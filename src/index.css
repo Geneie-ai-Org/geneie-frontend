@@ -1,0 +1,250 @@
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+
+  html,
+  body,
+  #root {
+    height: auto !important;
+    min-height: 100vh;
+    overflow-y: visible !important;
+    background-color: #0F0F0F;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+  .theme {
+    --animate-meteor: meteor 5s linear infinite;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
+@keyframes hero-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes hero-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.hero-reveal {
+  opacity: 0;
+  animation: hero-reveal 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+
+.hero-fade {
+  opacity: 0;
+  animation: hero-fade 1s ease-out forwards;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+
+@keyframes subtle-breathe {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(47, 127, 122, 0.1);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 0 20px 6px rgba(47, 127, 122, 0.08);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(47, 127, 122, 0.1);
+  }
+}
+
+.animate-breathe {
+  animation: subtle-breathe 3.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-dynamic-breathe {
+  background-size: 200% 200%;
+  animation: subtle-breathe 4.5s ease-in-out infinite, gradient-shift 6s ease infinite;
+}
+
+@keyframes star-sparkle {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(180deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0) rotate(360deg);
+  }
+}
+
+.animate-star-sparkle {
+  animation: star-sparkle 1s ease-out forwards;
+}
+
+.blink-cursor::after {
+  content: '|';
+  animation: blink-cursor 0.8s step-end infinite;
+}
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 6%;
+    --foreground: 0 0% 91%;
+    --card: 0 0% 11%;
+    --card-foreground: 0 0% 91%;
+    --popover: 0 0% 11%;
+    --popover-foreground: 0 0% 91%;
+    --primary: 210 80% 77%;
+    --primary-foreground: 0 0% 6%;
+    --secondary: 0 0% 11%;
+    --secondary-foreground: 0 0% 91%;
+    --muted: 0 0% 11%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 174 43% 55%;
+    --accent-foreground: 0 0% 6%;
+    --destructive: 6 74% 73%;
+    --border: 0 0% 15%;
+    --input: 0 0% 11%;
+    --ring: 210 80% 77%;
+    --chart-1: 210 80% 77%;
+    --chart-2: 174 43% 55%;
+    --chart-3: 0 0% 60%;
+    --chart-4: 0 0% 40%;
+    --chart-5: 0 0% 25%;
+    --radius: 0.75rem;
+    --sidebar: 0 0% 9%;
+    --sidebar-foreground: 0 0% 91%;
+    --sidebar-primary: 210 80% 77%;
+    --sidebar-primary-foreground: 0 0% 6%;
+    --sidebar-accent: 0 0% 16%;
+    --sidebar-accent-foreground: 0 0% 91%;
+    --sidebar-border: 0 0% 12%;
+    --sidebar-ring: 210 80% 77%;
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+}
+
+@keyframes meteor {
+  0% {
+    transform: rotate(var(--angle)) translateX(0);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--angle)) translateX(-500px);
+    opacity: 0;
+  }
+}
+
+@layer utilities {
+  .animate-meteor {
+    animation: meteor 5s linear infinite;
+  }
+}
+
+.thinking-loader {
+  width: 14px;
+  aspect-ratio: 1;
+  --_g: no-repeat radial-gradient(farthest-side, var(--accent-teal) 90%, #0000);
+  background: var(--_g), var(--_g), var(--_g), var(--_g);
+  background-size: 40% 40%;
+  animation: thinking-spin 1s infinite;
+}
+@keyframes thinking-spin {
+  0%        { background-position: 0 0, 100% 0, 100% 100%, 0 100% }
+  40%, 50%  { background-position: 100% 100%, 100% 0, 0 0, 0 100% }
+  90%, 100% { background-position: 100% 100%, 0 100%, 0 0, 100% 0 }
+}
+
+/* Accordion expand/collapse — base-ui transition approach */
+.accordion-panel {
+  overflow: hidden;
+  height: var(--accordion-panel-height);
+  opacity: 1;
+  transition:
+    height 300ms cubic-bezier(0.33, 1, 0.68, 1),
+    opacity 300ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.accordion-panel[data-starting-style],
+.accordion-panel[data-ending-style] {
+  height: 0;
+  opacity: 0;
+}
+
+.accordion-panel[data-ending-style] {
+  transition:
+    height 200ms cubic-bezier(0.65, 0, 0.35, 1),
+    opacity 200ms cubic-bezier(0.65, 0, 0.35, 1);
+}

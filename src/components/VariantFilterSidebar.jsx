@@ -1600,8 +1600,8 @@ const VariantFilterSidebar = ({
     <div className="variant-filter-sidebar w-full h-full flex flex-col min-w-0 relative">
       <div className="h-full flex flex-col">
         {/* Header */}
-        <div className="sidebar-header border-b flex items-center justify-between">
-          <h3 className="text-[var(--text-primary)] flex items-center gap-2">
+        <div className="sidebar-header flex items-center justify-between">
+          <h3 className="text-[var(--text-primary)] flex items-center gap-1">
             <FileText className="w-5 h-5 text-[var(--text-secondary)] shrink-0" />
             Variant File Filters
           </h3>
@@ -1613,7 +1613,6 @@ const VariantFilterSidebar = ({
                   if (window.confirm('Are you sure you want to remove this variant file? This will clear all filters and variant data.')) {
                     try {
                       await onUploadSuccess(null);
-                      // Reset filters
                       resetFilters();
                     } catch (error) {
                       console.error('[VariantFilterSidebar] Error removing file:', error);
@@ -1654,9 +1653,8 @@ const VariantFilterSidebar = ({
 
           {/* Recommended Filters Section */}
           {proprietaryFilterPreviews && (
-            <div className="sidebar-card border-2 rounded-lg shadow-sm">
-              <label className="block text-sm font-bold text-[var(--text-primary)] mb-3 flex items-center gap-2">
-                <Zap className="w-4 h-4 text-[var(--text-secondary)]" />
+            <div className="sidebar-card rounded-lg shadow-sm">
+              <label className="block text-sm font-bold text-[var(--text-primary)] mb-3">
                 Recommended Filters
               </label>
               
@@ -1752,7 +1750,7 @@ const VariantFilterSidebar = ({
                       isApplyingProprietaryFilter ||
                       (hasAppliedManualFilters && activeProprietaryFilter !== 'filter_2')
                     }
-                    className="w-full px-4 py-3 rounded-lg border-2 transition-all flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-4 py-3 rounded-lg border transition-all flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{
                       backgroundColor: activeProprietaryFilter === 'filter_2' ? 'var(--accent-teal-soft)' : 'var(--bg-surface-raised)',
                       borderColor: 'var(--accent-teal)'

@@ -992,7 +992,7 @@ const DocumentUpload = ({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex-shrink-0 px-5 pt-5 pb-3 relative">
-            <button
+            {/* <button
               type="button"
               onClick={handleInfoFormCancel}
               disabled={isUploading}
@@ -1003,7 +1003,7 @@ const DocumentUpload = ({
               aria-label="Close sample metadata"
             >
               <X className="w-4 h-4" />
-            </button>
+            </button> */}
             <h3 id="sample-metadata-title" className="text-sm font-semibold mb-0.5 pr-8" style={{ color: 'var(--text-primary)' }}>
               Sample Metadata
             </h3>
@@ -1049,7 +1049,7 @@ const DocumentUpload = ({
                 </div>
 
                 {/* Project */}
-                <div>
+                {/* <div>
                   <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
                     Project
                   </label>
@@ -1121,7 +1121,7 @@ const DocumentUpload = ({
                       </button>
                     </div>
                   )}
-                </div>
+                </div> */}
 
                 {/* Genome - Mandatory Field */}
                 <div>
@@ -1375,7 +1375,7 @@ const DocumentUpload = ({
               </div>
 
               {/* Form Actions — pinned footer */}
-              <div className="flex-shrink-0 flex gap-2 justify-end px-5 py-4 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
+              <div className="flex-shrink-0 flex gap-2 justify-end px-5 py-3" style={{ borderColor: 'var(--border-subtle)' }}>
                 <button
                   type="button"
                   onClick={handleInfoFormCancel}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useChatSimulation } from '@/hooks/useChatSimulation';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -230,12 +231,15 @@ const LandingPage = () => {
                 >
                   <Link to="/auth">Get Started</Link>
                 </Button>
-                <Button asChild
+                <Button
                   size="lg"
                   variant="outline"
-                  className="border-zinc-600 text-zinc-200 hover:bg-zinc-900 text-base px-8 py-6 font-medium"
+                  className="border-zinc-600/50 text-zinc-500 text-base px-8 py-6 font-medium opacity-70 cursor-not-allowed hover:bg-transparent hover:text-zinc-500"
+                  onClick={() =>
+                    toast.info("Coming soon!")
+                  }
                 >
-                  <Link to="/app">Try without signing up</Link>
+                  Try demo
                 </Button>
               </div>
 
@@ -699,8 +703,8 @@ const LandingPage = () => {
         <footer id="contact" ref={footerRef} className="fixed bottom-0 left-0 right-0 z-0 bg-zinc-950 overflow-hidden">
 
           <div className="absolute inset-0 flex items-end justify-center pointer-events-none select-none overflow-hidden" aria-hidden="true">
-            <span className="text-[clamp(64px,20vw,280px)] font-bold font-heading tracking-tight leading-none text-white/[0.08] whitespace-nowrap">
-              geneie
+            <span className="text-[clamp(64px,20vw,280px)] font-bold font-heading tracking-tight leading-none text-white/[0.08] whitespace-nowrap translate-y-[20%]">
+              Geneie
             </span>
           </div>
 

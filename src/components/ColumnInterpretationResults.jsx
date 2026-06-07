@@ -496,7 +496,7 @@ const ColumnInterpretationResults = ({
             <div className="p-6 rounded-t-xl" style={{ backgroundColor: C.tealSoft, borderBottom: `1px solid ${C.teal}` }}>
               <div className="flex items-center gap-3">
                 <AlertCircle className="w-6 h-6" style={{ color: C.teal }} />
-                <h2 className="text-2xl font-bold" style={{ color: C.text }}>Remove uploaded file?</h2>
+                <h2 className="text-2xl font-bold" style={{ color: C.text }}>Remove file?</h2>
               </div>
             </div>
 
@@ -885,7 +885,7 @@ const ColumnInterpretationResults = ({
             </div>
           )}
           
-          <div className="flex items-center gap-3 ml-auto flex-wrap justify-end">
+          <div className="flex items-center gap-2 ml-auto justify-end">
             {onDeleteDocument && (
               <button
                 type="button"
@@ -893,7 +893,7 @@ const ColumnInterpretationResults = ({
                 className="px-4 py-2 text-sm font-medium rounded-xl transition-colors"
                 style={{ color: C.error, border: `1px solid ${C.error}`, backgroundColor: C.errorSoft }}
               >
-                Remove uploaded file
+                Remove file
               </button>
             )}
 
@@ -901,7 +901,7 @@ const ColumnInterpretationResults = ({
             <button
               type="button"
               onClick={handleDismiss}
-              className="px-6 py-2 text-sm font-semibold rounded-xl transition-colors shadow-sm"
+              className="px-4 py-2 text-sm font-semibold rounded-xl transition-colors shadow-sm"
               style={{
                 backgroundColor: C.teal,
                 border: 'none',
@@ -933,9 +933,9 @@ const ColumnInterpretationResults = ({
                   }
                 } : undefined}
                 disabled={!step1?.passed}
-                className={`px-6 py-2 text-sm font-semibold rounded-xl transition-all shadow-sm flex items-center gap-2 ${
-                  step1?.passed 
-                    ? 'cursor-pointer' 
+                className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all shadow-sm flex items-center gap-2 ${
+                  step1?.passed
+                    ? 'cursor-pointer'
                     : 'cursor-not-allowed opacity-50'
                 }`}
                 style={{ 
@@ -1005,7 +1005,7 @@ const ColumnInterpretationResults = ({
                 type="button"
                 onClick={() => onAcmgFilterClick?.()}
                 disabled={!acmgFilterCanApply || isApplyingAcmgFilter || acmgFilterActive}
-                className={`px-6 py-2 text-sm font-semibold rounded-xl transition-all shadow-sm flex items-center gap-2 ${
+                className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all shadow-sm flex items-center gap-2 ${
                   acmgFilterCanApply && !acmgFilterActive && !isApplyingAcmgFilter
                     ? 'cursor-pointer'
                     : 'cursor-not-allowed opacity-50'

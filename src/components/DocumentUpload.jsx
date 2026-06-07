@@ -597,7 +597,9 @@ const DocumentUpload = ({
 
         if (onUploadSuccess) {
           try {
+            // console.log('[DocumentUpload] calling onUploadSuccess, isUploading is still true');
             await onUploadSuccess(documentData);
+            // console.log('[DocumentUpload] onUploadSuccess returned');
           } catch (callbackError) {
             console.error('[DocumentUpload] Error in onUploadSuccess callback:', callbackError);
             setError(`Upload succeeded but failed to save metadata: ${callbackError.message}`);
@@ -608,6 +610,7 @@ const DocumentUpload = ({
         setSuccess(
           `Document "${file.name}" uploaded successfully! ${response.is_variant_file ? `(${response.variant_count} variants)` : ''}`
         );
+        // console.log('[DocumentUpload] setting isUploading=false NOW');
         setIsUploading(false);
         setUploadProgress(0);
         onUploadProgressChange?.(null);
@@ -1507,14 +1510,14 @@ const DocumentUpload = ({
       {/* Replace Document Confirmation Modal */}
       {showReplaceConfirm && existingDocument && createPortal(
         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-[90] backdrop-blur-sm">
-          <div 
+          <div
             className="rounded-2xl p-6 max-w-md w-full mx-4 transition-all duration-300"
-            style={{ 
-              background: 'rgba(255, 255, 255, 0.85)',
+            style={{
+              background: 'var(--bg-surface)',
               backdropFilter: 'blur(20px) saturate(180%)',
               WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              border: '0.5px solid rgba(255, 255, 255, 0.3)',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.6)'
+              border: '0.5px solid var(--border-default)',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)'
             }}
           >
             <h3 className="text-lg font-bold mb-3" style={{ color: 'var(--text-primary)' }}>
@@ -1534,9 +1537,9 @@ const DocumentUpload = ({
                   }
                 }}
                 className="px-4 py-2 rounded-xl transition-colors text-sm font-medium"
-                style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-default)', color: 'var(--text-tertiary)' }}
-                onMouseEnter={(e) => { e.target.style.backgroundColor = '#F9FBFF'; e.target.style.borderColor = '#9CA3AF'; }}
-                onMouseLeave={(e) => { e.target.style.backgroundColor = '#FFFFFF'; e.target.style.borderColor = '#D1D5DB'; }}
+                style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
+                onMouseEnter={(e) => { e.target.style.backgroundColor = 'var(--bg-surface-hover)'; e.target.style.borderColor = 'var(--border-strong)'; }}
+                onMouseLeave={(e) => { e.target.style.backgroundColor = 'var(--bg-input)'; e.target.style.borderColor = 'var(--border-default)'; }}
               >
                 Cancel
               </button>
@@ -1578,9 +1581,9 @@ const DocumentUpload = ({
                   }
                 }}
                 className="px-4 py-2 rounded-xl transition-colors text-sm font-medium text-white shadow-sm"
-                style={{ backgroundColor: '#2F7F7A' }}
-                onMouseEnter={(e) => { e.target.style.backgroundColor = '#256B67'; }}
-                onMouseLeave={(e) => { e.target.style.backgroundColor = '#2F7F7A'; }}
+                style={{ backgroundColor: 'var(--accent-teal)' }}
+                onMouseEnter={(e) => { e.target.style.backgroundColor = 'var(--accent-teal-hover)'; }}
+                onMouseLeave={(e) => { e.target.style.backgroundColor = 'var(--accent-teal)'; }}
               >
                 Replace
               </button>

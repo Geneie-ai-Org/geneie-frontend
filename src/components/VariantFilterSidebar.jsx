@@ -1686,46 +1686,48 @@ const VariantFilterSidebar = ({
                       }
                     }}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <span className="font-semibold text-sm text-[var(--text-primary)]">
                         {ACMG_FILTER_DISPLAY_NAME}
                       </span>
                       {activeProprietaryFilter === 'filter_1' && (
-                        <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--bg-app)' }}>
+                        <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--bg-app)' }}>
                           Active
                         </span>
                       )}
                       {!proprietaryFilterPreviews.filter_1.can_apply && (
-                        <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: 'var(--accent-teal-soft)', color: 'var(--error)' }}>
+                        <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--accent-teal-soft)', color: 'var(--error)' }}>
                           Missing columns
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-right">
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                      <div className="text-right leading-tight">
                         {proprietaryFilterPreviews.filter_1.preview_pending &&
                         activeProprietaryFilter !== 'filter_1' ? (
                           <>
-                            <div className="text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>
+                            <div className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
                               Apply to load
                             </div>
-                            <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                            <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
                               from {proprietaryFilterPreviews.filter_1.total_count.toLocaleString()} rows
                             </div>
                           </>
                         ) : (
                           <>
-                            <div className="text-sm font-bold" style={{ color: 'var(--accent-teal)' }}>
-                              {proprietaryFilterPreviews.filter_1.preview_count} variants
+                            <div className="text-sm font-bold tabular-nums" style={{ color: 'var(--accent-teal)' }}>
+                              {(proprietaryFilterPreviews.filter_1.preview_count ?? 0).toLocaleString()}
+                              <span className="font-normal text-xs ml-1" style={{ color: 'var(--text-secondary)' }}>variants</span>
                             </div>
-                            <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                              of {proprietaryFilterPreviews.filter_1.total_count}
+                            <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                              of {(proprietaryFilterPreviews.filter_1.total_count ?? 0).toLocaleString()}
                             </div>
                           </>
                         )}
                       </div>
-                      <Info 
-                        className="w-4 h-4 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] cursor-help"
+                      <Info
+                        className="w-3.5 h-3.5 shrink-0"
+                        style={{ color: 'var(--text-tertiary)' }}
                         onMouseEnter={(e) => e.stopPropagation()}
                       />
                     </div>
@@ -1768,32 +1770,34 @@ const VariantFilterSidebar = ({
                       }
                     }}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <span className="font-semibold text-sm text-[var(--text-primary)]">
                         {proprietaryFilterPreviews.filter_2.name}
                       </span>
                       {activeProprietaryFilter === 'filter_2' && (
-                        <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--bg-app)' }}>
+                        <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--bg-app)' }}>
                           Active
                         </span>
                       )}
                       {!proprietaryFilterPreviews.filter_2.can_apply && (
-                        <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: 'var(--accent-teal-soft)', color: 'var(--error)' }}>
+                        <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--accent-teal-soft)', color: 'var(--error)' }}>
                           Missing columns
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-right">
-                        <div className="text-sm font-bold" style={{ color: 'var(--accent-teal)' }}>
-                          {proprietaryFilterPreviews.filter_2.preview_count} variants
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                      <div className="text-right leading-tight">
+                        <div className="text-sm font-bold tabular-nums" style={{ color: 'var(--accent-teal)' }}>
+                          {(proprietaryFilterPreviews.filter_2.preview_count ?? 0).toLocaleString()}
+                          <span className="font-normal text-xs ml-1" style={{ color: 'var(--text-secondary)' }}>variants</span>
                         </div>
-                        <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                          of {proprietaryFilterPreviews.filter_2.total_count}
+                        <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                          of {(proprietaryFilterPreviews.filter_2.total_count ?? 0).toLocaleString()}
                         </div>
                       </div>
-                      <Info 
-                        className="w-4 h-4 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] cursor-help"
+                      <Info
+                        className="w-3.5 h-3.5 shrink-0"
+                        style={{ color: 'var(--text-tertiary)' }}
                         onMouseEnter={(e) => e.stopPropagation()}
                       />
                     </div>
@@ -1873,7 +1877,6 @@ const VariantFilterSidebar = ({
                   </span>
                 </span>
               </div>
-              {/* Graphical bar: full teal when no filter; teal (under consideration) + muted (filtered out) when filter applied */}
               <div
                 className="w-full h-3 rounded-full overflow-hidden flex"
                 style={{ backgroundColor: 'var(--bg-surface-hover)' }}
@@ -1906,7 +1909,6 @@ const VariantFilterSidebar = ({
                   />
                 )}
               </div>
-              {/* Legend when filter is applied */}
               {(hasActiveManualFilters || activeProprietaryFilter) &&
                 underConsiderationCount < displayTotalVariants && (
                 <div className="flex items-center gap-3 mt-1.5 text-xs text-[var(--text-secondary)]">

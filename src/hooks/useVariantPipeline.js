@@ -64,6 +64,22 @@ export function useVariantPipeline({
   const isApplyingAcmgFilterRef = useRef(isApplyingAcmgFilter);
   isApplyingAcmgFilterRef.current = isApplyingAcmgFilter;
 
+  const pipelineSnapshotRef = useRef(pipelineSnapshot);
+  pipelineSnapshotRef.current = pipelineSnapshot;
+  const uploadSessionConversationIdRef = useRef(uploadSessionConversationId);
+  uploadSessionConversationIdRef.current = uploadSessionConversationId;
+  const variantDataRef = useRef(variantData);
+  variantDataRef.current = variantData;
+  const refreshConversationAfterAnnovarRef = useRef(null);
+  const refreshChatEligibilityFromApiRef = useRef(null);
+  const presentFileAnalysisModalRef = useRef(null);
+  const getDeviceIdRef = useRef(getDeviceId);
+  getDeviceIdRef.current = getDeviceId;
+  const setVariantDataRef = useRef(setVariantData);
+  setVariantDataRef.current = setVariantData;
+  const setAnnovarMessageModalRef = useRef(setAnnovarMessageModal);
+  setAnnovarMessageModalRef.current = setAnnovarMessageModal;
+
   const defaultChatEligibility = useCallback(
     () => ({
       allowed: true,
@@ -214,15 +230,52 @@ export function useVariantPipeline({
 
   const presentFileAnalysisModal = useCallback(
     (convData) => {
+      // console.log('[presentFileAnalysisModal] called', {
+      //   hasColumnInterp: !!convData?.column_interpretation,
+      //   uploadSessionConversationId: uploadSessionConversationIdRef.current,
+      //   currentDocument: !!currentDocument,
+      // });
       if (!convData?.column_interpretation) return;
       const hasDoc =
         currentDocument || (convData.document?.s3_url && convData.document?.file_name);
       if (!hasDoc) return;
+
+      // If an upload is still in progress, wait for it to finish before opening
+      if (uploadSessionConversationIdRef.current) {
+        // console.log('[presentFileAnalysisModal] upload in progress, deferring 500ms');
+        setTimeout(() => {
+          if (!uploadSessionConversationIdRef.current) {
+            // console.log('[presentFileAnalysisModal] upload finished, opening modal now');
+            interpretationDismissedRef.current = false;
+            setShowInterpretationModal(true);
+          } else {
+            // console.log('[presentFileAnalysisModal] upload still in progress, deferring again');
+            // Keep retrying until upload finishes
+            const checkInterval = setInterval(() => {
+              if (!uploadSessionConversationIdRef.current) {
+                clearInterval(checkInterval);
+                // console.log('[presentFileAnalysisModal] upload finished (retry), opening modal');
+                interpretationDismissedRef.current = false;
+                setShowInterpretationModal(true);
+              }
+            }, 300);
+            // Safety: stop checking after 30s
+            setTimeout(() => clearInterval(checkInterval), 30000);
+          }
+        }, 500);
+        return;
+      }
+
       interpretationDismissedRef.current = false;
       setShowInterpretationModal(true);
     },
     [currentDocument, interpretationDismissedRef, setShowInterpretationModal]
   );
+
+  // Assign refs after the callbacks are declared (avoids temporal dead zone)
+  refreshConversationAfterAnnovarRef.current = refreshConversationAfterAnnovar;
+  refreshChatEligibilityFromApiRef.current = refreshChatEligibilityFromApi;
+  presentFileAnalysisModalRef.current = presentFileAnalysisModal;
 
   const convertTabularToVcfForConversation = useCallback(
     async (referenceGenome = 'hg38') => {
@@ -273,27 +326,31 @@ export function useVariantPipeline({
       return undefined;
     }
 
-    const lineCountActive =
-      variantData?.s3_line_count_status === 'pending' ||
-      variantData?.s3_line_count_status === 'running';
-    const pipelineWorkActive =
-      isRunningAnnovar ||
-      isApplyingAcmgFilter ||
-      pipelineSnapshot.annovarJob?.status === 'running' ||
-      pipelineSnapshot.filterJob?.status === 'running' ||
-      pipelineSnapshot.filterJob?.status === 'pending' ||
-      uploadSessionConversationId === activeConversationId ||
-      lineCountActive;
-
-    if (!pipelineWorkActive) {
-      return undefined;
-    }
-
     let cancelled = false;
     let timerId = null;
 
     const pollBackgroundPipelineJobs = async () => {
       if (cancelled) return;
+
+      // Check whether there is any active work to poll for. We read from refs
+      // so this check never causes the effect to restart. If nothing is active,
+      // the loop simply stops scheduling itself.
+      const snap = pipelineSnapshotRef.current;
+      const vd = variantDataRef.current;
+      const uploadConvId = uploadSessionConversationIdRef.current;
+      const lineCountActive =
+        vd?.s3_line_count_status === 'pending' || vd?.s3_line_count_status === 'running';
+      const pipelineWorkActive =
+        isRunningAnnovarRef.current ||
+        isApplyingAcmgFilterRef.current ||
+        snap.annovarJob?.status === 'running' ||
+        snap.filterJob?.status === 'running' ||
+        snap.filterJob?.status === 'pending' ||
+        uploadConvId === activeConversationId ||
+        lineCountActive;
+
+      if (!pipelineWorkActive) return;
+
       try {
         const auth = getAuth();
         const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
@@ -305,32 +362,44 @@ export function useVariantPipeline({
         const lineStatus = convData.s3_line_count_status;
         if (lineStatus === 'pending' || lineStatus === 'running' || lineStatus === 'completed') {
           if (convData.variant_metadata) {
-            setVariantData(buildVariantDataFromConversation(convData, convData.variant_metadata));
+            setVariantDataRef.current(buildVariantDataFromConversation(convData, convData.variant_metadata));
           }
           if (lineStatus === 'completed') {
-            await refreshChatEligibilityFromApi(activeConversationId, {
+            await refreshChatEligibilityFromApiRef.current(activeConversationId, {
               announceReady: true,
               convFallback: convData,
             });
           }
         }
 
+        // Use refs (always current) to decide whether to poll the status endpoint.
+        // This avoids missing a poll tick when MongoDB hasn't caught up yet or when
+        // the effect restarts fresh (e.g. page reload mid-job).
+        const annShouldPoll =
+          isRunningAnnovarRef.current ||
+          prevAnnovarJobStatusRef.current === 'running' ||
+          convData.annovar_job?.status === 'running';
+
         let annJob = { ...(convData.annovar_job || {}) };
         let filtJob = { ...(convData.filter_job || {}) };
-        const annRunning = annJob.status === 'running';
         const filtRunning = filtJob.status === 'running' || filtJob.status === 'pending';
 
-        if (annRunning) {
+        if (annShouldPoll) {
           const statusRes = await fetch(apiUrl(`/api/annovar-status/${activeConversationId}`), {
             headers: {
               Authorization: `Bearer ${token}`,
-              'X-Device-Id': getDeviceId(),
+              'X-Device-Id': getDeviceIdRef.current(),
             },
           });
+          if (cancelled) return;
           if (statusRes.ok) {
             const statusData = await statusRes.json().catch(() => ({}));
+            // Status endpoint is authoritative — it merges S3 worker progress on top of MongoDB.
             annJob = { ...annJob, ...(statusData.annovar_job || {}) };
             if (statusData.status) annJob.status = statusData.status;
+            if (statusData.phase) annJob.phase = statusData.phase;
+            if (statusData.message) annJob.message = statusData.message;
+            if (statusData.progress_percent != null) annJob.progress_percent = statusData.progress_percent;
           }
         }
 
@@ -338,7 +407,7 @@ export function useVariantPipeline({
           const statusRes = await fetch(apiUrl(`/api/filter-status/${activeConversationId}`), {
             headers: {
               Authorization: `Bearer ${token}`,
-              'X-Device-Id': getDeviceId(),
+              'X-Device-Id': getDeviceIdRef.current(),
             },
           });
           if (statusRes.ok) {
@@ -365,7 +434,7 @@ export function useVariantPipeline({
           setIsApplyingAcmgFilter(false);
         }
 
-        setAnnovarMessageModal((prev) => {
+        setAnnovarMessageModalRef.current((prev) => {
           if (!annActive || !prev || prev.variant !== 'info') return prev;
           const pct = annJob.progress_percent;
           const msg = formatAnnovarProgressMessage(annJob.message || 'Annotating your variants…');
@@ -380,8 +449,8 @@ export function useVariantPipeline({
         const prevFilt = prevFilterJobStatusRef.current;
 
         if (prevAnn === 'running' && annJob.status === 'completed') {
-          const convAfterAnn = await refreshConversationAfterAnnovar(activeConversationId);
-          if (convAfterAnn) presentFileAnalysisModal(convAfterAnn);
+          const convAfterAnn = await refreshConversationAfterAnnovarRef.current(activeConversationId);
+          if (convAfterAnn) presentFileAnalysisModalRef.current(convAfterAnn);
           setPipelineToast({
             title: 'ANNOVAR complete',
             message:
@@ -399,7 +468,7 @@ export function useVariantPipeline({
         }
 
         if (prevFilt === 'running' && filtJob.status === 'completed') {
-          await refreshConversationAfterAnnovar(activeConversationId);
+          await refreshConversationAfterAnnovarRef.current(activeConversationId);
           setPipelineToast({
             title: 'ACMG filter complete',
             message:
@@ -421,7 +490,7 @@ export function useVariantPipeline({
         const lineStill = lineStatus === 'pending' || lineStatus === 'running';
         const annStill = annJob.status === 'running';
         const filtStill = filtJob.status === 'running' || filtJob.status === 'pending';
-        const uploadStill = uploadSessionConversationId === activeConversationId;
+        const uploadStill = uploadSessionConversationIdRef.current === activeConversationId;
 
         if (!cancelled && (annStill || filtStill || lineStill || uploadStill)) {
           const delayMs = lineStill && !annStill && !filtStill && !uploadStill ? 15000 : 8000;
@@ -440,30 +509,29 @@ export function useVariantPipeline({
       cancelled = true;
       if (timerId) clearTimeout(timerId);
     };
-  }, [
-    activeConversationId,
-    currentDocument,
-    userTier,
-    isRunningAnnovar,
-    isApplyingAcmgFilter,
-    variantData?.s3_line_count_status,
-    uploadSessionConversationId,
-    pipelineSnapshot.annovarJob?.status,
-    pipelineSnapshot.filterJob?.status,
-    refreshConversationAfterAnnovar,
-    applyChatEligibilityFromConversation,
-    refreshChatEligibilityFromApi,
-    presentFileAnalysisModal,
-    getDeviceId,
-    setVariantData,
-    setAnnovarMessageModal,
-  ]);
+    // Minimal deps: only values that should re-arm the poll loop from scratch.
+    // - activeConversationId / currentDocument / userTier: conversation switched or user state changed
+    // - isRunningAnnovar / isApplyingAcmgFilter: a job was *just* kicked off and the loop may have
+    //   already exited (pipelineWorkActive was false at the last tick); re-entry restarts it.
+    //
+    // Intentionally excluded (all read via refs instead):
+    //   pipelineSnapshot.annovarJob?.status, pipelineSnapshot.filterJob?.status,
+    //   uploadSessionConversationId, variantData?.s3_line_count_status,
+    //   refreshConversationAfterAnnovar, refreshChatEligibilityFromApi,
+    //   presentFileAnalysisModal, getDeviceId, setVariantData, setAnnovarMessageModal
+    //
+    // Those were previously causing the effect to restart on every setPipelineSnapshot
+    // call inside the loop, producing a duplicate poll tick each cycle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversationId, currentDocument, userTier, isRunningAnnovar, isApplyingAcmgFilter]);
 
   const handleVariantUploadingChange = useCallback(
     (isUploading) => {
+      // console.log('[useVariantPipeline] handleVariantUploadingChange:', isUploading);
       if (isUploading) {
         setUploadSessionConversationId((prev) => prev || activeConversationId || null);
       } else {
+        // console.log('[useVariantPipeline] clearing uploadSessionConversationId');
         setUploadSessionConversationId(null);
         setUploadProgress(null);
       }

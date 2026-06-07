@@ -100,7 +100,12 @@ const VariantAnalysisPipeline = ({
         : 'Ready for chat';
     }
     if (backgroundActive || summary.status === 'running') {
-      return `Step ${summary.stepIndex}/${summary.total} · ${summary.label}`;
+      const pct = isRunningAnnovar && annovarJob?.progress_percent != null
+        ? ` · ${Math.round(annovarJob.progress_percent)}%`
+        : isApplyingAcmgFilter && filterJob?.progress_percent != null
+          ? ` · ${Math.round(filterJob.progress_percent)}%`
+          : '';
+      return `Step ${summary.stepIndex}/${summary.total} · ${summary.label}${pct}`;
     }
     if (summary.focusId === 'chat' && steps.chat === 'done') {
       return variantCount != null
@@ -120,7 +125,7 @@ const VariantAnalysisPipeline = ({
       className="mb-2 rounded-xl border overflow-hidden transition-all"
       style={{
         backgroundColor: 'var(--bg-surface)',
-        borderColor: chatReady && showReadyMinimal ? 'var(--accent-teal)' : 'var(--border-default)',
+        borderColor: chatReady && showReadyMinimal ? 'var(--accent-teal)' : '',
         boxShadow: expanded ? 'var(--shadow-md)' : 'none',
       }}
       aria-label="Variant analysis pipeline"
@@ -131,9 +136,7 @@ const VariantAnalysisPipeline = ({
           className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
           style={{ backgroundColor: 'var(--accent-teal-soft)' }}
         >
-          {backgroundActive ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: 'var(--accent-teal)' }} />
-          ) : chatReady ? (
+          {chatReady ? (
             <Check className="w-3.5 h-3.5" style={{ color: 'var(--accent-teal)' }} />
           ) : (
             <FileText className="w-3.5 h-3.5" style={{ color: 'var(--accent-teal)' }} />
@@ -157,22 +160,6 @@ const VariantAnalysisPipeline = ({
         </button>
 
         <div className="flex items-center gap-0.5 shrink-0">
-          {chatReady && !backgroundActive && onDismiss && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDismiss();
-                onExpandedChange?.(false);
-              }}
-              className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-              style={{ color: 'var(--text-tertiary)' }}
-              aria-label="Minimize pipeline"
-              title="Minimize"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
           <button
             type="button"
             onClick={() => onExpandedChange?.(!expanded)}
@@ -181,7 +168,7 @@ const VariantAnalysisPipeline = ({
             aria-expanded={expanded}
             aria-label={expanded ? 'Collapse pipeline' : 'Expand pipeline'}
           >
-            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
           </button>
         </div>
       </div>

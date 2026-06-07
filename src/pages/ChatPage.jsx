@@ -15,6 +15,7 @@ import { Source, SourceTrigger, SourceContent } from '../components/prompt-kit/s
 // --- NEW IMPORTS ---
 import { useAuth } from '../hooks/useAuth';
 import AuthForm from '../components/AuthForm';
+import PixelBlast from '../components/PixelBlast';
 import SubscriptionManager from '../components/SubscriptionManager';
 import ConversationSidebar from '../components/ConversationSidebar';
 import DocumentUpload from '../components/DocumentUpload';
@@ -423,6 +424,61 @@ const ChatMessage = React.memo(({ role, text, sources, showRegenerate, onRegener
 });
 
 // --- Main Chat Page ---
+const AuthPageLayout = ({ children }) => (
+  <div className="min-h-dvh flex flex-col lg:flex-row bg-black font-sans selection:bg-[#2F7F7A]/30">
+    {/* Left panel — desktop only */}
+    <div className="relative hidden w-full lg:flex lg:w-[40%] flex-col items-center justify-center overflow-hidden bg-[#050505] border-r border-zinc-900">
+      <div className="absolute inset-0 z-0">
+        <PixelBlast
+          variant="square"
+          pixelSize={3}
+          color="#2F7F7A"
+          patternScale={2}
+          patternDensity={1}
+          enableRipples
+          rippleSpeed={0.3}
+          rippleThickness={0.1}
+          rippleIntensityScale={1}
+          speed={0.5}
+          transparent
+          edgeFade={0.5}
+        />
+      </div>
+      <div className="relative z-10 flex flex-col items-center text-center px-8">
+        <h1 className="text-3xl xl:text-4xl font-medium tracking-tight text-white leading-tight">
+          Build on Genomic Data <br />
+          without slowing down.
+        </h1>
+      </div>
+    </div>
+
+    {/* Right panel — form */}
+    <div className="relative flex flex-1 flex-col bg-black">
+      <div className="absolute inset-0 z-0 lg:hidden pointer-events-none">
+        <PixelBlast
+          variant="square"
+          pixelSize={3}
+          color="#2F7F7A"
+          patternScale={2}
+          patternDensity={1}
+          enableRipples
+          rippleSpeed={0.3}
+          rippleThickness={0.1}
+          rippleIntensityScale={1}
+          speed={0.5}
+          transparent
+          edgeFade={0.5}
+        />
+      </div>
+      <main className="relative z-10 flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-20">
+        <div className="w-full max-w-[400px]">
+          {children}
+        </div>
+      </main>
+    </div>
+  </div>
+);
+
 const ChatPage = () => {
   const navigate = useNavigate();
   const { conversationId: urlConversationId } = useParams();
@@ -955,9 +1011,13 @@ const ChatPage = () => {
               // Check if we've already shown this result
               const resultId = JSON.stringify(convData.column_interpretation);
               if (!interpretationShownRef.current || interpretationShownRef.current !== resultId) {
-                console.log('[App] Auto-showing interpretation results modal');
+                // console.log('[App] Auto-showing interpretation results modal (via conversation load)', { variantUploadInProgress });
                 interpretationShownRef.current = resultId;
-                setTimeout(() => setShowInterpretationModal(true), 100);
+                if (!variantUploadInProgress) {
+                  setTimeout(() => setShowInterpretationModal(true), 100);
+                } else {
+                  // console.log('[App] Upload in progress, skipping auto-show of interpretation modal');
+                }
               }
             }
             return convData.column_interpretation;
@@ -1266,12 +1326,15 @@ const ChatPage = () => {
           if (documentData.variant_metadata) {
             setVariantData(buildVariantDataFromConversation(documentData, documentData.variant_metadata));
           }
-          presentFileAnalysisModal({
+          // Defer the File Analysis modal so it opens after the upload loading
+          // modal closes (setIsUploading(false) runs after this callback returns).
+          const convDataForModal = {
             column_interpretation: documentData.column_interpretation,
             document: documentData.url
               ? { s3_url: documentData.url, file_name: documentData.name ?? documentData.file_name }
               : null,
-          });
+          };
+          presentFileAnalysisModal(convDataForModal);
           await syncAfterColumnInterpretation(activeConversationId, documentData.column_interpretation);
           refreshSubscriptionStatus();
         }
@@ -1899,31 +1962,43 @@ const ChatPage = () => {
   const hasPendingVerification = pendingEmailVerification || localStorage.getItem('pendingEmailVerification');
 
   if (hasPendingVerification) {
-    return <AuthForm
-      triggerReason={'manual'}
-      onSignupSuccess={(status) => {
-        setPendingEmailVerification(false);
-        localStorage.removeItem('pendingEmailVerification');
-        setJustSignedUp(status);
-      }}
-      onEmailVerificationPending={setPendingEmailVerification}
-    />;
+    return (
+      <AuthPageLayout>
+        <AuthForm
+          triggerReason={'manual'}
+          onSignupSuccess={(status) => {
+            setPendingEmailVerification(false);
+            localStorage.removeItem('pendingEmailVerification');
+            setJustSignedUp(status);
+          }}
+          onEmailVerificationPending={setPendingEmailVerification}
+        />
+      </AuthPageLayout>
+    );
   }
 
   if (justSignedUp) {
-    return <AuthForm
-      triggerReason={'manual'}
-      onSignupSuccess={setJustSignedUp}
-      onEmailVerificationPending={setPendingEmailVerification}
-    />;
+    return (
+      <AuthPageLayout>
+        <AuthForm
+          triggerReason={'manual'}
+          onSignupSuccess={setJustSignedUp}
+          onEmailVerificationPending={setPendingEmailVerification}
+        />
+      </AuthPageLayout>
+    );
   }
 
   if (userTier === 'guest' && (guestLimitExceeded || isShowingAuthForm)) {
-    return <AuthForm
-      triggerReason={isShowingAuthForm ? 'manual' : 'guestLimit'}
-      onSignupSuccess={handleSignupSuccess}
-      onEmailVerificationPending={setPendingEmailVerification}
-    />;
+    return (
+      <AuthPageLayout>
+        <AuthForm
+          triggerReason={isShowingAuthForm ? 'manual' : 'guestLimit'}
+          onSignupSuccess={handleSignupSuccess}
+          onEmailVerificationPending={setPendingEmailVerification}
+        />
+      </AuthPageLayout>
+    );
   }
 
   if (userTier === 'free' && isChatLimitReached) {

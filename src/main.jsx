@@ -7,6 +7,7 @@ import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import ChatPage from './pages/ChatPage';
 import PublicRoute from './components/PublicRoute';
+import { Toaster } from 'sonner';
 import './index.css';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -44,6 +45,7 @@ root.render(
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <Toaster theme="dark" position="bottom-center" richColors />
       </AuthProvider>
     </BrowserRouter>
     </MotionConfig>

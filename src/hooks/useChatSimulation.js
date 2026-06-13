@@ -32,7 +32,7 @@ const initialState = {
 function reducer(state, action) {
   switch (action.type) {
     case 'START_TYPING_INPUT':
-      return { ...state, phase: 'typing_input', showGreeting: false, inputText: '' };
+      return { ...state, phase: 'typing_input', showGreeting: true, inputText: '' };
     case 'TICK_INPUT': {
       const pair = SIMULATION_PAIRS[state.currentPairIndex];
       const next = pair.question.slice(0, state.inputText.length + 1);
@@ -46,6 +46,7 @@ function reducer(state, action) {
       return {
         ...state,
         sendButtonPressed: false,
+        showGreeting: false,
         inputText: '',
         messages: [...state.messages, { role: 'user', text: pair.question }],
         phase: 'thinking',

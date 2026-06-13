@@ -5,6 +5,9 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 
+import CardSwap, { Card } from '@/components/ui/CardSwap';
+import Carousel from '@/components/ui/Carousel';
+import '@/components/ui/Carousel.css';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import Silk from '@/components/Silk';
 import ClickSpark from '@/components/ClickSpark';
@@ -12,7 +15,7 @@ import { useScrollReveal, useStaggerReveal } from '@/hooks/useScrollReveal';
 import {
   Shield, Stethoscope, Microscope,
   Paperclip, Send, FileText,
-  Lock, Database, Check, Activity, Users
+  Lock, Database, Check, Activity
 } from 'lucide-react';
 import { HugeiconsIcon } from '@hugeicons/react'
 import { BioEnergyIcon, MentoringIcon, SpeedTrain01Icon, ArcherIcon, AiSheetsIcon, FileTypeIcon, DashboardSpeed01Icon } from '@hugeicons/core-free-icons'
@@ -46,7 +49,7 @@ const LandingPage = () => {
   const askQuestionsRef = useStaggerReveal(3, { staggerDelay: 150 });
   const askCardsRef = useStaggerReveal(3, { staggerDelay: 120 });
   const scienceTitleRef = useScrollReveal();
-  const scienceCardsRef = useStaggerReveal(3, { staggerDelay: 150 });
+
   const faqTitleRef = useScrollReveal();
   const faqListRef = useScrollReveal({ threshold: 0.1 });
   const ctaRef = useScrollReveal({ threshold: 0.1 });
@@ -156,7 +159,7 @@ const LandingPage = () => {
                   alt="geneie logo"
                   className="h-6 w-6 sm:h-7 sm:w-7 object-contain"
                 />
-                <span className="text-xl font-bold font-heading tracking-tight text-white">geneie</span>
+                <span className="text-xl font-bold font-brand tracking-tight text-white">geneie</span>
               </div>
               <div className="flex items-center gap-1 sm:gap-3">
                 {[
@@ -544,63 +547,92 @@ const LandingPage = () => {
           </svg>
         </div> */}
 
-          {/* 4. Built for Genomics */}
-          <section className="py-24 bg-white min-h-[100dvh] flex flex-col justify-center">
-            <div className="container px-4 md:px-6 max-w-6xl mx-auto text-center">
-              <div ref={scienceTitleRef}>
-                <h2 className="text-3xl md:text-4xl font-semibold font-heading tracking-tight text-zinc-900 mb-12">Built for Genomics</h2>
-              </div>
-              <div ref={scienceCardsRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5 w-full">
-                {[
-                  { icon: <Database className="w-6 h-6" />, title: 'Data Compatibility', desc: 'VCF, BAM, FASTA, and FASTQ files are fully supported for seamless ingestion and analysis.' },
-                  { icon: <Shield className="w-6 h-6" />, title: 'Clinical Trust & Security', desc: 'HIPAA/GDPR-compliant with end-to-end encryption and ACMG-guided databases for reliable interpretation.' },
-                  { icon: <HugeiconsIcon icon={SpeedTrain01Icon} className="w-6 h-6" />, title: 'Speed & Performance', desc: 'Delivers clinically relevant insights in minutes — optimized for fast turnaround without compromising accuracy.' },
-                  { icon: <Users className="w-6 h-6" />, title: 'Collaborative Approach', desc: 'Built for teams — share conversations, variant files, and analysis results across your organization.' },
-                ].map((card, i) => (
-                  <motion.div
-                    key={i}
-                    className="rounded-2xl border-2 border-zinc-200 bg-white px-6 py-10 flex flex-col items-center text-center hover:border-[#2F7F7A]/30 hover:shadow-lg transition-all"
-                    initial={{ y: 6 }}
-                    animate={{ y: 6 }}
-                    whileHover={{ y: 0 }}
-                    transition={{ ease: 'easeInOut' }}
-                  >
-                    <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-6 text-zinc-700">
-                      {card.icon}
-                    </div>
-                    <h3 className="text-base font-semibold font-heading text-zinc-900 mb-3">{card.title}</h3>
-                    <p className="text-zinc-500 text-sm leading-relaxed">{card.desc}</p>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-          </section>
+          {/* 4. Built for Genomics + FAQ (combined) */}
+          <section id="faq" className="py-24 bg-zinc-950 lg:bg-[#EDF7F6] relative isolate min-h-[100dvh] flex flex-col justify-center">
+            <div className="container px-4 md:px-6 max-w-6xl mx-auto">
 
-          {/* 5. FAQ */}
-          <section id="faq" className="py-24 bg-[#f5f5f0] relative isolate min-h-[100dvh] flex flex-col justify-center">
-            <div 
-              className="absolute inset-0 opacity-[0.3] pointer-events-none mix-blend-overlay" 
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`, backgroundRepeat: 'repeat' }} />
-            <div className="container px-4 md:px-6 max-w-3xl mx-auto relative">
-              <div ref={faqTitleRef} className="text-center mb-12">
-                <h2 className="text-3xl md:text-4xl font-semibold font-heading tracking-tight text-zinc-900">
-                  Frequently Asked Questions
-                </h2>
+              {/* Desktop: bordered box | Mobile: no box, content flows on dark bg */}
+              <div className="relative lg:rounded-2xl lg:border lg:border-zinc-800 lg:bg-zinc-950 lg:overflow-hidden lg:min-h-[580px]">
+
+                {/* Heading + Collapsible FAQ */}
+                <div className="relative z-10 py-4 lg:p-16 max-w-full lg:max-w-lg" ref={faqTitleRef}>
+                  <h2 className="text-3xl md:text-4xl font-semibold font-heading tracking-tight text-white mb-1">
+                    Built for Genomics
+                  </h2>
+                  <p className="text-zinc-400 text-base mb-10">
+                    Have questions? We've got answers.
+                  </p>
+
+                  <div ref={faqListRef}>
+                    <Accordion defaultValue={[]} className="w-full space-y-3">
+                      {faqItems.map((item, i) => (
+                        <AccordionItem
+                          key={i}
+                          value={`item-${i}`}
+                          className="rounded-xl border border-zinc-800 bg-zinc-900/60 backdrop-blur-sm px-5 overflow-hidden transition-colors hover:border-zinc-700 border-b-0"
+                        >
+                          <AccordionTrigger className="hover:no-underline font-medium text-white text-left py-4 text-sm">
+                            {item.q}
+                          </AccordionTrigger>
+                          <AccordionContent className="text-zinc-400 text-sm leading-relaxed pb-4">
+                            {item.a}
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  </div>
+                </div>
+
+                {/* Desktop: Feature cards in CardSwap — anchored bottom-right */}
+                <div ref={scienceTitleRef} className="absolute inset-0 pointer-events-none hidden lg:block">
+                  <div className="pointer-events-auto" style={{ position: 'absolute', bottom: 0, right: 0, width: 580, height: 500 }}>
+                    <CardSwap
+                      width={530}
+                      height={420}
+                      cardDistance={60}
+                      verticalDistance={70}
+                      delay={5000}
+                      pauseOnHover={true}
+                      skewAmount={6}
+                      easing="elastic"
+                    >
+                      {[
+                        { icon: <Database className="w-6 h-6" />, title: 'Data Compatibility', desc: 'VCF, BAM, FASTA, and FASTQ files are fully supported for seamless ingestion and analysis.' },
+                        { icon: <Shield className="w-6 h-6" />, title: 'Clinical Trust & Security', desc: 'HIPAA/GDPR-compliant with end-to-end encryption and ACMG-guided databases for reliable interpretation.' },
+                        { icon: <HugeiconsIcon icon={SpeedTrain01Icon} className="w-6 h-6" />, title: 'Speed & Performance', desc: 'Delivers clinically relevant insights in minutes — optimized for fast turnaround without compromising accuracy.' },
+                      ].map((card, i) => (
+                        <Card
+                          key={i}
+                          className="rounded-2xl border border-zinc-700/50 bg-zinc-900 p-8 flex flex-col"
+                        >
+                          <div className="w-12 h-12 rounded-xl bg-[#2F7F7A]/15 flex items-center justify-center mb-5 text-[#2F7F7A]">
+                            {card.icon}
+                          </div>
+                          <h3 className="text-lg font-semibold font-heading text-white mb-2">{card.title}</h3>
+                          <p className="text-zinc-400 text-sm leading-relaxed">{card.desc}</p>
+                        </Card>
+                      ))}
+                    </CardSwap>
+                  </div>
+                </div>
               </div>
-              <div ref={faqListRef}>
-                <Accordion defaultValue={[]} className="w-full space-y-3">
-                  {faqItems.map((item, i) => (
-                    <AccordionItem key={i} value={`item-${i}`} className="bg-white border rounded-lg px-6 shadow-sm overflow-hidden data-open:ring-1 data-open:ring-zinc-200 border-b-0">
-                      <AccordionTrigger className="hover:no-underline font-medium text-zinc-800 text-left py-4">
-                        {item.q}
-                      </AccordionTrigger>
-                      <AccordionContent className="text-zinc-500 leading-relaxed pb-4">
-                        {item.a}
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
+
+              {/* Mobile: Carousel below, outside the box */}
+              <div className="lg:hidden flex items-center justify-center mt-2" style={{ height: 340, position: 'relative' }}>
+                <Carousel
+                  baseWidth={340}
+                  autoplay={true}
+                  autoplayDelay={4000}
+                  pauseOnHover={true}
+                  loop={true}
+                  items={[
+                    { id: 1, icon: <Database className="w-5 h-5" />, title: 'Data Compatibility', description: 'VCF, BAM, FASTA, and FASTQ files are fully supported for seamless ingestion and analysis.' },
+                    { id: 2, icon: <Shield className="w-5 h-5" />, title: 'Clinical Trust & Security', description: 'HIPAA/GDPR-compliant with end-to-end encryption and ACMG-guided databases for reliable interpretation.' },
+                    { id: 3, icon: <HugeiconsIcon icon={SpeedTrain01Icon} className="w-5 h-5" />, title: 'Speed & Performance', description: 'Delivers clinically relevant insights in minutes — optimized for fast turnaround without compromising accuracy.' },
+                  ]}
+                />
               </div>
+
             </div>
           </section>
 
@@ -696,7 +728,7 @@ const LandingPage = () => {
         <footer id="contact" ref={footerRef} className="fixed bottom-0 left-0 right-0 z-0 bg-zinc-950 overflow-hidden">
 
           <div className="absolute inset-0 flex items-end justify-center pointer-events-none select-none overflow-hidden" aria-hidden="true">
-            <span className="text-[clamp(64px,20vw,280px)] font-bold font-heading tracking-tight leading-none text-white/[0.08] whitespace-nowrap translate-y-[20%]">
+            <span className="text-[clamp(64px,20vw,280px)] font-bold font-heading tracking-tight leading-none text-white/[0.08] whitespace-nowrap translate-y-[2%]">
               geneie
             </span>
           </div>

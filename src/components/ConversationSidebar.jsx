@@ -118,8 +118,8 @@ const ConversationSidebar = ({
                                 G
                             </div>
                             {isOpen && (
-                                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>
-                                    GENEIE
+                                <span className="text-sm font-semibold font-brand whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>
+                                    geneie
                                 </span>
                             )}
                         </div>

@@ -107,7 +107,13 @@ const Silk = ({ speed = 8, scale = 1, color = '#7B7481', noiseIntensity = 1.5, r
   }), [speed, scale, noiseIntensity, color, rotation]);
 
   return (
-    <Canvas dpr={[1, 2]} frameloop="always">
+    <Canvas dpr={[1, 2]} frameloop="always" onCreated={({ gl }) => {
+      const canvas = gl.domElement;
+      return () => {
+        gl.dispose();
+        canvas.remove();
+      };
+    }}>
       <SilkPlane ref={meshRef} uniforms={uniforms} />
     </Canvas>
   );

@@ -45,7 +45,7 @@ if (isFirebaseConfigured()) {
   storage = getStorage(app);
 } else {
   console.error(
-    '[Firebase] Missing config. Set VITE_FIREBASE_* in geneie-frontend/.env (see .env.example).'
+    'Missing config. Set VITE_FIREBASE_* in geneie-frontend/.env (see .env.example).'
   );
 }
 

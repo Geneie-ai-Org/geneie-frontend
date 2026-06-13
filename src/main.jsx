@@ -29,6 +29,7 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
 
 root.render(
   <React.StrictMode>
+    <Sentry.ErrorBoundary fallback={<p style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>Something went wrong. Please refresh the page.</p>}>
     <MotionConfig reducedMotion="user">
     <BrowserRouter>
       <AuthProvider>
@@ -73,5 +74,6 @@ root.render(
       </AuthProvider>
     </BrowserRouter>
     </MotionConfig>
+    </Sentry.ErrorBoundary>
   </React.StrictMode>
 );

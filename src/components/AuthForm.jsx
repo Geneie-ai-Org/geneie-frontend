@@ -259,8 +259,6 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                     return;
                 }
 
-                toast.success('Logged in successfully!');
-
             } else {
                 localStorage.setItem('pendingEmailVerification', email);
 
@@ -486,7 +484,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                             <button
                                 type="button"
                                 onClick={() => setShowPassword(!showPassword)}
-                                className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-400 hover:text-zinc-200 transition-colors"
+                                className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-400"
                                 aria-label={showPassword ? "Hide password" : "Show password"}
                                 tabIndex={-1}
                             >

@@ -933,7 +933,9 @@ const ChatPage = () => {
     return (
       <div className="flex flex-col h-screen" style={{ backgroundColor: 'var(--bg-app)' }}>
         <header className="px-6 py-4 border-b flex justify-start items-center z-10" style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-subtle)' }}>
-          <h1 className="text-lg font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>geneie</h1>
+          <h1 className="text-lg font-semibold font-brand tracking-tight" style={{ color: 'var(--text-primary)' }}>
+            geneie
+          </h1>
         </header>
         <SubscriptionManager isInputGated={true} />
       </div>
@@ -992,6 +994,14 @@ const ChatPage = () => {
         )}
       </aside>
 
+      {/* Mobile sidebar backdrop */}
+      {isMobile && isSidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       <main className="chat-shell-main">
       <GlobalTypingStyles />
 
@@ -1011,7 +1021,7 @@ const ChatPage = () => {
             <Menu className="w-[18px] h-[18px]" />
           </button>
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <span className="text-sm font-semibold shrink-0" style={{ color: 'var(--text-primary)' }}>Geneie</span>
+            <span className="text-sm font-brand shrink-0" style={{ color: 'var(--text-primary)' }}>Geneie</span>
             {isConversationStarted && (
               <>
                 <span className="text-xs shrink-0" style={{ color: 'var(--text-disabled)' }}>·</span>
@@ -1152,7 +1162,7 @@ const ChatPage = () => {
               {/* Branding */}
               <div className={`flex items-center gap-2.5 w-full justify-center ${isMobile ? 'mb-auto mt-auto' : 'mb-8'}`}>
                 <h2 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold tracking-tight text-center`} style={{ color: 'var(--text-primary)' }}>
-                  What do you want to ask Geneie?
+                  What do you want to ask <span className="font-brand italic">geneie</span> ?
                 </h2>
               </div>
 

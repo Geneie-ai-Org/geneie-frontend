@@ -3,15 +3,12 @@
  * Replaces Firestore operations with REST API calls to MongoDB backend
  */
 
+import { getAuth } from 'firebase/auth';
 import { getApiOrigin } from '../config/api.js';
 
 const API_BASE_URL = getApiOrigin();
 
-/**
- * Get Firebase auth token
- */
 const getAuthToken = async () => {
-  const { getAuth } = await import('firebase/auth');
   const auth = getAuth();
   if (auth.currentUser) {
     return await auth.currentUser.getIdToken();

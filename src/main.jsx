@@ -60,7 +60,16 @@ root.render(
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-        <Toaster theme="dark" position="bottom-center" richColors />
+        <Toaster
+          theme="dark"
+          position="bottom-center"
+          richColors
+          toastOptions={{
+            classNames: {
+              toast: 'font-sans shadow-lg',
+            },
+          }}
+        />
       </AuthProvider>
     </BrowserRouter>
     </MotionConfig>

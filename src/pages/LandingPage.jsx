@@ -100,14 +100,6 @@ const LandingPage = () => {
       title: "Researchers",
       icon: <Microscope className="w-5 h-5" strokeWidth={1.5} />,
     },
-    // {
-    //   title: "Students",
-    //   icon: <GraduationCap className="w-5 h-5" strokeWidth={1.5} />,
-    // },
-    // {
-    //   title: "Lab Scientists",
-    //   icon: <FlaskConical className="w-5 h-5" strokeWidth={1.5} />,
-    // },
     {
       title: "Genetic Counselors",
       icon: <HugeiconsIcon icon={MentoringIcon} className="w-5 h-5" strokeWidth={1.5} />,
@@ -161,10 +153,10 @@ const LandingPage = () => {
               <div className="flex items-center gap-2">
                 <img
                   src="/Logo.png"
-                  alt="Geneie logo"
+                  alt="geneie logo"
                   className="h-6 w-6 sm:h-7 sm:w-7 object-contain"
                 />
-                <span className="text-xl font-bold font-heading tracking-tight text-white">Geneie</span>
+                <span className="text-xl font-bold font-heading tracking-tight text-white">geneie</span>
               </div>
               <div className="flex items-center gap-1 sm:gap-3">
                 {[
@@ -220,7 +212,7 @@ const LandingPage = () => {
                 Chat with your Genomic Data
               </h1>
               <p className="text-base sm:text-lg md:text-xl text-zinc-400 max-w-lg sm:max-w-2xl mb-8 sm:mb-10 leading-relaxed hero-reveal" style={{ '--reveal-delay': '900ms' }}>
-                Explore yours variants, ask complex questions, and receive instant insights backed by peer-reviewed research.
+                Explore your variants, ask complex questions, and receive instant insights backed by peer-reviewed research.
               </p>
 
               {/* CTA */}
@@ -245,22 +237,23 @@ const LandingPage = () => {
 
               {/* Professional cards — compact inline on mobile */}
               <div className="hero-reveal w-full max-w-2xl" style={{ '--reveal-delay': '2100ms' }}>
-                <p className="text-zinc-500 text-[10px] sm:text-xs mb-3 sm:mb-4 uppercase tracking-[0.2em] font-medium text-center">
+                <p className="text-zinc-500 text-[10px] sm:text-xs sm:mb-4 uppercase font-medium text-center">
                   Built for genomics professionals including
                 </p>
-                <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+                <div className="flex flex-wrap items-center justify-center gap-x-2 sm:gap-x-3 gap-y-1">
                   {professionalCards.map((card, i) => (
-                    <div
-                      key={i}
-                      className="hero-reveal"
-                      style={{ '--reveal-delay': `${2400 + i * 150}ms` }}
-                    >
-                      <div className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-md bg-white/[0.04] cursor-default">
-                        <span className="text-[10px] sm:text-[11px] text-zinc-500 font-medium tracking-wide">
-                          {card.title}
-                        </span>
-                      </div>
-                    </div>
+                  <div
+                    key={i}
+                    className="hero-reveal flex items-center gap-2 sm:gap-3"
+                    style={{ '--reveal-delay': `${2400 + i * 150}ms` }}
+                  >
+                    {i > 0 && (
+                      <span className="text-zinc-600 select-none" aria-hidden="true">·</span>
+                    )}
+                    <span className="text-[10px] sm:text-[11px] text-zinc-500 font-medium tracking-wide uppercase">
+                      {card.title}
+                    </span>
+                  </div>
                   ))}
                 </div>
               </div>
@@ -704,7 +697,7 @@ const LandingPage = () => {
 
           <div className="absolute inset-0 flex items-end justify-center pointer-events-none select-none overflow-hidden" aria-hidden="true">
             <span className="text-[clamp(64px,20vw,280px)] font-bold font-heading tracking-tight leading-none text-white/[0.08] whitespace-nowrap translate-y-[20%]">
-              Geneie
+              geneie
             </span>
           </div>
 
@@ -722,7 +715,7 @@ const LandingPage = () => {
                 </a>
               </div>
               <div className="flex items-center justify-between pt-10 pb-1 border-b border-zinc-800/60">
-                <span className="text-zinc-600 text-xs sm:text-sm">&copy; {new Date().getFullYear()} Geneie</span>
+                <span className="text-zinc-600 text-xs sm:text-sm">&copy; {new Date().getFullYear()} geneie</span>
                 <span className="text-zinc-500 text-xs sm:text-sm font-medium">powered by Omixir</span>
               </div>
             </div>

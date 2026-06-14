@@ -114,7 +114,7 @@ const ChatPromptInput = ({
         {isEmpty ? (
           <>
             <PromptInputTextarea
-              placeholder="Message geneie..."
+              placeholder="Ask your genomic assistant..."
               className="text-sm min-h-[44px] max-h-[160px] py-1.5"
               style={{ color: 'var(--text-primary)' }}
             />

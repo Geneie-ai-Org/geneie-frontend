@@ -49,6 +49,7 @@ const ChatPage = () => {
   const [currentDocument, setCurrentDocument] = useState(null);
   const [variantData, setVariantData] = useState(null);
   const [isVariantSidebarOpen, setIsVariantSidebarOpen] = useState(false);
+  const [isEditSampleModalOpen, setIsEditSampleModalOpen] = useState(false);
 
   useEffect(() => {
     setIsSidebarOpen(!isMobile);
@@ -563,6 +564,7 @@ const ChatPage = () => {
               name: convData.document.file_name,
               type: convData.document.file_type || 'unknown',
               size: convData.document.file_size || 0,
+              sample_metadata: convData.sample_metadata || null,
             });
           } else {
             setCurrentDocument(null);
@@ -650,7 +652,8 @@ const ChatPage = () => {
             url: convData.document.s3_url,
             name: convData.document.file_name,
             type: convData.document.file_type || 'unknown',
-            size: convData.document.file_size || 0
+            size: convData.document.file_size || 0,
+            sample_metadata: convData.sample_metadata || null,
           };
           console.log('[App] Setting currentDocument from MongoDB:', documentObj);
           setCurrentDocument(documentObj);
@@ -828,11 +831,23 @@ const ChatPage = () => {
     if (variantUploadInProgress || isRunningAnnovar || isApplyingProprietaryFilter) {
       setPipelineExpanded(true);
     }
+    const fileReadyForAnnovar =
+      currentDocument &&
+      columnInterpretationResult &&
+      !pipelineSnapshot.hasAnnotatedFile &&
+      !isRunningAnnovar &&
+      !variantUploadInProgress;
+    if (fileReadyForAnnovar) {
+      setPipelineExpanded(true);
+    }
   }, [
     variantUploadInProgress,
     pipelineJobActive,
     isRunningAnnovar,
     isApplyingProprietaryFilter,
+    currentDocument,
+    columnInterpretationResult,
+    pipelineSnapshot.hasAnnotatedFile,
   ]);
 
   const handlePipelineStepAction = useCallback(
@@ -890,6 +905,7 @@ const ChatPage = () => {
         chatEligibility.variants_under_consideration ??
         conversationFilterState.filteredVariantCount
       }
+      onEditSampleInfo={() => setIsEditSampleModalOpen(true)}
     />
   ) : null;
 
@@ -1649,6 +1665,45 @@ const ChatPage = () => {
           isOpen={variantUploadInProgress}
           uploadProgress={uploadProgress}
           fileName={uploadingFileName || preSelectedFile?.name}
+        />
+      )}
+
+      {isEditSampleModalOpen && userTier !== 'guest' && activeConversationId && (
+        <DocumentUpload
+          conversationId={activeConversationId}
+          userId={userId}
+          userTier={userTier}
+          editMode={true}
+          initialMetadata={currentDocument?.sample_metadata || {}}
+          onEditSaved={(result) => {
+            setIsEditSampleModalOpen(false);
+            const impact = result?.metadata_edit_impact;
+            if (impact) {
+              if (impact.requires_filter_reset || impact.requires_annovar_rerun) {
+                setVariantData(null);
+                setConversationFilterState({
+                  activeVariantFilters: null,
+                  filteredVariantCount: null,
+                  activeProprietaryFilter: null,
+                  filterWorkingSetCount: null,
+                });
+                resetConversationPipeline();
+              }
+              if (impact.requires_annovar_rerun) {
+                setTimeout(() => runAnnovarForCurrentConversation(), 300);
+              }
+            }
+            mongodbApi.getConversation(activeConversationId).then((convData) => {
+              if (convData) {
+                setCurrentDocument((prev) => ({
+                  ...prev,
+                  sample_metadata: convData.sample_metadata || null,
+                }));
+              }
+            });
+          }}
+          onCancel={() => setIsEditSampleModalOpen(false)}
+          onUploadingChange={() => {}}
         />
       )}
 

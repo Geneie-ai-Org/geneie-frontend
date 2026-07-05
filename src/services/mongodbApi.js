@@ -117,6 +117,28 @@ export const updateConversation = async (conversationId, updates) => {
 };
 
 /**
+ * Patch sample metadata for a conversation (edit sample info).
+ */
+export const patchSampleMetadata = async (conversationId, sampleMetadata) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const response = await fetch(`${API_BASE_URL}/api/conversation/${conversationId}/sample-metadata`, {
+    method: 'PATCH',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ sample_metadata: sampleMetadata }),
+  });
+
+  if (!response.ok) await handleResponseError(response);
+
+  const data = await response.json();
+  return data;
+};
+
+/**
  * Delete a conversation
  */
 export const deleteConversation = async (conversationId) => {

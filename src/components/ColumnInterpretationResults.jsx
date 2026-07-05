@@ -752,12 +752,6 @@ const ColumnInterpretationResults = ({
           {/* Selected step detail panel */}
           {selectedStepData && (
             <div className="border rounded-lg p-4" style={{ borderColor: C.border }}>
-              {/* <div className="w-full rounded-full h-1.5" style={{ backgroundColor: C.track }}>
-                <div
-                  className="h-1.5 rounded-full transition-all"
-                  style={{ width: `${selectedStepData.progress}%`, backgroundColor: getStepColor(selectedStepData.status) }}
-                />
-              </div> */}
               {renderStepDetails(selectedStepData.n, selectedStepData.data) || (
                 <p className="mt-3 text-sm" style={{ color: C.textMuted }}>
                   No column details available for this step yet.

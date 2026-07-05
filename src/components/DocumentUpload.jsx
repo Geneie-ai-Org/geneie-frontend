@@ -15,6 +15,7 @@ import {
   shouldUsePresignedUpload,
   detectGenomeBuild,
 } from '@/services/backendApi';
+import { patchSampleMetadata } from '@/services/mongodbApi';
 
 /** Tabular + VCF (.vcf and .vcf.gz). Uses suffix checks so .vcf.gz is not mistaken for .gz-only. */
 function isAllowedVariantFilename(fileName) {
@@ -149,6 +150,9 @@ const DocumentUpload = ({
   onDismissForUpload,
   onUploadStarted,
   onMetadataFormChange,
+  editMode = false,
+  initialMetadata = null,
+  onEditSaved = null,
 }) => {
   const { subscriptionStatus } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
@@ -183,6 +187,30 @@ const DocumentUpload = ({
   const [pendingFile, setPendingFile] = useState(null);
   const [isDetectingGenome, setIsDetectingGenome] = useState(false);
   const [genomeDetection, setGenomeDetection] = useState(null); // { detected_build, genome, confidence, source }
+  const [editImpact, setEditImpact] = useState(null); // metadata_edit_impact from PATCH response
+  useEffect(() => {
+    if (editMode && initialMetadata) {
+      setSampleMetadata({
+        name: initialMetadata.sampleName || initialMetadata.name || '',
+        project: initialMetadata.projectName || initialMetadata.project || '',
+        genome: initialMetadata.genome || '',
+        sequencingType: initialMetadata.sequencingType || '',
+        sampleFileType: initialMetadata.sampleFileType || '',
+        sampleSex: initialMetadata.sampleSex || initialMetadata.patientSex || '',
+        analysisType: initialMetadata.analysisType || '',
+        sampleSource: initialMetadata.sampleSource || '',
+        sampleRole: initialMetadata.sampleRole || '',
+        affectedStatus: initialMetadata.affectedStatus || '',
+        inheritanceModel: initialMetadata.inheritanceModel || '',
+        phenotype: initialMetadata.phenotype || '',
+        tumorType: initialMetadata.tumorType || '',
+      });
+      setEditImpact(null);
+      setError('');
+      setShowInfoForm(true);
+    }
+  }, [editMode, initialMetadata]);
+
   // File type is now selected via dropdown in ChatPage before reaching this component
   const fileInputRef = useRef(null);
 
@@ -458,6 +486,40 @@ const DocumentUpload = ({
 
   const handleInfoFormSubmit = async (e) => {
     e.preventDefault();
+
+    // --- Edit mode: PATCH sample metadata ---
+    if (editMode && conversationId) {
+      setError('');
+      setValidationAttempted(true);
+
+      if (!sampleMetadata.genome) { setError('Please select a Genome (required)'); return; }
+      if (!sampleMetadata.sequencingType) { setError('Please select a Sequencing Type (required)'); return; }
+      if (!sampleMetadata.analysisType) { setError('Please select an Analysis Type (required)'); return; }
+
+      setIsUploading(true);
+      try {
+        const result = await patchSampleMetadata(conversationId, {
+          genome: sampleMetadata.genome,
+          sequencingType: sampleMetadata.sequencingType,
+          analysisType: sampleMetadata.analysisType,
+          sampleName: sampleMetadata.name,
+          projectName: sampleMetadata.project,
+          patientSex: sampleMetadata.sampleSex,
+          patientAge: initialMetadata?.patientAge || '',
+          phenotype: sampleMetadata.analysisType === 'Germline' ? sampleMetadata.phenotype : '',
+          tumorType: (sampleMetadata.analysisType === 'Somatic' || sampleMetadata.analysisType === 'Tumor-Normal Paired' || sampleMetadata.analysisType === 'Tumor-Only') ? sampleMetadata.tumorType : '',
+        });
+        onEditSaved?.(result);
+        setShowInfoForm(false);
+        setEditImpact(null);
+      } catch (err) {
+        setError(err.message || 'Failed to update sample metadata');
+      } finally {
+        setIsUploading(false);
+      }
+      return;
+    }
+
     console.log('[DocumentUpload] Form submitted, selectedFile:', selectedFile);
     
     if (!selectedFile) {
@@ -506,6 +568,13 @@ const DocumentUpload = ({
   };
 
   const handleInfoFormCancel = () => {
+    if (editMode) {
+      setShowInfoForm(false);
+      setEditImpact(null);
+      setError('');
+      onCancel?.();
+      return;
+    }
     setShowInfoForm(false);
     setSelectedFile(null);
     setSampleMetadata({
@@ -1038,12 +1107,12 @@ const DocumentUpload = ({
               <X className="w-4 h-4" />
             </button> */}
             <h3 id="sample-metadata-title" className="text-sm font-semibold mb-0.5 pr-8" style={{ color: 'var(--text-primary)' }}>
-              Sample Metadata
+              {editMode ? 'Edit Sample Information' : 'Sample Metadata'}
             </h3>
             <p className="text-xs mb-0" style={{ color: 'var(--text-tertiary)' }}>
-              Provide details about your variant file for better analysis.
+              {editMode ? 'Update metadata for this variant file. Changes may require re-running analysis steps.' : 'Provide details about your variant file for better analysis.'}
             </p>
-            {selectedFile && (
+            {!editMode && selectedFile && (
               <p className="text-xs mt-3 px-2.5 py-1.5 rounded-lg truncate" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-secondary)' }}>
                 File: <span className="font-medium">{selectedFile.name}</span>
               </p>
@@ -1161,28 +1230,43 @@ const DocumentUpload = ({
                   <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
                     Genome <span style={{ color: 'var(--error)' }}>*</span>
                   </label>
-                  <CustomSelect
-                    value={sampleMetadata.genome}
-                    onChange={(val) => {
-                      setSampleMetadata({ ...sampleMetadata, genome: val });
-                      // Clear auto-detection badge when user manually picks
-                      if (genomeDetection) setGenomeDetection((prev) => prev ? { ...prev, _userOverride: true } : prev);
-                    }}
-                    placeholder={isDetectingGenome ? 'Detecting genome…' : 'Select Genome...'}
-                    options={[
-                      { value: 'hg19 (GRCh37)', label: 'hg19 (GRCh37)' },
-                      { value: 'hg38 (GRCh38)', label: 'hg38 (GRCh38)' },
-                    ]}
-                    error={validationAttempted && !sampleMetadata.genome}
-                  />
+                  {editMode ? (
+                    <input
+                      type="text"
+                      value={sampleMetadata.genome}
+                      readOnly
+                      className="w-full px-2.5 py-1.5 border rounded-lg text-xs"
+                      style={{
+                        borderColor: 'var(--border-default)',
+                        background: 'var(--bg-surface-hover)',
+                        color: 'var(--text-tertiary)',
+                        height: '34px',
+                      }}
+                    />
+                  ) : (
+                    <CustomSelect
+                      value={sampleMetadata.genome}
+                      onChange={(val) => {
+                        setSampleMetadata({ ...sampleMetadata, genome: val });
+                        // Clear auto-detection badge when user manually picks
+                        if (genomeDetection) setGenomeDetection((prev) => prev ? { ...prev, _userOverride: true } : prev);
+                      }}
+                      placeholder={isDetectingGenome ? 'Detecting genome…' : 'Select Genome...'}
+                      options={[
+                        { value: 'hg19 (GRCh37)', label: 'hg19 (GRCh37)' },
+                        { value: 'hg38 (GRCh38)', label: 'hg38 (GRCh38)' },
+                      ]}
+                      error={validationAttempted && !sampleMetadata.genome}
+                    />
+                  )}
                   {/* Auto-detection feedback */}
-                  {isDetectingGenome && (
+                  {!editMode && isDetectingGenome && (
                     <div className="flex items-center gap-1.5 mt-1">
                       <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--accent-teal)' }} />
                       <span className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>Detecting genome build…</span>
                     </div>
                   )}
-                  {genomeDetection?.detected_build && !isDetectingGenome && !genomeDetection._userOverride && (
+                  {!editMode && genomeDetection?.detected_build && !isDetectingGenome && !genomeDetection._userOverride && (
                     <div className="flex items-center gap-1.5 mt-1">
                       <CheckCircle className="w-3 h-3" style={{ color: 'var(--accent-teal)' }} />
                       <span className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
@@ -1452,10 +1536,10 @@ const DocumentUpload = ({
                   {isUploading ? (
                     <>
                       <Loader2 className="w-3 h-3 animate-spin" />
-                      {uploadStatusMessage || 'Processing…'}
+                      {editMode ? 'Saving…' : (uploadStatusMessage || 'Processing…')}
                     </>
                   ) : (
-                    'Upload File'
+                    editMode ? 'Save Changes' : 'Upload File'
                   )}
                 </button>
               </div>

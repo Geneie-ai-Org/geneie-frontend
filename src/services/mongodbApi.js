@@ -8,6 +8,17 @@ import { getApiOrigin } from '../config/api.js';
 
 const API_BASE_URL = getApiOrigin();
 
+const handleResponseError = async (response) => {
+  let detail = response.statusText;
+  try {
+    const body = await response.json();
+    if (body.detail) detail = body.detail;
+  } catch (_) {}
+  const error = new Error(detail);
+  error.status = response.status;
+  throw error;
+};
+
 const getAuthToken = async () => {
   const auth = getAuth();
   if (auth.currentUser) {
@@ -31,9 +42,7 @@ export const getConversations = async () => {
     }
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch conversations: ${response.statusText}`);
-  }
+  if (!response.ok) await handleResponseError(response);
 
   const data = await response.json();
   return data.conversations || [];
@@ -55,9 +64,7 @@ export const createConversation = async (title = 'New Conversation') => {
     body: JSON.stringify({ title })
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to create conversation: ${response.statusText}`);
-  }
+  if (!response.ok) await handleResponseError(response);
 
   const data = await response.json();
   return data.conversation;
@@ -80,7 +87,7 @@ export const getConversation = async (conversationId) => {
 
   if (!response.ok) {
     if (response.status === 404) return null;
-    throw new Error(`Failed to fetch conversation: ${response.statusText}`);
+    await handleResponseError(response);
   }
 
   const data = await response.json();
@@ -103,9 +110,7 @@ export const updateConversation = async (conversationId, updates) => {
     body: JSON.stringify(updates)
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to update conversation: ${response.statusText}`);
-  }
+  if (!response.ok) await handleResponseError(response);
 
   const data = await response.json();
   return data.success;
@@ -126,9 +131,7 @@ export const deleteConversation = async (conversationId) => {
     }
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to delete conversation: ${response.statusText}`);
-  }
+  if (!response.ok) await handleResponseError(response);
 
   const data = await response.json();
   return data;
@@ -149,9 +152,7 @@ export const getMessages = async (conversationId) => {
     }
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch messages: ${response.statusText}`);
-  }
+  if (!response.ok) await handleResponseError(response);
 
   const data = await response.json();
   return data.messages || [];
@@ -177,9 +178,7 @@ export const createMessage = async (conversationId, role, text, sources = []) =>
     })
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to create message: ${response.statusText}`);
-  }
+  if (!response.ok) await handleResponseError(response);
 
   const data = await response.json();
   return data.message;
@@ -209,7 +208,7 @@ export const deleteMessage = async (conversationId, messageId) => {
       err.status = 404;
       throw err;
     }
-    throw new Error(`Failed to delete message: ${response.statusText}`);
+    await handleResponseError(response);
   }
 
   return await response.json();

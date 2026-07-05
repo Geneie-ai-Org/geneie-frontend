@@ -13,6 +13,7 @@ import {
   presignVariantUpload,
   putFileToPresignedUrl,
   shouldUsePresignedUpload,
+  detectGenomeBuild,
 } from '@/services/backendApi';
 
 /** Tabular + VCF (.vcf and .vcf.gz). Uses suffix checks so .vcf.gz is not mistaken for .gz-only. */
@@ -180,6 +181,8 @@ const DocumentUpload = ({
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
+  const [isDetectingGenome, setIsDetectingGenome] = useState(false);
+  const [genomeDetection, setGenomeDetection] = useState(null); // { detected_build, genome, confidence, source }
   // File type is now selected via dropdown in ChatPage before reaching this component
   const fileInputRef = useRef(null);
 
@@ -201,6 +204,29 @@ const DocumentUpload = ({
       onUploadStarted,
     ]
   );
+
+  /** Fire-and-forget genome detection when a file is selected for the metadata form. */
+  const runGenomeDetection = useCallback(async (file) => {
+    setIsDetectingGenome(true);
+    setGenomeDetection(null);
+    try {
+      const result = await detectGenomeBuild(file);
+      console.log('[DocumentUpload] Genome detection result:', result);
+      if (result.genome) {
+        // Pre-fill only if the user hasn't manually selected a genome yet
+        setSampleMetadata((prev) => {
+          if (prev.genome) return prev; // user already picked one
+          return { ...prev, genome: result.genome };
+        });
+      }
+      setGenomeDetection(result);
+    } catch (err) {
+      console.warn('[DocumentUpload] Genome detection failed (non-blocking):', err.message);
+      setGenomeDetection(null);
+    } finally {
+      setIsDetectingGenome(false);
+    }
+  }, []);
 
   const dismissUploadUiForBackgroundUpload = useCallback(() => {
     setShowInfoForm(false);
@@ -349,7 +375,9 @@ const DocumentUpload = ({
         }));
         setValidationAttempted(false);
         setError('');
+        setGenomeDetection(null);
         setShowInfoForm(true);
+        runGenomeDetection(file);
       } else {
         console.log('[DocumentUpload] Starting upload (non-CSV/TSV file)...');
         await uploadFile(file);
@@ -498,6 +526,8 @@ const DocumentUpload = ({
     setShowCreateProject(false);
     setNewProjectName('');
     setValidationAttempted(false);
+    setGenomeDetection(null);
+    setIsDetectingGenome(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -1126,21 +1156,42 @@ const DocumentUpload = ({
                   )}
                 </div> */}
 
-                {/* Genome - Mandatory Field */}
+                {/* Genome - Mandatory Field (auto-detected when possible) */}
                 <div>
                   <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
                     Genome <span style={{ color: 'var(--error)' }}>*</span>
                   </label>
                   <CustomSelect
                     value={sampleMetadata.genome}
-                    onChange={(val) => setSampleMetadata({ ...sampleMetadata, genome: val })}
-                    placeholder="Select Genome..."
+                    onChange={(val) => {
+                      setSampleMetadata({ ...sampleMetadata, genome: val });
+                      // Clear auto-detection badge when user manually picks
+                      if (genomeDetection) setGenomeDetection((prev) => prev ? { ...prev, _userOverride: true } : prev);
+                    }}
+                    placeholder={isDetectingGenome ? 'Detecting genome…' : 'Select Genome...'}
                     options={[
                       { value: 'hg19 (GRCh37)', label: 'hg19 (GRCh37)' },
                       { value: 'hg38 (GRCh38)', label: 'hg38 (GRCh38)' },
                     ]}
                     error={validationAttempted && !sampleMetadata.genome}
                   />
+                  {/* Auto-detection feedback */}
+                  {isDetectingGenome && (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--accent-teal)' }} />
+                      <span className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>Detecting genome build…</span>
+                    </div>
+                  )}
+                  {genomeDetection?.detected_build && !isDetectingGenome && !genomeDetection._userOverride && (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <CheckCircle className="w-3 h-3" style={{ color: 'var(--accent-teal)' }} />
+                      <span className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+                        Auto-detected: {genomeDetection.detected_build.toUpperCase()}
+                        {genomeDetection.confidence === 'high' ? '' : ' — please verify'}
+                        {genomeDetection.source ? ` (${genomeDetection.source.replace(/_/g, ' ')})` : ''}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Sequencing Type - Mandatory Field */}
@@ -1572,7 +1623,9 @@ const DocumentUpload = ({
                       }));
                       setValidationAttempted(false);
                       setError('');
+                      setGenomeDetection(null);
                       setShowInfoForm(true);
+                      runGenomeDetection(file);
                     } else {
                       await uploadFile(file);
                     }

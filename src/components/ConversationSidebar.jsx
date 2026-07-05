@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MessageSquare, Plus, Trash2, ChevronLeft, ChevronRight, User, Settings, LogOut } from 'lucide-react';
 import { getAuth, signOut } from 'firebase/auth';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -18,9 +19,11 @@ const ConversationSidebar = ({
     onOpenProfile
 }) => {
     const isMobile = useIsMobile();
+    const navigate = useNavigate();
     const freeChatLimit = userTier === 'free' ? chatLimit : Infinity;
     const [showAccountMenu, setShowAccountMenu] = useState(false);
     const menuRef = useRef(null);
+    const accountBtnRef = useRef(null);
 
     // Close menu on outside click
     useEffect(() => {
@@ -43,7 +46,7 @@ const ConversationSidebar = ({
         try {
             await signOut(auth);
             setShowAccountMenu(false);
-            window.location.reload();
+            navigate('/auth');
         } catch (err) {
             console.error('Sign out error:', err);
         }
@@ -196,7 +199,16 @@ const ConversationSidebar = ({
                         {/* Popover menu */}
                         {showAccountMenu && (
                             <div
-                                className={`absolute rounded-xl py-1 shadow-lg w-56 z-50 bg-zinc-900 border border-zinc-700/80 ${isOpen ? 'bottom-full left-3 right-3 mb-1' : 'bottom-0 left-full ml-2'}`}
+                                className="rounded-xl py-1 shadow-lg w-56 z-50 bg-zinc-900 border border-zinc-700/80"
+                                style={isOpen
+                                  ? { position: 'absolute', bottom: '100%', left: '12px', right: '12px', marginBottom: '4px' }
+                                  : (() => {
+                                      const rect = accountBtnRef.current?.getBoundingClientRect();
+                                      return rect
+                                        ? { position: 'fixed', bottom: `${window.innerHeight - rect.top + 4}px`, left: `${rect.right + 8}px`, zIndex: 9999 }
+                                        : { position: 'absolute', bottom: 0, left: '100%', marginLeft: '8px' };
+                                    })()
+                                }
                             >
                                 {/* User info */}
                                 <div className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-zinc-300">
@@ -231,6 +243,7 @@ const ConversationSidebar = ({
                         )}
 
                         <button
+                            ref={accountBtnRef}
                             onClick={() => setShowAccountMenu(!showAccountMenu)}
                             className={`w-full py-3 transition-colors hover:bg-white/5 cursor-pointer overflow-hidden ${isOpen ? 'px-5' : 'px-0'}`}
                             title={isOpen ? undefined : 'Profile & Settings'}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, AlertCircle, X, FileText, ChevronDown, ChevronUp, Info, ArrowRight, Trash2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2, ChevronDown } from 'lucide-react';
 import qiagenLogo from '../Qiagen.svg.png';
 import { ACMG_FILTER_DISPLAY_NAME } from './VariantFilterSidebar';
 
@@ -14,9 +14,9 @@ const C = {
   textDim: 'var(--text-tertiary)',
   success: 'var(--success)',
   successSoft: 'var(--success-soft)',
-  warning: 'var(--warning)',
-  warningSoft: 'var(--warning-soft)',
-  warningText: 'var(--warning)',
+  warning: 'var(--accent-teal)',
+  warningSoft: 'var(--accent-teal-soft)',
+  warningText: 'var(--accent-teal)',
   info: 'var(--accent-blue)',
   infoSoft: 'var(--accent-blue-soft)',
   teal: 'var(--accent-teal)',
@@ -33,10 +33,12 @@ const ColumnInterpretationResults = ({
   interpretationResult,
   onClose,
   onAnnovarClick,
-  onAcmgFilterClick,
-  isApplyingAcmgFilter = false,
+  onProprietaryFilterClick,
+  isApplyingProprietaryFilter = false,
   acmgFilterActive = false,
   acmgFilterCanApply = false,
+  filter2Active = false,
+  filter2CanApply = false,
   showVcfTabHighlight,
   onDeleteDocument,
   onTryVcfUpload,
@@ -51,9 +53,11 @@ const ColumnInterpretationResults = ({
   const [expandedStep, setExpandedStep] = useState(null); // Track which step is expanded
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // Explicit remove-file confirmation only
   const [showAnnovarConfirm, setShowAnnovarConfirm] = useState(false); // Confirm ANNOVAR when all columns present
+  const [expandedSections, setExpandedSections] = useState({}); // Track expanded column sections in step details
 
-  const backgroundJobActive = isRunningAnnovar || isApplyingAcmgFilter;
-  
+  const backgroundJobActive = isRunningAnnovar || isApplyingProprietaryFilter;
+  const genomeMismatch = interpretationResult?.genome_build_check?.status === 'mismatch';
+
   if (!interpretationResult) return null;
 
   const { step1, step2, step3, overall_status, recommendations } = interpretationResult;
@@ -180,20 +184,6 @@ const ColumnInterpretationResults = ({
   
   const recommendedButton = getRecommendedButton();
 
-  const toggleStep = (stepNumber) => {
-    setExpandedStep(expandedStep === stepNumber ? null : stepNumber);
-  };
-
-  const getStepIcon = (status) => {
-    if (status === 'passed') {
-      return <CheckCircle2 className="w-5 h-5" style={{ color: C.success }} />;
-    }
-    if (status === 'pending') {
-      return <Info className="w-5 h-5" style={{ color: C.info }} />;
-    }
-    return <AlertCircle className="w-5 h-5" style={{ color: C.warning }} />;
-  };
-
   const getStepLabel = (status) => {
     if (status === 'passed') return 'Complete';
     if (status === 'pending') return 'Pending';
@@ -212,16 +202,6 @@ const ColumnInterpretationResults = ({
     return { backgroundColor: C.warningSoft, color: C.warning };
   };
 
-  const stepCardHandlers = {
-    onMouseEnter: (e) => { e.currentTarget.style.backgroundColor = C.surfaceHover; },
-    onMouseLeave: (e) => { e.currentTarget.style.backgroundColor = C.surfaceCard; },
-  };
-
-  const chevronBtnHandlers = {
-    onMouseEnter: (e) => { e.currentTarget.style.backgroundColor = C.surfaceHover; },
-    onMouseLeave: (e) => { e.currentTarget.style.backgroundColor = 'transparent'; },
-  };
-
   const tooltipStyle = {
     backgroundColor: C.tooltip,
     color: C.text,
@@ -237,27 +217,165 @@ const ColumnInterpretationResults = ({
     borderTopColor: C.tooltip,
   };
 
+  /** Render a column group with exception-only display:
+   *  - All found → single summary line + expandable detail
+   *  - Has issues → show only the problematic columns directly */
+  const renderColumnGroup = (sectionKey, label, columns, columnsNoValidValues = [], opts = {}) => {
+    const entries = Object.entries(columns);
+    if (!entries.length) return null;
+
+    const found = entries.filter(([, c]) => c.found);
+    const issues = entries.filter(([colName, c]) => !c.found);
+    const allFound = issues.length === 0;
+    const isExpanded = !!expandedSections[sectionKey];
+
+    return (
+      <div>
+        {allFound ? (
+          /* Happy path: summary + expandable detail */
+          <>
+            <button
+              type="button"
+              onClick={() => setExpandedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }))}
+              className="flex items-center gap-1.5 w-full text-left group"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" style={{ color: C.success }} />
+              <span className="text-xs" style={{ color: C.textMuted }}>
+                {label}: {found.length}/{entries.length} columns found
+              </span>
+              <ChevronDown
+                className="w-3 h-3 ml-auto shrink-0 transition-transform"
+                style={{ color: C.textDim, transform: isExpanded ? 'rotate(180deg)' : 'none' }}
+              />
+            </button>
+            {isExpanded && (
+              <div className="mt-1.5 ml-5 space-y-1">
+                {entries.map(([colName, colInfo]) => (
+                  <div key={colName} className="flex items-center justify-between text-sm">
+                    <span style={{ color: C.textMuted }}>{colName}:</span>
+                    <span className="font-medium text-xs" style={{ color: C.success }}>✓ {colInfo.matched_column || 'Found'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          /* Issues present: show problems directly, found columns behind expand */
+          <>
+            <p className="font-semibold mb-1.5 text-xs" style={{ color: C.text }}>{label}:</p>
+            <div className="space-y-1">
+              {issues.map(([colName, colInfo]) => (
+                <div key={colName} className="flex items-center justify-between text-sm">
+                  <span style={{ color: C.textMuted }}>{colName}:</span>
+                  {columnsNoValidValues.includes(colName) ? (
+                    <span className="font-medium text-xs" style={{ color: C.warningText }}>○ No valid values</span>
+                  ) : (
+                    <span className="font-medium text-xs" style={{ color: opts.missingColor || C.warning }}>
+                      ○ {opts.missingLabel || 'Missing'}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            {found.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setExpandedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }))}
+                  className="flex items-center gap-1 mt-1.5"
+                >
+                  <span className="text-[11px]" style={{ color: C.textDim }}>
+                    {found.length} column{found.length > 1 ? 's' : ''} found
+                  </span>
+                  <ChevronDown
+                    className="w-3 h-3 transition-transform"
+                    style={{ color: C.textDim, transform: isExpanded ? 'rotate(180deg)' : 'none' }}
+                  />
+                </button>
+                {isExpanded && (
+                  <div className="mt-1 ml-1 space-y-1">
+                    {found.map(([colName, colInfo]) => (
+                      <div key={colName} className="flex items-center justify-between text-sm">
+                        <span style={{ color: C.textMuted }}>{colName}:</span>
+                        <span className="font-medium text-xs" style={{ color: C.success }}>✓ {colInfo.matched_column || 'Found'}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
+  /** Render conditional columns — found/missing with required/optional labels */
+  const renderConditionalGroup = (sectionKey, label, columns) => {
+    const entries = Object.entries(columns);
+    if (!entries.length) return null;
+
+    const found = entries.filter(([, c]) => c.found);
+    const issues = entries.filter(([, c]) => !c.found);
+    const allFound = issues.length === 0;
+    const isExpanded = !!expandedSections[sectionKey];
+
+    return (
+      <div>
+        {allFound ? (
+          <button
+            type="button"
+            onClick={() => setExpandedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }))}
+            className="flex items-center gap-1.5 w-full text-left"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" style={{ color: C.success }} />
+            <span className="text-xs" style={{ color: C.textMuted }}>
+              {label}: {found.length}/{entries.length} columns found
+            </span>
+            <ChevronDown
+              className="w-3 h-3 ml-auto shrink-0 transition-transform"
+              style={{ color: C.textDim, transform: isExpanded ? 'rotate(180deg)' : 'none' }}
+            />
+          </button>
+        ) : (
+          <p className="font-semibold mb-1.5 text-xs" style={{ color: C.text }}>{label}:</p>
+        )}
+        {allFound && isExpanded && (
+          <div className="mt-1.5 ml-5 space-y-1">
+            {entries.map(([colName, colInfo]) => (
+              <div key={colName} className="flex items-center justify-between text-sm">
+                <span style={{ color: C.textMuted }}>{colName}:</span>
+                <span className="font-medium text-xs" style={{ color: C.success }}>
+                  ✓ {colInfo.matched_column || 'Found'}
+                  {colInfo.required && <span className="ml-1">(Required)</span>}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {!allFound && (
+          <div className="space-y-1">
+            {issues.map(([colName, colInfo]) => (
+              <div key={colName} className="flex items-center justify-between text-sm">
+                <span style={{ color: C.textMuted }}>{colName}:</span>
+                <span className="font-medium text-xs" style={{ color: colInfo.required ? C.warning : C.textDim }}>
+                  {colInfo.required ? '○ Missing (Required)' : '○ Not found (Optional)'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderStepDetails = (stepNumber, stepData) => {
     if (stepNumber === 1) {
       const required = stepData.required_columns || {};
       const columnsNoValidValues = stepData.columns_no_valid_values || [];
-      
       return (
-        <div className="mt-3 space-y-2 text-sm">
-          <div className="space-y-1">
-            {Object.entries(required).map(([colName, colInfo]) => (
-              <div key={colName} className="flex items-center justify-between">
-                <span style={{ color: C.textMuted }}>{colName}:</span>
-                {colInfo.found ? (
-                  <span className="font-medium text-xs" style={{ color: C.success }}>✓ {colInfo.matched_column}</span>
-                ) : columnsNoValidValues.includes(colName) ? (
-                  <span className="font-medium text-xs" style={{ color: C.warningText }}>○ No valid values</span>
-                ) : (
-                  <span className="font-medium text-xs" style={{ color: C.warning }}>○ Missing</span>
-                )}
-              </div>
-            ))}
-          </div>
+        <div className="space-y-2 text-sm">
+          {renderColumnGroup(`step1_required`, 'Required Columns', required, columnsNoValidValues)}
         </div>
       );
     } else if (stepNumber === 2) {
@@ -275,46 +393,9 @@ const ColumnInterpretationResults = ({
       const columnsNoValidValues = stepData.columns_no_valid_values || [];
 
       return (
-        <div className="mt-3 space-y-3 text-sm">
-          {Object.keys(required).length > 0 && (
-            <div>
-              <p className="font-semibold mb-2" style={{ color: C.text }}>Required Columns:</p>
-              <div className="space-y-1">
-                {Object.entries(required).map(([colName, colInfo]) => (
-                  <div key={colName} className="flex items-center justify-between">
-                    <span style={{ color: C.textMuted }}>{colName}:</span>
-                    {colInfo.found ? (
-                      <span className="font-medium text-xs" style={{ color: C.success }}>✓ {colInfo.matched_column || 'Found'}</span>
-                    ) : columnsNoValidValues.includes(colName) ? (
-                      <span className="font-medium text-xs" style={{ color: C.warningText }}>○ No valid values</span>
-                    ) : (
-                      <span className="font-medium text-xs" style={{ color: C.warning }}>○ Missing</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {Object.keys(pathogenicity_group).length > 0 && (
-            <div>
-              <p className="font-semibold mb-2" style={{ color: C.text }}>Pathogenicity Predictors (At Least 2 Required):</p>
-              <div className="space-y-1">
-                {Object.entries(pathogenicity_group).map(([colName, colInfo]) => (
-                  <div key={colName} className="flex items-center justify-between">
-                    <span style={{ color: C.textMuted }}>{colName}:</span>
-                    {colInfo.found ? (
-                      <span className="font-medium text-xs" style={{ color: C.success }}>✓ {colInfo.matched_column || 'Found'}</span>
-                    ) : columnsNoValidValues.includes(colName) ? (
-                      <span className="font-medium text-xs" style={{ color: C.warningText }}>○ No valid values</span>
-                    ) : (
-                      <span className="font-medium text-xs" style={{ color: C.textDim }}>○ Not found</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+        <div className="space-y-3 text-sm">
+          {renderColumnGroup(`step2_required`, 'Required Columns', required, columnsNoValidValues)}
+          {renderColumnGroup(`step2_pathogenicity`, 'Pathogenicity Predictors (At Least 2 Required)', pathogenicity_group, columnsNoValidValues, { missingLabel: 'Not found', missingColor: C.textDim })}
 
           {missing_groups.length > 0 && (
             <div className="p-2 rounded" style={{ backgroundColor: C.warningSoft, border: `1px solid ${C.warning}` }}>
@@ -330,9 +411,9 @@ const ColumnInterpretationResults = ({
       );
     } else if (stepNumber === 3) {
       if (stepData.not_implemented) {
-        return null; // Don't show pending message
+        return null;
       }
-      
+
       const required = stepData.required_columns || {};
       const sample_genotype_group = stepData.sample_genotype_group || {};
       const pathogenicity_score_group = stepData.pathogenicity_score_group || {};
@@ -340,116 +421,15 @@ const ColumnInterpretationResults = ({
       const columnsNoValidValues = stepData.columns_no_valid_values || [];
       const optional = stepData.optional_columns || {};
       const missing_groups = stepData.missing_groups || [];
-      
+
       return (
-        <div className="mt-3 space-y-3 text-sm">
-          {/* Required Columns */}
-          {Object.keys(required).length > 0 && (
-            <div>
-              <p className="font-semibold mb-2" style={{ color: C.text }}>Required Columns:</p>
-              <div className="space-y-1">
-                {Object.entries(required).map(([colName, colInfo]) => (
-                  <div key={colName} className="flex items-center justify-between">
-                    <span style={{ color: C.textMuted }}>{colName}:</span>
-                    {colInfo.found ? (
-                      <span className="font-medium text-xs" style={{ color: C.success }}>✓ {colInfo.matched_column || 'Found'}</span>
-                    ) : columnsNoValidValues.includes(colName) ? (
-                      <span className="font-medium text-xs" style={{ color: C.warningText }}>○ No valid values</span>
-                    ) : (
-                      <span className="font-medium text-xs" style={{ color: C.warning }}>○ Missing</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {/* Sample Genotype Group */}
-          {Object.keys(sample_genotype_group).length > 0 && (
-            <div>
-              <p className="font-semibold mb-2" style={{ color: C.text }}>Sample Genotype (Any One Required):</p>
-              <div className="space-y-1">
-                {Object.entries(sample_genotype_group).map(([colName, colInfo]) => (
-                  <div key={colName} className="flex items-center justify-between">
-                    <span style={{ color: C.textMuted }}>{colName}:</span>
-                    {colInfo.found ? (
-                      <span className="font-medium text-xs" style={{ color: C.success }}>✓ {colInfo.matched_column || 'Found'}</span>
-                    ) : columnsNoValidValues.includes(colName) ? (
-                      <span className="font-medium text-xs" style={{ color: C.warningText }}>○ No valid values</span>
-                    ) : (
-                      <span className="font-medium text-xs" style={{ color: C.textDim }}>○ Not found</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {/* Pathogenicity Score Group */}
-          {Object.keys(pathogenicity_score_group).length > 0 && (
-            <div>
-              <p className="font-semibold mb-2" style={{ color: C.text }}>Pathogenicity Scores (Any One Required):</p>
-              <div className="space-y-1">
-                {Object.entries(pathogenicity_score_group).map(([colName, colInfo]) => (
-                  <div key={colName} className="flex items-center justify-between">
-                    <span style={{ color: C.textMuted }}>{colName}:</span>
-                    {colInfo.found ? (
-                      <span className="font-medium text-xs" style={{ color: C.success }}>✓ {colInfo.matched_column || 'Found'}</span>
-                    ) : columnsNoValidValues.includes(colName) ? (
-                      <span className="font-medium text-xs" style={{ color: C.warningText }}>○ No valid values</span>
-                    ) : (
-                      <span className="font-medium text-xs" style={{ color: C.textDim }}>○ Not found</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {/* Conditional Columns */}
-          {Object.keys(conditional).length > 0 && (
-            <div>
-              <p className="font-semibold mb-2" style={{ color: C.text }}>Conditional Columns:</p>
-              <div className="space-y-1">
-                {Object.entries(conditional).map(([colName, colInfo]) => (
-                  <div key={colName} className="flex items-center justify-between">
-                    <span style={{ color: C.textMuted }}>{colName}:</span>
-                    {colInfo.found ? (
-                      <span className="font-medium text-xs" style={{ color: C.success }}>
-                        ✓ {colInfo.matched_column || 'Found'}
-                        {colInfo.required && <span className="ml-1 text-xs">(Required)</span>}
-                      </span>
-                    ) : (
-                      <span className="font-medium text-xs" style={{ color: colInfo.required ? C.warning : C.textDim }}>
-                        {colInfo.required ? '○ Missing (Required)' : '○ Not found (Optional)'}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {/* Optional Columns */}
-          {Object.keys(optional).length > 0 && (
-            <div>
-              <p className="font-semibold mb-2" style={{ color: C.text }}>Optional Columns:</p>
-              <div className="space-y-1">
-                {Object.entries(optional).map(([colName, colInfo]) => (
-                  <div key={colName} className="flex items-center justify-between">
-                    <span style={{ color: C.textMuted }}>{colName}:</span>
-                    {colInfo.found ? (
-                      <span className="font-medium text-xs" style={{ color: C.success }}>✓ {colInfo.matched_column || 'Found'}</span>
-                    ) : (
-                      <span className="font-medium text-xs" style={{ color: C.textDim }}>○ Not found</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {/* Missing Groups */}
+        <div className="space-y-3 text-sm">
+          {renderColumnGroup(`step3_required`, 'Required Columns', required, columnsNoValidValues)}
+          {renderColumnGroup(`step3_genotype`, 'Sample Genotype (Any One Required)', sample_genotype_group, columnsNoValidValues, { missingLabel: 'Not found', missingColor: C.textDim })}
+          {renderColumnGroup(`step3_pathscore`, 'Pathogenicity Scores (Any One Required)', pathogenicity_score_group, columnsNoValidValues, { missingLabel: 'Not found', missingColor: C.textDim })}
+          {renderConditionalGroup(`step3_conditional`, 'Conditional Columns', conditional)}
+          {renderColumnGroup(`step3_optional`, 'Optional Columns', optional, [], { missingLabel: 'Not found', missingColor: C.textDim })}
+
           {missing_groups.length > 0 && (
             <div className="p-2 rounded" style={{ backgroundColor: C.warningSoft, border: `1px solid ${C.warning}` }}>
               <p className="font-semibold mb-1" style={{ color: C.warning }}>Missing Column Groups:</p>
@@ -483,21 +463,50 @@ const ColumnInterpretationResults = ({
     setShowDeleteConfirm(false);
   };
 
+  // --- Stepper model (horizontal stepper + detail layout) ---
+  const stepperSteps = [
+    {
+      n: 1,
+      name: isVcfFile ? 'ANNOVAR ready' : 'VCF Reconstruction',
+      status: step1Status,
+      progress: step1Progress,
+      data: step1,
+    },
+    {
+      n: 2,
+      name: step2?.step_name || 'Proprietary Filters',
+      status: step2Status,
+      progress: step2Progress,
+      data: step2,
+    },
+    {
+      n: 3,
+      name: 'Clinical Decision',
+      status: step3Status,
+      progress: step3Progress,
+      data: step3,
+    },
+  ];
+
+  // Default to the first step that needs attention so the detail panel is never empty.
+  const firstIncompleteStep =
+    step1Status !== 'passed' ? 1 : step2Status !== 'passed' ? 2 : step3Status !== 'passed' ? 3 : 1;
+  const selectedStep = expandedStep || firstIncompleteStep;
+  const selectedStepData = stepperSteps.find((s) => s.n === selectedStep);
+
   return (
     <>
       {/* Delete Confirmation Dialog */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 flex items-center justify-center z-[60]" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", backgroundColor: 'rgba(0,0,0,0.72)' }}>
           <div 
-            className="rounded-xl max-w-md w-full mx-4"
+            className="rounded-2xl max-w-md w-full mx-4"
             onClick={(e) => e.stopPropagation()}
             style={{ border: `1px solid ${C.border}`, backgroundColor: C.surface, boxShadow: C.shadow }}
           >
-            <div className="p-6 rounded-t-xl" style={{ backgroundColor: C.tealSoft, borderBottom: `1px solid ${C.teal}` }}>
-              <div className="flex items-center gap-3">
-                <AlertCircle className="w-6 h-6" style={{ color: C.teal }} />
-                <h2 className="text-2xl font-bold" style={{ color: C.text }}>Remove file?</h2>
-              </div>
+            <div className="px-6 py-4 flex items-center gap-2.5" style={{ borderBottom: `1px solid ${C.border}` }}>
+              <AlertCircle className="w-5 h-5" style={{ color: C.error }} />
+              <h2 className="text-base font-semibold" style={{ color: C.text }}>Remove file?</h2>
             </div>
 
             {/* Content */}
@@ -508,7 +517,7 @@ const ColumnInterpretationResults = ({
             </div>
 
             {/* Actions */}
-            <div className="px-6 py-4 border-t flex items-center justify-end gap-3 rounded-b-xl" style={{ borderColor: C.border, backgroundColor: C.surfaceCard }}>
+            <div className="px-6 py-4 border-t flex items-center justify-end gap-3 rounded-b-2xl" style={{ borderColor: C.border }}>
               <button
                 onClick={handleCancelDelete}
                 className="px-6 py-2 text-sm font-semibold rounded-xl transition-colors shadow-sm"
@@ -557,15 +566,13 @@ const ColumnInterpretationResults = ({
       {showAnnovarConfirm && (
         <div className="fixed inset-0 flex items-center justify-center z-[60]" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", backgroundColor: 'rgba(0,0,0,0.72)' }}>
           <div 
-            className="rounded-xl max-w-md w-full mx-4"
+            className="rounded-2xl max-w-md w-full mx-4"
             onClick={(e) => e.stopPropagation()}
             style={{ border: `1px solid ${C.border}`, backgroundColor: C.surface, boxShadow: C.shadow }}
           >
-            <div className="p-6 rounded-t-xl" style={{ backgroundColor: C.tealSoft, borderBottom: `1px solid ${C.teal}` }}>
-              <div className="flex items-center gap-3">
-                <Info className="w-6 h-6" style={{ color: C.teal }} />
-                <h2 className="text-xl font-bold" style={{ color: C.text }}>Run ANNOVAR?</h2>
-              </div>
+            <div className="px-6 py-4 flex items-center gap-2.5" style={{ borderBottom: `1px solid ${C.border}` }}>
+              <Info className="w-5 h-5" style={{ color: C.teal }} />
+              <h2 className="text-base font-semibold" style={{ color: C.text }}>Run ANNOVAR?</h2>
             </div>
             <div className="p-6 space-y-4">
               <p className="text-sm" style={{ color: C.textMuted }}>
@@ -575,11 +582,11 @@ const ColumnInterpretationResults = ({
                 Running ANNOVAR will add more information to some columns and make the analysis more streamlined.
               </p>
             </div>
-            <div className="px-6 py-4 border-t flex items-center justify-end gap-3 rounded-b-xl" style={{ borderColor: C.border, backgroundColor: C.surfaceCard }}>
+            <div className="px-6 py-4 border-t flex items-center justify-end gap-3 rounded-b-2xl" style={{ borderColor: C.border }}>
               <button
                 onClick={() => setShowAnnovarConfirm(false)}
                 className="px-6 py-2 text-sm font-semibold rounded-xl transition-colors shadow-sm"
-                style={{ backgroundColor: C.surfaceCard, border: `1px solid ${C.border}`, color: C.textMuted }}
+                style={{ backgroundColor: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted }}
               >
                 Cancel
               </button>
@@ -588,8 +595,8 @@ const ColumnInterpretationResults = ({
                   setShowAnnovarConfirm(false);
                   onAnnovarClick?.();
                 }}
-                className="px-6 py-2 text-sm font-semibold rounded-xl shadow-sm"
-                style={{ backgroundColor: C.teal, color: 'var(--bg-app)' }}
+                className="px-6 py-2 text-sm font-semibold rounded-xl transition-colors"
+                style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
               >
                 Run ANNOVAR
               </button>
@@ -601,34 +608,36 @@ const ColumnInterpretationResults = ({
       {/* Main Modal — backdrop does not close (avoids stacked-modal mis-clicks); use X or Continue */}
       <div className="fixed inset-0 flex items-center justify-center z-50" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", backgroundColor: 'rgba(0,0,0,0.72)' }}>
         <div 
-          className="rounded-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+          className="rounded-2xl max-w-2xl w-full mx-4 max-h-[min(90vh,900px)] flex flex-col overflow-hidden"
           onClick={(e) => e.stopPropagation()}
           style={{ border: `1px solid ${C.border}`, backgroundColor: C.surface, boxShadow: C.shadow }}
         >
-        <div className="p-6 rounded-t-xl" style={{ backgroundColor: C.tealSoft, borderBottom: `1px solid ${C.teal}` }}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <FileText className="w-6 h-6" style={{ color: C.teal }} />
-              <h2 className="text-2xl font-bold" style={{ color: C.text }}>File Analysis</h2>
-            </div>
+        {/* Header — matches Sample Metadata style: plain title + subtitle, no divider */}
+        <div className="flex-shrink-0 px-6 pt-5 pb-3 relative">
+          {onDeleteDocument && (
             <button
-              onClick={handleDismiss}
-              className="transition-colors p-1 rounded-lg"
+              onClick={() => setShowDeleteConfirm(true)}
+              className="absolute top-4 right-4 transition-colors p-1.5 rounded-lg"
               style={{ color: C.textMuted }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = C.text; e.currentTarget.style.backgroundColor = C.surfaceHover; }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = C.error; e.currentTarget.style.backgroundColor = C.errorSoft; }}
               onMouseLeave={(e) => { e.currentTarget.style.color = C.textMuted; e.currentTarget.style.backgroundColor = 'transparent'; }}
-              aria-label="Close"
+              aria-label="Remove file"
+              title="Remove file"
             >
-              <X className="w-6 h-6" />
+              <Trash2 className="w-4 h-4" />
             </button>
-          </div>
+          )}
+          <h2 className="text-sm font-semibold pr-8" style={{ color: C.text }}>File Analysis</h2>
+          <p className="text-xs mt-0.5" style={{ color: C.textMuted }}>
+            {overall_status === 'passed' ? 'Your file is ready for analysis.' : 'Some features may be limited.'}
+          </p>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4">
+        <div className="flex-1 overflow-y-auto px-6 pb-3 space-y-4">
           {backgroundJobActive && (
             <div
-              className="p-3 rounded-lg text-sm"
+              className="p-3 rounded-lg text-xs"
               style={{ backgroundColor: C.successSoft, border: `1px solid ${C.success}`, color: C.text }}
             >
               {isRunningAnnovar
@@ -637,34 +646,125 @@ const ColumnInterpretationResults = ({
             </div>
           )}
 
-          {/* Overall Status */}
-          <div className="text-center pb-4 border-b" style={{ borderColor: C.border }}>
-            {overall_status === 'passed' ? (
-              <div className="flex flex-col items-center gap-2">
-                <CheckCircle2 className="w-10 h-10" style={{ color: C.success }} />
-                <h3 className="text-lg font-bold" style={{ color: C.text }}>Analysis Complete</h3>
-                <p className="text-sm" style={{ color: C.textMuted }}>Your file is ready for analysis</p>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2">
-                <AlertCircle className="w-10 h-10" style={{ color: C.warning }} />
-                <h3 className="text-lg font-bold" style={{ color: C.text }}>Partial Analysis</h3>
-                <p className="text-sm" style={{ color: C.textMuted }}>Some features may be limited</p>
-              </div>
-            )}
-          </div>
-
           {/* Single-line warning: total rows that may have data quality issues */}
           {(() => {
             const r = interpretationResult || {};
             const total = (r.variants_skipped_invalid_alleles || 0) + (r.variants_skipped_invalid_predictors || 0) + (r.variants_skipped_invalid_genotype || 0) + (r.variants_skipped_invalid_mandatory_annotation || 0);
             return total > 0 ? (
-              <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg border-l-4" style={{ backgroundColor: C.warningSoft, borderColor: C.warning, borderLeftColor: C.warning }}>
-                <span className="font-semibold" style={{ color: C.warning }}>{total.toLocaleString()}</span>
-                <span className="text-sm" style={{ color: C.textMuted }}>variant row(s) may have data quality issues. All rows stored.</span>
-              </div>
+              <p className="text-xs" style={{ color: C.textMuted }}>
+                <span className="font-medium" style={{ color: C.warning }}>{total.toLocaleString()}</span> rows flagged for quality review. All stored.
+              </p>
             ) : null;
           })()}
+
+          {/* Genome build mismatch warning */}
+          {(() => {
+            const gbc = interpretationResult?.genome_build_check;
+            if (!gbc) return null;
+            if (gbc.status === 'mismatch') {
+              return (
+                <div
+                  className="p-3 rounded-lg text-xs flex items-start gap-2"
+                  style={{ backgroundColor: C.errorSoft, border: `1px solid ${C.error}`, color: C.text }}
+                >
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: C.error }} />
+                  <div>
+                    <span className="font-semibold" style={{ color: C.error }}>Genome mismatch</span>
+                    <span className="ml-1">{gbc.message || `You selected ${(gbc.declared || '').toUpperCase()}, but coordinates match ${(gbc.likely || '').toUpperCase()}. ANNOVAR and Exomiser cannot run until this is resolved — update the genome in sample information or re-upload.`}</span>
+                  </div>
+                </div>
+              );
+            }
+            if (gbc.status === 'match') {
+              return (
+                <p className="text-xs flex items-center gap-1.5" style={{ color: C.textMuted }}>
+                  Genome build verified: {(gbc.declared || '').toUpperCase()}
+                </p>
+              );
+            }
+            if (gbc.status === 'inconclusive') {
+              return (
+                <p className="text-xs flex items-center gap-1.5" style={{ color: C.textMuted }}>
+                  <AlertCircle className="w-3.5 h-3.5" style={{ color: C.warning }} />
+                  {gbc.message || `Could not verify genome build — double-check before running ANNOVAR.`}
+                </p>
+              );
+            }
+            return null;
+          })()}
+
+          {/* Horizontal stepper */}
+          <div className="flex items-start pt-1">
+            {stepperSteps.map((s, i) => {
+              const isSel = s.n === selectedStep;
+              const color = getStepColor(s.status);
+              const prevDone = i > 0 && stepperSteps[i - 1].status === 'passed';
+              return (
+                <React.Fragment key={s.n}>
+                  {i > 0 && (
+                    <div
+                      className="flex-1 h-0.5 mt-[18px] rounded-full transition-colors"
+                      style={{ backgroundColor: prevDone ? C.success : C.border }}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setExpandedStep(s.n)}
+                    className="flex flex-col items-center gap-1.5 flex-shrink-0 px-1 group whitespace-nowrap"
+                    style={{ minWidth: '6.5rem' }}
+                  >
+                    <div
+                      className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
+                      style={{
+                        backgroundColor: isSel ? `${C.surfaceHover}` : 'transparent',
+                        border: `2px solid ${isSel ? color : C.border}`,
+                        boxShadow: isSel ? `0 0 0 4px ${C.tealSoft}` : 'none',
+                      }}
+                    >
+                      {s.status === 'passed' ? (
+                        <CheckCircle2 className="w-4 h-4" style={{ color }} />
+                      ) : s.status === 'pending' ? (
+                        <Info className="w-4 h-4" style={{ color }} />
+                      ) : (
+                        <AlertCircle className="w-4 h-4" style={{ color }} />
+                      )}
+                    </div>
+                    <div className="text-center">
+                      <div
+                        className="text-[11px] font-semibold uppercase tracking-wide"
+                        style={{ color: isSel ? C.text : C.textDim }}
+                      >
+                        Step {s.n}
+                      </div>
+                      <div
+                        className="text-xs leading-tight mt-0.5"
+                        style={{ color: isSel ? C.text : C.textMuted }}
+                      >
+                        {s.name}
+                      </div>
+                    </div>
+                  </button>
+                </React.Fragment>
+              );
+            })}
+          </div>
+
+          {/* Selected step detail panel */}
+          {selectedStepData && (
+            <div className="border rounded-lg p-4" style={{ borderColor: C.border }}>
+              {/* <div className="w-full rounded-full h-1.5" style={{ backgroundColor: C.track }}>
+                <div
+                  className="h-1.5 rounded-full transition-all"
+                  style={{ width: `${selectedStepData.progress}%`, backgroundColor: getStepColor(selectedStepData.status) }}
+                />
+              </div> */}
+              {renderStepDetails(selectedStepData.n, selectedStepData.data) || (
+                <p className="mt-3 text-sm" style={{ color: C.textMuted }}>
+                  No column details available for this step yet.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Limitation: not all Pathog predictor columns present (Step 2) */}
           {step2?.pathogenicity_predictor_limitation && (
@@ -675,369 +775,177 @@ const ColumnInterpretationResults = ({
             </div>
           )}
 
-          {/* Step Progress Bars */}
-          <div className="space-y-3">
-            {/* Step 1 */}
-            <div className="border rounded-lg p-4 transition-colors" style={{ borderColor: C.border, backgroundColor: C.surfaceCard }} {...stepCardHandlers}>
-              <div 
-                className="flex items-center justify-between cursor-pointer"
-                onClick={() => toggleStep(1)}
-              >
-                <div className="flex items-center gap-3 flex-1">
-                  {getStepIcon(step1Status)}
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-semibold" style={{ color: C.text }}>Step 1: {isVcfFile ? 'ANNOVAR ready' : 'VCF Reconstruction'}</span>
-                      <span 
-                        className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                        style={getStepBadgeStyle(step1Status)}
+          {/* Tools — annotation + proprietary filters */}
+          <div className="pt-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: C.textDim }}>Tools</p>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* VCF Upload Button - Highlighted when recommended */}
+              {showVcfTabHighlight && (
+                <>
+                  <div className="relative group">
+                    <button
+                      onClick={() => {
+                        if (recommendedButton === 'vcf' && onTryVcfUpload) {
+                          onTryVcfUpload();
+                        }
+                      }}
+                      className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all ${
+                        recommendedButton === 'vcf' ? 'animate-pulse ring-2 ring-offset-2' : ''
+                      }`}
+                      style={{
+                        backgroundColor: recommendedButton === 'vcf' ? C.tealSoft : C.surfaceCard,
+                        color: recommendedButton === 'vcf' ? C.teal : C.textMuted,
+                        border: recommendedButton === 'vcf' ? `2px solid ${C.teal}` : `1px solid ${C.border}`,
+                      }}
+                      onMouseEnter={(e) => { e.target.style.backgroundColor = C.tealSoft; e.target.style.borderColor = C.teal; }}
+                      onMouseLeave={(e) => {
+                        if (recommendedButton === 'vcf') { e.target.style.backgroundColor = C.tealSoft; e.target.style.borderColor = C.teal; }
+                        else { e.target.style.backgroundColor = C.surfaceCard; e.target.style.borderColor = C.border; }
+                      }}
+                    >
+                      {isVcfFile ? 'Upload raw data for better results' : 'Try VCF upload for better results'}
+                    </button>
+                    {primaryRecommendation && recommendedButton === 'vcf' && (
+                      <div
+                        className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10"
+                        style={{ ...tooltipStyle, maxWidth: '250px', whiteSpace: 'normal', textAlign: 'left' }}
                       >
-                        {getStepLabel(step1Status)}
-                      </span>
-                    </div>
-                    <div className="w-full rounded-full h-2" style={{ backgroundColor: C.track }}>
-                      <div 
-                        className="h-2 rounded-full transition-all"
-                        style={{ 
-                          width: `${step1Progress}%`,
-                          backgroundColor: getStepColor(step1Status)
-                        }}
-                      />
-                    </div>
+                        {primaryRecommendation}
+                        <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
+                      </div>
+                    )}
                   </div>
-                </div>
-                <button className="ml-3 p-1 rounded transition-colors" {...chevronBtnHandlers}>
-                  {expandedStep === 1 ? (
-                    <ChevronUp className="w-5 h-5" style={{ color: C.textMuted }} />
-                  ) : (
-                    <ChevronDown className="w-5 h-5" style={{ color: C.textMuted }} />
+                  {!isVcfFile && onConvertToVcf && (
+                    <button
+                      type="button"
+                      onClick={() => onConvertToVcf()}
+                      disabled={isConvertingToVcf || backgroundJobActive}
+                      className="px-4 py-2 text-sm font-semibold rounded-xl transition-all disabled:opacity-60"
+                      style={{ backgroundColor: C.surfaceCard, color: C.teal, border: `1px solid ${C.teal}` }}
+                    >
+                      {isConvertingToVcf ? 'Converting…' : 'Convert file to VCF'}
+                    </button>
                   )}
-                </button>
-              </div>
-              {expandedStep === 1 && renderStepDetails(1, step1)}
-            </div>
+                </>
+              )}
 
-            {/* Step 2 */}
-            <div className="border rounded-lg p-4 transition-colors" style={{ borderColor: C.border, backgroundColor: C.surfaceCard }} {...stepCardHandlers}>
-              <div 
-                className="flex items-center justify-between cursor-pointer"
-                onClick={() => toggleStep(2)}
-              >
-                <div className="flex items-center gap-3 flex-1">
-                  {getStepIcon(step2Status)}
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-semibold" style={{ color: C.text }}>Step 2: {step2?.step_name || 'Proprietary Filters'}</span>
-                      <span 
-                        className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                        style={getStepBadgeStyle(step2Status)}
-                      >
-                        {getStepLabel(step2Status)}
-                      </span>
-                    </div>
-                    <div className="w-full rounded-full h-2" style={{ backgroundColor: C.track }}>
-                      <div 
-                        className="h-2 rounded-full transition-all"
-                        style={{ 
-                          width: `${step2Progress}%`,
-                          backgroundColor: getStepColor(step2Status)
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <button className="ml-3 p-1 rounded transition-colors" {...chevronBtnHandlers}>
-                  {expandedStep === 2 ? (
-                    <ChevronUp className="w-5 h-5" style={{ color: C.textMuted }} />
-                  ) : (
-                    <ChevronDown className="w-5 h-5" style={{ color: C.textMuted }} />
-                  )}
+              {/* Run ANNOVAR */}
+              <div className="relative group">
+                <button
+                  onClick={(step1?.passed && !genomeMismatch) ? () => {
+                    const allComplete = step1?.passed && step2?.passed && step3?.passed;
+                    if (allComplete) { setShowAnnovarConfirm(true); } else { onAnnovarClick?.(); }
+                  } : undefined}
+                  disabled={!step1?.passed || genomeMismatch}
+                  className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${
+                    (step1?.passed && !genomeMismatch) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+                  }`}
+                  style={{
+                    backgroundColor: (step1?.passed && !genomeMismatch) ? C.surfaceCard : C.surfaceHover,
+                    border: `1px solid ${genomeMismatch ? C.error : C.border}`,
+                    color: (step1?.passed && !genomeMismatch) ? C.textMuted : C.textDim,
+                  }}
+                  onMouseEnter={(e) => { if (step1?.passed && !genomeMismatch) { e.target.style.backgroundColor = C.surfaceHover; e.target.style.color = C.text; } }}
+                  onMouseLeave={(e) => { if (step1?.passed && !genomeMismatch) { e.target.style.backgroundColor = C.surfaceCard; e.target.style.color = C.textMuted; } }}
+                >
+                  <img src={qiagenLogo} alt="Qiagen" className="w-5 h-5 object-contain" style={{ filter: (step1?.passed && !genomeMismatch) ? 'none' : 'grayscale(100%) opacity(0.5)' }} />
+                  Run ANNOVAR
                 </button>
+                {genomeMismatch && (
+                  <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '250px', whiteSpace: 'normal', textAlign: 'left' }}>
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" style={{ color: C.error }} />
+                      <span>ANNOVAR and Exomiser require a matching genome build. Please fix the mismatch first.</span>
+                    </div>
+                    <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
+                  </div>
+                )}
+                {!step1?.passed && !genomeMismatch && (
+                  <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '250px', whiteSpace: 'normal', textAlign: 'left' }}>
+                    <div className="flex items-center gap-2">
+                      <ArrowRight className="w-3 h-3 flex-shrink-0" />
+                      <span>{isVcfFile ? 'Essential VCF columns are missing. Please upload raw data when available.' : 'Upload VCF to enable'}</span>
+                    </div>
+                    <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
+                  </div>
+                )}
+                {primaryRecommendation && recommendedButton === 'annovar' && step1?.passed && (
+                  <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '250px', whiteSpace: 'normal', textAlign: 'left' }}>
+                    {primaryRecommendation}
+                    <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
+                  </div>
+                )}
               </div>
-              {expandedStep === 2 && renderStepDetails(2, step2)}
-            </div>
 
-            {/* Step 3 */}
-            <div className="border rounded-lg p-4 transition-colors" style={{ borderColor: C.border, backgroundColor: C.surfaceCard }} {...stepCardHandlers}>
-              <div 
-                className="flex items-center justify-between cursor-pointer"
-                onClick={() => toggleStep(3)}
-              >
-                <div className="flex items-center gap-3 flex-1">
-                  {getStepIcon(step3Status)}
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-semibold" style={{ color: C.text }}>Step 3: Clinical Decision</span>
-                      <span 
-                        className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                        style={getStepBadgeStyle(step3Status)}
-                      >
-                        {getStepLabel(step3Status)}
-                      </span>
-                    </div>
-                    <div className="w-full rounded-full h-2" style={{ backgroundColor: C.track }}>
-                      <div 
-                        className="h-2 rounded-full transition-all"
-                        style={{ 
-                          width: `${step3Progress}%`,
-                          backgroundColor: getStepColor(step3Status)
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <button className="ml-3 p-1 rounded transition-colors" {...chevronBtnHandlers}>
-                  {expandedStep === 3 ? (
-                    <ChevronUp className="w-5 h-5" style={{ color: C.textMuted }} />
-                  ) : (
-                    <ChevronDown className="w-5 h-5" style={{ color: C.textMuted }} />
-                  )}
+              {/* ACMG Filter */}
+              <div className="relative group">
+                <button
+                  type="button"
+                  onClick={() => onProprietaryFilterClick?.('filter_1')}
+                  disabled={!acmgFilterCanApply || isApplyingProprietaryFilter || acmgFilterActive}
+                  className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${
+                    acmgFilterCanApply && !acmgFilterActive && !isApplyingProprietaryFilter ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+                  }`}
+                  style={{
+                    backgroundColor: acmgFilterActive ? C.tealSoft : acmgFilterCanApply ? C.surfaceCard : C.surfaceHover,
+                    border: acmgFilterActive ? `1px solid ${C.teal}` : `1px solid ${C.border}`,
+                    color: acmgFilterCanApply ? C.teal : C.textDim,
+                  }}
+                  onMouseEnter={(e) => { if (acmgFilterCanApply && !acmgFilterActive && !isApplyingProprietaryFilter) { e.target.style.backgroundColor = C.surfaceHover; } }}
+                  onMouseLeave={(e) => { if (acmgFilterCanApply && !acmgFilterActive && !isApplyingProprietaryFilter) { e.target.style.backgroundColor = C.surfaceCard; } }}
+                >
+                  {isApplyingProprietaryFilter ? 'Applying…' : acmgFilterActive ? `${ACMG_FILTER_DISPLAY_NAME} applied` : `Apply ${ACMG_FILTER_DISPLAY_NAME}`}
                 </button>
+                {!acmgFilterCanApply && !acmgFilterActive && step1?.passed && (
+                  <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '280px', whiteSpace: 'normal', textAlign: 'left' }}>
+                    Run ANNOVAR first — the ACMG filter needs ClinVar or InterVar annotations and gnomAD frequency.
+                    <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
+                  </div>
+                )}
               </div>
-              {expandedStep === 3 && renderStepDetails(3, step3)}
+
+              {/* Functional Impact Filter */}
+              <div className="relative group">
+                <button
+                  type="button"
+                  onClick={() => onProprietaryFilterClick?.('filter_2')}
+                  disabled={!filter2CanApply || isApplyingProprietaryFilter || filter2Active}
+                  className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${
+                    filter2CanApply && !filter2Active && !isApplyingProprietaryFilter ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+                  }`}
+                  style={{
+                    backgroundColor: filter2Active ? C.tealSoft : filter2CanApply ? C.surfaceCard : C.surfaceHover,
+                    border: filter2Active ? `1px solid ${C.teal}` : `1px solid ${C.border}`,
+                    color: filter2CanApply ? C.teal : C.textDim,
+                  }}
+                  onMouseEnter={(e) => { if (filter2CanApply && !filter2Active && !isApplyingProprietaryFilter) { e.target.style.backgroundColor = C.surfaceHover; } }}
+                  onMouseLeave={(e) => { if (filter2CanApply && !filter2Active && !isApplyingProprietaryFilter) { e.target.style.backgroundColor = C.surfaceCard; } }}
+                >
+                  {isApplyingProprietaryFilter ? 'Applying…' : filter2Active ? 'Functional Impact applied' : 'Apply Functional Impact'}
+                </button>
+                {!filter2CanApply && !filter2Active && step1?.passed && (
+                  <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '280px', whiteSpace: 'normal', textAlign: 'left' }}>
+                    Run ANNOVAR first — the Functional Impact filter needs predictor annotations (SIFT, PolyPhen, etc.) and population frequency.
+                    <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Actions - Graphical recommendations with hover tooltips */}
-        <div className="px-6 py-4 border-t flex items-center justify-between rounded-b-xl" style={{ borderColor: C.border, backgroundColor: C.surfaceCard }}>
-          {/* VCF Upload Button - Highlighted when recommended */}
-          {showVcfTabHighlight && (
-            <div className="flex flex-wrap items-center gap-2">
-            <div className="relative group">
-              <button
-                onClick={() => {
-                  if (recommendedButton === 'vcf' && onTryVcfUpload) {
-                    onTryVcfUpload(); // Close this modal, open upload modal, switch to VCF tab
-                  }
-                }}
-                className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all shadow-sm ${
-                  recommendedButton === 'vcf' 
-                    ? 'animate-pulse ring-2 ring-offset-2' 
-                    : ''
-                }`}
-                style={{ 
-                  backgroundColor: recommendedButton === 'vcf' ? C.tealSoft : C.surfaceCard,
-                  color: recommendedButton === 'vcf' ? C.teal : C.textMuted,
-                  border: recommendedButton === 'vcf' ? `2px solid ${C.teal}` : `1px solid ${C.border}`,
-                }}
-                onMouseEnter={(e) => { 
-                  e.target.style.backgroundColor = C.tealSoft;
-                  e.target.style.borderColor = C.teal;
-                }}
-                onMouseLeave={(e) => { 
-                  if (recommendedButton === 'vcf') {
-                    e.target.style.backgroundColor = C.tealSoft;
-                    e.target.style.borderColor = C.teal;
-                  } else {
-                    e.target.style.backgroundColor = C.surfaceCard;
-                    e.target.style.borderColor = C.border;
-                  }
-                }}
-              >
-                {isVcfFile
-                  ? 'Upload raw data for better results'
-                  : 'Try VCF upload for better results'}
-              </button>
-              {/* Hover tooltip with recommendation */}
-              {primaryRecommendation && recommendedButton === 'vcf' && (
-                <div 
-                  className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10"
-                  style={{ 
-                    backgroundColor: C.tooltip,
-                    color: C.text,
-                    fontSize: '12px',
-                    fontWeight: '500',
-                    maxWidth: '250px',
-                    whiteSpace: 'normal',
-                    textAlign: 'left',
-                    border: `1px solid ${C.border}`,
-                    boxShadow: C.shadow,
-                  }}
-                >
-                  {primaryRecommendation}
-                  <div 
-                    className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4"
-                    style={{ 
-                      borderLeftColor: 'transparent',
-                      borderRightColor: 'transparent',
-                      borderTopColor: C.tooltip,
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-            {!isVcfFile && onConvertToVcf && (
-              <button
-                type="button"
-                onClick={() => onConvertToVcf()}
-                disabled={isConvertingToVcf || backgroundJobActive}
-                className="px-4 py-2 text-sm font-semibold rounded-xl transition-all shadow-sm disabled:opacity-60"
-                style={{
-                  backgroundColor: C.surfaceCard,
-                  color: C.teal,
-                  border: `1px solid ${C.teal}`,
-                }}
-              >
-                {isConvertingToVcf ? 'Converting…' : 'Convert file to VCF'}
-              </button>
-            )}
-            </div>
-          )}
-          
-          <div className="flex items-center gap-2 ml-auto justify-end">
-            {onDeleteDocument && (
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="px-4 py-2 text-sm font-medium rounded-xl transition-colors"
-                style={{ color: C.error, border: `1px solid ${C.error}`, backgroundColor: C.errorSoft }}
-              >
-                Remove file
-              </button>
-            )}
-
-            {/* Dismiss modal — never deletes the file */}
-            <button
-              type="button"
-              onClick={handleDismiss}
-              className="px-4 py-2 text-sm font-semibold rounded-xl transition-colors shadow-sm"
-              style={{
-                backgroundColor: C.teal,
-                border: 'none',
-                color: 'var(--bg-app)',
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.backgroundColor = C.tealHover;
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.backgroundColor = C.teal;
-              }}
-            >
-              {backgroundJobActive
-                ? 'Continue in background'
-                : chatAllowed
-                  ? 'Continue Chatting'
-                  : 'Continue to chat'}
-            </button>
-
-            {/* ANNOVAR Button - Optional (secondary) */}
-            <div className="relative group">
-              <button
-                onClick={step1?.passed ? () => {
-                  const allComplete = step1?.passed && step2?.passed && step3?.passed;
-                  if (allComplete) {
-                    setShowAnnovarConfirm(true);
-                  } else {
-                    onAnnovarClick?.();
-                  }
-                } : undefined}
-                disabled={!step1?.passed}
-                className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all shadow-sm flex items-center gap-2 ${
-                  step1?.passed
-                    ? 'cursor-pointer'
-                    : 'cursor-not-allowed opacity-50'
-                }`}
-                style={{ 
-                  backgroundColor: step1?.passed ? C.surfaceCard : C.surfaceHover,
-                  border: `1px solid ${C.border}`,
-                  color: step1?.passed ? C.textMuted : C.textDim,
-                }}
-                onMouseEnter={(e) => { 
-                  if (step1?.passed) {
-                    e.target.style.backgroundColor = C.surfaceHover;
-                    e.target.style.color = C.text;
-                  }
-                }}
-                onMouseLeave={(e) => { 
-                  if (step1?.passed) {
-                    e.target.style.backgroundColor = C.surfaceCard;
-                    e.target.style.color = C.textMuted;
-                  }
-                }}
-              >
-                <img 
-                  src={qiagenLogo} 
-                  alt="Qiagen" 
-                  className="w-5 h-5 object-contain"
-                  style={{ filter: step1?.passed ? 'none' : 'grayscale(100%) opacity(0.5)' }}
-                />
-                Run ANNOVAR
-              </button>
-              
-              {/* Tooltip when disabled */}
-              {!step1?.passed && (
-                <div 
-                  className="absolute bottom-full right-0 mb-2 px-3 py-2 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 whitespace-nowrap"
-                  style={tooltipStyle}
-                >
-                  <div className="flex items-center gap-2">
-                    <ArrowRight className="w-3 h-3" />
-                    <span>
-                      {isVcfFile
-                        ? 'Essential VCF columns are missing. Please upload raw data when available.'
-                        : 'Upload VCF to enable'}
-                    </span>
-                  </div>
-                  <div 
-                    className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4"
-                    style={tooltipArrowStyle}
-                  />
-                </div>
-              )}
-              
-              {primaryRecommendation && recommendedButton === 'annovar' && step1?.passed && (
-                <div 
-                  className="absolute bottom-full right-0 mb-2 px-3 py-2 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10"
-                  style={{ ...tooltipStyle, maxWidth: '250px', whiteSpace: 'normal', textAlign: 'left' }}
-                >
-                  {primaryRecommendation}
-                  <div 
-                    className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4"
-                    style={tooltipArrowStyle}
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="relative group">
-              <button
-                type="button"
-                onClick={() => onAcmgFilterClick?.()}
-                disabled={!acmgFilterCanApply || isApplyingAcmgFilter || acmgFilterActive}
-                className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all shadow-sm flex items-center gap-2 ${
-                  acmgFilterCanApply && !acmgFilterActive && !isApplyingAcmgFilter
-                    ? 'cursor-pointer'
-                    : 'cursor-not-allowed opacity-50'
-                }`}
-                style={{
-                  backgroundColor: acmgFilterActive ? C.tealSoft : acmgFilterCanApply ? C.surfaceCard : C.surfaceHover,
-                  border: acmgFilterActive ? `1px solid ${C.teal}` : `1px solid ${C.border}`,
-                  color: acmgFilterCanApply ? C.teal : C.textDim,
-                }}
-                onMouseEnter={(e) => {
-                  if (acmgFilterCanApply && !acmgFilterActive && !isApplyingAcmgFilter) {
-                    e.target.style.backgroundColor = C.surfaceHover;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (acmgFilterCanApply && !acmgFilterActive && !isApplyingAcmgFilter) {
-                    e.target.style.backgroundColor = C.surfaceCard;
-                  }
-                }}
-              >
-                {isApplyingAcmgFilter ? 'Applying…' : acmgFilterActive ? `${ACMG_FILTER_DISPLAY_NAME} applied` : `Apply ${ACMG_FILTER_DISPLAY_NAME}`}
-              </button>
-              {!acmgFilterCanApply && !acmgFilterActive && step1?.passed && (
-                <div
-                  className="absolute bottom-full right-0 mb-2 px-3 py-2 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 whitespace-nowrap"
-                  style={{ ...tooltipStyle, maxWidth: '280px', whiteSpace: 'normal', textAlign: 'left' }}
-                >
-                  Run ANNOVAR first — the ACMG filter needs ClinVar or InterVar annotations and gnomAD frequency.
-                </div>
-              )}
-            </div>
-          </div>
+        {/* Actions */}
+        <div className="flex-shrink-0 px-6 py-4 border-t flex items-center justify-end rounded-b-2xl" style={{ borderColor: C.border }}>
+          <button
+            type="button"
+            onClick={handleDismiss}
+            className="px-4 py-2 text-sm font-semibold rounded-xl transition-colors"
+            style={{ backgroundColor: 'var(--accent-teal)', border: 'none', color: '#0F0F0F' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal-hover)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal)'; }}
+          >
+            {backgroundJobActive ? 'Continue in background' : chatAllowed ? 'Continue Chatting' : 'Continue to chat'}
+          </button>
         </div>
       </div>
     </div>

@@ -60,6 +60,7 @@ const ChatPromptInput = ({
   onSelectVcf,
   isVariantSidebarOpen,
   onToggleVariantSidebar,
+  hasDocument = false,
   pipelineGatedMessage,
   analysisPipelineBlock,
 }) => {
@@ -68,15 +69,10 @@ const ChatPromptInput = ({
   const UploadIcon = uploadIcon;
   const sendDisabled = isInputDisabled || !input.trim();
 
-  const sendButtonStyle = isEmpty
-    ? {
-        backgroundColor: sendDisabled ? 'var(--bg-surface-hover)' : 'var(--accent-teal)',
-        color: sendDisabled ? 'var(--text-disabled)' : '#fff',
-      }
-    : {
-        backgroundColor: sendDisabled ? 'var(--bg-surface-hover)' : 'var(--text-primary)',
-        color: sendDisabled ? 'var(--text-disabled)' : 'var(--bg-app)',
-      };
+  const sendButtonStyle = {
+    backgroundColor: sendDisabled ? 'var(--bg-surface-hover)' : 'var(--text-primary)',
+    color: sendDisabled ? 'var(--text-disabled)' : 'var(--bg-app)',
+  };
 
   const disclaimerClass = isEmpty
     ? 'text-center text-[11px] mt-2 leading-tight'
@@ -143,10 +139,12 @@ const ChatPromptInput = ({
                 )}
               </div>
               <div className="flex items-center gap-1">
-                <VariantSidebarToggle
-                  isVariantSidebarOpen={isVariantSidebarOpen}
-                  onToggleVariantSidebar={onToggleVariantSidebar}
-                />
+                {hasDocument && (
+                  <VariantSidebarToggle
+                    isVariantSidebarOpen={isVariantSidebarOpen}
+                    onToggleVariantSidebar={onToggleVariantSidebar}
+                  />
+                )}
                 <SendButton
                   onClick={onSend}
                   disabled={sendDisabled}
@@ -184,10 +182,12 @@ const ChatPromptInput = ({
               style={{ color: 'var(--text-primary)' }}
             />
             <div className="flex items-center gap-0.5 mb-0.5">
-              <VariantSidebarToggle
-                isVariantSidebarOpen={isVariantSidebarOpen}
-                onToggleVariantSidebar={onToggleVariantSidebar}
-              />
+              {hasDocument && (
+                <VariantSidebarToggle
+                  isVariantSidebarOpen={isVariantSidebarOpen}
+                  onToggleVariantSidebar={onToggleVariantSidebar}
+                />
+              )}
               {isCurrentlyActive ? (
                 <button
                   type="button"

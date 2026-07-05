@@ -53,7 +53,7 @@ const VariantAnalysisPipeline = ({
   hasAnnotatedFile,
   requiresAnnovar,
   isRunningAnnovar,
-  isApplyingAcmgFilter,
+  isApplyingProprietaryFilter,
   annovarJob,
   filterJob,
   chatEligibility,
@@ -71,7 +71,7 @@ const VariantAnalysisPipeline = ({
     hasAnnotatedFile,
     requiresAnnovar,
     isRunningAnnovar,
-    isApplyingAcmgFilter,
+    isApplyingProprietaryFilter,
     annovarJob,
     filterJob,
     chatEligibility,
@@ -102,7 +102,7 @@ const VariantAnalysisPipeline = ({
     if (backgroundActive || summary.status === 'running') {
       const pct = isRunningAnnovar && annovarJob?.progress_percent != null
         ? ` · ${Math.round(annovarJob.progress_percent)}%`
-        : isApplyingAcmgFilter && filterJob?.progress_percent != null
+        : isApplyingProprietaryFilter && filterJob?.progress_percent != null
           ? ` · ${Math.round(filterJob.progress_percent)}%`
           : '';
       return `Step ${summary.stepIndex}/${summary.total} · ${summary.label}${pct}`;

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { Zap, Unlock, TrendingUp } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
@@ -18,6 +19,7 @@ const FeatureItem = ({ text, isIncluded }) => (
 const SubscriptionManager = ({ isInputGated, userId, db }) => {
     const { userTier } = useAuth();
     const auth = getAuth();
+    const navigate = useNavigate();
     const [showSubscriptionPage, setShowSubscriptionPage] = useState(false);
 
     const getManagerContent = () => {
@@ -28,7 +30,7 @@ const SubscriptionManager = ({ isInputGated, userId, db }) => {
                 showUpgrade: true,
                 upgradeText: "Sign Up Now",
                 action: () => {
-                    console.log("Redirect to signup/login triggered by App.jsx");
+                    navigate('/auth');
                 }
             };
         } else if (userTier === 'free') {
@@ -78,7 +80,7 @@ const SubscriptionManager = ({ isInputGated, userId, db }) => {
                     </div>
                     {userTier !== 'guest' && (
                         <button
-                            onClick={() => auth.signOut()}
+                            onClick={() => { auth.signOut(); navigate('/auth'); }}
                             className="text-sm px-3 py-1 rounded-lg hover:bg-white/5 transition-colors"
                             style={{ color: 'var(--text-tertiary)' }}
                         >

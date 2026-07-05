@@ -13,13 +13,11 @@ import {
     reauthenticateWithCredential
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { Loader2, Eye, EyeOff } from 'lucide-react';
-import { toast } from 'sonner';
+import { Loader2, Eye, EyeOff, AlertCircle, CheckCircle2, Info } from 'lucide-react';
 
 const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificationPending }) => {
     const navigate = useNavigate();
 
-    // Form state
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLogin, setIsLogin] = useState(true);
@@ -29,6 +27,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
     const [showPassword, setShowPassword] = useState(false);
     const [verifyingEmail, setVerifyingEmail] = useState(false);
     const [verificationSuccess, setVerificationSuccess] = useState(false);
+    const [inlineMessage, setInlineMessage] = useState(null);
 
     // Account linking state
     const [pendingCredential, setPendingCredential] = useState(null);
@@ -53,24 +52,15 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         onEmailVerificationPending(false);
                     }
                     window.history.replaceState({}, '', window.location.pathname);
-                    toast.success("Email Verified! You can now log in.");
+                    setInlineMessage({ type: 'success', text: 'Email verified! You can now log in.' });
                 })
                 .catch((err) => {
                     setVerifyingEmail(false);
                     window.history.replaceState({}, '', window.location.pathname);
-                    toast.error('Email verification failed: ' + err.message);
+                    setInlineMessage({ type: 'error', text: 'Email verification failed: ' + err.message });
                 });
         }
     }, []);
-
-    // Check for pending email verification
-    const pendingEmail = localStorage.getItem('pendingEmailVerification');
-
-    useEffect(() => {
-        if (pendingEmail && isLogin) {
-            setIsLogin(false);
-        }
-    }, [pendingEmail, isLogin]);
 
     // Create Firestore profile
     const createFirestoreProfile = async (user) => {
@@ -101,6 +91,9 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                 await createFirestoreProfile(user);
             }
 
+            if (onSignupSuccess) {
+                onSignupSuccess(true);
+            }
             navigate('/app');
         } catch (err) {
             if (err.code === 'auth/account-exists-with-different-credential') {
@@ -128,7 +121,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         friendlyError = `Google sign-in failed: ${err.code.replace('auth/', '')}`;
                 }
             }
-            toast.error(friendlyError);
+            setInlineMessage({ type: 'error', text: friendlyError });
             setLoading(false);
         }
     };
@@ -149,6 +142,9 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                 await createFirestoreProfile(user);
             }
 
+            if (onSignupSuccess) {
+                onSignupSuccess(true);
+            }
             navigate('/app');
         } catch (err) {
             if (err.code === 'auth/account-exists-with-different-credential') {
@@ -176,7 +172,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         friendlyError = `Microsoft sign-in failed: ${err.code.replace('auth/', '')}`;
                 }
             }
-            toast.error(friendlyError);
+            setInlineMessage({ type: 'error', text: friendlyError });
             setLoading(false);
         }
     };
@@ -201,7 +197,9 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
             setShowLinkingPrompt(false);
             setLinkingEmail('');
 
-            // Navigate to app
+            if (onSignupSuccess) {
+                onSignupSuccess(true);
+            }
             navigate('/app');
         } catch (err) {
             let friendlyError = 'Failed to link accounts.';
@@ -218,7 +216,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         friendlyError = `Linking failed: ${err.code.replace('auth/', '')}`;
                 }
             }
-            toast.error(friendlyError);
+            setInlineMessage({ type: 'error', text: friendlyError });
             setLoading(false);
         }
     };
@@ -235,6 +233,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
         e.preventDefault();
         setError('');
         setSignupSuccess(false);
+        setInlineMessage(null);
         setLoading(true);
 
         try {
@@ -254,27 +253,31 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                 }
 
                 if (!emailVerified) {
-                    toast.error('Your email may not be verified yet. Please check your inbox.');
+                    setInlineMessage({ type: 'error', text: 'Your email may not be verified yet. Please check your inbox.' });
                     await signOut(auth);
                     return;
                 }
 
+                if (onSignupSuccess) {
+                    onSignupSuccess(true);
+                }
+                navigate('/app');
+
             } else {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+
+                await sendEmailVerification(user);
+
                 localStorage.setItem('pendingEmailVerification', email);
 
                 if (onEmailVerificationPending) {
                     onEmailVerificationPending(true);
                 }
 
-                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                const user = userCredential.user;
-
-                await createFirestoreProfile(user);
-                await sendEmailVerification(user);
-
                 await signOut(auth);
 
-                toast.success(`Account created! We've sent a verification email to ${email}.`, { duration: 6000 });
+                setInlineMessage({ type: 'success', text: `Account created! We've sent a verification email to ${email}.` });
                 setIsLogin(true); // Automatically toggle to login flow
                 setEmail('');
                 setPassword('');
@@ -284,11 +287,12 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
             if (err.code) {
                 switch (err.code) {
                     case 'auth/user-not-found':
+                    case 'auth/invalid-credential':
                     case 'auth/wrong-password':
-                        friendlyError = 'Invalid email or password.';
+                        friendlyError = 'Invalid email or password. Please try again or sign up.';
                         break;
                     case 'auth/email-already-in-use':
-                        friendlyError = 'This email is already registered. Try logging in.';
+                        friendlyError = 'This email is already registered. Try logging in instead.';
                         break;
                     case 'auth/weak-password':
                         friendlyError = 'Password should be at least 6 characters.';
@@ -297,7 +301,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         friendlyError = `Authentication failed: ${err.code.replace('auth/', '')}`;
                 }
             }
-            toast.error(friendlyError);
+            setInlineMessage({ type: 'error', text: friendlyError });
         } finally {
             setLoading(false);
         }
@@ -493,6 +497,19 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         </div>
                     </div>
 
+                    {inlineMessage && (
+                        <div className={`flex items-start gap-2 px-3 py-2.5 rounded-md text-xs ${
+                            inlineMessage.type === 'error' ? 'bg-red-500/10 border border-red-500/20 text-red-300' :
+                            inlineMessage.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300' :
+                            'bg-blue-500/10 border border-blue-500/20 text-blue-300'
+                        }`}>
+                            {inlineMessage.type === 'error' && <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />}
+                            {inlineMessage.type === 'success' && <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />}
+                            {inlineMessage.type === 'info' && <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />}
+                            <span>{inlineMessage.text}</span>
+                        </div>
+                    )}
+
                     {/* Submit Button */}
                     <div className="pt-2 flex justify-center">
                         <button
@@ -515,8 +532,8 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                 {isLogin ? "New to Geneie? " : "Already have an account? "}
                 <button
                     type="button"
-                    onClick={() => { setIsLogin(!isLogin); setError(''); setSignupSuccess(false); }}
-                    className="font-medium text-[#4ad6cd] hover:text-[#38b1a8] hover:underline transition-colors duration-200"
+                    onClick={() => { setIsLogin(!isLogin); setError(''); setSignupSuccess(false); setInlineMessage(null); }}
+                    className="font-medium text-[#60a5fa] hover:text-[#3b82f6] hover:underline transition-colors duration-200"
                     disabled={loading}
                 >
                     {isLogin ? 'Sign up' : 'Log in'}

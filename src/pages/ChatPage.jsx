@@ -45,7 +45,7 @@ const ChatPage = () => {
 
   // Conversation state
   const [conversations, setConversations] = useState([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(() => !isMobile);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentDocument, setCurrentDocument] = useState(null);
   const [variantData, setVariantData] = useState(null);
   const [isVariantSidebarOpen, setIsVariantSidebarOpen] = useState(false);
@@ -53,6 +53,13 @@ const ChatPage = () => {
   useEffect(() => {
     setIsSidebarOpen(!isMobile);
   }, [isMobile]);
+
+  // Auto-close variant sidebar when no document is present
+  useEffect(() => {
+    if (!currentDocument && isVariantSidebarOpen) {
+      setIsVariantSidebarOpen(false);
+    }
+  }, [currentDocument, isVariantSidebarOpen]);
 
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false); // Center modal for variant file upload on landing
@@ -131,19 +138,20 @@ const ChatPage = () => {
     pipelineToast,
     setPipelineToast,
     isRunningAnnovar,
-    isApplyingAcmgFilter,
+    isApplyingProprietaryFilter,
     uploadSessionConversationId,
     handleVariantUploadingChange,
     handleUploadProgressChange,
     uploadProgress,
     presentFileAnalysisModal,
     runAnnovarForCurrentConversation,
-    runAcmgFilterForCurrentConversation,
+    runProprietaryFilter,
     promptChatBlocked,
     isChatPipelineGated,
     pipelineJobActive,
     variantUploadInProgress,
     acmgFilterCanApply,
+    filter2CanApply,
     syncPipelineFromConversation,
     resetConversationPipeline,
     refreshConversationAfterAnnovar,
@@ -484,6 +492,12 @@ const ChatPage = () => {
           await createConversation();
         }
       } catch (error) {
+        if (error.status === 403 || error.status === 401) {
+          console.warn('[App] Auth rejected by backend, forcing verification check:', error.message);
+          localStorage.setItem('pendingEmailVerification', '');
+          setPendingEmailVerification(true);
+          return;
+        }
         console.error('[App] Error loading conversations:', error);
       }
     };
@@ -811,14 +825,14 @@ const ChatPage = () => {
     if (variantUploadInProgress || pipelineJobActive) {
       setPipelineDismissed(false);
     }
-    if (variantUploadInProgress || isRunningAnnovar || isApplyingAcmgFilter) {
+    if (variantUploadInProgress || isRunningAnnovar || isApplyingProprietaryFilter) {
       setPipelineExpanded(true);
     }
   }, [
     variantUploadInProgress,
     pipelineJobActive,
     isRunningAnnovar,
-    isApplyingAcmgFilter,
+    isApplyingProprietaryFilter,
   ]);
 
   const handlePipelineStepAction = useCallback(
@@ -864,7 +878,7 @@ const ChatPage = () => {
       hasAnnotatedFile={pipelineSnapshot.hasAnnotatedFile}
       requiresAnnovar={chatEligibility.requires_annovar}
       isRunningAnnovar={isRunningAnnovar}
-      isApplyingAcmgFilter={isApplyingAcmgFilter}
+      isApplyingProprietaryFilter={isApplyingProprietaryFilter}
       annovarJob={pipelineSnapshot.annovarJob}
       filterJob={pipelineSnapshot.filterJob}
       chatEligibility={chatEligibility}
@@ -1053,7 +1067,10 @@ const ChatPage = () => {
 
       {/* Desktop guest login button */}
       {userTier === 'guest' && !isMobile && (
-        <div className="fixed top-3 right-4 z-50">
+        <div className="fixed top-3 right-4 z-50 flex items-center gap-3">
+          <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>
+            {DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed}/{DEFAULT_GUEST_CHAT_LIMIT} free
+          </span>
           <button
             type="button"
             onClick={() => {
@@ -1094,30 +1111,34 @@ const ChatPage = () => {
         <button
           onClick={runAnnovarForCurrentConversation}
           disabled={isRunningAnnovar}
-          className={`chat-annovar-fab group h-10 w-10 rounded-full border transition-all duration-200 flex items-center justify-center ${isRunningAnnovar ? 'opacity-60 cursor-not-allowed' : ''
-            }`}
+          className={`chat-annovar-fab group h-10 w-10 rounded-full transition-all duration-200 flex items-center justify-center relative ${isRunningAnnovar ? 'cursor-not-allowed' : ''}`}
           style={{
             backgroundColor: 'var(--bg-surface)',
-            borderColor: 'var(--border-default)',
+            border: isRunningAnnovar ? 'none' : '1px solid var(--border-default)',
             color: isAnnovarRecommended ? 'var(--accent-teal)' : 'var(--text-tertiary)'
           }}
-          title={isAnnovarRecommended ? 'ANNOVAR recommended' : 'Run ANNOVAR'}
+          title={isRunningAnnovar ? 'ANNOVAR running…' : isAnnovarRecommended ? 'ANNOVAR recommended' : 'Run ANNOVAR'}
         >
+          {isRunningAnnovar && (
+            <svg className="absolute inset-0 w-full h-full animate-spin" viewBox="0 0 40 40" style={{ animationDuration: '1.2s' }}>
+              <circle cx="20" cy="20" r="19" fill="none" stroke="var(--border-default)" strokeWidth="1.5" />
+              <circle cx="20" cy="20" r="19" fill="none" stroke="var(--accent-teal)" strokeWidth="2" strokeLinecap="round" strokeDasharray="30 90" />
+            </svg>
+          )}
           <img
             src={qiagenLogo}
             alt="Qiagen"
             className="w-4 h-4 object-contain"
-            style={{ filter: isAnnovarRecommended ? 'none' : 'grayscale(100%) opacity(0.6)' }}
+            style={{ filter: isRunningAnnovar ? 'none' : isAnnovarRecommended ? 'none' : 'grayscale(100%) opacity(0.6)' }}
           />
-          <span
-            className={`absolute right-full mr-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shadow-md border transition-all duration-200 pointer-events-none ${isRunningAnnovar
-                ? 'opacity-100 translate-x-0'
-                : 'opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0'
-              }`}
-            style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-          >
-            {isRunningAnnovar ? 'Running ANNOVAR...' : 'Run ANNOVAR'}
-          </span>
+          {!isRunningAnnovar && (
+            <span
+              className="absolute right-full mr-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shadow-md border transition-all duration-200 pointer-events-none opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0"
+              style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
+            >
+              Run ANNOVAR
+            </span>
+          )}
         </button>
       )}
 
@@ -1172,6 +1193,23 @@ const ChatPage = () => {
                 </p>
               )}
 
+              {userTier === 'guest' && guestExchangesUsed >= 3 && !guestLimitExceeded && (
+                <div className="mb-4 w-full max-w-2xl px-4 py-3 rounded-xl border flex items-center justify-between gap-3"
+                  style={{ backgroundColor: 'rgba(245, 158, 11, 0.06)', borderColor: 'rgba(245, 158, 11, 0.2)' }}>
+                  <span className="text-xs font-medium" style={{ color: 'var(--warning)' }}>
+                    Only {DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed} exchange{DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed === 1 ? '' : 's'} left. Sign up for more and save your history.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { setIsShowingAuthForm(true); setJustSignedUp(false); }}
+                    className="text-xs px-3 py-1.5 rounded-lg font-medium border shrink-0 transition-colors hover:opacity-90"
+                    style={{ borderColor: 'var(--accent-teal)', color: 'var(--accent-teal)' }}
+                  >
+                    Sign up free
+                  </button>
+                </div>
+              )}
+
               <div className={`w-full ${isMobile ? 'shrink-0' : ''}`}>
                 <ChatPromptInput
                   mode="empty"
@@ -1190,6 +1228,7 @@ const ChatPage = () => {
                   onSelectVcf={onSelectVcfFile}
                   isVariantSidebarOpen={isVariantSidebarOpen}
                   onToggleVariantSidebar={() => setIsVariantSidebarOpen(!isVariantSidebarOpen)}
+                  hasDocument={!!currentDocument}
                   analysisPipelineBlock={analysisPipelineBlock}
                 />
               </div>
@@ -1197,6 +1236,22 @@ const ChatPage = () => {
           ) : (
             /* ===== ACTIVE CONVERSATION — messages + bottom input ===== */
             <>
+              {userTier === 'guest' && guestExchangesUsed >= 3 && !guestLimitExceeded && (
+                <div className="flex items-center justify-between gap-3 px-4 py-2 border-b mx-4"
+                  style={{ borderColor: 'rgba(245, 158, 11, 0.2)', backgroundColor: 'rgba(245, 158, 11, 0.04)' }}>
+                  <span className="text-xs font-medium" style={{ color: 'var(--warning)' }}>
+                    {DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed} exchange{DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed === 1 ? '' : 's'} remaining — sign up to get more and save your history.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { setIsShowingAuthForm(true); setJustSignedUp(false); }}
+                    className="text-xs px-3 py-1.5 rounded-lg font-medium border shrink-0 transition-colors hover:opacity-90"
+                    style={{ borderColor: 'var(--accent-teal)', color: 'var(--accent-teal)' }}
+                  >
+                    Sign up free
+                  </button>
+                </div>
+              )}
               {!isMobile && <header className="chat-conversation-header">
                 <div className="chat-column-inner flex items-center justify-between gap-3 h-12">
                   <h1
@@ -1274,6 +1329,22 @@ const ChatPage = () => {
 
               {/* Bottom input — conversation mode */}
               <div className="chat-column-inner pb-3 pt-1.5 shrink-0" style={{ backgroundColor: 'var(--bg-app)' }}>
+                {userTier === 'guest' && (
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      {DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed} of {DEFAULT_GUEST_CHAT_LIMIT} free exchanges remaining
+                    </span>
+                    <span className="text-xs" style={{ color: 'var(--border-default)' }}>|</span>
+                    <button
+                      type="button"
+                      onClick={() => { setIsShowingAuthForm(true); setJustSignedUp(false); }}
+                      className="text-xs font-medium hover:underline"
+                      style={{ color: 'var(--accent-teal)' }}
+                    >
+                      Sign up to save history
+                    </button>
+                  </div>
+                )}
                 <ChatPromptInput
                   mode="conversation"
                   input={input}
@@ -1292,6 +1363,7 @@ const ChatPage = () => {
                   onSelectVcf={onSelectVcfFile}
                   isVariantSidebarOpen={isVariantSidebarOpen}
                   onToggleVariantSidebar={() => setIsVariantSidebarOpen(!isVariantSidebarOpen)}
+                  hasDocument={!!currentDocument}
                   pipelineGatedMessage={isChatPipelineGated ? chatEligibility.message : null}
                   analysisPipelineBlock={analysisPipelineBlock}
                 />
@@ -1530,11 +1602,13 @@ const ChatPage = () => {
             await convertTabularToVcfForConversation(refGenome);
           }}
           onAnnovarClick={runAnnovarForCurrentConversation}
-          onAcmgFilterClick={runAcmgFilterForCurrentConversation}
-          isApplyingAcmgFilter={isApplyingAcmgFilter}
+          onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
+          isApplyingProprietaryFilter={isApplyingProprietaryFilter}
           isRunningAnnovar={isRunningAnnovar}
           acmgFilterActive={conversationFilterState.activeProprietaryFilter === 'filter_1'}
           acmgFilterCanApply={acmgFilterCanApply}
+          filter2Active={conversationFilterState.activeProprietaryFilter === 'filter_2'}
+          filter2CanApply={filter2CanApply}
           showVcfTabHighlight={columnInterpretationResult?.step1?.passed === false}
           onDeleteDocument={async () => {
             console.log('[App] Deleting document from conversation');

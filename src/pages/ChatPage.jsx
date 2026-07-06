@@ -28,7 +28,6 @@ import ColumnInterpretationResults from '../components/ColumnInterpretationResul
 import VariantAnalysisPipeline from '../components/VariantAnalysisPipeline';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
 import VariantUploadLoadingModal from '@/components/VariantUploadLoadingModal';
-import qiagenLogo from '../Qiagen.svg.png';
 
 import { apiUrl } from '@/config/api';
 import { buildVariantDataFromConversation, variantFileRowCountForSidebar } from '@/lib/variantPipelineUtils';
@@ -51,9 +50,6 @@ const ChatPage = () => {
   const [isVariantSidebarOpen, setIsVariantSidebarOpen] = useState(false);
   const [isEditSampleModalOpen, setIsEditSampleModalOpen] = useState(false);
 
-  useEffect(() => {
-    setIsSidebarOpen(!isMobile);
-  }, [isMobile]);
 
   // Auto-close variant sidebar when no document is present
   useEffect(() => {
@@ -504,7 +500,6 @@ const ChatPage = () => {
     };
 
     loadConversationsOnce();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, userTier, isAuthReady]);
 
   const clearConversationScopedState = useCallback(() => {
@@ -1121,42 +1116,6 @@ const ChatPage = () => {
           <FileText className="w-5 h-5" />
         </button>
       )} */}
-
-      {/* Run ANNOVAR action */}
-      {userTier !== 'guest' && activeConversationId && currentDocument && isVariantSidebarOpen && (
-        <button
-          onClick={runAnnovarForCurrentConversation}
-          disabled={isRunningAnnovar}
-          className={`chat-annovar-fab group h-10 w-10 rounded-full transition-all duration-200 flex items-center justify-center relative ${isRunningAnnovar ? 'cursor-not-allowed' : ''}`}
-          style={{
-            backgroundColor: 'var(--bg-surface)',
-            border: isRunningAnnovar ? 'none' : '1px solid var(--border-default)',
-            color: isAnnovarRecommended ? 'var(--accent-teal)' : 'var(--text-tertiary)'
-          }}
-          title={isRunningAnnovar ? 'ANNOVAR running…' : isAnnovarRecommended ? 'ANNOVAR recommended' : 'Run ANNOVAR'}
-        >
-          {isRunningAnnovar && (
-            <svg className="absolute inset-0 w-full h-full animate-spin" viewBox="0 0 40 40" style={{ animationDuration: '1.2s' }}>
-              <circle cx="20" cy="20" r="19" fill="none" stroke="var(--border-default)" strokeWidth="1.5" />
-              <circle cx="20" cy="20" r="19" fill="none" stroke="var(--accent-teal)" strokeWidth="2" strokeLinecap="round" strokeDasharray="30 90" />
-            </svg>
-          )}
-          <img
-            src={qiagenLogo}
-            alt="Qiagen"
-            className="w-4 h-4 object-contain"
-            style={{ filter: isRunningAnnovar ? 'none' : isAnnovarRecommended ? 'none' : 'grayscale(100%) opacity(0.6)' }}
-          />
-          {!isRunningAnnovar && (
-            <span
-              className="absolute right-full mr-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shadow-md border transition-all duration-200 pointer-events-none opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0"
-              style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-            >
-              Run ANNOVAR
-            </span>
-          )}
-        </button>
-      )}
 
         {/* {pipelineToast && userTier !== 'guest' && currentDocument && (
           <div

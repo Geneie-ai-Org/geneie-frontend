@@ -88,6 +88,38 @@ export async function mapProprietaryFilters(conversationId, columnInterpretation
   return data;
 }
 
+/**
+ * Send a file slice to POST /api/detect-genome-build and return
+ * { detected_build, genome, confidence, source }.
+ * Sends only the first ~512 KB to keep the request fast.
+ */
+const DETECT_GENOME_SLICE_BYTES = 512 * 1024;
+
+export async function detectGenomeBuild(file) {
+  const slice = file.slice(0, DETECT_GENOME_SLICE_BYTES);
+  const formData = new FormData();
+  formData.append('file', slice, file.name);
+
+  // Works for both guests and signed-in users; attach auth if available.
+  let headers = {};
+  try {
+    headers = await getAuthHeaders();
+  } catch {
+    // guest — no auth header needed, endpoint allows it
+  }
+
+  const response = await fetch(apiUrl('/api/detect-genome-build'), {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Genome detection failed');
+  }
+  return data;
+}
+
 export async function convertToVcf(conversationId, referenceGenome = 'hg38') {
   const headers = {
     ...(await getAuthHeaders()),
@@ -229,6 +261,43 @@ export function getTierChatLimit(userTier, subscriptionStatus) {
 
 export function shouldUsePresignedUpload(userTier, fileSize) {
   return userTier === 'pro' && fileSize > PRO_PRESIGN_UPLOAD_THRESHOLD_BYTES;
+}
+
+export async function getExportEligibility(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(
+    apiUrl(`/api/export-variants-eligibility/${encodeURIComponent(conversationId)}`),
+    { headers },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to check export eligibility');
+  }
+  return data;
+}
+
+export async function exportVariants(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(
+    apiUrl(`/api/export-variants/${encodeURIComponent(conversationId)}`),
+    { headers },
+  );
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(parseApiErrorDetail(data.detail) || 'Export failed');
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const filenameMatch = disposition.match(/filename="(.+?)"/);
+  const filename = filenameMatch?.[1] || `variants_${conversationId}.tsv`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 /** PUT file to S3 via presigned URL with byte progress. */

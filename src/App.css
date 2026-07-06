@@ -173,8 +173,7 @@
 
 .chat-annovar-fab {
   position: fixed;
-  top: 50%;
-  transform: translateY(-50%);
+  bottom: 1.5rem;
   right: calc(var(--shell-right-col) + 1rem);
   z-index: 45;
   transition: right var(--transition-slow);

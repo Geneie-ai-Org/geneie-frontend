@@ -50,7 +50,7 @@ export function useVariantPipeline({
   });
   const [pipelineToast, setPipelineToast] = useState(null);
   const [isRunningAnnovar, setIsRunningAnnovar] = useState(false);
-  const [isApplyingAcmgFilter, setIsApplyingAcmgFilter] = useState(false);
+  const [isApplyingProprietaryFilter, setIsApplyingProprietaryFilter] = useState(false);
   const [uploadSessionConversationId, setUploadSessionConversationId] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(null);
 
@@ -61,8 +61,8 @@ export function useVariantPipeline({
   currentDocumentRef.current = currentDocument;
   const isRunningAnnovarRef = useRef(isRunningAnnovar);
   isRunningAnnovarRef.current = isRunningAnnovar;
-  const isApplyingAcmgFilterRef = useRef(isApplyingAcmgFilter);
-  isApplyingAcmgFilterRef.current = isApplyingAcmgFilter;
+  const isApplyingProprietaryFilterRef = useRef(isApplyingProprietaryFilter);
+  isApplyingProprietaryFilterRef.current = isApplyingProprietaryFilter;
 
   const pipelineSnapshotRef = useRef(pipelineSnapshot);
   pipelineSnapshotRef.current = pipelineSnapshot;
@@ -110,7 +110,7 @@ export function useVariantPipeline({
           allowed &&
           currentDocumentRef.current &&
           !isRunningAnnovarRef.current &&
-          !isApplyingAcmgFilterRef.current
+          !isApplyingProprietaryFilterRef.current
         ) {
           setPipelineToast({
             title: 'Chat ready',
@@ -154,7 +154,7 @@ export function useVariantPipeline({
           allowed &&
           currentDocumentRef.current &&
           !isRunningAnnovarRef.current &&
-          !isApplyingAcmgFilterRef.current
+          !isApplyingProprietaryFilterRef.current
         ) {
           setPipelineToast({
             title: 'Chat ready',
@@ -342,7 +342,7 @@ export function useVariantPipeline({
         vd?.s3_line_count_status === 'pending' || vd?.s3_line_count_status === 'running';
       const pipelineWorkActive =
         isRunningAnnovarRef.current ||
-        isApplyingAcmgFilterRef.current ||
+        isApplyingProprietaryFilterRef.current ||
         snap.annovarJob?.status === 'running' ||
         snap.filterJob?.status === 'running' ||
         snap.filterJob?.status === 'pending' ||
@@ -429,9 +429,9 @@ export function useVariantPipeline({
         const filtActive = filtJob.status === 'running' || filtJob.status === 'pending';
         if (annActive) setIsRunningAnnovar(true);
         else if (annJob.status === 'completed' || annJob.status === 'failed') setIsRunningAnnovar(false);
-        if (filtActive) setIsApplyingAcmgFilter(true);
+        if (filtActive) setIsApplyingProprietaryFilter(true);
         else if (filtJob.status === 'completed' || filtJob.status === 'failed') {
-          setIsApplyingAcmgFilter(false);
+          setIsApplyingProprietaryFilter(false);
         }
 
         setAnnovarMessageModalRef.current((prev) => {
@@ -466,11 +466,10 @@ export function useVariantPipeline({
             variant: 'error',
           });
         }
-
         if (prevFilt === 'running' && filtJob.status === 'completed') {
           await refreshConversationAfterAnnovarRef.current(activeConversationId);
           setPipelineToast({
-            title: 'ACMG filter complete',
+            title: 'Variant prioritization complete',
             message:
               filtJob.message ||
               `${(filtJob.filtered_count ?? filtJob.rows_kept ?? 0).toLocaleString()} variants prioritized for chat.`,
@@ -478,8 +477,9 @@ export function useVariantPipeline({
           });
         } else if (prevFilt === 'running' && filtJob.status === 'failed') {
           setPipelineToast({
-            title: 'ACMG filter failed',
-            message: filtJob.message || filtJob.error || 'Prioritization did not complete.',
+            title: 'Variant prioritization failed',
+            message:
+              filtJob.message || filtJob.error || 'Prioritization did not complete.',
             variant: 'error',
           });
         }
@@ -511,7 +511,7 @@ export function useVariantPipeline({
     };
     // Minimal deps: only values that should re-arm the poll loop from scratch.
     // - activeConversationId / currentDocument / userTier: conversation switched or user state changed
-    // - isRunningAnnovar / isApplyingAcmgFilter: a job was *just* kicked off and the loop may have
+    // - isRunningAnnovar / isApplyingProprietaryFilter: a job was *just* kicked off and the loop may have
     //   already exited (pipelineWorkActive was false at the last tick); re-entry restarts it.
     //
     // Intentionally excluded (all read via refs instead):
@@ -523,7 +523,7 @@ export function useVariantPipeline({
     // Those were previously causing the effect to restart on every setPipelineSnapshot
     // call inside the loop, producing a duplicate poll tick each cycle.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeConversationId, currentDocument, userTier, isRunningAnnovar, isApplyingAcmgFilter]);
+  }, [activeConversationId, currentDocument, userTier, isRunningAnnovar, isApplyingProprietaryFilter]);
 
   const handleVariantUploadingChange = useCallback(
     (isUploading) => {
@@ -545,7 +545,7 @@ export function useVariantPipeline({
 
   const pipelineJobActive =
     isRunningAnnovar ||
-    isApplyingAcmgFilter ||
+    isApplyingProprietaryFilter ||
     pipelineSnapshot.annovarJob?.status === 'running' ||
     pipelineSnapshot.filterJob?.status === 'running' ||
     pipelineSnapshot.filterJob?.status === 'pending';
@@ -714,12 +714,18 @@ export function useVariantPipeline({
     getDeviceId,
   ]);
 
-  const runAcmgFilterForCurrentConversation = useCallback(async () => {
+  const FILTER_DISPLAY_NAMES = {
+    filter_1: 'ACMG filter',
+    filter_2: 'Functional Impact',
+  };
+
+  const runProprietaryFilter = useCallback(async (filterType) => {
+    const displayName = FILTER_DISPLAY_NAMES[filterType] || 'Proprietary filter';
+
     if (userTier === 'guest') {
       setAnnovarMessageModal({
-        title: 'Sign up to apply ACMG filter',
-        message:
-          'The ACMG filter is available for signed-in users. Create an account to prioritize variants for chat.',
+        title: `Sign up to apply ${displayName}`,
+        message: `The ${displayName} is available for signed-in users. Create an account to prioritize variants for chat.`,
         variant: 'info',
         ctaLabel: 'Sign Up / Log In',
         onCta: () => {
@@ -735,23 +741,46 @@ export function useVariantPipeline({
       setAnnovarMessageModal({ title: 'No file', message: 'Please upload a file first.', variant: 'info' });
       return;
     }
-    if (isApplyingAcmgFilter) return;
+    if (isApplyingProprietaryFilter) return;
 
-    const step2 = columnInterpretationResult?.step2;
-    const step2Req = step2?.required_columns || {};
-    const step2Ready = Boolean(step2Req.CLNSIG?.found || step2Req.InterVar_automated?.found);
-    if (!step2Ready && chatEligibility.requires_annovar) {
-      setAnnovarMessageModal({
-        title: 'Run ANNOVAR first',
-        message:
-          'The ACMG filter needs ClinVar or InterVar annotations and population frequency from ANNOVAR. Run ANNOVAR, then apply the ACMG filter.',
-        variant: 'info',
-      });
-      return;
+    // Gate check: filter_1 needs CLNSIG/InterVar; filter_2 needs its own columns
+    if (filterType === 'filter_1') {
+      const step2 = columnInterpretationResult?.step2;
+      const step2Req = step2?.required_columns || {};
+      const step2Ready = Boolean(step2Req.CLNSIG?.found || step2Req.InterVar_automated?.found);
+      if (!step2Ready && chatEligibility.requires_annovar) {
+        setAnnovarMessageModal({
+          title: 'Run ANNOVAR first',
+          message:
+            'The ACMG filter needs ClinVar or InterVar annotations and population frequency from ANNOVAR. Run ANNOVAR, then apply the ACMG filter.',
+          variant: 'info',
+        });
+        return;
+      }
+    }
+    // filter_2 gate: requires all columns mapped and step2 partially passed
+    if (filterType === 'filter_2') {
+      const step2 = columnInterpretationResult?.step2;
+      if (!step2 || step2.not_implemented) {
+        setAnnovarMessageModal({
+          title: 'Cannot apply filter',
+          message: 'Column mapping for this filter is not available. Run ANNOVAR first.',
+          variant: 'info',
+        });
+        return;
+      }
+      if (!step2.passed && !step2.partially_passed) {
+        setAnnovarMessageModal({
+          title: 'Missing columns',
+          message: 'Required predictor columns are missing for the Functional Impact filter.',
+          variant: 'info',
+        });
+        return;
+      }
     }
 
     let filterStartedAsync = false;
-    setIsApplyingAcmgFilter(true);
+    setIsApplyingProprietaryFilter(true);
     prevFilterJobStatusRef.current = 'running';
     interpretationDismissedRef.current = true;
     setShowInterpretationModal(false);
@@ -768,7 +797,7 @@ export function useVariantPipeline({
           Authorization: `Bearer ${token}`,
           'X-Device-Id': getDeviceId(),
         },
-        body: JSON.stringify({ conversation_id: activeConversationId, filter_type: 'filter_1' }),
+        body: JSON.stringify({ conversation_id: activeConversationId, filter_type: filterType }),
       });
 
       if (!res.ok && res.status !== 202) {
@@ -782,7 +811,7 @@ export function useVariantPipeline({
               : Array.isArray(detail)
                 ? detail.map((d) => d.msg || d).join(', ')
                 : null;
-        throw new Error(detailText || 'Failed to apply ACMG filter');
+        throw new Error(detailText || `Failed to apply ${displayName}`);
       }
 
       if (res.status === 202) {
@@ -790,7 +819,7 @@ export function useVariantPipeline({
         await res.json().catch(() => ({}));
         setAnnovarMessageModal(null);
         setPipelineToast({
-          title: 'ACMG filter started',
+          title: `${displayName} started`,
           message: 'Prioritization is running in the background. Watch the pipeline bar at the top.',
           variant: 'success',
         });
@@ -800,34 +829,34 @@ export function useVariantPipeline({
         await refreshConversationAfterAnnovar(activeConversationId);
         setConversationFilterState((prev) => ({
           ...prev,
-          activeProprietaryFilter: 'filter_1',
+          activeProprietaryFilter: filterType,
           filteredVariantCount: filteredCount ?? prev.filteredVariantCount,
           filterWorkingSetCount: filteredCount ?? prev.filterWorkingSetCount,
         }));
         setAnnovarMessageModal({
-          title: 'ACMG filter applied',
+          title: `${displayName} applied`,
           message: `${filteredCount ?? 0} variants prioritized for chat.`,
           variant: 'success',
         });
       }
     } catch (error) {
-      console.error('[useVariantPipeline] Apply ACMG filter error:', error);
+      console.error(`[useVariantPipeline] Apply ${filterType} error:`, error);
       setAnnovarMessageModal({
-        title: 'ACMG filter',
+        title: displayName,
         message:
           error.message ||
-          'Failed to apply ACMG filter. Run ANNOVAR first if your file is not annotated yet.',
+          `Failed to apply ${displayName}. Run ANNOVAR first if your file is not annotated yet.`,
         variant: 'error',
       });
     } finally {
       if (!filterStartedAsync) {
-        setIsApplyingAcmgFilter(false);
+        setIsApplyingProprietaryFilter(false);
       }
     }
   }, [
     activeConversationId,
     currentDocument,
-    isApplyingAcmgFilter,
+    isApplyingProprietaryFilter,
     userTier,
     columnInterpretationResult,
     chatEligibility.requires_annovar,
@@ -844,6 +873,9 @@ export function useVariantPipeline({
   const step2ReqGate = columnInterpretationResult?.step2?.required_columns || {};
   const step2AcmgReady = Boolean(step2ReqGate.CLNSIG?.found || step2ReqGate.InterVar_automated?.found);
   const acmgFilterCanApply = !!step2AcmgReady && !chatEligibility.requires_annovar;
+
+  const step2Filter2Ready = columnInterpretationResult?.step2?.passed || columnInterpretationResult?.step2?.partially_passed;
+  const filter2CanApply = !!step2Filter2Ready && !chatEligibility.requires_annovar;
 
   const resetConversationPipeline = useCallback(() => {
     setChatEligibility(defaultChatEligibility());
@@ -889,7 +921,7 @@ export function useVariantPipeline({
     pipelineToast,
     setPipelineToast,
     isRunningAnnovar,
-    isApplyingAcmgFilter,
+    isApplyingProprietaryFilter,
     uploadSessionConversationId,
     handleVariantUploadingChange,
     handleUploadProgressChange,
@@ -897,12 +929,13 @@ export function useVariantPipeline({
     refreshConversationAfterAnnovar,
     presentFileAnalysisModal,
     runAnnovarForCurrentConversation,
-    runAcmgFilterForCurrentConversation,
+    runProprietaryFilter,
     promptChatBlocked,
     isChatPipelineGated,
     pipelineJobActive,
     variantUploadInProgress,
     acmgFilterCanApply,
+    filter2CanApply,
     syncPipelineFromConversation,
     resetConversationPipeline,
     normalizeChatEligibilityMessage,

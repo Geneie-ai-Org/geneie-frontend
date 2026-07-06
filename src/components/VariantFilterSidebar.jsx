@@ -4,6 +4,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import DocumentUpload from './DocumentUpload';
 import ProcessingNotification from './ProcessingNotification';
+import ExportVariantsButton from './ExportVariantsButton';
 import { apiUrl, getApiOrigin } from '@/config/api';
 import qiagenLogo from '../Qiagen.svg.png';
 
@@ -1668,7 +1669,7 @@ const VariantFilterSidebar = ({
                       isApplyingProprietaryFilter ||
                       (hasAppliedManualFilters && activeProprietaryFilter !== 'filter_1')
                     }
-                    className="w-full px-4 py-3 rounded-lg border-2 transition-all flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-4 py-3 rounded-lg border-[var(--border-default)] transition-all flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{
                       backgroundColor: activeProprietaryFilter === 'filter_1' ? 'var(--accent-teal-soft)' : 'var(--bg-surface-raised)',
                       borderColor: 'var(--accent-teal)'
@@ -1742,13 +1743,22 @@ const VariantFilterSidebar = ({
                 </div>
               )}
               
-              {/* Filter 2 Button */}
-              {proprietaryFilterPreviews.filter_2 && (
-                <div className="relative group">
+              {/* Filter 2 Button — always rendered; falls back to ACMG's apply-state/row count
+                  when the backend preview omits filter_2 so the option is never hidden. */}
+              {(() => {
+                const f2 = proprietaryFilterPreviews.filter_2 || {
+                  name: 'Functional Impact',
+                  can_apply: proprietaryFilterPreviews.filter_1?.can_apply ?? false,
+                  preview_pending: true,
+                  total_count: proprietaryFilterPreviews.filter_1?.total_count ?? 0,
+                  preview_count: 0,
+                };
+                return (
+                <div className="mb-2 relative group">
                   <button
                     onClick={() => handleApplyProprietaryFilter('filter_2')}
                     disabled={
-                      !proprietaryFilterPreviews.filter_2.can_apply ||
+                      !f2.can_apply ||
                       isApplyingProprietaryFilter ||
                       (hasAppliedManualFilters && activeProprietaryFilter !== 'filter_2')
                     }
@@ -1772,28 +1782,42 @@ const VariantFilterSidebar = ({
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="font-semibold text-sm text-[var(--text-primary)]">
-                        {proprietaryFilterPreviews.filter_2.name}
+                        {f2.name || 'Functional Impact'}
                       </span>
                       {activeProprietaryFilter === 'filter_2' && (
                         <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--bg-app)' }}>
                           Active
                         </span>
                       )}
-                      {!proprietaryFilterPreviews.filter_2.can_apply && (
-                        <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--accent-teal-soft)', color: 'var(--error)' }}>
+                      {!f2.can_apply && (
+                        <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--error-soft)', color: 'var(--error)' }}>
                           Missing columns
                         </span>
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0 ml-2">
                       <div className="text-right leading-tight">
-                        <div className="text-sm font-bold tabular-nums" style={{ color: 'var(--accent-teal)' }}>
-                          {(proprietaryFilterPreviews.filter_2.preview_count ?? 0).toLocaleString()}
-                          <span className="font-normal text-xs ml-1" style={{ color: 'var(--text-secondary)' }}>variants</span>
-                        </div>
-                        <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                          of {(proprietaryFilterPreviews.filter_2.total_count ?? 0).toLocaleString()}
-                        </div>
+                        {f2.preview_pending &&
+                        activeProprietaryFilter !== 'filter_2' ? (
+                          <>
+                            <div className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                              Apply to load
+                            </div>
+                            <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                              from {(f2.total_count ?? 0).toLocaleString()} rows
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-sm font-bold tabular-nums" style={{ color: 'var(--accent-teal)' }}>
+                              {(f2.preview_count ?? 0).toLocaleString()}
+                              <span className="font-normal text-xs ml-1" style={{ color: 'var(--text-secondary)' }}>variants</span>
+                            </div>
+                            <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                              of {(f2.total_count ?? 0).toLocaleString()}
+                            </div>
+                          </>
+                        )}
                       </div>
                       <Info
                         className="w-3.5 h-3.5 shrink-0"
@@ -1810,13 +1834,14 @@ const VariantFilterSidebar = ({
                     </p>
                   </div>
                 </div>
-              )}
+                );
+              })()}
             </div>
           )}
 
           {variantData?.sample_only_ingest && (
             <div
-              className="mx-4 mb-3 p-2.5 rounded-lg border text-xs leading-relaxed"
+              className="p-2.5 rounded-lg text-xs leading-relaxed sidebar-card"
               style={{ backgroundColor: 'var(--accent-teal-soft)', borderColor: 'var(--accent-teal)', color: 'var(--text-primary)' }}
             >
               {variantData.s3_line_count_status === 'pending' || variantData.s3_line_count_status === 'running' ? (
@@ -2145,10 +2170,10 @@ const VariantFilterSidebar = ({
                             ))
                           ) : (
                             <div className="text-sm text-[var(--text-secondary)] text-center py-4">
-                              No values match "{popupSearchQuery}"
-                            </div>
-                          )}
-                        </div>
+                                No values match "{popupSearchQuery}"
+            </div>
+          )}
+          </div>
                       </div>
                     );
                   }
@@ -2403,6 +2428,15 @@ const VariantFilterSidebar = ({
                 )}
             </div>
           )}
+
+          <div className="pt-1">
+            <ExportVariantsButton
+              conversationId={conversationId}
+              variantData={variantData}
+              filteredCount={filteredCount}
+              isGuest={isGuest}
+            />
+          </div>
         </div>
       </div>
       

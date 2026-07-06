@@ -155,11 +155,11 @@ const LandingPage = () => {
             <div className="container mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <img
-                  src="/Logo.png"
+                  src="/Final logo dark.svg"
                   alt="geneie logo"
-                  className="h-6 w-6 sm:h-7 sm:w-7 object-contain"
+                  className="h-20 w-20 sm:h-24 sm:w-24 object-contain"
                 />
-                <span className="text-xl font-bold font-brand tracking-tight text-white">geneie</span>
+                {/* <span className="text-xl font-bold font-brand tracking-tight text-white">geneie</span> */}
               </div>
               <div className="flex items-center gap-1 sm:gap-3">
                 {[
@@ -531,8 +531,8 @@ const LandingPage = () => {
 
               <div ref={askQuestionsRef} className="w-full space-y-3">
                 {exampleQuestions.map((q, i) => (
-                  <div key={i} className="flex items-center p-4 md:p-5 bg-[#111] border border-zinc-800/50 rounded-xl hover:bg-[#151515] transition-colors cursor-pointer group">
-                    <div className="w-8 h-8 min-w-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-mono mr-4 group-hover:bg-zinc-700 transition-colors text-zinc-400">{i + 1}</div>
+                  <div key={i} className="flex items-center p-4 md:p-5 bg-[#111] border border-zinc-800/50 rounded-xl transition-colors">
+                    <div className="w-8 h-8 min-w-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-mono mr-4 transition-colors text-zinc-400">{i + 1}</div>
                     <p className="text-zinc-300 text-sm sm:text-[15px]">{q}</p>
                   </div>
                 ))}
@@ -591,7 +591,7 @@ const LandingPage = () => {
                       height={420}
                       cardDistance={60}
                       verticalDistance={70}
-                      delay={5000}
+                      delay={3000}
                       pauseOnHover={true}
                       skewAmount={6}
                       easing="elastic"
@@ -667,10 +667,6 @@ const LandingPage = () => {
                     <Button asChild size="lg" className="bg-white text-black hover:bg-zinc-200 px-6 py-6 rounded-md font-semibold text-base transition-colors w-full sm:w-auto sm:min-w-[280px]">
                       <Link to="/auth">Get Started</Link>
                     </Button>
-                    <div className="text-xs text-zinc-500 font-medium flex items-center gap-1.5">
-                      <Lock className="w-3 h-3" />
-                      <span>No credit card required</span>
-                    </div>
                   </div>
                 </div>
 
@@ -748,7 +744,11 @@ const LandingPage = () => {
               </div>
               <div className="flex items-center justify-between pt-10 pb-1 border-b border-zinc-800/60">
                 <span className="text-zinc-600 text-xs sm:text-sm">&copy; {new Date().getFullYear()} geneie</span>
-                <span className="text-zinc-500 text-xs sm:text-sm font-medium">powered by Omixir</span>
+                <span className="flex items-center gap-1.5 text-zinc-500 text-xs sm:text-sm font-medium">
+                  powered by 
+                  <img src="/omixer-small-logo.png" alt="Omixir" className="h-4 sm:h-5 object-contain" />
+                  Omixer
+                  </span>
               </div>
             </div>
           </div>

@@ -1,15 +1,5 @@
 import React, { useMemo } from 'react';
-import {
-  Check,
-  Circle,
-  Loader2,
-  Minus,
-  AlertCircle,
-  ChevronDown,
-  ChevronUp,
-  FileText,
-  X,
-} from 'lucide-react';
+import { Check, Circle, Loader2, Minus, AlertCircle, ChevronDown, ChevronUp, FileText, X, Pencil } from 'lucide-react';
 import {
   PIPELINE_STEP_DEFS,
   computePipelineSteps,
@@ -53,7 +43,7 @@ const VariantAnalysisPipeline = ({
   hasAnnotatedFile,
   requiresAnnovar,
   isRunningAnnovar,
-  isApplyingAcmgFilter,
+  isApplyingProprietaryFilter,
   annovarJob,
   filterJob,
   chatEligibility,
@@ -62,6 +52,7 @@ const VariantAnalysisPipeline = ({
   filteredVariantCount,
   s3LineCountStatus,
   variantsUnderConsideration,
+  onEditSampleInfo,
 }) => {
   const pipelineProps = {
     uploadInProgress,
@@ -71,7 +62,7 @@ const VariantAnalysisPipeline = ({
     hasAnnotatedFile,
     requiresAnnovar,
     isRunningAnnovar,
-    isApplyingAcmgFilter,
+    isApplyingProprietaryFilter,
     annovarJob,
     filterJob,
     chatEligibility,
@@ -102,7 +93,7 @@ const VariantAnalysisPipeline = ({
     if (backgroundActive || summary.status === 'running') {
       const pct = isRunningAnnovar && annovarJob?.progress_percent != null
         ? ` · ${Math.round(annovarJob.progress_percent)}%`
-        : isApplyingAcmgFilter && filterJob?.progress_percent != null
+        : isApplyingProprietaryFilter && filterJob?.progress_percent != null
           ? ` · ${Math.round(filterJob.progress_percent)}%`
           : '';
       return `Step ${summary.stepIndex}/${summary.total} · ${summary.label}${pct}`;
@@ -160,6 +151,17 @@ const VariantAnalysisPipeline = ({
         </button>
 
         <div className="flex items-center gap-0.5 shrink-0">
+          {!isGuest && onEditSampleInfo && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onEditSampleInfo(); }}
+              className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+              style={{ color: 'var(--text-tertiary)' }}
+              title="Edit sample info"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onExpandedChange?.(!expanded)}

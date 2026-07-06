@@ -23,7 +23,7 @@ export function computePipelineSteps({
   hasAnnotatedFile,
   requiresAnnovar,
   isRunningAnnovar,
-  isApplyingAcmgFilter,
+  isApplyingProprietaryFilter,
   annovarJob,
   filterJob,
   chatEligibility,
@@ -75,9 +75,9 @@ export function computePipelineSteps({
   })();
 
   const hasReduction =
-    activeProprietaryFilter === 'filter_1' || hasManualFilters(activeVariantFilters);
+    (activeProprietaryFilter === 'filter_1' || activeProprietaryFilter === 'filter_2') || hasManualFilters(activeVariantFilters);
   const filterRunning =
-    isApplyingAcmgFilter ||
+    isApplyingProprietaryFilter ||
     filterJob?.status === 'running' ||
     filterJob?.status === 'pending';
   const filterFailed = filterJob?.status === 'failed';
@@ -107,7 +107,7 @@ export function computePipelineSteps({
 export function getPipelineBackgroundActive({
   uploadInProgress,
   isRunningAnnovar,
-  isApplyingAcmgFilter,
+  isApplyingProprietaryFilter,
   annovarJob,
   filterJob,
   s3LineCountStatus,
@@ -120,7 +120,7 @@ export function getPipelineBackgroundActive({
   return (
     uploadInProgress ||
     isRunningAnnovar ||
-    isApplyingAcmgFilter ||
+    isApplyingProprietaryFilter ||
     annovarJob?.status === 'running' ||
     filterJob?.status === 'running' ||
     lineCountInProgress
@@ -134,7 +134,7 @@ export function getPipelineStatusLine(props, steps) {
     uploadInProgress,
     uploadProgress,
     isRunningAnnovar,
-    isApplyingAcmgFilter,
+    isApplyingProprietaryFilter,
     annovarJob,
     filterJob,
     chatEligibility,
@@ -162,7 +162,7 @@ export function getPipelineStatusLine(props, steps) {
   if (isRunningAnnovar || annovarJob?.status === 'running') {
     return annovarJob?.message || 'Annotation is running in the background.';
   }
-  if (isApplyingAcmgFilter || filterJob?.status === 'running') {
+  if (isApplyingProprietaryFilter || filterJob?.status === 'running') {
     return filterJob?.message || 'Prioritizing variants in the background.';
   }
   if (chatEligibility?.allowed) {

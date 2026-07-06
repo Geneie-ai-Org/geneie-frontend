@@ -70,12 +70,12 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // Path 1: User is successfully authenticated (via form or successful token)
+        localStorage.removeItem('pendingEmailVerification');
         setUserId(user.uid);
         setIsAuthReady(true);
-        setUserLoading(false); // UNLOCK
+        setUserLoading(false);
       } else {
         // Path 2: User is unauthenticated (or listener just started)
 

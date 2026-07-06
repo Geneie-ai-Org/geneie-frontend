@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { User, X, Mail, Calendar, Settings, CreditCard, LogOut, Database, MessageSquare, FileText } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, LogOut, ChevronRight, Crown, MessageSquare, FileText, Zap } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 import SubscriptionPage from './SubscriptionPage';
 import { useModalScrollLock } from '@/hooks/useModalScrollLock';
 
 const ProfileManagement = ({ isOpen, onClose, userTier, userId, db, conversations, currentExchanges, chatLimit = 10 }) => {
+  const navigate = useNavigate();
   const [userEmail, setUserEmail] = useState('');
   const [accountCreatedAt, setAccountCreatedAt] = useState(null);
   const [filesUploaded, setFilesUploaded] = useState(0);
@@ -32,12 +34,9 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, db, conversation
 
         if (userDoc.exists()) {
           const data = userDoc.data();
-          console.log('[ProfileManagement] User data from Firestore:', data);
           const planStatus = data.planStatus || data.plan_status || 'free';
-          console.log('[ProfileManagement] Detected planStatus:', planStatus);
           setOriginalPlanStatus(planStatus);
-          const displayTier = planStatus === 'admin' ? 'pro' : planStatus;
-          setActualUserTier(displayTier);
+          setActualUserTier(planStatus === 'admin' ? 'pro' : planStatus);
 
           if (auth.currentUser?.metadata?.creationTime) {
             setAccountCreatedAt(new Date(auth.currentUser.metadata.creationTime));
@@ -47,21 +46,16 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, db, conversation
             const appId = 'default-app-id';
             const conversationsRef = collection(db, 'artifacts', appId, 'users', userId, 'conversations');
             const conversationsSnapshot = await getDocs(conversationsRef);
-
             let totalFiles = 0;
             for (const convDoc of conversationsSnapshot.docs) {
               const convData = convDoc.data();
-              if (convData.documentName || convData.documentUrl) {
-                totalFiles++;
-              }
+              if (convData.documentName || convData.documentUrl) totalFiles++;
             }
             setFilesUploaded(totalFiles);
-          } catch (fileCountError) {
-            console.error('[ProfileManagement] Error counting files:', fileCountError);
+          } catch {
             setFilesUploaded(0);
           }
         } else {
-          console.warn('[ProfileManagement] User document does not exist in Firestore');
           setActualUserTier('free');
         }
       }
@@ -82,16 +76,12 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, db, conversation
     }
   }, [isOpen, userId, db, loadUserData]);
 
-  const formatDate = (date) => {
-    if (!date) return 'N/A';
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
   if (!isOpen) return null;
+
+  const isPro = actualUserTier === 'pro';
+  const isAdmin = originalPlanStatus === 'admin';
+  const initial = userEmail ? userEmail.charAt(0).toUpperCase() : '?';
+  const convCount = conversations?.length || 0;
 
   return createPortal(
     <dialog
@@ -99,180 +89,130 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, db, conversation
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm overscroll-contain p-0 w-full h-full max-w-none max-h-none border-0"
       onClick={onClose}
       aria-modal="true"
-      aria-labelledby="profile-modal-title"
     >
       <div
         ref={panelRef}
-        className="rounded-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto overscroll-contain"
-        style={{ backgroundColor: 'var(--bg-surface-raised)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-xl)' }}
+        className="rounded-2xl w-full mx-4 overflow-hidden"
+        style={{
+          maxWidth: '320px',
+          backgroundColor: 'var(--bg-surface)',
+          border: '1px solid var(--border-default)',
+          boxShadow: '0 24px 48px rgba(0,0,0,0.4)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="sticky top-0 px-6 py-5 rounded-t-xl border-b" style={{ backgroundColor: 'var(--bg-surface-raised)', borderColor: 'var(--border-default)' }}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--accent-blue-soft)' }}>
-                <User className="w-4 h-4" style={{ color: 'var(--accent-blue)' }} />
-              </div>
-              <h2 id="profile-modal-title" className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Profile & Settings</h2>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-              style={{ color: 'var(--text-secondary)' }}
-            >
-              <X className="w-5 h-5" />
-            </button>
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <div
+              className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin"
+              style={{ borderColor: 'var(--accent-teal)', borderTopColor: 'transparent' }}
+            />
           </div>
-        </div>
-
-        {/* Content */}
-        <div className="p-6 space-y-5">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--accent-blue)' }}></div>
+        ) : (
+          <>
+            {/* Profile row */}
+            <div className="flex items-center gap-3 px-5 pt-5 pb-4">
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+                style={{ backgroundColor: 'var(--accent-teal-soft)' }}
+              >
+                <span className="text-sm font-bold" style={{ color: 'var(--accent-teal)' }}>{initial}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{userEmail}</p>
+                <span
+                  className="text-[11px] font-semibold px-1.5 py-px rounded mt-0.5 inline-block"
+                  style={{
+                    backgroundColor: isPro ? 'var(--accent-teal-soft)' : 'var(--bg-surface-hover)',
+                    color: isPro ? 'var(--accent-teal)' : 'var(--text-tertiary)',
+                  }}
+                >
+                  {isAdmin ? 'Admin' : isPro ? 'Pro' : 'Free tier'}
+                </span>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-1 rounded-lg transition-colors hover:bg-white/5 shrink-0"
+                style={{ color: 'var(--text-tertiary)' }}
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-          ) : (
-            <>
-              {/* Account Information */}
-              <div className="rounded-lg p-4 border" style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}>
-                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                  <User className="w-4 h-4" style={{ color: 'var(--accent-teal)' }} />
-                  Account Information
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3">
-                    <Mail className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: 'var(--text-tertiary)' }} />
-                    <div className="flex-1 min-w-0">
-                      <label className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Email</label>
-                      <p className="text-sm mt-0.5 truncate" style={{ color: 'var(--text-secondary)' }}>{userEmail}</p>
-                    </div>
-                  </div>
 
-                  <div className="flex items-start gap-3">
-                    <div className="w-4 h-4 mt-0.5 flex items-center justify-center rounded flex-shrink-0" style={{ backgroundColor: 'var(--accent-teal-soft)' }}>
-                      {actualUserTier === 'pro' ? '✨' : '🆓'}
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Account Tier</label>
-                      <div className="mt-0.5">
-                        <span className="inline-block px-2.5 py-0.5 rounded text-xs font-semibold"
-                          style={{ backgroundColor: actualUserTier === 'pro' ? 'var(--success-soft)' : 'var(--accent-blue-soft)', color: actualUserTier === 'pro' ? 'var(--success)' : 'var(--accent-blue)' }}
-                        >
-                          {originalPlanStatus === 'admin' ? '✨ Admin' : actualUserTier === 'pro' ? '✨ Pro' : '🆓 Free'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+            {/* Divider */}
+            <div style={{ height: '1px', backgroundColor: 'var(--border-default)' }} />
 
-                  {accountCreatedAt && (
-                    <div className="flex items-start gap-3">
-                      <Calendar className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: 'var(--text-tertiary)' }} />
-                      <div className="flex-1">
-                        <label className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Member Since</label>
-                        <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>{formatDate(accountCreatedAt)}</p>
-                      </div>
-                    </div>
-                  )}
+            {/* Stats list */}
+            <div className="px-5 py-3">
+              <div className="flex items-center justify-between py-2">
+                <div className="flex items-center gap-2.5">
+                  <MessageSquare className="w-4 h-4" style={{ color: 'var(--text-disabled)' }} />
+                  <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Chats</span>
                 </div>
+                <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{convCount}</span>
               </div>
 
-              {/* Usage Statistics */}
-              <div className="rounded-lg p-4 border" style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}>
-                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                  <Database className="w-4 h-4" style={{ color: 'var(--accent-teal)' }} />
-                  Usage Statistics
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg p-3 border" style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-subtle)' }}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <MessageSquare className="w-3.5 h-3.5" style={{ color: 'var(--text-tertiary)' }} />
-                      <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>Conversations</span>
+              {actualUserTier !== 'pro' && (
+                <div className="py-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <Zap className="w-4 h-4" style={{ color: 'var(--text-disabled)' }} />
+                      <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Exchanges</span>
                     </div>
-                    <p className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{conversations?.length || 0}</p>
+                    <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                      {currentExchanges || 0}
+                      <span className="font-normal" style={{ color: 'var(--text-disabled)' }}>/{freeChatLimit}</span>
+                    </span>
                   </div>
-
-                  {actualUserTier !== 'pro' && (
-                    <div className="rounded-lg p-3 border" style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-subtle)' }}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <MessageSquare className="w-3.5 h-3.5" style={{ color: 'var(--text-tertiary)' }} />
-                        <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>Exchanges</span>
-                      </div>
-                      <p className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                        {currentExchanges || 0}<span className="text-sm font-normal" style={{ color: 'var(--text-tertiary)' }}>/{freeChatLimit}</span>
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="rounded-lg p-3 border" style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-subtle)' }}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <FileText className="w-3.5 h-3.5" style={{ color: 'var(--text-tertiary)' }} />
-                      <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>Files</span>
-                    </div>
-                    <p className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{filesUploaded}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Settings */}
-              <div className="rounded-lg p-4 border" style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}>
-                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                  <Settings className="w-4 h-4" style={{ color: 'var(--accent-teal)' }} />
-                  Settings
-                </h3>
-                <div className="space-y-2">
-                  <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                    <p className="font-medium mb-0.5">Notification Preferences</p>
-                    <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Coming soon</p>
-                  </div>
-                  <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                    <p className="font-medium mb-0.5">Privacy Settings</p>
-                    <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Coming soon</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Subscription */}
-              {actualUserTier === 'free' && originalPlanStatus !== 'admin' && (
-                <div className="rounded-lg p-4 border-2" style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--accent-teal)' }}>
-                  <h3 className="text-sm font-semibold mb-1.5 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                    <CreditCard className="w-4 h-4" style={{ color: 'var(--accent-teal)' }} />
-                    Subscription
-                  </h3>
-                  <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
-                    Upgrade to Pro for unlimited exchanges and advanced features.
-                  </p>
-                  <button
-                    onClick={() => setShowSubscriptionPage(true)}
-                    className="w-full px-4 py-2 rounded-lg font-medium text-sm transition-all"
-                    style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
-                    onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                    onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                  >
-                    Upgrade to Pro
-                  </button>
                 </div>
               )}
 
-              {/* Sign Out */}
-              <div className="border-t pt-4" style={{ borderColor: 'var(--border-subtle)' }}>
-                <button
-                  onClick={() => {
-                    getAuth().signOut();
-                    onClose();
-                  }}
-                  className="w-full px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                  style={{ backgroundColor: 'var(--error-soft)', borderColor: 'var(--error)', color: 'var(--error)', border: '1px solid' }}
-                  onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
-                  onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                >
-                  <LogOut className="w-4 h-4" />
-                  Sign Out
-                </button>
+              <div className="flex items-center justify-between py-2">
+                <div className="flex items-center gap-2.5">
+                  <FileText className="w-4 h-4" style={{ color: 'var(--text-disabled)' }} />
+                  <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Files</span>
+                </div>
+                <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{filesUploaded}</span>
               </div>
-            </>
-          )}
-        </div>
+            </div>
+
+            {/* Divider */}
+            <div style={{ height: '1px', backgroundColor: 'var(--border-default)' }} />
+
+            {/* Actions */}
+            <div className="px-5 py-4 flex items-center justify-end gap-2.5">
+              {/* Upgrade — free users only */}
+              {!isPro && !isAdmin && (
+                <button
+                  onClick={() => setShowSubscriptionPage(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-colors"
+                  style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.85'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
+                >
+                  <Crown className="w-3.5 h-3.5" />
+                  Upgrade
+                </button>
+              )}
+
+              {/* Sign out */}
+              <button
+                onClick={() => {
+                  getAuth().signOut();
+                  onClose();
+                  navigate('/auth');
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-colors"
+                style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--error)'; e.currentTarget.style.color = 'var(--error)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                Sign Out
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Subscription Page */}

@@ -905,7 +905,7 @@ const ChatPage = () => {
         chatEligibility.variants_under_consideration ??
         conversationFilterState.filteredVariantCount
       }
-      onEditSampleInfo={() => setIsEditSampleModalOpen(true)}
+      onEditSampleInfo={() => { setIsEditSampleModalOpen(true); }}
     />
   ) : null;
 

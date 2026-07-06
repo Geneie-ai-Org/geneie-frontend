@@ -490,7 +490,7 @@ const ColumnInterpretationResults = ({
 
   // Default to the first step that needs attention so the detail panel is never empty.
   const firstIncompleteStep =
-    step1Status !== 'passed' ? 1 : step2Status !== 'passed' ? 2 : step3Status !== 'passed' ? 3 : 1;
+    step1Status !== 'passed' ? 1 : step2Status !== 'passed' ? 2 : step3Status !== 'passed' ? 3 : 3;
   const selectedStep = expandedStep || firstIncompleteStep;
   const selectedStepData = stepperSteps.find((s) => s.n === selectedStep);
 

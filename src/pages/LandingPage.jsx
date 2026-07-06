@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useChatSimulation } from '@/hooks/useChatSimulation';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 
@@ -21,6 +21,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { BioEnergyIcon, MentoringIcon, SpeedTrain01Icon, ArcherIcon, AiSheetsIcon, FileTypeIcon, DashboardSpeed01Icon } from '@hugeicons/core-free-icons'
 
 const LandingPage = () => {
+  const navigate = useNavigate();
   const [isNavSolid, setIsNavSolid] = useState(false);
   const [activeWord, setActiveWord] = useState(0);
   const workflowWords = ["Upload.", "Annotate.", "Filter.", "Ask.", "Discover."];
@@ -181,12 +182,13 @@ const LandingPage = () => {
                     {item.label}
                   </button>
                 ))}
-                <Button asChild
-                  variant="ghost"
-                  className="text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors border border-white/60"
-                >
-                  <Link to="/auth">Sign In</Link>
-                </Button>
+                  <Button
+                    variant="ghost"
+                    className="text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors border border-white/60"
+                    onClick={() => { console.log('[LandingPage] Sign In clicked — navigating to /auth'); navigate('/auth'); }}
+                  >
+                    Sign In
+                  </Button>
               </div>
             </div>
           </nav>
@@ -220,12 +222,13 @@ const LandingPage = () => {
 
               {/* CTA */}
               <div className="hero-reveal mb-10 sm:mb-14 flex flex-col sm:flex-row items-center gap-3" style={{ '--reveal-delay': '1500ms' }}>
-                <Button asChild
-                  size="lg"
-                  className="bg-white text-black hover:bg-zinc-200 text-base px-8 py-6 font-medium transition-all hover:scale-105 active:scale-95"
-                >
-                  <Link to="/auth">Get Started</Link>
-                </Button>
+                  <Button
+                    size="lg"
+                    className="bg-white text-black hover:bg-zinc-200 text-base px-8 py-6 font-medium transition-all hover:scale-105 active:scale-95"
+                    onClick={() => navigate('/auth')}
+                  >
+                    Get Started
+                  </Button>
                 <Button
                   size="lg"
                   variant="outline"
@@ -664,8 +667,8 @@ const LandingPage = () => {
 
                   {/* TODO: Change label to "Start Free Trial" and link to pricing/checkout when subscription breakdown is done (Dodo payment) */}
                   <div className="flex flex-col items-center lg:items-start gap-3">
-                    <Button asChild size="lg" className="bg-white text-black hover:bg-zinc-200 px-6 py-6 rounded-md font-semibold text-base transition-colors w-full sm:w-auto sm:min-w-[280px]">
-                      <Link to="/auth">Get Started</Link>
+                    <Button size="lg" className="bg-white text-black hover:bg-zinc-200 px-6 py-6 rounded-md font-semibold text-base transition-colors w-full sm:w-auto sm:min-w-[280px]" onClick={() => navigate('/auth')}>
+                      Get Started
                     </Button>
                   </div>
                 </div>

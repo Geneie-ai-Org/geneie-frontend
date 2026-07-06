@@ -987,44 +987,6 @@ const DocumentUpload = ({
         </div>
       )}
 
-      {/* Upload Area */}
-      {!existingDocument && (
-        <div className="space-y-3 flex flex-col items-center">
-          <div className="flex items-center justify-center gap-3">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".tsv,.csv,.vcf,.vcf.gz,.gz,application/gzip"
-              onChange={handleFileSelect}
-              className="hidden"
-              id="document-upload"
-              disabled={isUploading}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ backgroundColor: isUploading ? 'var(--text-tertiary)' : 'var(--accent-blue)', color: 'var(--bg-app)' }}
-              onMouseEnter={(e) => { if (!isUploading) e.currentTarget.style.opacity = '0.9'; }}
-              onMouseLeave={(e) => { if (!isUploading) e.currentTarget.style.opacity = '1'; }}
-            >
-              {isUploading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Uploading {uploadProgress > 0 ? `${Math.round(uploadProgress)}%` : ''}</span>
-                </>
-              ) : (
-                <>
-                  <Upload className="w-4 h-4" />
-                  <span>Select File</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Replace Document Button */}
       {existingDocument && !isUploading && (
         <button
@@ -1094,18 +1056,6 @@ const DocumentUpload = ({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex-shrink-0 px-5 pt-5 pb-3 relative">
-            {/* <button
-              type="button"
-              onClick={handleInfoFormCancel}
-              disabled={isUploading}
-              className="absolute top-4 right-4 p-1.5 rounded-lg transition-colors disabled:opacity-40"
-              style={{ color: 'var(--text-tertiary)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-              aria-label="Close sample metadata"
-            >
-              <X className="w-4 h-4" />
-            </button> */}
             <h3 id="sample-metadata-title" className="text-sm font-semibold mb-0.5 pr-8" style={{ color: 'var(--text-primary)' }}>
               {editMode ? 'Edit Sample Information' : 'Sample Metadata'}
             </h3>

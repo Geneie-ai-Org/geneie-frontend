@@ -171,14 +171,6 @@
   padding-inline: var(--chat-gutter-x);
 }
 
-.chat-annovar-fab {
-  position: fixed;
-  bottom: 1.5rem;
-  right: calc(var(--shell-right-col) + 1rem);
-  z-index: 45;
-  transition: right var(--transition-slow);
-}
-
 /* Chat message typography (markdown + streaming) */
 .chat-prose {
   font-size: 0.875rem;

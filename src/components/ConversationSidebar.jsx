@@ -93,7 +93,7 @@ const ConversationSidebar = ({
             {!isMobile && (
                 <button
                     onClick={onToggle}
-                    className="absolute z-50 w-5 h-5 rounded-full flex items-center justify-center transition-colors right-[-10px] top-[37px] bg-[var(--bg-surface-raised)] border border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                    className="absolute z-50 w-5 h-5 rounded-full flex items-center justify-center transition-colors right-[-10px] top-[37px] bg-[var(--bg-surface-raised)] text-[var(--text-secondary)]"
                     aria-label={isOpen ? "Collapse sidebar" : "Expand sidebar"}
                 >
                     {isOpen ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
@@ -101,10 +101,7 @@ const ConversationSidebar = ({
             )}
 
             {/* Sidebar */}
-            <div
-                className="relative z-40 h-full w-full flex flex-col overflow-hidden"
-                style={{ backgroundColor: 'var(--bg-sidebar)' }}
-            >
+            <div className="relative z-40 h-full w-full flex flex-col overflow-hidden">
 
                 {/* Top: Logo — desktop only (mobile uses main top bar) */}
                 {!isMobile && (
@@ -245,7 +242,7 @@ const ConversationSidebar = ({
                         <button
                             ref={accountBtnRef}
                             onClick={() => setShowAccountMenu(!showAccountMenu)}
-                            className={`w-full py-3 transition-colors hover:bg-white/5 cursor-pointer overflow-hidden ${isOpen ? 'px-5' : 'px-0'}`}
+                            className={`w-full py-3 cursor-pointer overflow-hidden ${isOpen ? 'px-5' : 'px-0'}`}
                             title={isOpen ? undefined : 'Profile & Settings'}
                         >
                             <div className={`flex items-center ${isOpen ? 'gap-2.5' : 'justify-center'}`}>

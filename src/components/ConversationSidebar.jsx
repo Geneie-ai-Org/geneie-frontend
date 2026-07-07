@@ -1,9 +1,20 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MessageSquare, Plus, Trash2, ChevronLeft, ChevronRight, Settings, LogOut } from 'lucide-react';
 import { getAuth, signOut } from 'firebase/auth';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import NotificationBell from './NotificationBell';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -31,6 +42,14 @@ const ConversationSidebar = ({
     const isMobile = useIsMobile();
     const navigate = useNavigate();
     const freeChatLimit = userTier === 'free' ? chatLimit : Infinity;
+    const [pendingDeleteId, setPendingDeleteId] = useState(null);
+
+    const confirmDelete = () => {
+        if (pendingDeleteId != null) {
+            onDeleteConversation(pendingDeleteId);
+        }
+        setPendingDeleteId(null);
+    };
 
     // Get display name from Firebase
     const auth = getAuth();
@@ -170,7 +189,7 @@ const ConversationSidebar = ({
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    onDeleteConversation(conv.id);
+                                                    setPendingDeleteId(conv.id);
                                                 }}
                                                 className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-white/10 shrink-0"
                                                 style={{ color: 'var(--text-tertiary)' }}
@@ -251,6 +270,26 @@ const ConversationSidebar = ({
                     )}
                 </div>
             </div>
+
+            <AlertDialog
+                open={pendingDeleteId !== null}
+                onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure? This cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction variant="destructive" onClick={confirmDelete}>
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
         </>
     );

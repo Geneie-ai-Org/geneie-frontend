@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
-import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2, ChevronDown } from 'lucide-react';
+import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import ProcessingNotification from './ProcessingNotification';
 import { apiUrl as buildApiUrl } from '@/config/api';
@@ -16,6 +15,31 @@ import {
   detectGenomeBuild,
 } from '@/services/backendApi';
 import { patchSampleMetadata } from '@/services/mongodbApi';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 /** Tabular + VCF (.vcf and .vcf.gz). Uses suffix checks so .vcf.gz is not mistaken for .gz-only. */
 function isAllowedVariantFilename(fileName) {
@@ -26,112 +50,28 @@ function isAllowedVariantFilename(fileName) {
   return false;
 }
 
-// Custom select — menu is portaled so it doesn't expand a scrollable modal
+// Custom select — thin wrapper over shadcn Select (Base UI handles portal/positioning)
 const CustomSelect = ({ value, onChange, placeholder, options, error, className = '' }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [menuStyle, setMenuStyle] = useState(null);
-  const triggerRef = useRef(null);
-  const menuRef = useRef(null);
-
-  const updateMenuPosition = () => {
-    const trigger = triggerRef.current;
-    if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    const gap = 4;
-    const maxMenuHeight = 240;
-    const spaceBelow = window.innerHeight - rect.bottom - gap;
-    const spaceAbove = rect.top - gap;
-    const openUp = spaceBelow < Math.min(maxMenuHeight, 160) && spaceAbove > spaceBelow;
-    const available = openUp ? spaceAbove : spaceBelow;
-    const height = Math.min(maxMenuHeight, Math.max(available, 120));
-
-    setMenuStyle({
-      position: 'fixed',
-      left: rect.left,
-      width: rect.width,
-      zIndex: 10000,
-      maxHeight: height,
-      ...(openUp
-        ? { bottom: window.innerHeight - rect.top + gap }
-        : { top: rect.bottom + gap }),
-    });
-  };
-
-  useEffect(() => {
-    if (!isOpen) return;
-    updateMenuPosition();
-    const onScrollOrResize = () => updateMenuPosition();
-    window.addEventListener('resize', onScrollOrResize);
-    window.addEventListener('scroll', onScrollOrResize, true);
-    return () => {
-      window.removeEventListener('resize', onScrollOrResize);
-      window.removeEventListener('scroll', onScrollOrResize, true);
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleClick = (e) => {
-      const t = e.target;
-      if (triggerRef.current?.contains(t) || menuRef.current?.contains(t)) return;
-      setIsOpen(false);
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [isOpen]);
-
-  const selectedLabel = options.find(o => o.value === value)?.label;
-  const hasOptions = options.length > 0;
-
-  const menu = isOpen && hasOptions && menuStyle && createPortal(
-    <div
-      ref={menuRef}
-      className="rounded-lg border shadow-xl overflow-y-auto"
-      style={{
-        ...menuStyle,
-        backgroundColor: 'var(--bg-surface-raised)',
-        borderColor: 'var(--border-default)',
-      }}
-    >
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => { onChange(opt.value); setIsOpen(false); }}
-          className="w-full px-2.5 py-1.5 text-xs text-left transition-colors hover:bg-white/5 flex items-center justify-between"
-          style={{ color: value === opt.value ? 'var(--accent-teal)' : 'var(--text-primary)' }}
-        >
-          {opt.label}
-          {value === opt.value && <CheckCircle className="w-3.5 h-3.5" style={{ color: 'var(--accent-teal)' }} />}
-        </button>
-      ))}
-    </div>,
-    document.body
-  );
-
+  const items = Object.fromEntries((options || []).map((o) => [o.value, o.label]));
   return (
-    <div className={className}>
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={() => {
-          if (!hasOptions) return;
-          if (!isOpen) updateMenuPosition();
-          setIsOpen((open) => !open);
-        }}
-        className="w-full h-[34px] px-2.5 flex items-center justify-between rounded-lg border text-xs transition-colors text-left"
-        style={{
-          borderColor: error ? 'var(--error)' : 'var(--border-default)',
-          backgroundColor: 'var(--bg-input)',
-          color: selectedLabel ? 'var(--text-primary)' : 'var(--text-tertiary)',
-          cursor: hasOptions ? 'pointer' : 'default',
-        }}
+    <Select value={value || ''} onValueChange={onChange} items={items}>
+      <SelectTrigger
+        className={cn(
+          'w-full h-[34px] px-2.5 text-xs rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] data-placeholder:text-[var(--text-tertiary)]',
+          className
+        )}
+        style={{ borderColor: error ? 'var(--error)' : 'var(--border-default)' }}
       >
-        <span className="truncate">{selectedLabel || placeholder}</span>
-        <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} style={{ color: 'var(--text-tertiary)' }} />
-      </button>
-      {menu}
-    </div>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {(options || []).map((opt) => (
+          <SelectItem key={opt.value} value={opt.value}>
+            {opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 };
 
@@ -1038,23 +978,20 @@ const DocumentUpload = ({
       )}
       
       {/* Sample Metadata — always a centered popup (portal), never inline in sidebar/parent */}
-      {showInfoForm && createPortal(
-        <dialog
-          open
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-[80] backdrop-blur-sm p-4 w-full h-full max-w-none max-h-none border-0"
-          onClick={handleInfoFormCancel}
-          aria-modal="true"
-          aria-labelledby="sample-metadata-title"
+      <Dialog open={showInfoForm} onOpenChange={(open) => { if (!open) handleInfoFormCancel(); }}>
+        <DialogContent
+          showCloseButton={false}
+          className="max-w-4xl w-full max-h-[min(96vh,900px)] flex flex-col p-0 gap-0 overflow-hidden ring-0 border"
+          style={{
+            backgroundColor: 'var(--bg-surface-raised)',
+            boxShadow: 'var(--shadow-lg)',
+            borderColor: 'var(--border-default)',
+          }}
         >
-          <div
-            className="rounded-2xl max-w-4xl w-full max-h-[min(96vh,900px)] flex flex-col transition-all duration-300 relative overflow-hidden"
-            style={{
-              backgroundColor: 'var(--bg-surface-raised)',
-              boxShadow: 'var(--shadow-lg)',
-              border: '1px solid var(--border-default)',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <DialogTitle className="sr-only">{editMode ? 'Edit Sample Information' : 'Sample Metadata'}</DialogTitle>
+          <DialogDescription className="sr-only">
+            {editMode ? 'Update metadata for this variant file.' : 'Provide details about your variant file for better analysis.'}
+          </DialogDescription>
             <div className="flex-shrink-0 px-5 pt-5 pb-3 relative">
             <h3 id="sample-metadata-title" className="text-sm font-semibold mb-0.5 pr-8" style={{ color: 'var(--text-primary)' }}>
               {editMode ? 'Edit Sample Information' : 'Sample Metadata'}
@@ -1494,191 +1431,123 @@ const DocumentUpload = ({
                 </button>
               </div>
             </form>
-          </div>
-        </dialog>,
-        document.body
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* Optional Fields Warning Modal */}
-      {showOptionalFieldsWarning && createPortal(
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[90] backdrop-blur-sm">
-          <div
-            className="rounded-2xl p-6 max-w-md w-full mx-4"
-            style={{
-              backgroundColor: 'var(--bg-surface-raised)',
-              border: '1px solid var(--border-default)',
-              boxShadow: 'var(--shadow-xl)'
-            }}
-          >
-            <h3 className="text-lg font-bold mb-3" style={{ color: 'var(--text-primary)' }}>
-              Continue without optional fields?
-            </h3>
-            <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
+      <AlertDialog open={showOptionalFieldsWarning} onOpenChange={(open) => { if (!open) setShowOptionalFieldsWarning(false); }}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Continue without optional fields?</AlertDialogTitle>
+            <AlertDialogDescription>
               Some optional fields are empty. Filling them will improve analysis accuracy.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowOptionalFieldsWarning(false);
-                }}
-                className="px-4 py-2 rounded-lg transition-colors text-sm font-medium hover:bg-white/5"
-                style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
-              >
-                Go Back
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setShowOptionalFieldsWarning(false);
-                  notifyUploadStarting(selectedFile);
-                  dismissUploadUiForBackgroundUpload();
-                  await uploadFile(selectedFile, sampleMetadata);
-                }}
-                className="px-4 py-2 rounded-lg transition-colors text-sm font-medium hover:opacity-90"
-                style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
-              >
-                Continue
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go Back</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[var(--accent-teal)] text-[#0F0F0F] hover:bg-[var(--accent-teal-hover)]"
+              onClick={async () => {
+                setShowOptionalFieldsWarning(false);
+                notifyUploadStarting(selectedFile);
+                dismissUploadUiForBackgroundUpload();
+                await uploadFile(selectedFile, sampleMetadata);
+              }}
+            >
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Remove Document Confirmation Modal */}
-      {showRemoveConfirm && createPortal(
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-[90] backdrop-blur-sm">
-          <div 
-            className="rounded-2xl p-6 max-w-md w-full mx-4 transition-all duration-300"
-            style={{ 
-              background: 'rgba(255, 255, 255, 0.85)',
-              backdropFilter: 'blur(20px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              border: '0.5px solid rgba(255, 255, 255, 0.3)',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.6)'
-            }}
-          >
-            <h3 className="text-lg font-bold mb-3" style={{ color: 'var(--text-primary)' }}>
-              Remove Document?
-            </h3>
-            <p className="text-sm mb-6" style={{ color: 'var(--text-tertiary)' }}>
+      <AlertDialog open={showRemoveConfirm} onOpenChange={(open) => { if (!open) setShowRemoveConfirm(false); }}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Document?</AlertDialogTitle>
+            <AlertDialogDescription>
               Are you sure you want to remove this document from the conversation?
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                type="button"
-                onClick={() => setShowRemoveConfirm(false)}
-                className="px-4 py-2 rounded-xl transition-colors text-sm font-medium"
-                style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-default)', color: 'var(--text-tertiary)' }}
-                onMouseEnter={(e) => { e.target.style.backgroundColor = '#F9FBFF'; e.target.style.borderColor = '#9CA3AF'; }}
-                onMouseLeave={(e) => { e.target.style.backgroundColor = '#FFFFFF'; e.target.style.borderColor = '#D1D5DB'; }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmRemoveDocument}
-                className="px-4 py-2 rounded-xl transition-colors text-sm font-medium text-white shadow-sm"
-                style={{ backgroundColor: '#2F7F7A' }}
-                onMouseEnter={(e) => { e.target.style.backgroundColor = '#256B67'; }}
-                onMouseLeave={(e) => { e.target.style.backgroundColor = '#2F7F7A'; }}
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[var(--accent-teal)] text-white hover:bg-[var(--accent-teal-hover)]"
+              onClick={confirmRemoveDocument}
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Replace Document Confirmation Modal */}
-      {showReplaceConfirm && existingDocument && createPortal(
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-[90] backdrop-blur-sm">
-          <div
-            className="rounded-2xl p-6 max-w-md w-full mx-4 transition-all duration-300"
-            style={{
-              background: 'var(--bg-surface)',
-              backdropFilter: 'blur(20px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              border: '0.5px solid var(--border-default)',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)'
-            }}
-          >
-            <h3 className="text-lg font-bold mb-3" style={{ color: 'var(--text-primary)' }}>
-              Replace Document?
-            </h3>
-            <p className="text-sm mb-6" style={{ color: 'var(--text-tertiary)' }}>
-              This conversation already has a document ({existingDocument.name}). Do you want to replace it?
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowReplaceConfirm(false);
-                  setPendingFile(null);
-                  if (fileInputRef.current) {
-                    fileInputRef.current.value = '';
-                  }
-                }}
-                className="px-4 py-2 rounded-xl transition-colors text-sm font-medium"
-                style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
-                onMouseEnter={(e) => { e.target.style.backgroundColor = 'var(--bg-surface-hover)'; e.target.style.borderColor = 'var(--border-strong)'; }}
-                onMouseLeave={(e) => { e.target.style.backgroundColor = 'var(--bg-input)'; e.target.style.borderColor = 'var(--border-default)'; }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setShowReplaceConfirm(false);
-                  const file = pendingFile;
-                  setPendingFile(null);
-                  if (!file) return;
-                  
-                  // Continue with file processing
-                  const isGuest = userTier === 'guest' || userId === 'guest';
-                  if (!isGuest) {
-                    const fileName = file.name.toLowerCase();
-                    const extension = fileName.substring(fileName.lastIndexOf('.'));
-                    if (extension === '.tsv' || extension === '.csv') {
-                      setSelectedFile(file);
-                      let detectedFileType = '';
-                      if (extension === '.tsv') {
-                        detectedFileType = 'TSV';
-                      } else if (extension === '.csv') {
-                        detectedFileType = 'CSV';
-                      }
-                      const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.'));
-                      setSampleMetadata(prev => ({
-                        ...prev,
-                        name: nameWithoutExt,
-                        sampleFileType: detectedFileType
-                      }));
-                      setValidationAttempted(false);
-                      setError('');
-                      setGenomeDetection(null);
-                      setShowInfoForm(true);
-                      runGenomeDetection(file);
-                    } else {
-                      await uploadFile(file);
+      <AlertDialog
+        open={showReplaceConfirm && !!existingDocument}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowReplaceConfirm(false);
+            setPendingFile(null);
+            if (fileInputRef.current) {
+              fileInputRef.current.value = '';
+            }
+          }
+        }}
+      >
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace Document?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This conversation already has a document ({existingDocument?.name}). Do you want to replace it?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[var(--accent-teal)] text-[#0F0F0F] hover:bg-[var(--accent-teal-hover)]"
+              onClick={async () => {
+                setShowReplaceConfirm(false);
+                const file = pendingFile;
+                setPendingFile(null);
+                if (!file) return;
+
+                // Continue with file processing
+                const isGuest = userTier === 'guest' || userId === 'guest';
+                if (!isGuest) {
+                  const fileName = file.name.toLowerCase();
+                  const extension = fileName.substring(fileName.lastIndexOf('.'));
+                  if (extension === '.tsv' || extension === '.csv') {
+                    setSelectedFile(file);
+                    let detectedFileType = '';
+                    if (extension === '.tsv') {
+                      detectedFileType = 'TSV';
+                    } else if (extension === '.csv') {
+                      detectedFileType = 'CSV';
                     }
+                    const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.'));
+                    setSampleMetadata(prev => ({
+                      ...prev,
+                      name: nameWithoutExt,
+                      sampleFileType: detectedFileType
+                    }));
+                    setValidationAttempted(false);
+                    setError('');
+                    setGenomeDetection(null);
+                    setShowInfoForm(true);
+                    runGenomeDetection(file);
                   } else {
                     await uploadFile(file);
                   }
-                }}
-                className="px-4 py-2 rounded-xl transition-colors text-sm font-medium text-white shadow-sm"
-                style={{ backgroundColor: 'var(--accent-teal)' }}
-                onMouseEnter={(e) => { e.target.style.backgroundColor = 'var(--accent-teal-hover)'; }}
-                onMouseLeave={(e) => { e.target.style.backgroundColor = 'var(--accent-teal)'; }}
-              >
-                Replace
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+                } else {
+                  await uploadFile(file);
+                }
+              }}
+            >
+              Replace
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

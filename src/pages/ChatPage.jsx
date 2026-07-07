@@ -29,6 +29,8 @@ import VariantAnalysisPipeline from '../components/VariantAnalysisPipeline';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
 import VariantUploadLoadingModal from '@/components/VariantUploadLoadingModal';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { apiUrl, getApiOrigin } from '@/config/api';
 import { buildVariantDataFromConversation, variantFileRowCountForSidebar } from '@/lib/variantPipelineUtils';
@@ -1066,15 +1068,25 @@ const ChatPage = () => {
           className="flex items-center gap-2 px-3 h-12 shrink-0 border-b"
           style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-app)' }}
         >
-          <button
-            type="button"
-            onClick={() => setIsSidebarOpen(true)}
-            className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
-            style={{ color: 'var(--text-secondary)' }}
-            aria-label="Open sidebar"
-          >
-            <Menu className="w-[18px] h-[18px]" />
-          </button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsSidebarOpen(true)}
+                    className="rounded-lg hover:bg-white/5 text-[var(--text-secondary)]"
+                    aria-label="Open sidebar"
+                  >
+                    <Menu className="size-[18px]" />
+                  </Button>
+                }
+              />
+              <TooltipContent>Open sidebar</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <span className="text-sm font-brand shrink-0" style={{ color: 'var(--text-primary)' }}>Geneie</span>
             {isConversationStarted && (

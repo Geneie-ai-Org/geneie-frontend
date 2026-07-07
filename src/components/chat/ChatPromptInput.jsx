@@ -117,7 +117,7 @@ const ChatPromptInput = ({
               variant="ghost"
               size="icon"
               onClick={() => onUploadButtonClick(dropdownSource)}
-              className="chat-chrome-btn size-9"
+              className="chat-chrome-btn size-9 rounded-[0.5rem]"
               aria-label="Upload variant file"
             >
               <UploadIcon className="size-5" />
@@ -263,7 +263,7 @@ const VariantSidebarToggle = ({ isVariantSidebarOpen, onToggleVariantSidebar }) 
           variant="ghost"
           size="icon"
           onClick={onToggleVariantSidebar}
-          className={`chat-chrome-btn size-9 ${isVariantSidebarOpen ? 'is-active' : ''}`}
+          className={`chat-chrome-btn size-9 rounded-[0.5rem] ${isVariantSidebarOpen ? 'is-active' : ''}`}
           aria-label={isVariantSidebarOpen ? 'Close variant filters' : 'Open variant filters'}
           aria-pressed={isVariantSidebarOpen}
         >

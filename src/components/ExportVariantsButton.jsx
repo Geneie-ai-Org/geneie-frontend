@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Download } from 'lucide-react';
 import { getExportEligibility, exportVariants } from '@/services/backendApi';
+import { Button } from '@/components/ui/button';
 
 export default function ExportVariantsButton({ conversationId, variantData, filteredCount, isGuest }) {
   const [eligibility, setEligibility] = useState(null);
@@ -58,11 +59,12 @@ export default function ExportVariantsButton({ conversationId, variantData, filt
           {error.length > 50 ? error.slice(0, 50) + '...' : error}
         </span>
       )}
-      <button
+      <Button
         type="button"
+        variant="ghost"
         onClick={handleExport}
         disabled={!canExport || isExporting}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+        className={`flex items-center gap-1.5 px-3 py-1.5 h-auto rounded-lg text-xs font-medium ${
           !canExport || isExporting
             ? 'opacity-50 cursor-not-allowed'
             : 'hover:opacity-90'
@@ -80,13 +82,13 @@ export default function ExportVariantsButton({ conversationId, variantData, filt
           </>
         ) : (
           <>
-            <Download className="w-3.5 h-3.5" />
+            <Download className="size-3.5" />
             {canExport
               ? `Download ${rowCount.toLocaleString()} variants`
               : 'Download'}
           </>
         )}
-      </button>
+      </Button>
       {isLoading && !eligibility && (
         <div className="w-3.5 h-3.5 border-2 border-[var(--text-secondary)] border-t-transparent rounded-full animate-spin" />
       )}

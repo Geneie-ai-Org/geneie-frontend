@@ -1,9 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, Plus, Trash2, ChevronLeft, ChevronRight, User, Settings, LogOut } from 'lucide-react';
+import { MessageSquare, Plus, Trash2, ChevronLeft, ChevronRight, Settings, LogOut } from 'lucide-react';
 import { getAuth, signOut } from 'firebase/auth';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import NotificationBell from './NotificationBell';
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 
 const ConversationSidebar = ({
     conversations,
@@ -22,20 +30,6 @@ const ConversationSidebar = ({
     const isMobile = useIsMobile();
     const navigate = useNavigate();
     const freeChatLimit = userTier === 'free' ? chatLimit : Infinity;
-    const [showAccountMenu, setShowAccountMenu] = useState(false);
-    const menuRef = useRef(null);
-    const accountBtnRef = useRef(null);
-
-    // Close menu on outside click
-    useEffect(() => {
-        const handleClickOutside = (e) => {
-            if (menuRef.current && !menuRef.current.contains(e.target)) {
-                setShowAccountMenu(false);
-            }
-        };
-        if (showAccountMenu) document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [showAccountMenu]);
 
     // Get display name from Firebase
     const auth = getAuth();
@@ -46,7 +40,6 @@ const ConversationSidebar = ({
     const handleSignOut = async () => {
         try {
             await signOut(auth);
-            setShowAccountMenu(false);
             navigate('/auth');
         } catch (err) {
             console.error('Sign out error:', err);
@@ -193,72 +186,39 @@ const ConversationSidebar = ({
                 {/* Bottom section */}
                 <div className="mt-auto">
                     {/* Account row: avatar + name on left, bell on right */}
-                    <div className={`relative flex items-center ${isOpen ? 'px-3 gap-2' : 'flex-col gap-1'}`} ref={menuRef}>
-                        {/* Popover menu */}
-                        {showAccountMenu && (
-                            <div
-                                className="rounded-xl py-1 shadow-lg w-56 z-50 bg-zinc-900 border border-zinc-700/80"
-                                style={isOpen
-                                  ? { position: 'absolute', bottom: '100%', left: '12px', right: '12px', marginBottom: '4px' }
-                                  : (() => {
-                                      const rect = accountBtnRef.current?.getBoundingClientRect();
-                                      return rect
-                                        ? { position: 'fixed', bottom: `${window.innerHeight - rect.top + 4}px`, left: `${rect.right + 8}px`, zIndex: 9999 }
-                                        : { position: 'absolute', bottom: 0, left: '100%', marginLeft: '8px' };
-                                    })()
-                                }
+                    <div className={`flex items-center ${isOpen ? 'px-3 gap-2' : 'flex-col gap-1'}`}>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger
+                                className={`flex-1 min-w-0 py-3 cursor-pointer overflow-hidden rounded-lg hover:bg-white/5 transition-colors ${isOpen ? 'px-2' : 'px-0'}`}
+                                title={isOpen ? undefined : 'Profile & Settings'}
                             >
-                                {/* User info */}
-                                <div className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-zinc-300">
-                                    <User className="w-4 h-4 shrink-0" />
-                                    <div className="min-w-0">
-                                        {email && (
-                                            <p className="text-sm truncate mt-0.5 text-zinc-300">
-                                                {email}
-                                            </p>
-                                        )}
+                                <div className={`flex items-center ${isOpen ? 'gap-2.5' : 'justify-center'}`}>
+                                    <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--accent-blue-soft)' }}>
+                                        <span className="text-xs font-semibold" style={{ color: 'var(--accent-blue)' }}>
+                                            {displayName.charAt(0).toUpperCase()}
+                                        </span>
                                     </div>
+                                    {isOpen && (
+                                        <span className="text-sm truncate whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>
+                                            {displayName}
+                                        </span>
+                                    )}
                                 </div>
-
-                                {/* Settings */}
-                                <button
-                                    onClick={() => { setShowAccountMenu(false); onOpenProfile(); }}
-                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-white/5"
-                                >
-                                    <Settings className="w-4 h-4" />
-                                    Settings
-                                </button>
-
-                                {/* Sign out */}
-                                <button
-                                    onClick={handleSignOut}
-                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-400 transition-colors hover:bg-white/5"
-                                >
-                                    <LogOut className="w-4 h-4" />
-                                    Sign out
-                                </button>
-                            </div>
-                        )}
-
-                        <button
-                            ref={accountBtnRef}
-                            onClick={() => setShowAccountMenu(!showAccountMenu)}
-                            className={`flex-1 min-w-0 py-3 cursor-pointer overflow-hidden rounded-lg hover:bg-white/5 transition-colors ${isOpen ? 'px-2' : 'px-0'}`}
-                            title={isOpen ? undefined : 'Profile & Settings'}
-                        >
-                            <div className={`flex items-center ${isOpen ? 'gap-2.5' : 'justify-center'}`}>
-                                <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--accent-blue-soft)' }}>
-                                    <span className="text-xs font-semibold" style={{ color: 'var(--accent-blue)' }}>
-                                        {displayName.charAt(0).toUpperCase()}
-                                    </span>
-                                </div>
-                                {isOpen && (
-                                    <span className="text-sm truncate whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>
-                                        {displayName}
-                                    </span>
-                                )}
-                            </div>
-                        </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent side="top" align="start" className="w-56">
+                                <DropdownMenuGroup>
+                                    <DropdownMenuLabel>{email || displayName}</DropdownMenuLabel>
+                                </DropdownMenuGroup>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={onOpenProfile}>
+                                    <Settings /> Settings
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
+                                    <LogOut /> Sign out
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
                         <div className="shrink-0">
                             <NotificationBell

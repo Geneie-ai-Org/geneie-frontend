@@ -89,24 +89,7 @@ export default function NotificationBell({ onNavigateToConversation }) {
           border: '1px solid var(--border-default)',
         }}
       >
-        <div
-          className="px-3 py-2.5 border-b flex items-center justify-between shrink-0"
-          style={{ borderColor: 'var(--border-subtle)' }}
-        >
-          <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-            Notifications
-          </span>
-          {unreadCount > 0 && (
-            <span
-              className="text-[11px] px-1.5 py-0.5 rounded-full font-semibold"
-              style={{ backgroundColor: 'var(--accent-teal-soft)', color: 'var(--accent-teal)' }}
-            >
-              {unreadCount} new
-            </span>
-          )}
-        </div>
-
-        <ScrollArea className="max-h-[70vh]">
+        <ScrollArea className={notifications.length > 3 ? 'h-[312px]' : ''}>
           {loading && notifications.length === 0 ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--text-tertiary)' }} />

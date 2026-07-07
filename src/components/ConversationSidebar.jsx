@@ -5,6 +5,7 @@ import { getAuth, signOut } from 'firebase/auth';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import NotificationBell from './NotificationBell';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Progress } from '@/components/ui/progress';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -257,15 +258,14 @@ const ConversationSidebar = ({
                                     {currentExchanges || 0}/{freeChatLimit}
                                 </span>
                             </div>
-                            <div className="w-full h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-surface-hover)' }}>
-                                <div
-                                    className="h-full rounded-full transition-all duration-500"
-                                    style={{
-                                        width: `${Math.min(((currentExchanges || 0) / freeChatLimit) * 100, 100)}%`,
-                                        backgroundColor: (currentExchanges || 0) >= freeChatLimit ? 'var(--error)' : 'var(--accent-teal)',
-                                    }}
-                                />
-                            </div>
+                            <Progress
+                                value={Math.min(((currentExchanges || 0) / freeChatLimit) * 100, 100)}
+                                className={`w-full [&_[data-slot=progress-track]]:h-1 [&_[data-slot=progress-track]]:bg-[var(--bg-surface-hover)] [&_[data-slot=progress-indicator]]:duration-500 ${
+                                    (currentExchanges || 0) >= freeChatLimit
+                                        ? '[&_[data-slot=progress-indicator]]:bg-[var(--error)]'
+                                        : '[&_[data-slot=progress-indicator]]:bg-[var(--accent-teal)]'
+                                }`}
+                            />
                         </div>
                     )}
                 </div>

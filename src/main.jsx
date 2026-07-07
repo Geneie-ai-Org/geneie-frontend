@@ -8,7 +8,7 @@ import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import ChatPage from './pages/ChatPage';
 import PublicRoute from './components/PublicRoute';
-import { Toaster } from 'sonner';
+import { Toaster } from '@/components/ui/sonner';
 import './index.css';
 
 Sentry.init({
@@ -63,7 +63,7 @@ root.render(
         </Routes>
         <Toaster
           theme="dark"
-          position="bottom-center"
+          position="top-right"
           richColors
           toastOptions={{
             classNames: {

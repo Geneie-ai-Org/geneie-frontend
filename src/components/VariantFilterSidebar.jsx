@@ -475,6 +475,8 @@ const VariantFilterSidebar = ({
   const [proprietaryFilterPreviews, setProprietaryFilterPreviews] = useState(null);
   const [activeProprietaryFilter, setActiveProprietaryFilter] = useState(null);
   const [isApplyingProprietaryFilter, setIsApplyingProprietaryFilter] = useState(false);
+  const [filterMode, setFilterMode] = useState('manual');
+  const [pendingTabSwitch, setPendingTabSwitch] = useState(null);
   const [openFilterPopup, setOpenFilterPopup] = useState(null); // Column name for which popup is open
   const [popupSearchQuery, setPopupSearchQuery] = useState(''); // Search query for filtering values in popup
   const [initializedConversationId, setInitializedConversationId] = useState(null); // Prevent re-initializing filters on polling updates
@@ -559,7 +561,14 @@ const VariantFilterSidebar = ({
     setInitializedConversationId(null);
     setSavedFilterPresets([]);
     setSelectedPresetId('');
+    setFilterMode('manual');
+    setPendingTabSwitch(null);
   }, [conversationId]);
+
+  useEffect(() => {
+    if (activeProprietaryFilter === 'filter_1') setFilterMode('acmg');
+    else if (activeProprietaryFilter === 'filter_2') setFilterMode('functional');
+  }, [activeProprietaryFilter]);
 
   // Sync sidebar state from MongoDB conversation (when parent loads conversation from backend)
   // Ensures apply/reset filter state in backend and DB is reflected in the UI after refresh or switch conversation
@@ -1529,6 +1538,51 @@ const VariantFilterSidebar = ({
     return Object.keys(normalized).length > 0;
   }, [appliedFilters]);
 
+  const currentActiveFilterLabel = useMemo(() => {
+    if (activeProprietaryFilter === 'filter_1') return 'ACMG filter';
+    if (activeProprietaryFilter === 'filter_2') return 'Functional Impact';
+    if (hasAppliedManualFilters) {
+      const cols = Object.keys(normalizeAppliedFiltersForCompare(appliedFilters)).filter(k => k !== '_numeric_logic');
+      if (cols.length === 0) return null;
+      return `${cols.length} manual filter${cols.length > 1 ? 's' : ''} (${cols.join(', ')})`;
+    }
+    return null;
+  }, [activeProprietaryFilter, hasAppliedManualFilters, appliedFilters]);
+
+  const getCurrentActiveMode = useCallback(() => {
+    if (activeProprietaryFilter === 'filter_1') return 'acmg';
+    if (activeProprietaryFilter === 'filter_2') return 'functional';
+    if (hasAppliedManualFilters) return 'manual';
+    return null;
+  }, [activeProprietaryFilter, hasAppliedManualFilters]);
+
+  const handleTabSwitch = (targetMode) => {
+    if (targetMode === filterMode) return;
+    const currentMode = getCurrentActiveMode();
+    if (!currentMode || targetMode === currentMode) {
+      setFilterMode(targetMode);
+      return;
+    }
+    setPendingTabSwitch(targetMode);
+  };
+
+  const confirmTabSwitch = async () => {
+    const target = pendingTabSwitch;
+    setPendingTabSwitch(null);
+    if (!target) return;
+    if (activeProprietaryFilter) {
+      await handleRemoveProprietaryFilter();
+    }
+    if (hasAppliedManualFilters) {
+      await resetFilters();
+    }
+    setFilterMode(target);
+  };
+
+  const cancelTabSwitch = () => {
+    setPendingTabSwitch(null);
+  };
+
   // Always show sidebar, but with different content based on state
   if (!isOpen) {
     return null;
@@ -1652,190 +1706,11 @@ const VariantFilterSidebar = ({
             </div>
           )}
 
-          {/* Recommended Filters Section */}
-          {proprietaryFilterPreviews && (
-            <div className="sidebar-card rounded-lg shadow-sm">
-              <label className="block text-sm font-bold text-[var(--text-primary)] mb-3">
-                Recommended Filters
-              </label>
-              
-              {/* Filter 1 Button */}
-              {proprietaryFilterPreviews.filter_1 && (
-                <div className="mb-2 relative group">
-                  <button
-                    onClick={() => handleApplyProprietaryFilter('filter_1')}
-                    disabled={
-                      !proprietaryFilterPreviews.filter_1.can_apply ||
-                      isApplyingProprietaryFilter ||
-                      (hasAppliedManualFilters && activeProprietaryFilter !== 'filter_1')
-                    }
-                    className="w-full px-4 py-3 rounded-lg border-[var(--border-default)] transition-all flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{
-                      backgroundColor: activeProprietaryFilter === 'filter_1' ? 'var(--accent-teal-soft)' : 'var(--bg-surface-raised)',
-                      borderColor: 'var(--accent-teal)'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!e.target.disabled && activeProprietaryFilter !== 'filter_1') {
-                        e.target.style.borderColor = 'var(--accent-teal-hover)';
-                        e.target.style.backgroundColor = 'var(--accent-teal-soft)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!e.target.disabled && activeProprietaryFilter !== 'filter_1') {
-                        e.target.style.borderColor = 'var(--accent-teal)';
-                        e.target.style.backgroundColor = 'var(--bg-surface-raised)';
-                      }
-                    }}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-semibold text-sm text-[var(--text-primary)]">
-                        {ACMG_FILTER_DISPLAY_NAME}
-                      </span>
-                      {activeProprietaryFilter === 'filter_1' && (
-                        <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--bg-app)' }}>
-                          Active
-                        </span>
-                      )}
-                      {!proprietaryFilterPreviews.filter_1.can_apply && (
-                        <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--accent-teal-soft)', color: 'var(--error)' }}>
-                          Missing columns
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                      <div className="text-right leading-tight">
-                        {proprietaryFilterPreviews.filter_1.preview_pending &&
-                        activeProprietaryFilter !== 'filter_1' ? (
-                          <>
-                            <div className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                              Apply to load
-                            </div>
-                            <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                              from {proprietaryFilterPreviews.filter_1.total_count.toLocaleString()} rows
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div className="text-sm font-bold tabular-nums" style={{ color: 'var(--accent-teal)' }}>
-                              {(proprietaryFilterPreviews.filter_1.preview_count ?? 0).toLocaleString()}
-                              <span className="font-normal text-xs ml-1" style={{ color: 'var(--text-secondary)' }}>variants</span>
-                            </div>
-                            <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                              of {(proprietaryFilterPreviews.filter_1.total_count ?? 0).toLocaleString()}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                      <Info
-                        className="w-3.5 h-3.5 shrink-0"
-                        style={{ color: 'var(--text-tertiary)' }}
-                        onMouseEnter={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                  </button>
-                  {/* Tooltip */}
-                  <div className="absolute left-0 top-full mt-1 w-64 p-3 bg-[var(--bg-surface-raised)] border-2 border-[var(--border-default)] rounded-lg shadow-lg z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity pointer-events-none"
-                    style={{ borderColor: 'var(--accent-teal)' }}>
-                    <p className="text-xs text-[var(--text-primary)] leading-relaxed">
-                      {PROPRIETARY_FILTER_1_DESCRIPTION || "Filters for high-confidence clinically validated pathogenic variants using ClinVar annotations, functional predictions, and population frequency criteria."}
-                    </p>
-                  </div>
-                </div>
-              )}
-              
-              {/* Filter 2 Button — always rendered; falls back to ACMG's apply-state/row count
-                  when the backend preview omits filter_2 so the option is never hidden. */}
-              {(() => {
-                const f2 = proprietaryFilterPreviews.filter_2 || {
-                  name: 'Functional Impact',
-                  can_apply: proprietaryFilterPreviews.filter_1?.can_apply ?? false,
-                  preview_pending: true,
-                  total_count: proprietaryFilterPreviews.filter_1?.total_count ?? 0,
-                  preview_count: 0,
-                };
-                return (
-                <div className="mb-2 relative group">
-                  <button
-                    onClick={() => handleApplyProprietaryFilter('filter_2')}
-                    disabled={
-                      !f2.can_apply ||
-                      isApplyingProprietaryFilter ||
-                      (hasAppliedManualFilters && activeProprietaryFilter !== 'filter_2')
-                    }
-                    className="w-full px-4 py-3 rounded-lg border transition-all flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{
-                      backgroundColor: activeProprietaryFilter === 'filter_2' ? 'var(--accent-teal-soft)' : 'var(--bg-surface-raised)',
-                      borderColor: 'var(--accent-teal)'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!e.target.disabled && activeProprietaryFilter !== 'filter_2') {
-                        e.target.style.borderColor = 'var(--accent-teal-hover)';
-                        e.target.style.backgroundColor = 'var(--accent-teal-soft)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!e.target.disabled && activeProprietaryFilter !== 'filter_2') {
-                        e.target.style.borderColor = 'var(--accent-teal)';
-                        e.target.style.backgroundColor = 'var(--bg-surface-raised)';
-                      }
-                    }}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-semibold text-sm text-[var(--text-primary)]">
-                        {f2.name || 'Functional Impact'}
-                      </span>
-                      {activeProprietaryFilter === 'filter_2' && (
-                        <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--bg-app)' }}>
-                          Active
-                        </span>
-                      )}
-                      {!f2.can_apply && (
-                        <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--error-soft)', color: 'var(--error)' }}>
-                          Missing columns
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                      <div className="text-right leading-tight">
-                        {f2.preview_pending &&
-                        activeProprietaryFilter !== 'filter_2' ? (
-                          <>
-                            <div className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                              Apply to load
-                            </div>
-                            <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                              from {(f2.total_count ?? 0).toLocaleString()} rows
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div className="text-sm font-bold tabular-nums" style={{ color: 'var(--accent-teal)' }}>
-                              {(f2.preview_count ?? 0).toLocaleString()}
-                              <span className="font-normal text-xs ml-1" style={{ color: 'var(--text-secondary)' }}>variants</span>
-                            </div>
-                            <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                              of {(f2.total_count ?? 0).toLocaleString()}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                      <Info
-                        className="w-3.5 h-3.5 shrink-0"
-                        style={{ color: 'var(--text-tertiary)' }}
-                        onMouseEnter={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                  </button>
-                  {/* Tooltip */}
-                  <div className="absolute left-0 top-full mt-1 w-64 p-3 bg-[var(--bg-surface-raised)] border-2 border-[var(--border-default)] rounded-lg shadow-lg z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity pointer-events-none"
-                    style={{ borderColor: 'var(--accent-teal)' }}>
-                    <p className="text-xs text-[var(--text-primary)] leading-relaxed">
-                      {PROPRIETARY_FILTER_2_DESCRIPTION || "Filters for rare, potentially deleterious coding and regulatory variants, including novel candidates, using functional impact and population frequency criteria."}
-                    </p>
-                  </div>
-                </div>
-                );
-              })()}
+          {/* Active Filter Summary Strip */}
+          {currentActiveFilterLabel && (
+            <div className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5" style={{ backgroundColor: 'var(--accent-teal-soft)', color: 'var(--text-primary)' }}>
+              <span style={{ color: 'var(--text-secondary)' }}>Filtered by:</span>
+              <span className="font-semibold">{currentActiveFilterLabel}</span>
             </div>
           )}
 
@@ -1950,80 +1825,306 @@ const VariantFilterSidebar = ({
             </div>
           )}
 
-          {/* All Columns */}
-          {allColumns.length > 0 && (
-            <div className={`space-y-2 ${activeProprietaryFilter ? 'opacity-50' : ''}`}>
-              <div className="flex items-center gap-2 px-1">
-                <h4 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">All Columns</h4>
-                {activeProprietaryFilter && (
-                  <span className="text-xs text-[var(--text-tertiary)] italic">(Disabled - proprietary filter active)</span>
-                )}
-              </div>
-              <div className="space-y-1">
-              {allColumns.map((colName) => {
-                // Check if this column is numeric (for filtering)
-                const isNumeric = columnIsNumeric(colName);
-                const filter = filters[colName] || {};
-                
-                // Check if this column is categorical (for filtering)
-                const isCategorical = columnIsCategoricalOnly(colName);
-                const selectedValues = categoricalFilters[colName] || [];
-                // Columns flagged as having no valid values in interpretation
-                const isColumnUnusable = noValidValuesColumns.includes(colName);
-                
-                // Count active filters for this column
-                let filterCount = 0;
-                if (isNumeric) {
-                  if (filter.currentMin !== null && filter.currentMin !== undefined) filterCount++;
-                  if (filter.currentMax !== null && filter.currentMax !== undefined) filterCount++;
-                } else if (isCategorical) {
-                  filterCount = selectedValues.length;
-                }
-                
-                // Check if filters are applied (from Firestore)
-                const appliedFilter = appliedFilters && appliedFilters[colName];
-                if (appliedFilter) {
-                  if (appliedFilter.min !== undefined || appliedFilter.max !== undefined) {
-                    filterCount = (appliedFilter.min !== null && appliedFilter.min !== undefined ? 1 : 0) + 
-                                  (appliedFilter.max !== null && appliedFilter.max !== undefined ? 1 : 0);
-                  } else if (appliedFilter.values && Array.isArray(appliedFilter.values)) {
-                    filterCount = appliedFilter.values.length;
-                  }
-                }
-                
-                return (
-                  <button
-                    key={colName}
-                    onClick={() => {
-                      if (!isManualFiltersDisabled && !isColumnUnusable) {
-                        setOpenFilterPopup(colName);
-                        setPopupSearchQuery(''); // Clear search when opening popup
-                      }
-                    }}
-                    disabled={isManualFiltersDisabled || isColumnUnusable}
-                    className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
-                      (isManualFiltersDisabled || isColumnUnusable)
-                        ? 'opacity-50 cursor-not-allowed bg-[var(--bg-surface)] border-[var(--border-default)]' 
-                        : 'bg-[var(--bg-surface-raised)] border-[var(--border-default)] hover:border-[var(--border-default)] hover:bg-[var(--bg-surface-hover)] cursor-pointer'
-                    } ${openFilterPopup === colName ? 'border-2' : ''}`}
-                    style={openFilterPopup === colName ? { borderColor: 'var(--accent-teal)' } : {}}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium truncate flex-1" style={{ color: isColumnUnusable ? 'var(--text-tertiary)' : 'var(--text-primary)' }}>
-                        {colName}
-                      </span>
-                      {filterCount > 0 && (
-                        <span className="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full text-[var(--bg-app)] flex-shrink-0" style={{ backgroundColor: 'var(--accent-teal)' }}>
-                          {filterCount}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
+          {/* Segmented Filter Mode Selector */}
+          <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: 'var(--border-default)' }} role="tablist" aria-label="Filter mode">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filterMode === 'manual'}
+              onClick={() => handleTabSwitch('manual')}
+              className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors ${
+                filterMode === 'manual'
+                  ? 'text-[var(--bg-app)]'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
+              }`}
+              style={filterMode === 'manual' ? { backgroundColor: 'var(--accent-teal)' } : { backgroundColor: 'var(--bg-surface-raised)' }}
+            >
+              Manual
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filterMode === 'acmg'}
+              onClick={() => handleTabSwitch('acmg')}
+              className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors ${
+                filterMode === 'acmg'
+                  ? 'text-[var(--bg-app)]'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
+              }`}
+              style={filterMode === 'acmg' ? { backgroundColor: 'var(--accent-teal)' } : { backgroundColor: 'var(--bg-surface-raised)' }}
+            >
+              ACMG
+              {proprietaryFilterPreviews?.filter_1?.preview_count != null && activeProprietaryFilter !== 'filter_1' && (
+                <span className="ml-1 opacity-70">({proprietaryFilterPreviews.filter_1.preview_count.toLocaleString()})</span>
+              )}
+              {activeProprietaryFilter === 'filter_1' && (
+                <span className="ml-1 opacity-70">({filteredCount != null ? filteredCount.toLocaleString() : '...'})</span>
+              )}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filterMode === 'functional'}
+              onClick={() => handleTabSwitch('functional')}
+              className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors ${
+                filterMode === 'functional'
+                  ? 'text-[var(--bg-app)]'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
+              }`}
+              style={filterMode === 'functional' ? { backgroundColor: 'var(--accent-teal)' } : { backgroundColor: 'var(--bg-surface-raised)' }}
+            >
+              Func.Imp
+              {proprietaryFilterPreviews?.filter_2?.preview_count != null && activeProprietaryFilter !== 'filter_2' && (
+                <span className="ml-1 opacity-70">({proprietaryFilterPreviews.filter_2.preview_count.toLocaleString()})</span>
+              )}
+              {activeProprietaryFilter === 'filter_2' && (
+                <span className="ml-1 opacity-70">({filteredCount != null ? filteredCount.toLocaleString() : '...'})</span>
+              )}
+            </button>
+          </div>
+
+          {/* Inline Confirmation Banner */}
+          {pendingTabSwitch && (
+            <div
+              className="p-3 rounded-lg border text-xs leading-relaxed flex items-center justify-between gap-2"
+              style={{ backgroundColor: 'var(--warning-soft)', borderColor: 'var(--warning)', color: 'var(--warning)' }}
+            >
+              <span>
+                Switching to <strong>{pendingTabSwitch === 'manual' ? 'Manual' : pendingTabSwitch === 'acmg' ? 'ACMG' : 'Functional Impact'}</strong> will clear your{' '}
+                <strong>{getCurrentActiveMode() === 'manual' ? 'manual filters' : getCurrentActiveMode() === 'acmg' ? 'ACMG filter' : 'Functional Impact filter'}</strong>.
+              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={confirmTabSwitch}
+                  className="px-2.5 py-1 rounded text-xs font-semibold transition-colors"
+                  style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--bg-app)' }}
+                >
+                  Switch
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelTabSwitch}
+                  className="px-2.5 py-1 rounded text-xs font-semibold transition-colors"
+                  style={{ backgroundColor: 'var(--bg-surface-raised)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           )}
+
+          {/* Tab Content */}
+          <div role="tabpanel" aria-label={`${filterMode} filter panel`}>
+            {filterMode === 'manual' && allColumns.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 px-1">
+                  <h4 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">All Columns</h4>
+                </div>
+                {allColumns.length === 0 ? (
+                  <p className="text-xs text-[var(--text-tertiary)] px-1 italic">Select columns below to build a custom filter</p>
+                ) : (
+                  <div className="space-y-1">
+                  {allColumns.map((colName) => {
+                    const isNumeric = columnIsNumeric(colName);
+                    const filter = filters[colName] || {};
+                    const isCategorical = columnIsCategoricalOnly(colName);
+                    const selectedValues = categoricalFilters[colName] || [];
+                    const isColumnUnusable = noValidValuesColumns.includes(colName);
+                    let filterCount = 0;
+                    if (isNumeric) {
+                      if (filter.currentMin !== null && filter.currentMin !== undefined) filterCount++;
+                      if (filter.currentMax !== null && filter.currentMax !== undefined) filterCount++;
+                    } else if (isCategorical) {
+                      filterCount = selectedValues.length;
+                    }
+                    const appliedFilter = appliedFilters && appliedFilters[colName];
+                    if (appliedFilter) {
+                      if (appliedFilter.min !== undefined || appliedFilter.max !== undefined) {
+                        filterCount = (appliedFilter.min !== null && appliedFilter.min !== undefined ? 1 : 0) + 
+                                      (appliedFilter.max !== null && appliedFilter.max !== undefined ? 1 : 0);
+                      } else if (appliedFilter.values && Array.isArray(appliedFilter.values)) {
+                        filterCount = appliedFilter.values.length;
+                      }
+                    }
+                    return (
+                      <button
+                        key={colName}
+                        onClick={() => {
+                          if (!isManualFiltersDisabled && !isColumnUnusable) {
+                            setOpenFilterPopup(colName);
+                            setPopupSearchQuery('');
+                          }
+                        }}
+                        disabled={isManualFiltersDisabled || isColumnUnusable}
+                        className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                          (isManualFiltersDisabled || isColumnUnusable)
+                            ? 'opacity-50 cursor-not-allowed bg-[var(--bg-surface)] border-[var(--border-default)]' 
+                            : 'bg-[var(--bg-surface-raised)] border-[var(--border-default)] hover:border-[var(--border-default)] hover:bg-[var(--bg-surface-hover)] cursor-pointer'
+                        } ${openFilterPopup === colName ? 'border-2' : ''}`}
+                        style={openFilterPopup === colName ? { borderColor: 'var(--accent-teal)' } : {}}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium truncate flex-1" style={{ color: isColumnUnusable ? 'var(--text-tertiary)' : 'var(--text-primary)' }}>
+                            {colName}
+                          </span>
+                          {filterCount > 0 && (
+                            <span className="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full text-[var(--bg-app)] flex-shrink-0" style={{ backgroundColor: 'var(--accent-teal)' }}>
+                              {filterCount}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {filterMode === 'acmg' && (
+              <div className="sidebar-card rounded-lg shadow-sm">
+                <label className="block text-sm font-bold text-[var(--text-primary)] mb-3">
+                  ACMG Filter
+                </label>
+                <p className="text-xs text-[var(--text-secondary)] mb-3 leading-relaxed">
+                  {PROPRIETARY_FILTER_1_DESCRIPTION}
+                </p>
+                {proprietaryFilterPreviews?.filter_1 ? (
+                  <div className="mb-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-[var(--text-secondary)]">
+                        {proprietaryFilterPreviews.filter_1.preview_pending && activeProprietaryFilter !== 'filter_1'
+                          ? 'Apply to load preview count'
+                          : `${(proprietaryFilterPreviews.filter_1.preview_count ?? 0).toLocaleString()} of ${(proprietaryFilterPreviews.filter_1.total_count ?? 0).toLocaleString()} variants match`}
+                      </span>
+                      {activeProprietaryFilter === 'filter_1' && (
+                        <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--bg-app)' }}>
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    {activeProprietaryFilter === 'filter_1' ? (
+                      <button
+                        type="button"
+                        onClick={() => handleApplyProprietaryFilter('filter_1')}
+                        disabled={isApplyingProprietaryFilter}
+                        className="w-full px-4 py-2 rounded-lg text-sm font-medium border transition-colors"
+                        style={{ borderColor: 'var(--error)', color: 'var(--error)', backgroundColor: 'var(--bg-surface-raised)' }}
+                      >
+                        {isApplyingProprietaryFilter ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            Removing...
+                          </span>
+                        ) : (
+                          'Remove ACMG Filter'
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleApplyProprietaryFilter('filter_1')}
+                        disabled={
+                          !proprietaryFilterPreviews.filter_1.can_apply ||
+                          isApplyingProprietaryFilter
+                        }
+                        className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ backgroundColor: 'var(--accent-teal)' }}
+                      >
+                        {isApplyingProprietaryFilter ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            Applying...
+                          </span>
+                        ) : (
+                          'Apply ACMG Filter'
+                        )}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[var(--text-tertiary)] italic">
+                    ACMG filter previews are loading...
+                  </p>
+                )}
+              </div>
+            )}
+
+            {filterMode === 'functional' && (
+              <div className="sidebar-card rounded-lg shadow-sm">
+                <label className="block text-sm font-bold text-[var(--text-primary)] mb-3">
+                  Functional Impact
+                </label>
+                <p className="text-xs text-[var(--text-secondary)] mb-3 leading-relaxed">
+                  {PROPRIETARY_FILTER_2_DESCRIPTION}
+                </p>
+                {(() => {
+                  const f2 = proprietaryFilterPreviews?.filter_2 || {
+                    name: 'Functional Impact',
+                    can_apply: proprietaryFilterPreviews?.filter_1?.can_apply ?? false,
+                    preview_pending: true,
+                    total_count: proprietaryFilterPreviews?.filter_1?.total_count ?? 0,
+                    preview_count: 0,
+                  };
+                  return (
+                    <div className="mb-2">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-[var(--text-secondary)]">
+                          {f2.preview_pending && activeProprietaryFilter !== 'filter_2'
+                            ? 'Apply to load preview count'
+                            : `${(f2.preview_count ?? 0).toLocaleString()} of ${(f2.total_count ?? 0).toLocaleString()} variants match`}
+                        </span>
+                        {activeProprietaryFilter === 'filter_2' && (
+                          <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--bg-app)' }}>
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      {activeProprietaryFilter === 'filter_2' ? (
+                        <button
+                          type="button"
+                          onClick={() => handleApplyProprietaryFilter('filter_2')}
+                          disabled={isApplyingProprietaryFilter}
+                          className="w-full px-4 py-2 rounded-lg text-sm font-medium border transition-colors"
+                          style={{ borderColor: 'var(--error)', color: 'var(--error)', backgroundColor: 'var(--bg-surface-raised)' }}
+                        >
+                          {isApplyingProprietaryFilter ? (
+                            <span className="flex items-center justify-center gap-2">
+                              <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                              Removing...
+                            </span>
+                          ) : (
+                            'Remove Functional Impact Filter'
+                          )}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleApplyProprietaryFilter('filter_2')}
+                          disabled={
+                            !f2.can_apply ||
+                            isApplyingProprietaryFilter
+                          }
+                          className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          style={{ backgroundColor: 'var(--accent-teal)' }}
+                        >
+                          {isApplyingProprietaryFilter ? (
+                            <span className="flex items-center justify-center gap-2">
+                              <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                              Applying...
+                            </span>
+                          ) : (
+                            'Apply Functional Impact Filter'
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Floating Filter Popup */}
@@ -2298,8 +2399,8 @@ const VariantFilterSidebar = ({
 
         {/* Footer with Actions */}
         <div className="sidebar-header border-t space-y-3">
-          {/* Show pending filters (set but not yet applied) */}
-          {(() => {
+          {/* Show pending filters (set but not yet applied) — Manual tab only */}
+          {filterMode === 'manual' && (() => {
             if (!hasUnappliedFilterChanges) return null;
             const pendingFilters = [];
             for (const param in filters) {
@@ -2359,56 +2460,58 @@ const VariantFilterSidebar = ({
           )} */}
 
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={applyFilters}
-              disabled={isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges}
-              title={
-                isManualFiltersDisabled
-                  ? undefined
-                  : isApplying
+            {filterMode === 'manual' && (
+              <button
+                type="button"
+                onClick={applyFilters}
+                disabled={isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges}
+                title={
+                  isManualFiltersDisabled
                     ? undefined
-                    : !hasUnappliedFilterChanges
-                      ? 'No changes to apply — adjust filters first'
-                      : 'Apply all current filter settings'
-              }
-              className={`flex-1 px-4 py-2 rounded-lg flex items-center justify-center gap-2 text-sm font-medium text-white ${
-                isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges
-                  ? 'opacity-60 cursor-not-allowed'
-                  : 'hover:opacity-90'
-              }`}
-              style={{
-                backgroundColor:
-                  isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges ? 'var(--text-tertiary)' : 'var(--accent-teal)'
-              }}
-            >
-              {isApplying ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-[var(--bg-app)] border-t-transparent rounded-full animate-spin"></div>
-                  Applying...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="w-4 h-4" />
-                  Apply Filters
-                </>
-              )}
-            </button>
+                    : isApplying
+                      ? undefined
+                      : !hasUnappliedFilterChanges
+                        ? 'No changes to apply — adjust filters first'
+                        : 'Apply all current filter settings'
+                }
+                className={`flex-1 px-4 py-2 rounded-lg flex items-center justify-center gap-2 text-sm font-medium text-white ${
+                  isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges
+                    ? 'opacity-60 cursor-not-allowed'
+                    : 'hover:opacity-90'
+                }`}
+                style={{
+                  backgroundColor:
+                    isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges ? 'var(--text-tertiary)' : 'var(--accent-teal)'
+                }}
+              >
+                {isApplying ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-[var(--bg-app)] border-t-transparent rounded-full animate-spin"></div>
+                    Applying...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Apply Filters
+                  </>
+                )}
+              </button>
+            )}
 
             <button
               onClick={resetFilters}
-              disabled={isApplying || isManualFiltersDisabled}
+              disabled={isApplying}
               title={
                 isGuest
-                  ? 'Clear manual filters and restore all preview variants for chat'
-                  : undefined
+                  ? 'Clear all filters and restore all preview variants for chat'
+                  : 'Clear all active filters (manual and proprietary) and restore all variants'
               }
-              className={`px-4 py-2 bg-[var(--bg-surface-hover)] text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-hover)] flex items-center justify-center gap-2 text-sm font-medium ${
-                isApplying || isManualFiltersDisabled ? 'opacity-50 cursor-not-allowed' : ''
+              className={`flex-1 px-4 py-2 bg-[var(--bg-surface-hover)] text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-hover)] flex items-center justify-center gap-2 text-sm font-medium ${
+                isApplying ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
               <RotateCcw className="w-4 h-4" />
-              Reset
+              Reset All Filters
             </button>
           </div>
 

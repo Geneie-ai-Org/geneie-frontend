@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MessageSquare, Plus, Trash2, ChevronLeft, ChevronRight, User, Settings, LogOut } from 'lucide-react';
 import { getAuth, signOut } from 'firebase/auth';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import NotificationBell from './NotificationBell';
 
 const ConversationSidebar = ({
     conversations,
@@ -191,8 +192,8 @@ const ConversationSidebar = ({
 
                 {/* Bottom section */}
                 <div className="mt-auto">
-                    {/* Account button with popover menu */}
-                    <div className="relative" ref={menuRef}>
+                    {/* Account row: avatar + name on left, bell on right */}
+                    <div className={`relative flex items-center ${isOpen ? 'px-3 gap-2' : 'flex-col gap-1'}`} ref={menuRef}>
                         {/* Popover menu */}
                         {showAccountMenu && (
                             <div
@@ -242,7 +243,7 @@ const ConversationSidebar = ({
                         <button
                             ref={accountBtnRef}
                             onClick={() => setShowAccountMenu(!showAccountMenu)}
-                            className={`w-full py-3 cursor-pointer overflow-hidden ${isOpen ? 'px-5' : 'px-0'}`}
+                            className={`flex-1 min-w-0 py-3 cursor-pointer overflow-hidden rounded-lg hover:bg-white/5 transition-colors ${isOpen ? 'px-2' : 'px-0'}`}
                             title={isOpen ? undefined : 'Profile & Settings'}
                         >
                             <div className={`flex items-center ${isOpen ? 'gap-2.5' : 'justify-center'}`}>
@@ -258,6 +259,12 @@ const ConversationSidebar = ({
                                 )}
                             </div>
                         </button>
+
+                        <div className="shrink-0">
+                            <NotificationBell
+                                onNavigateToConversation={(convId) => onSelectConversation(convId)}
+                            />
+                        </div>
                     </div>
                     {/* Usage indicator */}
                     {userTier !== 'pro' && (

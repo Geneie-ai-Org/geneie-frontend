@@ -29,7 +29,7 @@ import VariantAnalysisPipeline from '../components/VariantAnalysisPipeline';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
 import VariantUploadLoadingModal from '@/components/VariantUploadLoadingModal';
 
-import { apiUrl } from '@/config/api';
+import { apiUrl, getApiOrigin } from '@/config/api';
 import { buildVariantDataFromConversation, variantFileRowCountForSidebar } from '@/lib/variantPipelineUtils';
 import { conversationPath, isValidConversationId } from '@/lib/conversationRoutes';
 import { getDeviceId } from '@/lib/deviceId';
@@ -297,6 +297,14 @@ const ChatPage = () => {
     }
   }, []);
 
+  // Handle ?conversation=<id> deep links (from email notifications)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const deepLinkId = urlParams.get('conversation');
+    if (deepLinkId && isValidConversationId(deepLinkId)) {
+      navigate(conversationPath(deepLinkId), { replace: true });
+    }
+  }, []);
   // Close file type dropdown on outside click
   useEffect(() => {
     if (!showFileTypeDropdown) return;
@@ -706,6 +714,27 @@ const ChatPage = () => {
     // Only re-load when the active conversation identity changes — not when pipeline
     // callbacks are recreated (which previously re-triggered clear + fetch in a loop).
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversationId, userId, userTier]);
+
+  useEffect(() => {
+    if (!activeConversationId || !userId || userTier === 'guest') return;
+    const markNotificationsRead = async () => {
+      try {
+        const auth = getAuth();
+        const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+        await fetch(`${getApiOrigin()}/api/conversations/${encodeURIComponent(activeConversationId)}/notifications/mark-read`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { Authorization: `Bearer ${token}` }),
+            'X-Device-Id': getDeviceId(),
+          },
+        });
+      } catch (_) {
+        // Silently ignore
+      }
+    };
+    markNotificationsRead();
   }, [activeConversationId, userId, userTier]);
 
   // 3. Delete conversation (optimistic: remove from list first, then call API)
@@ -1236,19 +1265,6 @@ const ChatPage = () => {
                   >
                     {conversationHeaderTitle}
                   </h1>
-                  {/* <div className="flex items-center gap-0.5 shrink-0">
-                    {userTier !== 'guest' && (
-                      <button
-                        type="button"
-                        onClick={createConversation}
-                        className="chat-chrome-btn"
-                        title="New chat"
-                        aria-label="New chat"
-                      >
-                        <Plus />
-                      </button>
-                    )}
-                  </div> */}
                 </div>
               </header>}
 

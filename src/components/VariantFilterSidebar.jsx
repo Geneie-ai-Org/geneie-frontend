@@ -5,6 +5,14 @@ import { getAuth } from 'firebase/auth';
 import DocumentUpload from './DocumentUpload';
 import ProcessingNotification from './ProcessingNotification';
 import ExportVariantsButton from './ExportVariantsButton';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { apiUrl, getApiOrigin } from '@/config/api';
 import qiagenLogo from '../Qiagen.svg.png';
 
@@ -15,6 +23,13 @@ const PROPRIETARY_FILTER_1_DESCRIPTION = "ClinVar and/or InterVar pathogenic cla
 const PROPRIETARY_FILTER_2_DESCRIPTION = "Filters for rare, potentially deleterious coding and regulatory variants, including novel candidates, using functional impact and population frequency criteria.";
 
 const DEVICE_ID_STORAGE_KEY = 'geneie_device_id';
+
+const GARDEN_ACTION_LABELS = {
+  create: 'Create new entry from current filters',
+  apply: 'Apply existing entry',
+  edit: 'Edit name/notes of existing entry',
+  delete: 'Delete existing entry',
+};
 
 function getOrCreateDeviceId() {
   try {
@@ -2258,13 +2273,11 @@ const VariantFilterSidebar = ({
                               <label key={value} className={`flex items-center gap-2 text-sm p-2 rounded ${
                                 isManualFiltersDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-[var(--bg-surface-hover)]'
                               }`}>
-                                <input
-                                  type="checkbox"
+                                <Checkbox
                                   checked={selectedValues.includes(value)}
-                                  onChange={(e) => !isManualFiltersDisabled && handleCategoricalChange(colName, value, e.target.checked)}
+                                  onCheckedChange={(checked) => !isManualFiltersDisabled && handleCategoricalChange(colName, value, checked === true)}
                                   disabled={isManualFiltersDisabled}
-                                  className="rounded border-[var(--border-default)]"
-                                  style={{ accentColor: 'var(--accent-teal)' }}
+                                  className="aria-checked:bg-[var(--accent-teal)] aria-checked:border-[var(--accent-teal)] aria-checked:text-white"
                                 />
                                 <span className="truncate flex-1">{value === 'Empty' ? 'Empty' : value}</span>
                               </label>
@@ -2563,43 +2576,53 @@ const VariantFilterSidebar = ({
             <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
               <div className="sidebar-garden-step p-3 rounded-lg border">
                 <div className="text-xs font-semibold text-[var(--text-primary)] mb-2">Step 1: Choose action</div>
-                <select
+                <Select
                   value={gardenAction}
-                  onChange={(e) => {
-                    setGardenAction(e.target.value);
+                  items={GARDEN_ACTION_LABELS}
+                  onValueChange={(value) => {
+                    setGardenAction(value);
                     setGardenFeedback(null);
                     setGardenApplyMissingColumns([]);
                   }}
-                  className="w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg bg-[var(--bg-surface-raised)]"
                 >
-                  <option value="create">Create new entry from current filters</option>
-                  <option value="apply" disabled={savedFilterPresets.length === 0}>Apply existing entry</option>
-                  <option value="edit" disabled={savedFilterPresets.length === 0}>Edit name/notes of existing entry</option>
-                  <option value="delete" disabled={savedFilterPresets.length === 0}>Delete existing entry</option>
-                </select>
+                  <SelectTrigger className="w-full bg-[var(--bg-surface-raised)]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="create">Create new entry from current filters</SelectItem>
+                    <SelectItem value="apply" disabled={savedFilterPresets.length === 0}>Apply existing entry</SelectItem>
+                    <SelectItem value="edit" disabled={savedFilterPresets.length === 0}>Edit name/notes of existing entry</SelectItem>
+                    <SelectItem value="delete" disabled={savedFilterPresets.length === 0}>Delete existing entry</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {(gardenAction === 'apply' || gardenAction === 'edit' || gardenAction === 'delete') && (
                 <div className="sidebar-garden-step p-3 rounded-lg border">
                   <div className="text-xs font-semibold text-[var(--text-primary)] mb-2">Step 2: Choose existing entry</div>
-                  <select
+                  <Select
                     value={selectedPresetId}
-                    onChange={(e) => {
-                      setSelectedPresetId(e.target.value);
+                    items={Object.fromEntries(savedFilterPresets.map((p) => [p.id, p.name]))}
+                    onValueChange={(value) => {
+                      setSelectedPresetId(value);
                       setIsEditingGardenEntry(false);
                     }}
-                    className="w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg bg-[var(--bg-surface-raised)]"
                   >
-                    {savedFilterPresets.length === 0 ? (
-                      <option value="">No entries yet</option>
-                    ) : (
-                      savedFilterPresets.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))
-                    )}
-                  </select>
+                    <SelectTrigger className="w-full bg-[var(--bg-surface-raised)]">
+                      <SelectValue placeholder="Select an entry" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {savedFilterPresets.length === 0 ? (
+                        <SelectItem value="__none__" disabled>No entries yet</SelectItem>
+                      ) : (
+                        savedFilterPresets.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 

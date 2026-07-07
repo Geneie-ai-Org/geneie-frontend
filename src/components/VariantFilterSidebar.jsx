@@ -3,7 +3,7 @@ import { FileText, X, RotateCcw, CheckCircle, Upload, Trash2, Info, Zap, Search 
 import { doc, getDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import DocumentUpload from './DocumentUpload';
-import ProcessingNotification from './ProcessingNotification';
+import { useProcessingToast } from '@/hooks/useProcessingToast';
 import ExportVariantsButton from './ExportVariantsButton';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -499,6 +499,7 @@ const VariantFilterSidebar = ({
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isApplyingPreset, setIsApplyingPreset] = useState(false);
+  useProcessingToast(isApplying ? 'Processing filters...' : null, isApplying);
   const [isRunningAnnovar, setIsRunningAnnovar] = useState(false);
   const [isGardenModalOpen, setIsGardenModalOpen] = useState(false);
   const [gardenNameInput, setGardenNameInput] = useState('');
@@ -2779,10 +2780,6 @@ const VariantFilterSidebar = ({
       )}
 
       {/* Processing Notification */}
-      <ProcessingNotification 
-        message={isApplying ? 'Processing filters...' : null}
-        isVisible={isApplying}
-      />
     </div>
   );
 };

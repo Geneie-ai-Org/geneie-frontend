@@ -23,7 +23,6 @@ import VariantFilterSidebar from '../components/VariantFilterSidebar';
 import ProfileManagement from '../components/ProfileManagement';
 import SubscriptionSuccess from '../components/SubscriptionSuccess';
 import SubscriptionCanceled from '../components/SubscriptionCanceled';
-import ProcessingNotification from '../components/ProcessingNotification';
 import ColumnInterpretationResults from '../components/ColumnInterpretationResults';
 import VariantAnalysisPipeline from '../components/VariantAnalysisPipeline';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
@@ -1568,12 +1567,6 @@ const ChatPage = () => {
       {showSubscriptionCanceled && (
         <SubscriptionCanceled onClose={() => setShowSubscriptionCanceled(false)} />
       )}
-
-      {/* Global Processing Notification */}
-      <ProcessingNotification
-        message={null}
-        isVisible={false}
-      />
 
       {/* Column Interpretation Results Modal */}
       {showFileAnalysisModal && (

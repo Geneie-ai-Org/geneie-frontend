@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
-import ProcessingNotification from './ProcessingNotification';
-import { apiUrl as buildApiUrl } from '@/config/api';
+import { useProcessingToast } from '@/hooks/useProcessingToast';import { apiUrl as buildApiUrl } from '@/config/api';
 import { getUploadDisplayMessage } from '@/lib/uploadProcessingPhases';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -211,6 +210,8 @@ const DocumentUpload = ({
   }, [isUploading, onUploadingChange, onUploadProgressChange]);
 
   const uploadStatusMessage = getUploadDisplayMessage({ uploadProgress });
+
+  useProcessingToast(isUploading ? uploadStatusMessage : null, isUploading);
 
   // Fetch existing projects when form opens (for authenticated users only)
   useEffect(() => {
@@ -879,11 +880,6 @@ const DocumentUpload = ({
           </div>
         )}
         
-        {/* Processing Notification for compact mode */}
-        <ProcessingNotification 
-          message={isUploading ? uploadStatusMessage : null}
-          isVisible={isUploading}
-        />
       </div>
     );
   }
@@ -969,11 +965,6 @@ const DocumentUpload = ({
         </div>
       )}
       
-      {/* Processing Notification */}
-      <ProcessingNotification 
-        message={isUploading ? uploadStatusMessage : null}
-        isVisible={isUploading}
-      />
         </>
       )}
       

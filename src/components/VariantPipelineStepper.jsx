@@ -6,6 +6,16 @@ import {
   getPipelineBackgroundActive,
   getPipelineStatusLine,
 } from '@/lib/variantPipelineSteps';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+
+const STATUS_VARIANT = {
+  done: 'default',
+  running: 'secondary',
+  failed: 'destructive',
+  skipped: 'outline',
+  pending: 'outline',
+};
 
 function StepIcon({ status }) {
   if (status === 'running') {
@@ -37,23 +47,18 @@ const VariantPipelineStepper = (props) => {
     >
       <div className="max-w-4xl mx-auto">
         <p className="text-xs font-semibold text-gray-700 mb-2">Analysis pipeline</p>
-        <ol className="flex flex-wrap items-center gap-2 sm:gap-0 sm:justify-between">
+        <ol className="flex flex-wrap items-center gap-2">
           {PIPELINE_STEP_DEFS.map((def, index) => {
             const status = steps[def.id];
             const isLast = index === PIPELINE_STEP_DEFS.length - 1;
             return (
-              <li
-                key={def.id}
-                className={`flex items-center gap-1.5 text-xs sm:text-sm ${
-                  status === 'done' ? 'text-[#2F7F7A] font-medium' : 'text-gray-600'
-                }`}
-              >
-                <StepIcon status={status} />
-                <span>{def.label}</span>
+              <li key={def.id} className="flex items-center gap-2">
+                <Badge variant={STATUS_VARIANT[status] || 'outline'} className="gap-1.5">
+                  <StepIcon status={status} />
+                  <span>{def.label}</span>
+                </Badge>
                 {!isLast && (
-                  <span className="hidden sm:inline text-gray-300 mx-1" aria-hidden>
-                    →
-                  </span>
+                  <Separator orientation="vertical" className="hidden sm:block h-4" aria-hidden />
                 )}
               </li>
             );

@@ -28,6 +28,7 @@ import ColumnInterpretationResults from '../components/ColumnInterpretationResul
 import VariantAnalysisPipeline from '../components/VariantAnalysisPipeline';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
 import VariantUploadLoadingModal from '@/components/VariantUploadLoadingModal';
+import { Skeleton } from '@/components/ui/skeleton';
 
 import { apiUrl, getApiOrigin } from '@/config/api';
 import { buildVariantDataFromConversation, variantFileRowCountForSidebar } from '@/lib/variantPipelineUtils';
@@ -1299,8 +1300,10 @@ const ChatPage = () => {
                                 {typingText}
                               </Markdown>
                             ) : (
-                              <div className="flex items-center gap-2 pt-1">
-                                <div className="thinking-loader" />
+                              <div className="space-y-2.5 pt-1" aria-label="Assistant is thinking" role="status">
+                                <Skeleton className="h-3.5 w-[85%]" />
+                                <Skeleton className="h-3.5 w-[92%]" />
+                                <Skeleton className="h-3.5 w-[70%]" />
                               </div>
                             )}
                           </div>

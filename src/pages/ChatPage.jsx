@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu } from 'lucide-react';
+import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
 
-import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from '../components/prompt-kit/chat-container';
-import { ScrollButton } from '../components/prompt-kit/scroll-button';
-import { Markdown } from '../components/prompt-kit/markdown';
+import { useStickToBottom } from 'use-stick-to-bottom';
+import { Markdown } from '../components/chat/ChatMarkdown';
 
 import { useAuth } from '../hooks/useAuth';
 import { useChatMessaging } from '../hooks/useChatMessaging';
@@ -51,6 +50,14 @@ const ChatPage = () => {
   const [variantData, setVariantData] = useState(null);
   const [isVariantSidebarOpen, setIsVariantSidebarOpen] = useState(false);
   const [isEditSampleModalOpen, setIsEditSampleModalOpen] = useState(false);
+
+  // Stick-to-bottom for the message list (replaces prompt-kit ChatContainer)
+  const {
+    scrollRef: chatScrollRef,
+    contentRef: chatContentRef,
+    isAtBottom: chatIsAtBottom,
+    scrollToBottom: chatScrollToBottom,
+  } = useStickToBottom();
 
 
   // Auto-close variant sidebar when no document is present
@@ -1281,10 +1288,13 @@ const ChatPage = () => {
               </header>}
 
 
-              <ChatContainerRoot className="flex-1 min-w-0 overflow-x-hidden relative"
+              <div
+                ref={chatScrollRef}
+                role="log"
+                className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden relative"
                 style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
               >
-                <ChatContainerContent className="chat-column-inner space-y-8 pt-5 pb-4">
+                <div ref={chatContentRef} className="chat-column-inner space-y-8 pt-5 pb-4">
                   <div className="space-y-8 pb-4 w-full">
                     {messages.map((msg, index) => (
                       <ChatMessage
@@ -1322,15 +1332,25 @@ const ChatPage = () => {
                       </div>
                     )}
                   </div>
-                </ChatContainerContent>
-                <ChatContainerScrollAnchor />
-                <div className="sticky bottom-4 flex justify-center pointer-events-none" style={{ zIndex: 10 }}>
-                  <ScrollButton
-                    className="pointer-events-auto shadow-lg"
-                    style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-                  />
                 </div>
-              </ChatContainerRoot>
+                <div className="sticky bottom-4 flex justify-center pointer-events-none" style={{ zIndex: 10 }}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => chatScrollToBottom()}
+                    aria-label="Scroll to bottom"
+                    className={`h-10 w-10 rounded-full transition-all duration-150 ease-out pointer-events-auto shadow-lg ${
+                      !chatIsAtBottom
+                        ? 'translate-y-0 scale-100 opacity-100'
+                        : 'pointer-events-none translate-y-4 scale-95 opacity-0'
+                    }`}
+                    style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
+                  >
+                    <ChevronDown className="size-5" />
+                  </Button>
+                </div>
+              </div>
 
               {/* Bottom input — conversation mode */}
               <div className="chat-column-inner pb-3 pt-1.5 shrink-0" style={{ backgroundColor: 'var(--bg-app)' }}>

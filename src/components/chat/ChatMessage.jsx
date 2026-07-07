@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CheckCircle2, Copy, RotateCw } from 'lucide-react';
-import { MessageContent } from '../prompt-kit/message';
-import { Markdown } from '../prompt-kit/markdown';
-import { Source, SourceTrigger, SourceContent } from '../prompt-kit/source';
+import { Markdown } from './ChatMarkdown';
+import { Source, SourceTrigger, SourceContent } from './Source';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -291,7 +290,7 @@ const ChatMessage = React.memo(({ role, text, sources, showRegenerate, onRegener
   return (
     <div className="group flex w-full gap-3" ref={messageRef}>
       <div className="flex-1 min-w-0">
-        <MessageContent className="text-sm bg-transparent p-0 rounded-none break-words overflow-wrap-anywhere">
+        <div className="text-sm break-words whitespace-normal overflow-wrap-anywhere">
           {processedText.type === 'withRefs' ? (
             <MarkdownWithReferences
               content={processedText.content}
@@ -303,7 +302,7 @@ const ChatMessage = React.memo(({ role, text, sources, showRegenerate, onRegener
               {processedText.content}
             </Markdown>
           )}
-        </MessageContent>
+        </div>
 
         {sources && sources.length > 0 && (
           <div className="mt-3 pt-2.5 border-t" style={{ borderColor: 'var(--border-subtle)' }}>

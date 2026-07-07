@@ -3,6 +3,7 @@ import { MessageSquare, Plus, Trash2, ChevronLeft, ChevronRight, Settings, LogOu
 import { getAuth, signOut } from 'firebase/auth';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import NotificationBell from './NotificationBell';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -138,7 +139,8 @@ const ConversationSidebar = ({
                 </div>
 
                 {/* Conversations List — expanded only */}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3">
+                <ScrollArea className="flex-1 min-h-0">
+                    <div className="px-3 pb-3">
                     {isOpen && conversations.length === 0 && (
                         <div className="text-center py-12" style={{ color: 'var(--text-tertiary)' }}>
                             <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
@@ -181,7 +183,8 @@ const ConversationSidebar = ({
                                 ))}
                             </div>
                         ))}
-                </div>
+                    </div>
+                </ScrollArea>
 
                 {/* Bottom section */}
                 <div className="mt-auto">

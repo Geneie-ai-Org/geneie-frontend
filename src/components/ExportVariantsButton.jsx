@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Download } from 'lucide-react';
 import { getExportEligibility, exportVariants } from '@/services/backendApi';
-import { Button } from '@/components/ui/button';
 
 export default function ExportVariantsButton({ conversationId, variantData, filteredCount, isGuest }) {
   const [eligibility, setEligibility] = useState(null);
@@ -52,45 +51,40 @@ export default function ExportVariantsButton({ conversationId, variantData, filt
   const rowCount = eligibility?.row_count ?? 0;
   const message = eligibility?.message || '';
 
+  const label = isExporting
+    ? 'Exporting…'
+    : canExport
+      ? `Download ${rowCount.toLocaleString()} variants`
+      : isLoading && !eligibility
+        ? 'Checking export…'
+        : rowCount > 0
+          ? 'Download'
+          : 'Nothing to download yet';
+
   return (
-    <div className="flex items-center gap-2">
-      {error && (
-        <span className="text-xs" style={{ color: 'var(--error)' }} title={error}>
-          {error.length > 50 ? error.slice(0, 50) + '...' : error}
-        </span>
-      )}
-      <Button
+    <div className="space-y-1.5">
+      <button
         type="button"
-        variant="ghost"
         onClick={handleExport}
         disabled={!canExport || isExporting}
-        className={`flex items-center gap-1.5 px-3 py-1.5 h-auto rounded-lg text-xs font-medium ${
-          !canExport || isExporting
-            ? 'opacity-50 cursor-not-allowed'
-            : 'hover:opacity-90'
-        }`}
-        style={{
-          backgroundColor: canExport ? 'var(--accent-teal)' : 'var(--bg-surface-hover)',
-          color: canExport ? 'white' : 'var(--text-secondary)',
-        }}
         title={!canExport ? message : `Download ${rowCount.toLocaleString()} variants as TSV`}
+        className={`w-full h-10 rounded-lg flex items-center justify-center gap-2 text-[13px] font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${
+          canExport && !isExporting
+            ? 'bg-[var(--accent-teal)] text-[var(--bg-app)] hover:brightness-110'
+            : 'bg-[var(--bg-surface)] text-[var(--text-tertiary)] border border-[var(--border-subtle)] cursor-not-allowed'
+        }`}
       >
         {isExporting ? (
-          <>
-            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            Exporting...
-          </>
+          <div className="w-3.5 h-3.5 border-2 border-[var(--bg-app)] border-t-transparent rounded-full animate-spin" />
         ) : (
-          <>
-            <Download className="size-3.5" />
-            {canExport
-              ? `Download ${rowCount.toLocaleString()} variants`
-              : 'Download'}
-          </>
+          <Download className="w-4 h-4" />
         )}
-      </Button>
-      {isLoading && !eligibility && (
-        <div className="w-3.5 h-3.5 border-2 border-[var(--text-secondary)] border-t-transparent rounded-full animate-spin" />
+        {label}
+      </button>
+      {error && (
+        <p className="text-[11px] text-[var(--error)] truncate" title={error}>
+          {error}
+        </p>
       )}
     </div>
   );

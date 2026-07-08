@@ -10,6 +10,7 @@ import ChatPage from './pages/ChatPage';
 import PublicRoute from './components/PublicRoute';
 import { Toaster } from '@/components/ui/sonner';
 import './index.css';
+import './App.css';
 
 Sentry.init({
   dsn: "https://21eb629f3af2e173607c06c6affe5e7c@o4511525430427648.ingest.de.sentry.io/4511525433245776",

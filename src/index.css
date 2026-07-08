@@ -6,7 +6,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
+/* @layer base {
 
   html,
   body,
@@ -23,7 +23,7 @@
   .theme {
     --animate-meteor: meteor 5s linear infinite;
   }
-}
+} */
 
 @keyframes slide-in {
   from {

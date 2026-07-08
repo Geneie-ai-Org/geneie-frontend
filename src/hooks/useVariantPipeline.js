@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
 import { apiUrl } from '@/config/api';
+import { apiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
 import {
   convertToVcf,
   fetchChatEligibility,
@@ -300,7 +301,7 @@ export function useVariantPipeline({
       } catch (error) {
         setAnnovarMessageModal({
           title: 'VCF conversion failed',
-          message: error.message || 'Could not convert file to VCF.',
+          message: humanizeError(error.message) || 'Could not convert file to VCF.',
           variant: 'error',
         });
         throw error;
@@ -690,7 +691,7 @@ export function useVariantPipeline({
       console.error('[useVariantPipeline] Run ANNOVAR error:', error);
       setAnnovarMessageModal({
         title: 'Error',
-        message: error.message || 'Annotation failed. Please try again.',
+        message: humanizeError(error.message) || 'Annotation failed. Please try again.',
         variant: 'error',
       });
     } finally {
@@ -802,16 +803,7 @@ export function useVariantPipeline({
 
       if (!res.ok && res.status !== 202) {
         const err = await res.json().catch(() => ({}));
-        const detail = err.detail;
-        const detailText =
-          typeof detail === 'string'
-            ? detail
-            : detail && typeof detail === 'object' && detail.message
-              ? detail.message
-              : Array.isArray(detail)
-                ? detail.map((d) => d.msg || d).join(', ')
-                : null;
-        throw new Error(detailText || `Failed to apply ${displayName}`);
+        throw new Error(apiErrorDetailToMessage(err.detail) || `Failed to apply ${displayName}`);
       }
 
       if (res.status === 202) {
@@ -844,7 +836,7 @@ export function useVariantPipeline({
       setAnnovarMessageModal({
         title: displayName,
         message:
-          error.message ||
+          humanizeError(error.message) ||
           `Failed to apply ${displayName}. Run ANNOVAR first if your file is not annotated yet.`,
         variant: 'error',
       });

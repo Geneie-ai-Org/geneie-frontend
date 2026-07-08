@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
-import { useProcessingToast } from '@/hooks/useProcessingToast';import { apiUrl as buildApiUrl } from '@/config/api';
+import { apiUrl as buildApiUrl } from '@/config/api';
 import { getUploadDisplayMessage } from '@/lib/uploadProcessingPhases';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -56,14 +56,15 @@ const CustomSelect = ({ value, onChange, placeholder, options, error, className 
     <Select value={value || ''} onValueChange={onChange} items={items}>
       <SelectTrigger
         className={cn(
-          'w-full h-[34px] px-2.5 text-xs rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] data-placeholder:text-[var(--text-tertiary)]',
+          // Override the base-nova default (data-[size=default]:h-8) with an explicit h-10.
+          'w-full !h-10 px-3 text-sm rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] data-placeholder:text-[var(--text-tertiary)]',
           className
         )}
         style={{ borderColor: error ? 'var(--error)' : 'var(--border-default)' }}
       >
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="min-w-[var(--radix-select-trigger-width)] p-1.5">
         {(options || []).map((opt) => (
           <SelectItem key={opt.value} value={opt.value}>
             {opt.label}
@@ -210,8 +211,7 @@ const DocumentUpload = ({
   }, [isUploading, onUploadingChange, onUploadProgressChange]);
 
   const uploadStatusMessage = getUploadDisplayMessage({ uploadProgress });
-
-  useProcessingToast(isUploading ? uploadStatusMessage : null, isUploading);
+  // Processing status is already shown by <VariantUploadLoadingModal /> — no extra toast needed.
 
   // Fetch existing projects when form opens (for authenticated users only)
   useEffect(() => {
@@ -972,7 +972,7 @@ const DocumentUpload = ({
       <Dialog open={showInfoForm} onOpenChange={(open) => { if (!open) handleInfoFormCancel(); }}>
         <DialogContent
           showCloseButton={false}
-          className="max-w-4xl w-full max-h-[min(96vh,900px)] flex flex-col p-0 gap-0 overflow-hidden ring-0 border"
+          className="!max-w-2xl w-full max-h-[min(96vh,900px)] flex flex-col p-0 gap-0 overflow-hidden ring-0 border"
           style={{
             backgroundColor: 'var(--bg-surface-raised)',
             boxShadow: 'var(--shadow-lg)',
@@ -983,20 +983,23 @@ const DocumentUpload = ({
           <DialogDescription className="sr-only">
             {editMode ? 'Update metadata for this variant file.' : 'Provide details about your variant file for better analysis.'}
           </DialogDescription>
-            <div className="flex-shrink-0 px-5 pt-5 pb-3 relative">
-            <h3 id="sample-metadata-title" className="text-sm font-semibold mb-0.5 pr-8" style={{ color: 'var(--text-primary)' }}>
+            <div className="flex-shrink-0 px-7 pt-6 pb-4 relative">
+            <h3 id="sample-metadata-title" className="text-base font-semibold mb-1 pr-8" style={{ color: 'var(--text-primary)' }}>
               {editMode ? 'Edit Sample Information' : 'Sample Metadata'}
             </h3>
-            <p className="text-xs mb-0" style={{ color: 'var(--text-tertiary)' }}>
+            <p className="text-[13px] mb-0" style={{ color: 'var(--text-tertiary)' }}>
               {editMode ? 'Update metadata for this variant file. Changes may require re-running analysis steps.' : 'Provide details about your variant file for better analysis.'}
             </p>
             {!editMode && selectedFile && (
-              <p className="text-xs mt-3 px-2.5 py-1.5 rounded-lg truncate" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-secondary)' }}>
-                File: <span className="font-medium">{selectedFile.name}</span>
-              </p>
+              <div className="inline-flex items-center gap-2 mt-4 max-w-full pl-2.5 pr-3 py-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]" title={selectedFile.name}>
+                <FileText className="w-3.5 h-3.5 shrink-0 text-[var(--accent-teal)]" />
+                <span className="text-xs font-medium truncate text-[var(--text-secondary)]">
+                  {selectedFile.name}
+                </span>
+              </div>
             )}
             {error && showInfoForm && (
-              <div className="mt-3 p-2.5 border rounded-lg flex items-start gap-2" style={{ backgroundColor: 'var(--error-soft)', borderColor: 'var(--error)' }}>
+              <div className="mt-4 p-3 border rounded-lg flex items-start gap-2" style={{ backgroundColor: 'var(--error-soft)', borderColor: 'var(--error)' }}>
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--error)' }} />
                 <p className="text-xs" style={{ color: 'var(--error)' }}>{error}</p>
               </div>
@@ -1004,23 +1007,23 @@ const DocumentUpload = ({
             </div>
 
             <form onSubmit={handleInfoFormSubmit} className="flex flex-col flex-1 min-h-0">
-              <div className="flex-1 overflow-y-auto px-5 pb-3 space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-3">
+              <div className="flex-1 overflow-y-auto px-7 pb-4 space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
                 {/* Name - Editable */}
                 <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
+                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Name
                   </label>
                   <input
                     type="text"
                     value={sampleMetadata.name}
                     onChange={(e) => setSampleMetadata({ ...sampleMetadata, name: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border rounded-lg focus:outline-none focus:ring-1 text-xs transition-all"
+                    className="w-full px-3 h-10 border rounded-lg focus:outline-none focus:ring-1 text-sm transition-all"
                     style={{
                       borderColor: 'var(--border-default)',
                       background: 'var(--bg-input)',
                       color: 'var(--text-primary)',
-                      height: '34px'
+                      height: '40px'
                     }}
                     onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent-blue)'}
                     onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-default)'}
@@ -1030,7 +1033,7 @@ const DocumentUpload = ({
 
                 {/* Project */}
                 {/* <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
+                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Project
                   </label>
                   {!showCreateProject ? (
@@ -1105,7 +1108,7 @@ const DocumentUpload = ({
 
                 {/* Genome - Mandatory Field (auto-detected when possible) */}
                 <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
+                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Genome <span style={{ color: 'var(--error)' }}>*</span>
                   </label>
                   {editMode ? (
@@ -1113,12 +1116,12 @@ const DocumentUpload = ({
                       type="text"
                       value={sampleMetadata.genome}
                       readOnly
-                      className="w-full px-2.5 py-1.5 border rounded-lg text-xs"
+                      className="w-full px-3 h-10 border rounded-lg text-sm"
                       style={{
                         borderColor: 'var(--border-default)',
                         background: 'var(--bg-surface-hover)',
                         color: 'var(--text-tertiary)',
-                        height: '34px',
+                        height: '40px',
                       }}
                     />
                   ) : (
@@ -1129,7 +1132,7 @@ const DocumentUpload = ({
                         // Clear auto-detection badge when user manually picks
                         if (genomeDetection) setGenomeDetection((prev) => prev ? { ...prev, _userOverride: true } : prev);
                       }}
-                      placeholder={isDetectingGenome ? 'Detecting genome…' : 'Select Genome...'}
+                      placeholder={isDetectingGenome ? 'Detecting…' : 'Choose one'}
                       options={[
                         { value: 'hg19 (GRCh37)', label: 'hg19 (GRCh37)' },
                         { value: 'hg38 (GRCh38)', label: 'hg38 (GRCh38)' },
@@ -1145,12 +1148,14 @@ const DocumentUpload = ({
                     </div>
                   )}
                   {!editMode && genomeDetection?.detected_build && !isDetectingGenome && !genomeDetection._userOverride && (
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <CheckCircle className="w-3 h-3" style={{ color: 'var(--accent-teal)' }} />
-                      <span className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
-                        Auto-detected: {genomeDetection.detected_build.toUpperCase()}
-                        {genomeDetection.confidence === 'high' ? '' : ' — please verify'}
-                        {genomeDetection.source ? ` (${genomeDetection.source.replace(/_/g, ' ')})` : ''}
+                    <div
+                      className="flex items-center gap-1.5 mt-1 min-w-0"
+                      title={genomeDetection.source ? `Source: ${genomeDetection.source.replace(/_/g, ' ')}` : undefined}
+                    >
+                      <CheckCircle className="w-3 h-3 shrink-0" style={{ color: 'var(--accent-teal)' }} />
+                      <span className="text-[11px] truncate text-[var(--text-tertiary)]">
+                        Auto-detected {genomeDetection.detected_build.toUpperCase()}
+                        {genomeDetection.confidence !== 'high' && ' — verify'}
                       </span>
                     </div>
                   )}
@@ -1158,13 +1163,13 @@ const DocumentUpload = ({
 
                 {/* Sequencing Type - Mandatory Field */}
                 <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
+                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Sequencing Type <span style={{ color: 'var(--error)' }}>*</span>
                   </label>
                   <CustomSelect
                     value={sampleMetadata.sequencingType}
                     onChange={(val) => setSampleMetadata({ ...sampleMetadata, sequencingType: val })}
-                    placeholder="Select Sequencing Type..."
+                    placeholder="Choose one"
                     options={[
                       { value: 'Whole Exome (WES)', label: 'Whole Exome (WES)' },
                       { value: 'Whole Genome (WGS)', label: 'Whole Genome (WGS)' },
@@ -1176,32 +1181,32 @@ const DocumentUpload = ({
 
                 {/* Sample File Type - Auto-detected */}
                 <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
-                    Sample File Type <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>(Auto-detected)</span>
+                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                    Sample File Type
                   </label>
                   <input
                     type="text"
                     value={sampleMetadata.sampleFileType}
-                    className="w-full px-2.5 py-1.5 border rounded-lg focus:outline-none text-xs transition-all"
+                    className="w-full px-3 h-10 border rounded-lg focus:outline-none text-sm transition-all"
                     style={{
                       borderColor: 'var(--border-default)',
                       background: 'var(--bg-surface-hover)',
                       color: 'var(--text-tertiary)',
-                      height: '34px'
                     }}
                     readOnly
                   />
+                  <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">Auto-detected from file</p>
                 </div>
 
                 {/* Sample Sex - Optional */}
                 <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
+                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Sample Sex
                   </label>
                   <CustomSelect
                     value={sampleMetadata.sampleSex}
                     onChange={(val) => setSampleMetadata({ ...sampleMetadata, sampleSex: val })}
-                    placeholder="Select Sex..."
+                    placeholder="Choose one"
                     options={[
                       { value: 'Male', label: 'Male' },
                       { value: 'Female', label: 'Female' },
@@ -1212,13 +1217,13 @@ const DocumentUpload = ({
 
                 {/* Analysis Type - Mandatory Field */}
                 <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
+                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Analysis Type <span style={{ color: 'var(--error)' }}>*</span>
                   </label>
                   <CustomSelect
                     value={sampleMetadata.analysisType}
                     onChange={(val) => setSampleMetadata({ ...sampleMetadata, analysisType: val })}
-                    placeholder="Select Analysis Type..."
+                    placeholder="Choose one"
                     options={[
                       { value: 'Germline', label: 'Germline' },
                       { value: 'Somatic', label: 'Somatic' },
@@ -1234,13 +1239,13 @@ const DocumentUpload = ({
 
                 {/* Sample Source - Optional */}
                 <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
+                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Sample Source
                   </label>
                   <CustomSelect
                     value={sampleMetadata.sampleSource}
                     onChange={(val) => setSampleMetadata({ ...sampleMetadata, sampleSource: val })}
-                    placeholder="Select Source..."
+                    placeholder="Choose one"
                     options={[
                       { value: 'Tissue', label: 'Tissue' },
                       { value: 'Blood', label: 'Blood' },
@@ -1277,13 +1282,13 @@ const DocumentUpload = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {/* Sample Role */}
                     <div>
-                      <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-primary)' }}>
+                      <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Sample Role
                       </label>
                       <CustomSelect
                         value={sampleMetadata.sampleRole}
                         onChange={(val) => setSampleMetadata({ ...sampleMetadata, sampleRole: val })}
-                        placeholder="Select Role..."
+                        placeholder="Choose one"
                         options={[
                           { value: 'proband', label: 'Proband' },
                           { value: 'mother', label: 'Mother' },
@@ -1296,13 +1301,13 @@ const DocumentUpload = ({
 
                     {/* Affected Status */}
                     <div>
-                      <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-primary)' }}>
+                      <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Affected Status
                       </label>
                       <CustomSelect
                         value={sampleMetadata.affectedStatus}
                         onChange={(val) => setSampleMetadata({ ...sampleMetadata, affectedStatus: val })}
-                        placeholder="Select Status..."
+                        placeholder="Choose one"
                         options={[
                           { value: 'affected', label: 'Affected' },
                           { value: 'unaffected', label: 'Unaffected' },
@@ -1312,13 +1317,13 @@ const DocumentUpload = ({
 
                     {/* Inheritance Model */}
                     <div>
-                      <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-primary)' }}>
+                      <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Inheritance Model
                       </label>
                       <CustomSelect
                         value={sampleMetadata.inheritanceModel}
                         onChange={(val) => setSampleMetadata({ ...sampleMetadata, inheritanceModel: val })}
-                        placeholder="Select Model..."
+                        placeholder="Choose one"
                         options={[
                           { value: 'Autosomal Dominant', label: 'Autosomal Dominant' },
                           { value: 'Autosomal Recessive', label: 'Autosomal Recessive' },
@@ -1333,7 +1338,7 @@ const DocumentUpload = ({
 
                   {/* Phenotype - Full width */}
                   <div>
-                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-primary)' }}>
+                    <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
                       Phenotype
                     </label>
                     <textarea
@@ -1341,7 +1346,7 @@ const DocumentUpload = ({
                       onChange={(e) => setSampleMetadata({ ...sampleMetadata, phenotype: e.target.value })}
                       placeholder="Describe the phenotype or clinical presentation..."
                       rows={3}
-                    className="w-full px-2.5 py-1.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-xs transition-all"
+                    className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all"
                     style={{ 
                       borderColor: 'var(--border-default)',
                       background: 'var(--bg-input)',
@@ -1368,7 +1373,7 @@ const DocumentUpload = ({
                     Tumor Analysis Fields
                   </h4>
                   <div>
-                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-primary)' }}>
+                    <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
                       Tumor Type
                     </label>
                     <input
@@ -1376,12 +1381,12 @@ const DocumentUpload = ({
                       value={sampleMetadata.tumorType}
                       onChange={(e) => setSampleMetadata({ ...sampleMetadata, tumorType: e.target.value })}
                       placeholder="Enter tumor type (e.g., Breast Cancer, Lung Adenocarcinoma)..."
-                      className="w-full px-2.5 py-1.5 border rounded-lg focus:outline-none focus:ring-1 text-xs transition-all"
+                      className="w-full px-3 h-10 border rounded-lg focus:outline-none focus:ring-1 text-sm transition-all"
                       style={{
                         borderColor: 'var(--border-default)',
                         background: 'var(--bg-input)',
                         color: 'var(--text-primary)',
-                        height: '34px'
+                        height: '40px'
                       }}
                     />
                   </div>
@@ -1391,12 +1396,12 @@ const DocumentUpload = ({
               </div>
 
               {/* Form Actions — pinned footer */}
-              <div className="flex-shrink-0 flex gap-2 justify-end px-5 py-3" style={{ borderColor: 'var(--border-subtle)' }}>
+              <div className="flex-shrink-0 flex gap-2 justify-end px-7 py-4 border-t border-[var(--border-subtle)]">
                 <button
                   type="button"
                   onClick={handleInfoFormCancel}
                   disabled={isUploading}
-                  className="px-3 py-1.5 rounded-lg transition-colors text-xs font-medium disabled:opacity-40"
+                  className="h-10 px-4 rounded-lg transition-colors text-sm font-medium disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
                   style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
                   onMouseEnter={(e) => { if (!isUploading) e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; }}
@@ -1406,14 +1411,14 @@ const DocumentUpload = ({
                 <button
                   type="submit"
                   disabled={isUploading}
-                  className="px-3 py-1.5 rounded-lg transition-colors text-xs font-medium flex items-center gap-1.5 disabled:opacity-70"
+                  className="h-10 px-5 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface-raised)]"
                   style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
                   onMouseEnter={(e) => { if (!isUploading) e.currentTarget.style.opacity = '0.9'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
                 >
                   {isUploading ? (
                     <>
-                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <Loader2 className="w-4 h-4 animate-spin" />
                       {editMode ? 'Saving…' : (uploadStatusMessage || 'Processing…')}
                     </>
                   ) : (

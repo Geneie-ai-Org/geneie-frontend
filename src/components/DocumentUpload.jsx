@@ -294,7 +294,6 @@ const DocumentUpload = ({
 
   // Core file processing logic — used by both handleFileSelect and preSelectedFile
   const processFile = async (file) => {
-    console.log('[DocumentUpload] Processing file:', file.name, file.size, 'bytes');
     setError('');
     setSuccess('');
 

@@ -6,6 +6,7 @@ import DocumentUpload from './DocumentUpload';
 import { useProcessingToast } from '@/hooks/useProcessingToast';
 import ExportVariantsButton from './ExportVariantsButton';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -536,7 +537,7 @@ const VariantFilterSidebar = ({
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isApplyingPreset, setIsApplyingPreset] = useState(false);
-  useProcessingToast(isApplying ? 'Processing filters...' : null, isApplying);
+  // useProcessingToast(isApplying ? 'Processing filters...' : null, isApplying);
   const [isRunningAnnovar, setIsRunningAnnovar] = useState(false);
   const [isGardenModalOpen, setIsGardenModalOpen] = useState(false);
   const [gardenNameInput, setGardenNameInput] = useState('');
@@ -1730,37 +1731,7 @@ const VariantFilterSidebar = ({
             </div>
           )}
 
-          {variantData?.sample_only_ingest && (
-            <div
-              className="px-3 py-2.5 rounded-lg text-[11px] leading-relaxed border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
-            >
-              {variantData.s3_line_count_status === 'pending' || variantData.s3_line_count_status === 'running' ? (
-                <>
-                  Counting all variant rows in your file on the server (very large files can take several minutes).
-                  Column mapping already used the first {variantData.interpretation_sample_rows || 50} rows.
-                </>
-              ) : annotatedRowBaseline > 0 ? (
-                variantData?.annotated_row_count || variantData?.sample_only_ingest ? (
-                  <>
-                    Annotated variant file ({annotatedRowBaseline.toLocaleString()} rows). Each Apply re-scans this full
-                    annotated file on S3 (all active filters combined). Uploaded VCF may list more rows before annotation.
-                  </>
-                ) : (
-                  <>
-                    Full file on cloud storage ({annotatedRowBaseline.toLocaleString()} data rows). Column mapping used the first{' '}
-                    {variantData.interpretation_sample_rows || 50} rows only — not loaded into the database yet. Run ANNOVAR,
-                    then apply the ACMG filter (or apply sidebar filters once) to load a working set. Use Reset to clear
-                    filters and start over from the full file.
-                  </>
-                )
-              ) : (
-                <>
-                  Full file on cloud storage. Column mapping used the first {variantData.interpretation_sample_rows || 50}{' '}
-                  rows only. Run ANNOVAR, then apply the ACMG filter. Use Reset to reload the full file row count.
-                </>
-              )}
-            </div>
-          )}
+          {/* File-context explanation moved into an Info popover next to the "Under consideration" title. */}
 
           {/* Variant Count Display with graphical bar */}
           {hasActiveManualFilters &&
@@ -1780,7 +1751,46 @@ const VariantFilterSidebar = ({
           {fileTotalVariants > 0 && (
             <div className="sidebar-card">
               <div className="flex items-baseline justify-between mb-2 gap-2">
-                <span className="text-[13px] font-medium text-[var(--text-primary)]">Under consideration</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-[13px] font-medium text-[var(--text-primary)]">Under consideration</span>
+                  {variantData?.sample_only_ingest && (
+                    <Popover>
+                      <PopoverTrigger
+                        className="inline-flex items-center justify-center w-4 h-4 rounded text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                        aria-label="About this file"
+                      >
+                        <Info className="w-3.5 h-3.5" />
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="bottom"
+                        align="start"
+                        sideOffset={6}
+                        className="w-72 p-3 text-[12px] leading-relaxed text-[var(--text-secondary)] bg-[var(--bg-surface-raised)] border border-[var(--border-default)] rounded-lg shadow-xl"
+                      >
+                        {variantData.s3_line_count_status === 'pending' || variantData.s3_line_count_status === 'running' ? (
+                          <>
+                            Counting all variant rows in your file on the server (very large files can take several minutes).
+                            Column mapping already used the first {variantData.interpretation_sample_rows || 50} rows.
+                          </>
+                        ) : annotatedRowBaseline > 0 ? (
+                          variantData?.annotated_row_count || variantData?.sample_only_ingest ? (
+                            <>
+                              Annotated variant file ({annotatedRowBaseline.toLocaleString()} rows). Each Apply re-scans this full annotated file on S3 (all active filters combined). Uploaded VCF may list more rows before annotation.
+                            </>
+                          ) : (
+                            <>
+                              Full file on cloud storage ({annotatedRowBaseline.toLocaleString()} data rows). Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only — not loaded into the database yet. Run ANNOVAR, then apply the ACMG filter (or apply sidebar filters once) to load a working set. Use Reset to clear filters and start over from the full file.
+                            </>
+                          )
+                        ) : (
+                          <>
+                            Full file on cloud storage. Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only. Run ANNOVAR, then apply the ACMG filter. Use Reset to reload the full file row count.
+                          </>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
                 <span className="text-[13px] font-semibold tabular-nums text-[var(--accent-teal)]">
                   {underConsiderationCount.toLocaleString()}
                   <span className="text-[var(--text-tertiary)] font-normal">

@@ -1008,17 +1008,13 @@ const ChatPage = () => {
   const isInputDisabled =
     !isAuthReady || isCurrentlyActive || isChatLimitReached || variantUploadInProgress;
 
-  let inputPlaceholder = "Ask a question about bioinformatics...";
+  let inputPlaceholder = "Ask anything about bioinformatics...";
   if (variantUploadInProgress) {
     inputPlaceholder = 'Upload in progress — chat will resume when your file is ready…';
   } else if (isCurrentlyActive) {
-    inputPlaceholder = "geneie is thinking...";
-  } else if (isChatPipelineGated && chatEligibility.message) {
-    const short =
-      chatEligibility.message.length > 120
-        ? `${chatEligibility.message.slice(0, 117)}…`
-        : chatEligibility.message;
-    inputPlaceholder = short;
+    inputPlaceholder = "Geneie is thinking...";
+  } else if (isChatPipelineGated) {
+    inputPlaceholder = 'Chat disabled, see above message';
   } else if (isChatLimitReached) {
     inputPlaceholder = userTier === 'guest'
       ? `Limit reached (${DEFAULT_GUEST_CHAT_LIMIT} exchanges). Please Sign Up or Log In.`

@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu } from 'lucide-react';
+import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
+import { toast } from 'sonner';
 
-import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from '../components/prompt-kit/chat-container';
-import { ScrollButton } from '../components/prompt-kit/scroll-button';
-import { Markdown } from '../components/prompt-kit/markdown';
+import { useStickToBottom } from 'use-stick-to-bottom';
+import { Markdown } from '../components/chat/ChatMarkdown';
 
 import { useAuth } from '../hooks/useAuth';
 import { useChatMessaging } from '../hooks/useChatMessaging';
@@ -23,11 +23,13 @@ import VariantFilterSidebar from '../components/VariantFilterSidebar';
 import ProfileManagement from '../components/ProfileManagement';
 import SubscriptionSuccess from '../components/SubscriptionSuccess';
 import SubscriptionCanceled from '../components/SubscriptionCanceled';
-import ProcessingNotification from '../components/ProcessingNotification';
 import ColumnInterpretationResults from '../components/ColumnInterpretationResults';
 import VariantAnalysisPipeline from '../components/VariantAnalysisPipeline';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
 import VariantUploadLoadingModal from '@/components/VariantUploadLoadingModal';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { apiUrl, getApiOrigin } from '@/config/api';
 import { buildVariantDataFromConversation, variantFileRowCountForSidebar } from '@/lib/variantPipelineUtils';
@@ -49,6 +51,14 @@ const ChatPage = () => {
   const [variantData, setVariantData] = useState(null);
   const [isVariantSidebarOpen, setIsVariantSidebarOpen] = useState(false);
   const [isEditSampleModalOpen, setIsEditSampleModalOpen] = useState(false);
+
+  // Stick-to-bottom for the message list (replaces prompt-kit ChatContainer)
+  const {
+    scrollRef: chatScrollRef,
+    contentRef: chatContentRef,
+    isAtBottom: chatIsAtBottom,
+    scrollToBottom: chatScrollToBottom,
+  } = useStickToBottom();
 
 
   // Auto-close variant sidebar when no document is present
@@ -997,19 +1007,17 @@ const ChatPage = () => {
   }
 
   const isInputDisabled =
-    !isAuthReady || isCurrentlyActive || isChatLimitReached || variantUploadInProgress;
+    !isAuthReady || isCurrentlyActive || isChatLimitReached || variantUploadInProgress || isRunningAnnovar;
 
-  let inputPlaceholder = "Ask a question about bioinformatics...";
-  if (variantUploadInProgress) {
+  let inputPlaceholder = "Ask anything about bioinformatics...";
+  if (isRunningAnnovar) {
+    inputPlaceholder = 'ANNOVAR is running — chat will resume when annotation is complete…';
+  } else if (variantUploadInProgress) {
     inputPlaceholder = 'Upload in progress — chat will resume when your file is ready…';
   } else if (isCurrentlyActive) {
-    inputPlaceholder = "geneie is thinking...";
-  } else if (isChatPipelineGated && chatEligibility.message) {
-    const short =
-      chatEligibility.message.length > 120
-        ? `${chatEligibility.message.slice(0, 117)}…`
-        : chatEligibility.message;
-    inputPlaceholder = short;
+    inputPlaceholder = "Geneie is thinking...";
+  } else if (isChatPipelineGated) {
+    inputPlaceholder = 'Chat disabled, see above message';
   } else if (isChatLimitReached) {
     inputPlaceholder = userTier === 'guest'
       ? `Limit reached (${DEFAULT_GUEST_CHAT_LIMIT} exchanges). Please Sign Up or Log In.`
@@ -1065,15 +1073,25 @@ const ChatPage = () => {
           className="flex items-center gap-2 px-3 h-12 shrink-0 border-b"
           style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-app)' }}
         >
-          <button
-            type="button"
-            onClick={() => setIsSidebarOpen(true)}
-            className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
-            style={{ color: 'var(--text-secondary)' }}
-            aria-label="Open sidebar"
-          >
-            <Menu className="w-[18px] h-[18px]" />
-          </button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsSidebarOpen(true)}
+                    className="rounded-lg hover:bg-white/5 text-[var(--text-secondary)]"
+                    aria-label="Open sidebar"
+                  >
+                    <Menu className="size-[18px]" />
+                  </Button>
+                }
+              />
+              <TooltipContent>Open sidebar</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <span className="text-sm font-brand shrink-0" style={{ color: 'var(--text-primary)' }}>Geneie</span>
             {isConversationStarted && (
@@ -1269,10 +1287,13 @@ const ChatPage = () => {
               </header>}
 
 
-              <ChatContainerRoot className="flex-1 min-w-0 overflow-x-hidden relative"
+              <div
+                ref={chatScrollRef}
+                role="log"
+                className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden relative"
                 style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
               >
-                <ChatContainerContent className="chat-column-inner space-y-8 pt-5 pb-4">
+                <div ref={chatContentRef} className="chat-column-inner space-y-8 pt-5 pb-4">
                   <div className="space-y-8 pb-4 w-full">
                     {messages.map((msg, index) => (
                       <ChatMessage
@@ -1299,8 +1320,10 @@ const ChatPage = () => {
                                 {typingText}
                               </Markdown>
                             ) : (
-                              <div className="flex items-center gap-2 pt-1">
-                                <div className="thinking-loader" />
+                              <div className="space-y-2.5 pt-1" aria-label="Assistant is thinking" role="status">
+                                <Skeleton className="h-3.5 w-[85%]" />
+                                <Skeleton className="h-3.5 w-[92%]" />
+                                <Skeleton className="h-3.5 w-[70%]" />
                               </div>
                             )}
                           </div>
@@ -1308,15 +1331,25 @@ const ChatPage = () => {
                       </div>
                     )}
                   </div>
-                </ChatContainerContent>
-                <ChatContainerScrollAnchor />
-                <div className="sticky bottom-4 flex justify-center pointer-events-none" style={{ zIndex: 10 }}>
-                  <ScrollButton
-                    className="pointer-events-auto shadow-lg"
-                    style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-                  />
                 </div>
-              </ChatContainerRoot>
+                <div className="sticky bottom-4 flex justify-center pointer-events-none" style={{ zIndex: 10 }}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => chatScrollToBottom()}
+                    aria-label="Scroll to bottom"
+                    className={`h-10 w-10 rounded-full transition-all duration-150 ease-out pointer-events-auto shadow-lg ${
+                      !chatIsAtBottom
+                        ? 'translate-y-0 scale-100 opacity-100'
+                        : 'pointer-events-none translate-y-4 scale-95 opacity-0'
+                    }`}
+                    style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
+                  >
+                    <ChevronDown className="size-5" />
+                  </Button>
+                </div>
+              </div>
 
               {/* Bottom input — conversation mode */}
               <div className="chat-column-inner pb-3 pt-1.5 shrink-0" style={{ backgroundColor: 'var(--bg-app)' }}>
@@ -1554,12 +1587,6 @@ const ChatPage = () => {
         <SubscriptionCanceled onClose={() => setShowSubscriptionCanceled(false)} />
       )}
 
-      {/* Global Processing Notification */}
-      <ProcessingNotification
-        message={null}
-        isVisible={false}
-      />
-
       {/* Column Interpretation Results Modal */}
       {showFileAnalysisModal && (
         <ColumnInterpretationResults
@@ -1596,41 +1623,13 @@ const ChatPage = () => {
           onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
           isApplyingProprietaryFilter={isApplyingProprietaryFilter}
           isRunningAnnovar={isRunningAnnovar}
+          hasAnnotatedFile={pipelineSnapshot.hasAnnotatedFile}
           acmgFilterActive={conversationFilterState.activeProprietaryFilter === 'filter_1'}
           acmgFilterCanApply={acmgFilterCanApply}
           filter2Active={conversationFilterState.activeProprietaryFilter === 'filter_2'}
           filter2CanApply={filter2CanApply}
           showVcfTabHighlight={columnInterpretationResult?.step1?.passed === false}
-          onDeleteDocument={async () => {
-            console.log('[App] Deleting document from conversation');
-            try {
-              const auth = getAuth();
-              const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-              if (token && activeConversationId) {
-                const deleteResponse = await fetch(apiUrl(`/api/conversation/${activeConversationId}/document`), {
-                  method: 'DELETE',
-                  headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                  }
-                });
-                if (deleteResponse.ok) {
-                  const deleteData = await deleteResponse.json();
-                  console.log('[App] Backend document deletion:', deleteData);
-                } else {
-                  console.warn('[App] Backend document deletion failed');
-                }
-              }
-            } catch (backendError) {
-              console.warn('[App] Backend document deletion error:', backendError);
-            }
-            setCurrentDocument(null);
-            setVariantData(null);
-            setColumnInterpretationResult(null);
-            setShowInterpretationModal(false);
-            interpretationShownRef.current = false;
-            console.log('[App] Document removed successfully');
-          }}
+          onDeleteDocument={() => handleDocumentUpload(null)}
         />
       )}
 
@@ -1653,6 +1652,10 @@ const ChatPage = () => {
           onEditSaved={(result) => {
             setIsEditSampleModalOpen(false);
             const impact = result?.metadata_edit_impact;
+            const backendMessage =
+              (typeof result?.message === 'string' && result.message.trim()) ||
+              (typeof impact?.message === 'string' && impact.message.trim()) ||
+              '';
             if (impact) {
               if (impact.requires_filter_reset || impact.requires_annovar_rerun) {
                 setVariantData(null);
@@ -1665,7 +1668,16 @@ const ChatPage = () => {
                 resetConversationPipeline();
               }
               if (impact.requires_annovar_rerun) {
+                // Explain what just happened before the pipeline kicks off silently.
+                toast.info(
+                  backendMessage ||
+                    'Genome build changed. Previous ANNOVAR results were cleared — re-running now.',
+                  { duration: 6000 }
+                );
                 setTimeout(() => runAnnovarForCurrentConversation(), 300);
+              } else if (backendMessage) {
+                // No re-run needed, but the backend still has something to say (e.g. filters reset).
+                toast.info(backendMessage, { duration: 5000 });
               }
             }
             mongodbApi.getConversation(activeConversationId).then((convData) => {

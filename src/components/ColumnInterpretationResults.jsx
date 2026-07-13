@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
-import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2, ChevronDown } from 'lucide-react';
+import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2 } from 'lucide-react';
 import qiagenLogo from '../Qiagen.svg.png';
 import { ACMG_FILTER_DISPLAY_NAME } from './VariantFilterSidebar';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 
 /** Dark theme tokens — aligned with App.css */
 const C = {
@@ -49,11 +56,11 @@ const ColumnInterpretationResults = ({
   chatBlockedMessage,
   onChatBlocked,
   isRunningAnnovar = false,
+  hasAnnotatedFile = false,
 }) => {
   const [expandedStep, setExpandedStep] = useState(null); // Track which step is expanded
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // Explicit remove-file confirmation only
   const [showAnnovarConfirm, setShowAnnovarConfirm] = useState(false); // Confirm ANNOVAR when all columns present
-  const [expandedSections, setExpandedSections] = useState({}); // Track expanded column sections in step details
 
   const backgroundJobActive = isRunningAnnovar || isApplyingProprietaryFilter;
   const genomeMismatch = interpretationResult?.genome_build_check?.status === 'mismatch';
@@ -227,84 +234,86 @@ const ColumnInterpretationResults = ({
     const found = entries.filter(([, c]) => c.found);
     const issues = entries.filter(([colName, c]) => !c.found);
     const allFound = issues.length === 0;
-    const isExpanded = !!expandedSections[sectionKey];
 
+    if (allFound) {
+      /* Happy path: summary + expandable detail */
+      return (
+        <Accordion>
+          <AccordionItem value={sectionKey} className="border-0">
+            <AccordionTrigger className="py-0 text-xs font-normal hover:no-underline items-center">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" style={{ color: C.success }} />
+                <span className="text-xs" style={{ color: C.textMuted }}>
+                  {label}: {found.length}/{entries.length} columns found
+                </span>
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="pb-0">
+              <div className="mt-2 ml-5 flex flex-wrap gap-1.5">
+                {entries.map(([colName, colInfo]) => {
+                  const label = colInfo.matched_column || colName;
+                  const roleDiffers = colInfo.matched_column && colInfo.matched_column !== colName;
+                  return (
+                    <span
+                      key={colName}
+                      title={roleDiffers ? `Role: ${colName}` : label}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+                      style={{
+                        backgroundColor: C.successSoft || `${C.success}18`,
+                        borderColor: `${C.success}40`,
+                        color: C.success,
+                      }}
+                    >
+                      <CheckCircle2 className="w-3 h-3 shrink-0" />
+                      {label}
+                    </span>
+                  );
+                })}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      );
+    }
+
+    /* Issues present: show problems directly, found columns behind expand */
     return (
       <div>
-        {allFound ? (
-          /* Happy path: summary + expandable detail */
-          <>
-            <button
-              type="button"
-              onClick={() => setExpandedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }))}
-              className="flex items-center gap-1.5 w-full text-left group"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" style={{ color: C.success }} />
-              <span className="text-xs" style={{ color: C.textMuted }}>
-                {label}: {found.length}/{entries.length} columns found
-              </span>
-              <ChevronDown
-                className="w-3 h-3 ml-auto shrink-0 transition-transform"
-                style={{ color: C.textDim, transform: isExpanded ? 'rotate(180deg)' : 'none' }}
-              />
-            </button>
-            {isExpanded && (
-              <div className="mt-1.5 ml-5 space-y-1">
-                {entries.map(([colName, colInfo]) => (
-                  <div key={colName} className="flex items-center justify-between text-sm">
-                    <span style={{ color: C.textMuted }}>{colName}:</span>
-                    <span className="font-medium text-xs" style={{ color: C.success }}>✓ {colInfo.matched_column || 'Found'}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        ) : (
-          /* Issues present: show problems directly, found columns behind expand */
-          <>
-            <p className="font-semibold mb-1.5 text-xs" style={{ color: C.text }}>{label}:</p>
-            <div className="space-y-1">
-              {issues.map(([colName, colInfo]) => (
-                <div key={colName} className="flex items-center justify-between text-sm">
-                  <span style={{ color: C.textMuted }}>{colName}:</span>
-                  {columnsNoValidValues.includes(colName) ? (
-                    <span className="font-medium text-xs" style={{ color: C.warningText }}>○ No valid values</span>
-                  ) : (
-                    <span className="font-medium text-xs" style={{ color: opts.missingColor || C.warning }}>
-                      ○ {opts.missingLabel || 'Missing'}
-                    </span>
-                  )}
-                </div>
-              ))}
+        <p className="font-semibold mb-1.5 text-xs" style={{ color: C.text }}>{label}:</p>
+        <div className="space-y-1">
+          {issues.map(([colName, colInfo]) => (
+            <div key={colName} className="flex items-center justify-between text-sm">
+              <span style={{ color: C.textMuted }}>{colName}:</span>
+              {columnsNoValidValues.includes(colName) ? (
+                <span className="font-medium text-xs" style={{ color: C.warningText }}>○ No valid values</span>
+              ) : (
+                <span className="font-medium text-xs" style={{ color: opts.missingColor || C.warning }}>
+                  ○ {opts.missingLabel || 'Missing'}
+                </span>
+              )}
             </div>
-            {found.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setExpandedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }))}
-                  className="flex items-center gap-1 mt-1.5"
-                >
-                  <span className="text-[11px]" style={{ color: C.textDim }}>
-                    {found.length} column{found.length > 1 ? 's' : ''} found
-                  </span>
-                  <ChevronDown
-                    className="w-3 h-3 transition-transform"
-                    style={{ color: C.textDim, transform: isExpanded ? 'rotate(180deg)' : 'none' }}
-                  />
-                </button>
-                {isExpanded && (
-                  <div className="mt-1 ml-1 space-y-1">
-                    {found.map(([colName, colInfo]) => (
-                      <div key={colName} className="flex items-center justify-between text-sm">
-                        <span style={{ color: C.textMuted }}>{colName}:</span>
-                        <span className="font-medium text-xs" style={{ color: C.success }}>✓ {colInfo.matched_column || 'Found'}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </>
+          ))}
+        </div>
+        {found.length > 0 && (
+          <Accordion>
+            <AccordionItem value={sectionKey} className="border-0">
+              <AccordionTrigger className="py-0 mt-1.5 text-[11px] font-normal hover:no-underline items-center">
+                <span className="text-[11px]" style={{ color: C.textDim }}>
+                  {found.length} column{found.length > 1 ? 's' : ''} found
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="pb-0">
+                <div className="mt-1 ml-1 space-y-1">
+                  {found.map(([colName, colInfo]) => (
+                    <div key={colName} className="flex items-center justify-between text-sm">
+                      <span style={{ color: C.textMuted }}>{colName}:</span>
+                      <span className="font-medium text-xs" style={{ color: C.success }}>✓ {colInfo.matched_column || 'Found'}</span>
+                    </div>
+                  ))}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         )}
       </div>
     );
@@ -318,53 +327,50 @@ const ColumnInterpretationResults = ({
     const found = entries.filter(([, c]) => c.found);
     const issues = entries.filter(([, c]) => !c.found);
     const allFound = issues.length === 0;
-    const isExpanded = !!expandedSections[sectionKey];
+
+    if (allFound) {
+      return (
+        <Accordion>
+          <AccordionItem value={sectionKey} className="border-0">
+            <AccordionTrigger className="py-0 text-xs font-normal hover:no-underline items-center">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" style={{ color: C.success }} />
+                <span className="text-xs" style={{ color: C.textMuted }}>
+                  {label}: {found.length}/{entries.length} columns found
+                </span>
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="pb-0">
+              <div className="mt-1.5 ml-5 space-y-1">
+                {entries.map(([colName, colInfo]) => (
+                  <div key={colName} className="flex items-center justify-between text-sm">
+                    <span style={{ color: C.textMuted }}>{colName}:</span>
+                    <span className="font-medium text-xs" style={{ color: C.success }}>
+                      ✓ {colInfo.matched_column || 'Found'}
+                      {colInfo.required && <span className="ml-1">(Required)</span>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      );
+    }
 
     return (
       <div>
-        {allFound ? (
-          <button
-            type="button"
-            onClick={() => setExpandedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }))}
-            className="flex items-center gap-1.5 w-full text-left"
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" style={{ color: C.success }} />
-            <span className="text-xs" style={{ color: C.textMuted }}>
-              {label}: {found.length}/{entries.length} columns found
-            </span>
-            <ChevronDown
-              className="w-3 h-3 ml-auto shrink-0 transition-transform"
-              style={{ color: C.textDim, transform: isExpanded ? 'rotate(180deg)' : 'none' }}
-            />
-          </button>
-        ) : (
-          <p className="font-semibold mb-1.5 text-xs" style={{ color: C.text }}>{label}:</p>
-        )}
-        {allFound && isExpanded && (
-          <div className="mt-1.5 ml-5 space-y-1">
-            {entries.map(([colName, colInfo]) => (
-              <div key={colName} className="flex items-center justify-between text-sm">
-                <span style={{ color: C.textMuted }}>{colName}:</span>
-                <span className="font-medium text-xs" style={{ color: C.success }}>
-                  ✓ {colInfo.matched_column || 'Found'}
-                  {colInfo.required && <span className="ml-1">(Required)</span>}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-        {!allFound && (
-          <div className="space-y-1">
-            {issues.map(([colName, colInfo]) => (
-              <div key={colName} className="flex items-center justify-between text-sm">
-                <span style={{ color: C.textMuted }}>{colName}:</span>
-                <span className="font-medium text-xs" style={{ color: colInfo.required ? C.warning : C.textDim }}>
-                  {colInfo.required ? '○ Missing (Required)' : '○ Not found (Optional)'}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+        <p className="font-semibold mb-1.5 text-xs" style={{ color: C.text }}>{label}:</p>
+        <div className="space-y-1">
+          {issues.map(([colName, colInfo]) => (
+            <div key={colName} className="flex items-center justify-between text-sm">
+              <span style={{ color: C.textMuted }}>{colName}:</span>
+              <span className="font-medium text-xs" style={{ color: colInfo.required ? C.warning : C.textDim }}>
+                {colInfo.required ? '○ Missing (Required)' : '○ Not found (Optional)'}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     );
   };
@@ -474,7 +480,7 @@ const ColumnInterpretationResults = ({
     },
     {
       n: 2,
-      name: step2?.step_name || 'Proprietary Filters',
+      name: step2?.step_name || 'Annotation Stage',
       status: step2Status,
       progress: step2Progress,
       data: step2,
@@ -751,13 +757,15 @@ const ColumnInterpretationResults = ({
 
           {/* Selected step detail panel */}
           {selectedStepData && (
-            <div className="border rounded-lg p-4" style={{ borderColor: C.border }}>
-              {renderStepDetails(selectedStepData.n, selectedStepData.data) || (
-                <p className="mt-3 text-sm" style={{ color: C.textMuted }}>
-                  No column details available for this step yet.
-                </p>
-              )}
-            </div>
+            <Card className="bg-transparent ring-0 border rounded-lg py-0 gap-0" style={{ borderColor: C.border }}>
+              <CardContent className="p-4">
+                {renderStepDetails(selectedStepData.n, selectedStepData.data) || (
+                  <p className="mt-3 text-sm" style={{ color: C.textMuted }}>
+                    No column details available for this step yet.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
           )}
 
           {/* Limitation: not all Pathog predictor columns present (Step 2) */}
@@ -771,7 +779,9 @@ const ColumnInterpretationResults = ({
 
           {/* Tools — annotation + proprietary filters */}
           <div className="pt-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: C.textDim }}>Tools</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: C.textDim }}>
+              Proprietary Filters
+            </p>
             <div className="flex flex-wrap items-center gap-2">
               {/* VCF Upload Button - Highlighted when recommended */}
               {showVcfTabHighlight && (
@@ -824,6 +834,7 @@ const ColumnInterpretationResults = ({
               )}
 
               {/* Run ANNOVAR */}
+              {!hasAnnotatedFile && (
               <div className="relative group">
                 <button
                   onClick={(step1?.passed && !genomeMismatch) ? () => {
@@ -870,6 +881,7 @@ const ColumnInterpretationResults = ({
                   </div>
                 )}
               </div>
+              )}
 
               {/* ACMG Filter */}
               <div className="relative group">

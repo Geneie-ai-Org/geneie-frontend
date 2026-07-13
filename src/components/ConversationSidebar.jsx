@@ -1,9 +1,30 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, Plus, Trash2, ChevronLeft, ChevronRight, User, Settings, LogOut } from 'lucide-react';
+import { MessageSquare, Plus, Trash2, ChevronLeft, ChevronRight, Settings, LogOut } from 'lucide-react';
 import { getAuth, signOut } from 'firebase/auth';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import NotificationBell from './NotificationBell';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Progress } from '@/components/ui/progress';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 
 const ConversationSidebar = ({
     conversations,
@@ -22,20 +43,14 @@ const ConversationSidebar = ({
     const isMobile = useIsMobile();
     const navigate = useNavigate();
     const freeChatLimit = userTier === 'free' ? chatLimit : Infinity;
-    const [showAccountMenu, setShowAccountMenu] = useState(false);
-    const menuRef = useRef(null);
-    const accountBtnRef = useRef(null);
+    const [pendingDeleteId, setPendingDeleteId] = useState(null);
 
-    // Close menu on outside click
-    useEffect(() => {
-        const handleClickOutside = (e) => {
-            if (menuRef.current && !menuRef.current.contains(e.target)) {
-                setShowAccountMenu(false);
-            }
-        };
-        if (showAccountMenu) document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [showAccountMenu]);
+    const confirmDelete = () => {
+        if (pendingDeleteId != null) {
+            onDeleteConversation(pendingDeleteId);
+        }
+        setPendingDeleteId(null);
+    };
 
     // Get display name from Firebase
     const auth = getAuth();
@@ -46,7 +61,6 @@ const ConversationSidebar = ({
     const handleSignOut = async () => {
         try {
             await signOut(auth);
-            setShowAccountMenu(false);
             navigate('/auth');
         } catch (err) {
             console.error('Sign out error:', err);
@@ -94,7 +108,7 @@ const ConversationSidebar = ({
             {!isMobile && (
                 <button
                     onClick={onToggle}
-                    className="absolute z-50 w-5 h-5 rounded-full flex items-center justify-center transition-colors right-[-10px] top-[37px] bg-[var(--bg-surface-raised)] text-[var(--text-secondary)]"
+                    className="absolute z-50 w-5 h-5 rounded-full flex items-center justify-center right-[-10px] top-[37px] bg-[var(--bg-surface-raised)] text-[var(--text-secondary)] border border-[var(--border-subtle)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
                     aria-label={isOpen ? "Collapse sidebar" : "Expand sidebar"}
                 >
                     {isOpen ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
@@ -107,20 +121,15 @@ const ConversationSidebar = ({
                 {/* Top: Logo — desktop only (mobile uses main top bar) */}
                 {!isMobile && (
                     <div className={`flex items-center h-16 overflow-hidden shrink-0 ${isOpen ? 'px-3' : 'justify-center'}`}>
-                        <div className={`flex items-center min-w-0 ${isOpen ? 'gap-2.5' : ''}`}>
-                            <div
-                                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold tracking-wide"
-                                style={{
-                                    backgroundColor: isOpen ? 'var(--accent-teal-soft)' : 'transparent',
-                                    color: 'var(--accent-teal)'
-                                }}
-                                aria-hidden
-                            >
-                                G
-                            </div>
+                        <div className={`flex items-center min-w-0 ${isOpen ? 'gap-0 pl-2' : ''}`}>
+                            <img
+                                src="/geneie-g.svg"
+                                alt="G"
+                                className="w-6 h-6 shrink-0"
+                            />
                             {isOpen && (
                                 <span className="text-sm font-semibold font-brand whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>
-                                    geneie
+                                    eneie
                                 </span>
                             )}
                         </div>
@@ -131,11 +140,10 @@ const ConversationSidebar = ({
                 <div className={`py-2 overflow-hidden shrink-0 ${isOpen ? 'px-3' : 'flex justify-center'}`}>
                     <button
                         onClick={onCreateConversation}
-                        className={`rounded-lg text-sm transition-colors flex items-center hover:bg-white/5 overflow-hidden ${isOpen ? 'w-full py-2.5 px-3 gap-2.5' : 'w-8 h-8 justify-center shrink-0'}`}
-                        style={{ color: 'var(--text-primary)' }}
+                        className={`rounded-lg text-sm text-[var(--text-primary)] transition-colors flex items-center overflow-hidden hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${isOpen ? 'w-full py-2.5 px-3 gap-2.5' : 'w-8 h-8 justify-center shrink-0'}`}
                         title="New Chat"
                     >
-                        <Plus className="w-5 h-5 shrink-0" style={{ color: 'var(--text-secondary)' }} />
+                        <Plus className="w-4 h-4 shrink-0 text-[var(--text-secondary)]" />
                         {isOpen && (
                             <span className="whitespace-nowrap">
                                 New Chat
@@ -145,127 +153,128 @@ const ConversationSidebar = ({
                 </div>
 
                 {/* Conversations List — expanded only */}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3">
+                <ScrollArea className="flex-1 min-h-0">
+                    <div className="px-3 pb-3">
                     {isOpen && conversations.length === 0 && (
-                        <div className="text-center py-12" style={{ color: 'var(--text-tertiary)' }}>
-                            <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                            <p className="text-sm">No conversations yet</p>
+                        <div className="text-center py-12 text-[var(--text-tertiary)]">
+                            <MessageSquare className="w-6 h-6 mx-auto mb-2 opacity-30" />
+                            <p className="text-sm">No conversations.</p>
+                            <p className="text-xs mt-1 text-[var(--text-disabled)]">Start one from “New Chat”.</p>
                         </div>
                     )}
                     {isOpen && conversations.length > 0 && grouped.map((group) => (
-                            <div key={group.label} className="mb-4">
-                                <p className="px-3 pt-4 pb-2 text-xs font-medium whitespace-nowrap overflow-hidden" style={{ color: 'var(--text-tertiary)' }}>
+                            <div key={group.label} className="mb-3">
+                                <p className="px-3 pt-3 pb-1.5 text-[11px] font-medium uppercase tracking-wider whitespace-nowrap overflow-hidden text-[var(--text-tertiary)]">
                                     {group.label}
                                 </p>
-                                {group.items.map((conv) => (
-                                    <div
-                                        key={conv.id}
-                                        className="group relative px-3 py-2.5 rounded-lg cursor-pointer transition-colors hover:bg-white/5 overflow-hidden"
-                                        style={{
-                                            backgroundColor: activeConversationId === conv.id ? 'var(--bg-surface-hover)' : 'transparent',
-                                        }}
-                                        onClick={() => onSelectConversation(conv.id)}
-                                    >
-                                        <div className="flex items-center justify-between gap-2">
-                                            <h3 className="text-sm truncate flex-1 whitespace-nowrap" style={{
-                                                color: activeConversationId === conv.id ? 'var(--text-primary)' : 'var(--text-secondary)'
-                                            }}>
-                                                {conv.title || 'New Conversation'}
-                                            </h3>
+                                {group.items.map((conv) => {
+                                    const active = activeConversationId === conv.id;
+                                    return (
+                                        <div key={conv.id} className="group relative">
                                             <button
+                                                type="button"
+                                                onClick={() => onSelectConversation(conv.id)}
+                                                aria-current={active ? 'page' : undefined}
+                                                className={`w-full text-left px-3 py-2 rounded-lg transition-colors overflow-hidden hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${active ? 'bg-[var(--bg-surface-hover)]' : 'bg-transparent'}`}
+                                            >
+                                                <h3 className={`text-sm truncate whitespace-nowrap pr-6 ${active ? 'text-[var(--text-primary)] font-medium' : 'text-[var(--text-secondary)]'}`}>
+                                                    {conv.title || 'New Conversation'}
+                                                </h3>
+                                            </button>
+                                            <button
+                                                type="button"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    onDeleteConversation(conv.id);
+                                                    setPendingDeleteId(conv.id);
                                                 }}
-                                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-white/10 shrink-0"
-                                                style={{ color: 'var(--text-tertiary)' }}
-                                                aria-label="Delete conversation"
+                                                className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-1 rounded text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                                                aria-label={`Delete "${conv.title || 'New Conversation'}"`}
                                             >
-                                                <Trash2 className="w-3.5 h-3.5" />
+                                                <Trash2 className="w-4 h-4" />
                                             </button>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         ))}
-                </div>
+                    </div>
+                </ScrollArea>
 
                 {/* Bottom section */}
                 <div className="mt-auto">
-                    {/* Account row: avatar + name on left, bell on right */}
-                    <div className={`relative flex items-center ${isOpen ? 'px-3 gap-2' : 'flex-col gap-1'}`} ref={menuRef}>
-                        {/* Popover menu */}
-                        {showAccountMenu && (
-                            <div
-                                className="rounded-xl py-1 shadow-lg w-56 z-50 bg-zinc-900 border border-zinc-700/80"
-                                style={isOpen
-                                  ? { position: 'absolute', bottom: '100%', left: '12px', right: '12px', marginBottom: '4px' }
-                                  : (() => {
-                                      const rect = accountBtnRef.current?.getBoundingClientRect();
-                                      return rect
-                                        ? { position: 'fixed', bottom: `${window.innerHeight - rect.top + 4}px`, left: `${rect.right + 8}px`, zIndex: 9999 }
-                                        : { position: 'absolute', bottom: 0, left: '100%', marginLeft: '8px' };
-                                    })()
-                                }
-                            >
-                                {/* User info */}
-                                <div className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-zinc-300">
-                                    <User className="w-4 h-4 shrink-0" />
-                                    <div className="min-w-0">
-                                        {email && (
-                                            <p className="text-sm truncate mt-0.5 text-zinc-300">
-                                                {email}
-                                            </p>
-                                        )}
+                    {/* Account bar: profile + bell as one segmented unit */}
+                    {isOpen ? (
+                        <div className="px-3 pb-2">
+                            <div className="flex items-stretch rounded-lg overflow-hidden bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger
+                                        className="flex-1 min-w-0 h-10 px-2.5 flex items-center gap-2.5 cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)]"
+                                    >
+                                        <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-[var(--accent-blue-soft)]">
+                                            <span className="text-[11px] font-semibold text-[var(--accent-blue)]">
+                                                {displayName.charAt(0).toUpperCase()}
+                                            </span>
+                                        </div>
+                                        <span className="text-sm truncate whitespace-nowrap text-[var(--text-secondary)]">
+                                            {displayName}
+                                        </span>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent side="top" align="start" className="w-56">
+                                        <DropdownMenuGroup>
+                                            <DropdownMenuLabel>{email || displayName}</DropdownMenuLabel>
+                                        </DropdownMenuGroup>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={onOpenProfile}>
+                                            <Settings /> Settings
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
+                                            <LogOut /> Sign out
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+
+                                <div className="w-px bg-[var(--border-subtle)]" aria-hidden />
+
+                                <NotificationBell
+                                    onNavigateToConversation={(convId) => onSelectConversation(convId)}
+                                    triggerClassName="h-10 w-10 shrink-0 flex items-center justify-center text-[var(--text-secondary)] cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)]"
+                                />
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center gap-1 pb-2">
+                            <DropdownMenu>
+                                <DropdownMenuTrigger
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                                    title="Profile & Settings"
+                                >
+                                    <div className="w-6 h-6 rounded-full flex items-center justify-center bg-[var(--accent-blue-soft)]">
+                                        <span className="text-[11px] font-semibold text-[var(--accent-blue)]">
+                                            {displayName.charAt(0).toUpperCase()}
+                                        </span>
                                     </div>
-                                </div>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent side="right" align="end" className="w-56">
+                                    <DropdownMenuGroup>
+                                        <DropdownMenuLabel>{email || displayName}</DropdownMenuLabel>
+                                    </DropdownMenuGroup>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={onOpenProfile}>
+                                        <Settings /> Settings
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
+                                        <LogOut /> Sign out
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
 
-                                {/* Settings */}
-                                <button
-                                    onClick={() => { setShowAccountMenu(false); onOpenProfile(); }}
-                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-white/5"
-                                >
-                                    <Settings className="w-4 h-4" />
-                                    Settings
-                                </button>
-
-                                {/* Sign out */}
-                                <button
-                                    onClick={handleSignOut}
-                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-400 transition-colors hover:bg-white/5"
-                                >
-                                    <LogOut className="w-4 h-4" />
-                                    Sign out
-                                </button>
-                            </div>
-                        )}
-
-                        <button
-                            ref={accountBtnRef}
-                            onClick={() => setShowAccountMenu(!showAccountMenu)}
-                            className={`flex-1 min-w-0 py-3 cursor-pointer overflow-hidden rounded-lg hover:bg-white/5 transition-colors ${isOpen ? 'px-2' : 'px-0'}`}
-                            title={isOpen ? undefined : 'Profile & Settings'}
-                        >
-                            <div className={`flex items-center ${isOpen ? 'gap-2.5' : 'justify-center'}`}>
-                                <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--accent-blue-soft)' }}>
-                                    <span className="text-xs font-semibold" style={{ color: 'var(--accent-blue)' }}>
-                                        {displayName.charAt(0).toUpperCase()}
-                                    </span>
-                                </div>
-                                {isOpen && (
-                                    <span className="text-sm truncate whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>
-                                        {displayName}
-                                    </span>
-                                )}
-                            </div>
-                        </button>
-
-                        <div className="shrink-0">
                             <NotificationBell
                                 onNavigateToConversation={(convId) => onSelectConversation(convId)}
                             />
                         </div>
-                    </div>
+                    )}
                     {/* Usage indicator */}
                     {userTier !== 'pro' && (
                         <div className="px-5 py-2.5 mb-1 overflow-hidden" style={{ opacity: isOpen ? 1 : 0, transition: 'opacity 150ms', height: isOpen ? 'auto' : 0 }}>
@@ -275,19 +284,38 @@ const ConversationSidebar = ({
                                     {currentExchanges || 0}/{freeChatLimit}
                                 </span>
                             </div>
-                            <div className="w-full h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-surface-hover)' }}>
-                                <div
-                                    className="h-full rounded-full transition-all duration-500"
-                                    style={{
-                                        width: `${Math.min(((currentExchanges || 0) / freeChatLimit) * 100, 100)}%`,
-                                        backgroundColor: (currentExchanges || 0) >= freeChatLimit ? 'var(--error)' : 'var(--accent-teal)',
-                                    }}
-                                />
-                            </div>
+                            <Progress
+                                value={Math.min(((currentExchanges || 0) / freeChatLimit) * 100, 100)}
+                                className={`w-full [&_[data-slot=progress-track]]:h-1 [&_[data-slot=progress-track]]:bg-[var(--bg-surface-hover)] [&_[data-slot=progress-indicator]]:duration-500 ${
+                                    (currentExchanges || 0) >= freeChatLimit
+                                        ? '[&_[data-slot=progress-indicator]]:bg-[var(--error)]'
+                                        : '[&_[data-slot=progress-indicator]]:bg-[var(--accent-teal)]'
+                                }`}
+                            />
                         </div>
                     )}
                 </div>
             </div>
+
+            <AlertDialog
+                open={pendingDeleteId !== null}
+                onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure? This cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction variant="destructive" onClick={confirmDelete}>
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
         </>
     );

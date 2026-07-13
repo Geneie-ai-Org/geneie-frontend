@@ -3,10 +3,52 @@ import { FileText, X, RotateCcw, CheckCircle, Upload, Trash2, Info, Zap, Search 
 import { doc, getDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import DocumentUpload from './DocumentUpload';
-import ProcessingNotification from './ProcessingNotification';
+import { useProcessingToast } from '@/hooks/useProcessingToast';
 import ExportVariantsButton from './ExportVariantsButton';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { apiUrl, getApiOrigin } from '@/config/api';
 import qiagenLogo from '../Qiagen.svg.png';
+import { toast } from 'sonner';
+import { apiErrorDetailToMessage as sharedApiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
+
+/**
+ * Backwards-compatible replacement for the old in-panel notification overlay.
+ * Accepts the same {message, type} shape but routes through the global sonner
+ * <Toaster /> mounted in main.jsx so toasts never collide with panel content.
+ */
+function notify(payload) {
+  if (!payload) return;
+  const raw = payload.message;
+  let msg;
+  if (typeof raw === 'string') msg = raw;
+  else if (raw && typeof raw === 'object' && typeof raw.message === 'string') msg = raw.message;
+  else if (raw != null) { try { msg = JSON.stringify(raw); } catch (_) { msg = String(raw); } }
+  else msg = '';
+  if (!msg) return;
+  const type = payload.type || 'info';
+  if (type === 'error') toast.error(msg);
+  else if (type === 'success') toast.success(msg);
+  else if (type === 'warning') toast.warning?.(msg) || toast(msg);
+  else toast(msg);
+}
 
 // Proprietary filter descriptions (for tooltips - no exact parameters)
 export const ACMG_FILTER_DISPLAY_NAME = 'ACMG filter';
@@ -15,6 +57,13 @@ const PROPRIETARY_FILTER_1_DESCRIPTION = "ClinVar and/or InterVar pathogenic cla
 const PROPRIETARY_FILTER_2_DESCRIPTION = "Filters for rare, potentially deleterious coding and regulatory variants, including novel candidates, using functional impact and population frequency criteria.";
 
 const DEVICE_ID_STORAGE_KEY = 'geneie_device_id';
+
+const GARDEN_ACTION_LABELS = {
+  create: 'Create new entry from current filters',
+  apply: 'Apply existing entry',
+  edit: 'Edit name/notes of existing entry',
+  delete: 'Delete existing entry',
+};
 
 function getOrCreateDeviceId() {
   try {
@@ -30,13 +79,7 @@ function getOrCreateDeviceId() {
   }
 }
 
-function apiErrorDetailToMessage(detail) {
-  if (!detail) return null;
-  if (typeof detail === 'string') return detail;
-  if (typeof detail === 'object' && detail.message) return detail.message;
-  if (Array.isArray(detail)) return detail.map((d) => d.msg || d).join(', ');
-  return null;
-}
+const apiErrorDetailToMessage = sharedApiErrorDetailToMessage;
 
 async function pollFilterJobStatus(conversationId, token, apiBase, onProgress) {
   const maxPollMs = 14 * 24 * 60 * 60 * 1000;
@@ -471,12 +514,29 @@ const VariantFilterSidebar = ({
   const [filterWorkingSetCount, setFilterWorkingSetCount] = useState(null);
   const [isApplying, setIsApplying] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState(null);
-  const [notification, setNotification] = useState(null);
   const [proprietaryFilterPreviews, setProprietaryFilterPreviews] = useState(null);
   const [activeProprietaryFilter, setActiveProprietaryFilter] = useState(null);
   const [isApplyingProprietaryFilter, setIsApplyingProprietaryFilter] = useState(false);
   const [filterMode, setFilterMode] = useState('manual');
   const [pendingTabSwitch, setPendingTabSwitch] = useState(null);
+  const [removeFileDialogOpen, setRemoveFileDialogOpen] = useState(false);
+
+  const handleRemoveVariantFile = async () => {
+    setRemoveFileDialogOpen(false);
+    try {
+      await onUploadSuccess(null);
+      // Clear filter state locally without hitting backend (file is already gone)
+      setFilters({});
+      setCategoricalFilters({});
+      setAppliedFilters(null);
+      setFilteredCount(null);
+      setFilterWorkingSetCount(null);
+      setActiveProprietaryFilter(null);
+      notify({ message: 'File removed from conversation', type: 'success' });
+    } catch (error) {
+      console.error('[VariantFilterSidebar] Error removing file:', error);
+    }
+  };
   const [openFilterPopup, setOpenFilterPopup] = useState(null); // Column name for which popup is open
   const [popupSearchQuery, setPopupSearchQuery] = useState(''); // Search query for filtering values in popup
   const [initializedConversationId, setInitializedConversationId] = useState(null); // Prevent re-initializing filters on polling updates
@@ -484,6 +544,7 @@ const VariantFilterSidebar = ({
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isApplyingPreset, setIsApplyingPreset] = useState(false);
+  // useProcessingToast(isApplying ? 'Processing filters...' : null, isApplying);
   const [isRunningAnnovar, setIsRunningAnnovar] = useState(false);
   const [isGardenModalOpen, setIsGardenModalOpen] = useState(false);
   const [gardenNameInput, setGardenNameInput] = useState('');
@@ -799,11 +860,10 @@ const VariantFilterSidebar = ({
 
     // Don't apply filters if there's no variant data
     if (!variantData || !variantData.total_variants || variantData.total_variants === 0) {
-      setNotification({
+      notify({
         message: 'No variant data available. Please upload a variant file first.',
         type: 'error'
       });
-      setTimeout(() => setNotification(null), 3000);
       return false;
     }
 
@@ -857,20 +917,18 @@ const VariantFilterSidebar = ({
           (v) => v && typeof v === 'object' && ('min' in v || 'max' in v)
         );
         if (sameCount && hasNumericInPayload && fc > 0) {
-          setNotification({
+          notify({
             message:
               'Match count unchanged. If you added a numeric column, narrow its range (full span does not filter). Try a smaller min/max, then Apply again.',
             type: 'warning',
           });
-          setTimeout(() => setNotification(null), 7000);
         }
 
         if (fc === 0 && Object.keys(filterObject).length > 0) {
-          setNotification({
+          notify({
             message: 'No variants match these filters. Widen numeric bounds or change categorical selections.',
             type: 'warning',
           });
-          setTimeout(() => setNotification(null), 6000);
         }
         
         // IMPORTANT: Keep filter state intact - don't clear the inputs
@@ -878,7 +936,7 @@ const VariantFilterSidebar = ({
         // so users can see what they selected and modify if needed
         
         // Show notification message
-        setNotification({
+        notify({
           message: variantData?.sample_only_ingest
             ? `Filters applied on full annotated file: ${(Number.isFinite(fc) ? fc : 0).toLocaleString()} of ${(Number.isFinite(tc) ? tc : displayTotalVariants).toLocaleString()} variants match`
             : `Filters applied: ${(Number.isFinite(fc) ? fc : 0).toLocaleString()} of ${(Number.isFinite(tc) ? tc : displayTotalVariants).toLocaleString()} variants`,
@@ -886,7 +944,6 @@ const VariantFilterSidebar = ({
         });
         
         // Auto-hide notification after 4 seconds
-        setTimeout(() => setNotification(null), 4000);
         
         if (onFiltersChange) {
           onFiltersChange(filterObject, data.filtered_count, data.total_count, {
@@ -896,12 +953,11 @@ const VariantFilterSidebar = ({
           });
         }
         if (data.parameter_ranges_from_full_file && data.parameter_ranges) {
-          setNotification({
+          notify({
             message:
               `Numeric slider bounds now reflect all ${(Number.isFinite(tc) ? tc : data.total_count || 0).toLocaleString()} rows in the annotated file. Narrow a range and Apply again if the count did not change.`,
             type: 'warning',
           });
-          setTimeout(() => setNotification(null), 8000);
         }
         return true;
       }
@@ -912,8 +968,7 @@ const VariantFilterSidebar = ({
         (typeof errDetail === 'object' && errDetail?.message) ||
         (typeof errDetail === 'string' ? errDetail : null) ||
         'Failed to apply filters. For large files, run ACMG Filter 1 first.';
-      setNotification({ message: errMessage, type: 'error' });
-      setTimeout(() => setNotification(null), 6000);
+      notify({ message: errMessage, type: 'error' });
       return false;
     } catch (error) {
       console.error('[VariantFilterSidebar] Error applying filters:', error);
@@ -994,11 +1049,10 @@ const VariantFilterSidebar = ({
         
         // Show notification
         if (data.total_count > 0) {
-          setNotification({
+          notify({
             message: `Filters reset: All ${data.total_count.toLocaleString()} variants are now under consideration`,
             type: 'success'
           });
-          setTimeout(() => setNotification(null), 4000);
         }
         setFilterWorkingSetCount(null);
 
@@ -1009,20 +1063,18 @@ const VariantFilterSidebar = ({
         const errorData = await response.json().catch(() => ({}));
         console.error('[VariantFilterSidebar] Reset request failed:', response.status, errorData);
         // Even if backend fails, we've cleared local state, so show a warning
-        setNotification({
+        notify({
           message: 'Filters reset locally, but backend update may have failed. Please refresh if needed.',
           type: 'warning'
         });
-        setTimeout(() => setNotification(null), 4000);
       }
     } catch (error) {
       console.error('[VariantFilterSidebar] Error resetting filters:', error);
       // Even if backend fails, we've cleared local state
-      setNotification({
+      notify({
         message: 'Filters reset locally, but backend update failed. Please refresh if needed.',
         type: 'warning'
       });
-      setTimeout(() => setNotification(null), 4000);
     } finally {
       setIsApplying(false);
     }
@@ -1369,11 +1421,10 @@ const VariantFilterSidebar = ({
   const handleApplyProprietaryFilter = async (filterType) => {
     if (!conversationId || !userId) return;
     if (hasAppliedManualFilters && activeProprietaryFilter !== filterType) {
-      setNotification({
+      notify({
         message: 'Manual filters are active. Reset manual filters before applying a proprietary filter.',
         type: 'warning'
       });
-      setTimeout(() => setNotification(null), 4000);
       return;
     }
     
@@ -1434,11 +1485,10 @@ const VariantFilterSidebar = ({
 
         await loadProprietaryFilterPreviews();
         
-        setNotification({
+        notify({
           message: `${filterType === 'filter_1' ? ACMG_FILTER_DISPLAY_NAME : 'Functional Impact'} applied: ${filteredCount.toLocaleString()} variants`,
           type: 'success'
         });
-        setTimeout(() => setNotification(null), 4000);
         
         if (onFiltersChange) {
           onFiltersChange({ proprietary: filterType }, filteredCount, totalCount);
@@ -1451,11 +1501,10 @@ const VariantFilterSidebar = ({
       }
     } catch (error) {
       console.error('[VariantFilterSidebar] Error applying proprietary filter:', error);
-      setNotification({
+      notify({
         message: error.message || 'Failed to apply recommended filter',
         type: 'error'
       });
-      setTimeout(() => setNotification(null), 5000);
     } finally {
       setIsApplyingProprietaryFilter(false);
     }
@@ -1493,11 +1542,10 @@ const VariantFilterSidebar = ({
         await loadProprietaryFilterPreviews();
         
         // Show notification
-        setNotification({
+        notify({
           message: 'Recommended filter removed',
           type: 'success'
         });
-        setTimeout(() => setNotification(null), 4000);
         
         // Notify parent
         if (onFiltersChange) {
@@ -1505,15 +1553,14 @@ const VariantFilterSidebar = ({
         }
       } else {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to remove filter');
+        throw new Error(apiErrorDetailToMessage(errorData.detail) || 'Failed to remove filter');
       }
     } catch (error) {
       console.error('[VariantFilterSidebar] Error removing proprietary filter:', error);
-      setNotification({
+      notify({
         message: error.message || 'Failed to remove recommended filter',
         type: 'error'
       });
-      setTimeout(() => setNotification(null), 5000);
     } finally {
       setIsApplyingProprietaryFilter(false);
     }
@@ -1656,96 +1703,42 @@ const VariantFilterSidebar = ({
       <div className="h-full flex flex-col">
         {/* Header */}
         <div className="sidebar-header flex items-center justify-between">
-          <h3 className="text-[var(--text-primary)] flex items-center gap-1">
-            <FileText className="w-5 h-5 text-[var(--text-secondary)] shrink-0" />
-            Variant File Filters
+          <h3 className="text-[var(--text-primary)] flex items-center gap-1.5 min-w-0">
+            <FileText className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />
+            <span className="truncate">Variant File Filters</span>
           </h3>
-          <div className="flex items-center gap-2">
-            {/* Remove File Button - Show when variant data exists */}
+          <div className="flex items-center gap-0.5">
             {(variantData && variantData.total_variants > 0) && (
               <button
-                onClick={async () => {
-                  if (window.confirm('Are you sure you want to remove this variant file? This will clear all filters and variant data.')) {
-                    try {
-                      await onUploadSuccess(null);
-                      resetFilters();
-                    } catch (error) {
-                      console.error('[VariantFilterSidebar] Error removing file:', error);
-                    }
-                  }
-                }}
-                className="p-1 rounded transition-colors"
-                style={{ color: 'var(--error)' }}
-                onMouseEnter={(e) => e.target.style.backgroundColor = 'var(--error-soft)'}
-                onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                onClick={() => setRemoveFileDialogOpen(true)}
+                className="p-1.5 rounded-md text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--error)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
                 aria-label="Remove variant file"
                 title="Remove variant file"
               >
-                <Trash2 className="w-5 h-5" style={{ color: 'var(--error)' }} />
+                <Trash2 className="w-4 h-4" />
               </button>
             )}
             <button
               onClick={onToggle}
-              className="p-1 hover:bg-[var(--bg-surface-hover)] rounded transition-colors"
+              className="p-1.5 rounded-md text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
               aria-label="Close sidebar"
             >
-              <X className="w-5 h-5 text-[var(--text-secondary)]" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto sidebar-scroll flex flex-col space-y-3 relative">
-          {/* Notification Toast */}
-          {notification && (
-            <div className={`absolute top-4 left-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg border-2 animate-slide-in border-[var(--border-default)] text-[var(--text-primary)] sidebar-card`}>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-5 h-5" />
-                <span className="text-sm font-semibold">{notification.message}</span>
-              </div>
-            </div>
-          )}
-
           {/* Active Filter Summary Strip */}
           {currentActiveFilterLabel && (
-            <div className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5" style={{ backgroundColor: 'var(--accent-teal-soft)', color: 'var(--text-primary)' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Filtered by:</span>
-              <span className="font-semibold">{currentActiveFilterLabel}</span>
+            <div className="px-3 py-1.5 rounded-md text-[11px] flex items-center gap-1.5 border border-[var(--accent-teal)]/30 bg-[var(--accent-teal-soft)]">
+              <span className="text-[var(--text-tertiary)]">Filtered by</span>
+              <span className="font-semibold text-[var(--accent-teal)] truncate">{currentActiveFilterLabel}</span>
             </div>
           )}
 
-          {variantData?.sample_only_ingest && (
-            <div
-              className="p-2.5 rounded-lg text-xs leading-relaxed sidebar-card"
-              style={{ backgroundColor: 'var(--accent-teal-soft)', borderColor: 'var(--accent-teal)', color: 'var(--text-primary)' }}
-            >
-              {variantData.s3_line_count_status === 'pending' || variantData.s3_line_count_status === 'running' ? (
-                <>
-                  Counting all variant rows in your file on the server (very large files can take several minutes).
-                  Column mapping already used the first {variantData.interpretation_sample_rows || 50} rows.
-                </>
-              ) : annotatedRowBaseline > 0 ? (
-                variantData?.annotated_row_count || variantData?.sample_only_ingest ? (
-                  <>
-                    Annotated variant file ({annotatedRowBaseline.toLocaleString()} rows). Each Apply re-scans this full
-                    annotated file on S3 (all active filters combined). Uploaded VCF may list more rows before annotation.
-                  </>
-                ) : (
-                  <>
-                    Full file on cloud storage ({annotatedRowBaseline.toLocaleString()} data rows). Column mapping used the first{' '}
-                    {variantData.interpretation_sample_rows || 50} rows only — not loaded into the database yet. Run ANNOVAR,
-                    then apply the ACMG filter (or apply sidebar filters once) to load a working set. Use Reset to clear
-                    filters and start over from the full file.
-                  </>
-                )
-              ) : (
-                <>
-                  Full file on cloud storage. Column mapping used the first {variantData.interpretation_sample_rows || 50}{' '}
-                  rows only. Run ANNOVAR, then apply the ACMG filter. Use Reset to reload the full file row count.
-                </>
-              )}
-            </div>
-          )}
+          {/* File-context explanation moved into an Info popover next to the "Under consideration" title. */}
 
           {/* Variant Count Display with graphical bar */}
           {hasActiveManualFilters &&
@@ -1763,23 +1756,57 @@ const VariantFilterSidebar = ({
           )}
 
           {fileTotalVariants > 0 && (
-            <div className="sidebar-card border rounded-lg p-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-[var(--text-primary)]">Variants Under Consideration</span>
-                <span className="text-sm font-bold" style={{ color: 'var(--accent-teal)' }}>
+            <div className="sidebar-card">
+              <div className="flex items-baseline justify-between mb-2 gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-[13px] font-medium text-[var(--text-primary)]">Under consideration</span>
+                  {variantData?.sample_only_ingest && (
+                    <Popover>
+                      <PopoverTrigger
+                        className="inline-flex items-center justify-center w-4 h-4 rounded text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                        aria-label="About this file"
+                      >
+                        <Info className="w-3.5 h-3.5" />
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="bottom"
+                        align="start"
+                        sideOffset={6}
+                        className="w-72 p-3 text-[12px] leading-relaxed text-[var(--text-secondary)] bg-[var(--bg-surface-raised)] border border-[var(--border-default)] rounded-lg shadow-xl"
+                      >
+                        {variantData.s3_line_count_status === 'pending' || variantData.s3_line_count_status === 'running' ? (
+                          <>
+                            Counting all variant rows in your file on the server (very large files can take several minutes).
+                            Column mapping already used the first {variantData.interpretation_sample_rows || 50} rows.
+                          </>
+                        ) : annotatedRowBaseline > 0 ? (
+                          variantData?.annotated_row_count || variantData?.sample_only_ingest ? (
+                            <>
+                              Annotated variant file ({annotatedRowBaseline.toLocaleString()} rows). Each Apply re-scans this full annotated file on S3 (all active filters combined). Uploaded VCF may list more rows before annotation.
+                            </>
+                          ) : (
+                            <>
+                              Full file on cloud storage ({annotatedRowBaseline.toLocaleString()} data rows). Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only — not loaded into the database yet. Run ANNOVAR, then apply the ACMG filter (or apply sidebar filters once) to load a working set. Use Reset to clear filters and start over from the full file.
+                            </>
+                          )
+                        ) : (
+                          <>
+                            Full file on cloud storage. Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only. Run ANNOVAR, then apply the ACMG filter. Use Reset to reload the full file row count.
+                          </>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+                <span className="text-[13px] font-semibold tabular-nums text-[var(--accent-teal)]">
                   {underConsiderationCount.toLocaleString()}
-                  <span className="text-[var(--text-secondary)] font-normal">
-                    {hasActiveManualFilters
-                      ? ` of ${displayTotalVariants.toLocaleString()} in annotated file`
-                      : activeProprietaryFilter
-                        ? ` of ${displayTotalVariants.toLocaleString()} loaded`
-                        : ` of ${fileTotalVariants.toLocaleString()} in file`}
+                  <span className="text-[var(--text-tertiary)] font-normal">
+                    {` / ${displayTotalVariants.toLocaleString()}`}
                   </span>
                 </span>
               </div>
               <div
-                className="w-full h-3 rounded-full overflow-hidden flex"
-                style={{ backgroundColor: 'var(--bg-surface-hover)' }}
+                className="w-full h-1.5 rounded-full overflow-hidden flex bg-[var(--bg-surface-hover)]"
                 title={
                   (hasActiveManualFilters || activeProprietaryFilter) &&
                   underConsiderationCount < displayTotalVariants
@@ -1788,143 +1815,180 @@ const VariantFilterSidebar = ({
                 }
               >
                 <div
-                  className="h-full rounded-l-full transition-all duration-300"
+                  className="h-full bg-[var(--accent-teal)] transition-[width] duration-300"
                   style={{
                     width: displayTotalVariants > 0
                       ? `${Math.max(0, Math.min(100, (underConsiderationCount / displayTotalVariants) * 100))}%`
                       : '0%',
-                    backgroundColor: 'var(--accent-teal)',
                     minWidth: displayTotalVariants > 0 ? '4px' : 0
                   }}
                 />
-                {(hasActiveManualFilters || activeProprietaryFilter) &&
-                  underConsiderationCount < displayTotalVariants && (
-                  <div
-                    className="h-full rounded-r-full flex-shrink-0"
-                    style={{
-                      width: `${Math.max(0, ((displayTotalVariants - underConsiderationCount) / displayTotalVariants) * 100)}%`,
-                      backgroundColor: 'rgba(77,182,172,0.35)',
-                      minWidth: displayTotalVariants - underConsiderationCount > 0 ? '4px' : 0
-                    }}
-                  />
-                )}
               </div>
               {(hasActiveManualFilters || activeProprietaryFilter) &&
                 underConsiderationCount < displayTotalVariants && (
-                <div className="flex items-center gap-3 mt-1.5 text-xs text-[var(--text-secondary)]">
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--accent-teal)' }} />
-                    Under consideration
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'rgba(77,182,172,0.35)' }} />
-                    Filtered out
-                  </span>
-                </div>
+                <p className="mt-1.5 text-[11px] text-[var(--text-tertiary)]">
+                  {(displayTotalVariants - underConsiderationCount).toLocaleString()} filtered out
+                </p>
               )}
             </div>
           )}
 
           {/* Segmented Filter Mode Selector */}
-          <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: 'var(--border-default)' }} role="tablist" aria-label="Filter mode">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={filterMode === 'manual'}
-              onClick={() => handleTabSwitch('manual')}
-              className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors ${
-                filterMode === 'manual'
-                  ? 'text-[var(--bg-app)]'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
-              }`}
-              style={filterMode === 'manual' ? { backgroundColor: 'var(--accent-teal)' } : { backgroundColor: 'var(--bg-surface-raised)' }}
-            >
-              Manual
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={filterMode === 'acmg'}
-              onClick={() => handleTabSwitch('acmg')}
-              className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors ${
-                filterMode === 'acmg'
-                  ? 'text-[var(--bg-app)]'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
-              }`}
-              style={filterMode === 'acmg' ? { backgroundColor: 'var(--accent-teal)' } : { backgroundColor: 'var(--bg-surface-raised)' }}
-            >
-              ACMG
-              {proprietaryFilterPreviews?.filter_1?.preview_count != null && activeProprietaryFilter !== 'filter_1' && (
-                <span className="ml-1 opacity-70">({proprietaryFilterPreviews.filter_1.preview_count.toLocaleString()})</span>
-              )}
-              {activeProprietaryFilter === 'filter_1' && (
-                <span className="ml-1 opacity-70">({filteredCount != null ? filteredCount.toLocaleString() : '...'})</span>
-              )}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={filterMode === 'functional'}
-              onClick={() => handleTabSwitch('functional')}
-              className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors ${
-                filterMode === 'functional'
-                  ? 'text-[var(--bg-app)]'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
-              }`}
-              style={filterMode === 'functional' ? { backgroundColor: 'var(--accent-teal)' } : { backgroundColor: 'var(--bg-surface-raised)' }}
-            >
-              Func.Imp
-              {proprietaryFilterPreviews?.filter_2?.preview_count != null && activeProprietaryFilter !== 'filter_2' && (
-                <span className="ml-1 opacity-70">({proprietaryFilterPreviews.filter_2.preview_count.toLocaleString()})</span>
-              )}
-              {activeProprietaryFilter === 'filter_2' && (
-                <span className="ml-1 opacity-70">({filteredCount != null ? filteredCount.toLocaleString() : '...'})</span>
-              )}
-            </button>
-          </div>
-
-          {/* Inline Confirmation Banner */}
-          {pendingTabSwitch && (
-            <div
-              className="p-3 rounded-lg border text-xs leading-relaxed flex items-center justify-between gap-2"
-              style={{ backgroundColor: 'var(--warning-soft)', borderColor: 'var(--warning)', color: 'var(--warning)' }}
-            >
-              <span>
-                Switching to <strong>{pendingTabSwitch === 'manual' ? 'Manual' : pendingTabSwitch === 'acmg' ? 'ACMG' : 'Functional Impact'}</strong> will clear your{' '}
-                <strong>{getCurrentActiveMode() === 'manual' ? 'manual filters' : getCurrentActiveMode() === 'acmg' ? 'ACMG filter' : 'Functional Impact filter'}</strong>.
-              </span>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={confirmTabSwitch}
-                  className="px-2.5 py-1 rounded text-xs font-semibold transition-colors"
-                  style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--bg-app)' }}
-                >
-                  Switch
-                </button>
-                <button
-                  type="button"
-                  onClick={cancelTabSwitch}
-                  className="px-2.5 py-1 rounded text-xs font-semibold transition-colors"
-                  style={{ backgroundColor: 'var(--bg-surface-raised)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
-                >
-                  Cancel
-                </button>
+          {(() => {
+            const TABS = [
+              { key: 'manual', label: 'Manual', filterKey: null },
+              { key: 'acmg', label: 'ACMG', filterKey: 'filter_1' },
+              { key: 'functional', label: 'Func.Imp', filterKey: 'filter_2' },
+            ];
+            const activeIndex = TABS.findIndex((t) => t.key === filterMode);
+            const focusTab = (i) => {
+              const el = document.getElementById(`filter-tab-${TABS[i].key}`);
+              if (el) el.focus();
+            };
+            const onTablistKeyDown = (e) => {
+              switch (e.key) {
+                case 'ArrowRight':
+                case 'ArrowDown':
+                  e.preventDefault();
+                  focusTab((activeIndex + 1) % TABS.length);
+                  break;
+                case 'ArrowLeft':
+                case 'ArrowUp':
+                  e.preventDefault();
+                  focusTab((activeIndex - 1 + TABS.length) % TABS.length);
+                  break;
+                case 'Home':
+                  e.preventDefault();
+                  focusTab(0);
+                  break;
+                case 'End':
+                  e.preventDefault();
+                  focusTab(TABS.length - 1);
+                  break;
+                default:
+              }
+            };
+            const renderCount = (filterKey) => {
+              if (!filterKey) return null;
+              // Loading: previews haven't arrived yet — show skeleton
+              if (proprietaryFilterPreviews == null) {
+                return (
+                  <span
+                    className="ml-1.5 inline-block h-2.5 w-8 align-middle rounded bg-[var(--bg-surface-hover)] animate-pulse"
+                    aria-hidden
+                  />
+                );
+              }
+              const isActive =
+                (filterKey === 'filter_1' && activeProprietaryFilter === 'filter_1') ||
+                (filterKey === 'filter_2' && activeProprietaryFilter === 'filter_2');
+              if (isActive) {
+                return (
+                  <span className="ml-1 opacity-70 tabular-nums">
+                    ({filteredCount != null ? filteredCount.toLocaleString() : '…'})
+                  </span>
+                );
+              }
+              const count = proprietaryFilterPreviews?.[filterKey]?.preview_count;
+              if (count == null) return null;
+              return <span className="ml-1 opacity-70 tabular-nums">({count.toLocaleString()})</span>;
+            };
+            return (
+              <div
+                className="flex rounded-lg overflow-hidden border border-[var(--border-subtle)]"
+                role="tablist"
+                aria-label="Filter mode"
+                aria-orientation="horizontal"
+                onKeyDown={onTablistKeyDown}
+              >
+                {TABS.map((t) => {
+                  const selected = filterMode === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      id={`filter-tab-${t.key}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={selected}
+                      aria-controls="filter-tabpanel"
+                      tabIndex={selected ? 0 : -1}
+                      onClick={() => handleTabSwitch(t.key)}
+                      data-state={selected ? 'active' : 'inactive'}
+                      className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)] ${
+                        selected
+                          ? 'bg-[var(--accent-teal)] text-[var(--bg-app)]'
+                          : 'bg-[var(--bg-surface-raised)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
+                      }`}
+                    >
+                      {t.label}
+                      {renderCount(t.filterKey)}
+                    </button>
+                  );
+                })}
               </div>
-            </div>
-          )}
+            );
+          })()}
+
+          {/* Remove variant file confirmation dialog */}
+          <AlertDialog
+            open={removeFileDialogOpen}
+            onOpenChange={setRemoveFileDialogOpen}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove this variant file?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  All filters and variant data for this conversation will be cleared. You'll need to upload the file again to run analysis.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction variant="destructive" onClick={handleRemoveVariantFile}>
+                  Remove
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Switch-mode confirmation dialog */}
+          <AlertDialog
+            open={!!pendingTabSwitch}
+            onOpenChange={(open) => { if (!open) cancelTabSwitch(); }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Switch to {pendingTabSwitch === 'manual' ? 'Manual' : pendingTabSwitch === 'acmg' ? 'ACMG' : 'Functional Impact'}?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  Your current {getCurrentActiveMode() === 'manual' ? 'manual filters' : getCurrentActiveMode() === 'acmg' ? 'ACMG filter' : 'Functional Impact filter'} will be cleared. You can re-apply after switching.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={cancelTabSwitch}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmTabSwitch}>Switch</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* Tab Content */}
-          <div role="tabpanel" aria-label={`${filterMode} filter panel`}>
+          <div
+            role="tabpanel"
+            id="filter-tabpanel"
+            aria-labelledby={`filter-tab-${filterMode}`}
+            tabIndex={0}
+            className="focus-visible:outline-none"
+          >
             {filterMode === 'manual' && allColumns.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 px-1">
-                  <h4 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">All Columns</h4>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between px-1">
+                  <h4 className="text-[11px] font-medium text-[var(--text-tertiary)]">Columns</h4>
+                  <span className="text-[11px] text-[var(--text-disabled)] tabular-nums">{allColumns.length}</span>
                 </div>
                 {allColumns.length === 0 ? (
                   <p className="text-xs text-[var(--text-tertiary)] px-1 italic">Select columns below to build a custom filter</p>
                 ) : (
-                  <div className="space-y-1">
+                  <div className="rounded-lg overflow-hidden border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)]">
                   {allColumns.map((colName) => {
                     const isNumeric = columnIsNumeric(colName);
                     const filter = filters[colName] || {};
@@ -1941,39 +2005,41 @@ const VariantFilterSidebar = ({
                     const appliedFilter = appliedFilters && appliedFilters[colName];
                     if (appliedFilter) {
                       if (appliedFilter.min !== undefined || appliedFilter.max !== undefined) {
-                        filterCount = (appliedFilter.min !== null && appliedFilter.min !== undefined ? 1 : 0) + 
+                        filterCount = (appliedFilter.min !== null && appliedFilter.min !== undefined ? 1 : 0) +
                                       (appliedFilter.max !== null && appliedFilter.max !== undefined ? 1 : 0);
                       } else if (appliedFilter.values && Array.isArray(appliedFilter.values)) {
                         filterCount = appliedFilter.values.length;
                       }
                     }
+                    const isOpen = openFilterPopup === colName;
+                    const isDisabled = isManualFiltersDisabled || isColumnUnusable;
                     return (
                       <button
                         key={colName}
                         onClick={() => {
-                          if (!isManualFiltersDisabled && !isColumnUnusable) {
+                          if (!isDisabled) {
                             setOpenFilterPopup(colName);
                             setPopupSearchQuery('');
                           }
                         }}
-                        disabled={isManualFiltersDisabled || isColumnUnusable}
-                        className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
-                          (isManualFiltersDisabled || isColumnUnusable)
-                            ? 'opacity-50 cursor-not-allowed bg-[var(--bg-surface)] border-[var(--border-default)]' 
-                            : 'bg-[var(--bg-surface-raised)] border-[var(--border-default)] hover:border-[var(--border-default)] hover:bg-[var(--bg-surface-hover)] cursor-pointer'
-                        } ${openFilterPopup === colName ? 'border-2' : ''}`}
-                        style={openFilterPopup === colName ? { borderColor: 'var(--accent-teal)' } : {}}
+                        disabled={isDisabled}
+                        aria-pressed={isOpen}
+                        className={`group w-full text-left px-3 py-2 flex items-center justify-between gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)] ${
+                          isDisabled
+                            ? 'opacity-50 cursor-not-allowed'
+                            : `cursor-pointer hover:bg-[var(--bg-surface-hover)] ${isOpen ? 'bg-[var(--bg-surface-hover)]' : ''}`
+                        }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium truncate flex-1" style={{ color: isColumnUnusable ? 'var(--text-tertiary)' : 'var(--text-primary)' }}>
-                            {colName}
+                        <span
+                          className={`text-[13px] truncate flex-1 ${isOpen ? 'font-medium text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'} ${isColumnUnusable ? 'text-[var(--text-tertiary)]' : ''}`}
+                        >
+                          {colName}
+                        </span>
+                        {filterCount > 0 && (
+                          <span className="px-1.5 h-[18px] inline-flex items-center rounded-full text-[10px] font-semibold tabular-nums bg-[var(--accent-teal-soft)] text-[var(--accent-teal)] flex-shrink-0">
+                            {filterCount}
                           </span>
-                          {filterCount > 0 && (
-                            <span className="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full text-[var(--bg-app)] flex-shrink-0" style={{ backgroundColor: 'var(--accent-teal)' }}>
-                              {filterCount}
-                            </span>
-                          )}
-                        </div>
+                        )}
                       </button>
                     );
                   })}
@@ -2258,13 +2324,11 @@ const VariantFilterSidebar = ({
                               <label key={value} className={`flex items-center gap-2 text-sm p-2 rounded ${
                                 isManualFiltersDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-[var(--bg-surface-hover)]'
                               }`}>
-                                <input
-                                  type="checkbox"
+                                <Checkbox
                                   checked={selectedValues.includes(value)}
-                                  onChange={(e) => !isManualFiltersDisabled && handleCategoricalChange(colName, value, e.target.checked)}
+                                  onCheckedChange={(checked) => !isManualFiltersDisabled && handleCategoricalChange(colName, value, checked === true)}
                                   disabled={isManualFiltersDisabled}
-                                  className="rounded border-[var(--border-default)]"
-                                  style={{ accentColor: 'var(--accent-teal)' }}
+                                  className="aria-checked:bg-[var(--accent-teal)] aria-checked:border-[var(--accent-teal)] aria-checked:text-white"
                                 />
                                 <span className="truncate flex-1">{value === 'Empty' ? 'Empty' : value}</span>
                               </label>
@@ -2474,25 +2538,21 @@ const VariantFilterSidebar = ({
                         ? 'No changes to apply — adjust filters first'
                         : 'Apply all current filter settings'
                 }
-                className={`flex-1 px-4 py-2 rounded-lg flex items-center justify-center gap-2 text-sm font-medium text-white ${
+                className={`flex-1 h-9 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-medium whitespace-nowrap text-[var(--bg-app)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${
                   isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges
-                    ? 'opacity-60 cursor-not-allowed'
-                    : 'hover:opacity-90'
+                    ? 'opacity-50 cursor-not-allowed bg-[var(--text-tertiary)]'
+                    : 'bg-[var(--accent-teal)] hover:brightness-110'
                 }`}
-                style={{
-                  backgroundColor:
-                    isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges ? 'var(--text-tertiary)' : 'var(--accent-teal)'
-                }}
               >
                 {isApplying ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-[var(--bg-app)] border-t-transparent rounded-full animate-spin"></div>
-                    Applying...
+                    <div className="w-3.5 h-3.5 border-2 border-[var(--bg-app)] border-t-transparent rounded-full animate-spin" />
+                    Applying
                   </>
                 ) : (
                   <>
-                    <CheckCircle className="w-4 h-4" />
-                    Apply Filters
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Apply
                   </>
                 )}
               </button>
@@ -2506,33 +2566,19 @@ const VariantFilterSidebar = ({
                   ? 'Clear all filters and restore all preview variants for chat'
                   : 'Clear all active filters (manual and proprietary) and restore all variants'
               }
-              className={`flex-1 px-4 py-2 bg-[var(--bg-surface-hover)] text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-hover)] flex items-center justify-center gap-2 text-sm font-medium ${
+              className={`flex-1 h-9 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-medium whitespace-nowrap border border-[var(--border-subtle)] bg-transparent text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${
                 isApplying ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
-              <RotateCcw className="w-4 h-4" />
-              Reset All Filters
+              <RotateCcw className="w-3.5 h-3.5" />
+              Reset all
             </button>
           </div>
+        </div>
 
-          {filteredCount !== null && displayTotalVariants > 0 && (
-            <div className="p-3 border rounded-lg" style={{ backgroundColor: 'var(--bg-surface-raised)', borderColor: 'var(--accent-teal)' }}>
-              <div className="text-sm" style={{ color: 'var(--text-primary)' }}>
-                <span className="font-semibold">Filtered:</span> {filteredCount.toLocaleString()} / {displayTotalVariants.toLocaleString()} variants
-              </div>
-              {appliedFilters &&
-                Object.keys(appliedFilters).filter((k) => k !== '_numeric_logic').length > 0 && (
-                  <div className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
-                    <span className="font-semibold">Active filters:</span>{' '}
-                    {Object.keys(appliedFilters)
-                      .filter((k) => k !== '_numeric_logic')
-                      .join(', ')}
-                  </div>
-                )}
-            </div>
-          )}
-
-          <div className="pt-1">
+        {/* Sticky footer: primary export action, always visible */}
+        {!isGuest && variantData && (
+          <div className="shrink-0 px-3.5 py-3 border-t border-[var(--border-subtle)] bg-[var(--bg-sidebar)]">
             <ExportVariantsButton
               conversationId={conversationId}
               variantData={variantData}
@@ -2540,9 +2586,9 @@ const VariantFilterSidebar = ({
               isGuest={isGuest}
             />
           </div>
-        </div>
+        )}
       </div>
-      
+
       {isGardenModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[70]">
           <div className="bg-[var(--bg-surface-raised)] rounded-xl shadow-xl w-full max-w-2xl mx-4 border border-[var(--border-default)] sidebar-modal">
@@ -2563,43 +2609,53 @@ const VariantFilterSidebar = ({
             <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
               <div className="sidebar-garden-step p-3 rounded-lg border">
                 <div className="text-xs font-semibold text-[var(--text-primary)] mb-2">Step 1: Choose action</div>
-                <select
+                <Select
                   value={gardenAction}
-                  onChange={(e) => {
-                    setGardenAction(e.target.value);
+                  items={GARDEN_ACTION_LABELS}
+                  onValueChange={(value) => {
+                    setGardenAction(value);
                     setGardenFeedback(null);
                     setGardenApplyMissingColumns([]);
                   }}
-                  className="w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg bg-[var(--bg-surface-raised)]"
                 >
-                  <option value="create">Create new entry from current filters</option>
-                  <option value="apply" disabled={savedFilterPresets.length === 0}>Apply existing entry</option>
-                  <option value="edit" disabled={savedFilterPresets.length === 0}>Edit name/notes of existing entry</option>
-                  <option value="delete" disabled={savedFilterPresets.length === 0}>Delete existing entry</option>
-                </select>
+                  <SelectTrigger className="w-full bg-[var(--bg-surface-raised)]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="create">Create new entry from current filters</SelectItem>
+                    <SelectItem value="apply" disabled={savedFilterPresets.length === 0}>Apply existing entry</SelectItem>
+                    <SelectItem value="edit" disabled={savedFilterPresets.length === 0}>Edit name/notes of existing entry</SelectItem>
+                    <SelectItem value="delete" disabled={savedFilterPresets.length === 0}>Delete existing entry</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {(gardenAction === 'apply' || gardenAction === 'edit' || gardenAction === 'delete') && (
                 <div className="sidebar-garden-step p-3 rounded-lg border">
                   <div className="text-xs font-semibold text-[var(--text-primary)] mb-2">Step 2: Choose existing entry</div>
-                  <select
+                  <Select
                     value={selectedPresetId}
-                    onChange={(e) => {
-                      setSelectedPresetId(e.target.value);
+                    items={Object.fromEntries(savedFilterPresets.map((p) => [p.id, p.name]))}
+                    onValueChange={(value) => {
+                      setSelectedPresetId(value);
                       setIsEditingGardenEntry(false);
                     }}
-                    className="w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg bg-[var(--bg-surface-raised)]"
                   >
-                    {savedFilterPresets.length === 0 ? (
-                      <option value="">No entries yet</option>
-                    ) : (
-                      savedFilterPresets.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))
-                    )}
-                  </select>
+                    <SelectTrigger className="w-full bg-[var(--bg-surface-raised)]">
+                      <SelectValue placeholder="Select an entry" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {savedFilterPresets.length === 0 ? (
+                        <SelectItem value="__none__" disabled>No entries yet</SelectItem>
+                      ) : (
+                        savedFilterPresets.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 
@@ -2756,10 +2812,6 @@ const VariantFilterSidebar = ({
       )}
 
       {/* Processing Notification */}
-      <ProcessingNotification 
-        message={isApplying ? 'Processing filters...' : null}
-        isVisible={isApplying}
-      />
     </div>
   );
 };

@@ -594,6 +594,10 @@ export function useVariantPipeline({
       return;
     }
     if (isRunningAnnovar) return;
+    if (pipelineSnapshot.hasAnnotatedFile) {
+      setAnnovarMessageModal({ title: 'Already annotated', message: 'ANNOVAR has already been run on this file. Edit sample metadata to re-run annotation.', variant: 'info' });
+      return;
+    }
 
     let annovarStartedAsync = false;
     try {
@@ -783,8 +787,10 @@ export function useVariantPipeline({
     let filterStartedAsync = false;
     setIsApplyingProprietaryFilter(true);
     prevFilterJobStatusRef.current = 'running';
-    interpretationDismissedRef.current = true;
-    setShowInterpretationModal(false);
+    // NOTE: Do NOT dismiss the File Analysis (interpretation) modal here.
+    // A rejected apply (e.g. backend refuses filter_2 as "not available") used to
+    // leave the user stranded with the modal closed and no way to choose another
+    // filter. We only dismiss on success below.
 
     try {
       const auth = getAuth();
@@ -809,6 +815,8 @@ export function useVariantPipeline({
       if (res.status === 202) {
         filterStartedAsync = true;
         await res.json().catch(() => ({}));
+        interpretationDismissedRef.current = true;
+        setShowInterpretationModal(false);
         setAnnovarMessageModal(null);
         setPipelineToast({
           title: `${displayName} started`,
@@ -818,6 +826,8 @@ export function useVariantPipeline({
       } else {
         const data = await res.json();
         const filteredCount = data.filtered_count ?? 0;
+        interpretationDismissedRef.current = true;
+        setShowInterpretationModal(false);
         await refreshConversationAfterAnnovar(activeConversationId);
         setConversationFilterState((prev) => ({
           ...prev,

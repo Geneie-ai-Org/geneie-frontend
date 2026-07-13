@@ -525,7 +525,14 @@ const VariantFilterSidebar = ({
     setRemoveFileDialogOpen(false);
     try {
       await onUploadSuccess(null);
-      resetFilters();
+      // Clear filter state locally without hitting backend (file is already gone)
+      setFilters({});
+      setCategoricalFilters({});
+      setAppliedFilters(null);
+      setFilteredCount(null);
+      setFilterWorkingSetCount(null);
+      setActiveProprietaryFilter(null);
+      notify({ message: 'File removed from conversation', type: 'success' });
     } catch (error) {
       console.error('[VariantFilterSidebar] Error removing file:', error);
     }

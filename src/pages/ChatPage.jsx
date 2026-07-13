@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
+import { toast } from 'sonner';
 
 import { useStickToBottom } from 'use-stick-to-bottom';
 import { Markdown } from '../components/chat/ChatMarkdown';
@@ -1006,10 +1007,12 @@ const ChatPage = () => {
   }
 
   const isInputDisabled =
-    !isAuthReady || isCurrentlyActive || isChatLimitReached || variantUploadInProgress;
+    !isAuthReady || isCurrentlyActive || isChatLimitReached || variantUploadInProgress || isRunningAnnovar;
 
   let inputPlaceholder = "Ask anything about bioinformatics...";
-  if (variantUploadInProgress) {
+  if (isRunningAnnovar) {
+    inputPlaceholder = 'ANNOVAR is running — chat will resume when annotation is complete…';
+  } else if (variantUploadInProgress) {
     inputPlaceholder = 'Upload in progress — chat will resume when your file is ready…';
   } else if (isCurrentlyActive) {
     inputPlaceholder = "Geneie is thinking...";
@@ -1620,41 +1623,13 @@ const ChatPage = () => {
           onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
           isApplyingProprietaryFilter={isApplyingProprietaryFilter}
           isRunningAnnovar={isRunningAnnovar}
+          hasAnnotatedFile={pipelineSnapshot.hasAnnotatedFile}
           acmgFilterActive={conversationFilterState.activeProprietaryFilter === 'filter_1'}
           acmgFilterCanApply={acmgFilterCanApply}
           filter2Active={conversationFilterState.activeProprietaryFilter === 'filter_2'}
           filter2CanApply={filter2CanApply}
           showVcfTabHighlight={columnInterpretationResult?.step1?.passed === false}
-          onDeleteDocument={async () => {
-            console.log('[App] Deleting document from conversation');
-            try {
-              const auth = getAuth();
-              const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-              if (token && activeConversationId) {
-                const deleteResponse = await fetch(apiUrl(`/api/conversation/${activeConversationId}/document`), {
-                  method: 'DELETE',
-                  headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                  }
-                });
-                if (deleteResponse.ok) {
-                  const deleteData = await deleteResponse.json();
-                  console.log('[App] Backend document deletion:', deleteData);
-                } else {
-                  console.warn('[App] Backend document deletion failed');
-                }
-              }
-            } catch (backendError) {
-              console.warn('[App] Backend document deletion error:', backendError);
-            }
-            setCurrentDocument(null);
-            setVariantData(null);
-            setColumnInterpretationResult(null);
-            setShowInterpretationModal(false);
-            interpretationShownRef.current = false;
-            console.log('[App] Document removed successfully');
-          }}
+          onDeleteDocument={() => handleDocumentUpload(null)}
         />
       )}
 
@@ -1677,6 +1652,10 @@ const ChatPage = () => {
           onEditSaved={(result) => {
             setIsEditSampleModalOpen(false);
             const impact = result?.metadata_edit_impact;
+            const backendMessage =
+              (typeof result?.message === 'string' && result.message.trim()) ||
+              (typeof impact?.message === 'string' && impact.message.trim()) ||
+              '';
             if (impact) {
               if (impact.requires_filter_reset || impact.requires_annovar_rerun) {
                 setVariantData(null);
@@ -1689,7 +1668,16 @@ const ChatPage = () => {
                 resetConversationPipeline();
               }
               if (impact.requires_annovar_rerun) {
+                // Explain what just happened before the pipeline kicks off silently.
+                toast.info(
+                  backendMessage ||
+                    'Genome build changed. Previous ANNOVAR results were cleared — re-running now.',
+                  { duration: 6000 }
+                );
                 setTimeout(() => runAnnovarForCurrentConversation(), 300);
+              } else if (backendMessage) {
+                // No re-run needed, but the backend still has something to say (e.g. filters reset).
+                toast.info(backendMessage, { duration: 5000 });
               }
             }
             mongodbApi.getConversation(activeConversationId).then((convData) => {

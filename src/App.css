@@ -311,12 +311,14 @@
   height: 1.25rem;
 }
 
-/* CORE SETUP */
+/* NOTE: do not set `overflow: hidden` on html/body/#root globally — that breaks
+ * document scrolling on pages that rely on normal flow (LandingPage). ChatPage
+ * contains its own scroll region via `.chat-app-shell { height: 100vh; overflow: hidden }`
+ * so it doesn't need help here. */
 body, html, #root {
     margin: 0;
     padding: 0;
-    height: 100%;
-    overflow: hidden;
+    min-height: 100%;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background-color: var(--bg-app);
     color: var(--text-primary);

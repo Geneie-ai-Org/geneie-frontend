@@ -56,6 +56,7 @@ const ColumnInterpretationResults = ({
   chatBlockedMessage,
   onChatBlocked,
   isRunningAnnovar = false,
+  hasAnnotatedFile = false,
 }) => {
   const [expandedStep, setExpandedStep] = useState(null); // Track which step is expanded
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // Explicit remove-file confirmation only
@@ -248,13 +249,26 @@ const ColumnInterpretationResults = ({
               </span>
             </AccordionTrigger>
             <AccordionContent className="pb-0">
-              <div className="mt-1.5 ml-5 space-y-1">
-                {entries.map(([colName, colInfo]) => (
-                  <div key={colName} className="flex items-center justify-between text-sm">
-                    <span style={{ color: C.textMuted }}>{colName}:</span>
-                    <span className="font-medium text-xs" style={{ color: C.success }}>✓ {colInfo.matched_column || 'Found'}</span>
-                  </div>
-                ))}
+              <div className="mt-2 ml-5 flex flex-wrap gap-1.5">
+                {entries.map(([colName, colInfo]) => {
+                  const label = colInfo.matched_column || colName;
+                  const roleDiffers = colInfo.matched_column && colInfo.matched_column !== colName;
+                  return (
+                    <span
+                      key={colName}
+                      title={roleDiffers ? `Role: ${colName}` : label}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+                      style={{
+                        backgroundColor: C.successSoft || `${C.success}18`,
+                        borderColor: `${C.success}40`,
+                        color: C.success,
+                      }}
+                    >
+                      <CheckCircle2 className="w-3 h-3 shrink-0" />
+                      {label}
+                    </span>
+                  );
+                })}
               </div>
             </AccordionContent>
           </AccordionItem>
@@ -466,7 +480,7 @@ const ColumnInterpretationResults = ({
     },
     {
       n: 2,
-      name: step2?.step_name || 'Proprietary Filters',
+      name: step2?.step_name || 'Annotation Stage',
       status: step2Status,
       progress: step2Progress,
       data: step2,
@@ -765,7 +779,9 @@ const ColumnInterpretationResults = ({
 
           {/* Tools — annotation + proprietary filters */}
           <div className="pt-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: C.textDim }}>Tools</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: C.textDim }}>
+              Proprietary Filters
+            </p>
             <div className="flex flex-wrap items-center gap-2">
               {/* VCF Upload Button - Highlighted when recommended */}
               {showVcfTabHighlight && (
@@ -818,6 +834,7 @@ const ColumnInterpretationResults = ({
               )}
 
               {/* Run ANNOVAR */}
+              {!hasAnnotatedFile && (
               <div className="relative group">
                 <button
                   onClick={(step1?.passed && !genomeMismatch) ? () => {
@@ -864,6 +881,7 @@ const ColumnInterpretationResults = ({
                   </div>
                 )}
               </div>
+              )}
 
               {/* ACMG Filter */}
               <div className="relative group">

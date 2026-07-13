@@ -121,20 +121,15 @@ const ConversationSidebar = ({
                 {/* Top: Logo — desktop only (mobile uses main top bar) */}
                 {!isMobile && (
                     <div className={`flex items-center h-16 overflow-hidden shrink-0 ${isOpen ? 'px-3' : 'justify-center'}`}>
-                        <div className={`flex items-center min-w-0 ${isOpen ? 'gap-2.5' : ''}`}>
-                            <div
-                                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold tracking-wide"
-                                style={{
-                                    backgroundColor: isOpen ? 'var(--accent-teal-soft)' : 'transparent',
-                                    color: 'var(--accent-teal)'
-                                }}
-                                aria-hidden
-                            >
-                                G
-                            </div>
+                        <div className={`flex items-center min-w-0 ${isOpen ? 'gap-0 pl-2' : ''}`}>
+                            <img
+                                src="/geneie-g.svg"
+                                alt="G"
+                                className="w-6 h-6 shrink-0"
+                            />
                             {isOpen && (
                                 <span className="text-sm font-semibold font-brand whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>
-                                    geneie
+                                    eneie
                                 </span>
                             )}
                         </div>

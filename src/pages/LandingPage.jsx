@@ -126,6 +126,21 @@ const LandingPage = () => {
     "Are there any clinically significant structural variants in this genome?"
   ];
 
+  const askAnythingFaqs = [
+    {
+      q: "Can I filter genomic variants based on a patient's actual physical symptoms?",
+      a: "Yes. Geneie uses phenotype-driven prioritization. Input clinical symptoms via natural language, and the platform will instantly highlight variants matching that specific patient profile."
+    },
+    {
+      q: "Can I export the data for my own clinical reports or research publications?",
+      a: "Absolutely. Geneie analyzes your complex genomic data into clean, interpretable tables. With a single click, users can copy insights or export customized variant tables directly into Excel sheets for seamless integration into medical reports or peer-reviewed publications."
+    },
+    {
+      q: "Since Geneie uses AI, is there a risk of it \"hallucinating\" medical data?",
+      a: "No. Geneie is engineered with a strict \"Zero-Hallucination\" architecture. Our in-house Large Language Model (LLM) is restricted exclusively to translating your natural language queries. All actual clinical scoring, data matching, and variant filtering are executed by deterministic, established bioinformatics pipelines, ensuring results are always scientifically defensible."
+    }
+  ];
+
   const faqItems = [
     {
       q: "Is this intended for clinical or research use?",
@@ -156,7 +171,7 @@ const LandingPage = () => {
             <div className="container mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <img
-                  src="/Final logo dark.svg"
+                  src="/logo/Final gene dark.svg"
                   alt="geneie logo"
                   className="h-20 w-20 sm:h-24 sm:w-24 object-contain"
                 />
@@ -532,13 +547,28 @@ const LandingPage = () => {
                 ))}
               </div>
 
-              <div ref={askQuestionsRef} className="w-full space-y-3">
-                {exampleQuestions.map((q, i) => (
-                  <div key={i} className="flex items-center p-4 md:p-5 bg-[#111] border border-zinc-800/50 rounded-xl transition-colors">
-                    <div className="w-8 h-8 min-w-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-mono mr-4 transition-colors text-zinc-400">{i + 1}</div>
-                    <p className="text-zinc-300 text-sm sm:text-[15px]">{q}</p>
-                  </div>
-                ))}
+              <div ref={askQuestionsRef} className="w-full">
+                <Accordion defaultValue={[]} className="w-full space-y-3">
+                  {askAnythingFaqs.map((item, i) => (
+                    <AccordionItem
+                      key={i}
+                      value={`ask-${i}`}
+                      className="rounded-xl border border-zinc-800/50 bg-[#111] px-4 md:px-5 overflow-hidden transition-colors hover:border-zinc-700 border-b-0"
+                    >
+                      <AccordionTrigger className="hover:no-underline font-medium text-zinc-100 text-left py-4 md:py-5 text-sm sm:text-[15px] items-start gap-4">
+                        <div className="flex items-start gap-4 min-w-0 flex-1">
+                          <div className="w-7 h-7 min-w-7 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-mono text-zinc-400 mt-0.5">
+                            {i + 1}
+                          </div>
+                          <span className="min-w-0">{item.q}</span>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="text-zinc-400 text-sm leading-relaxed pl-[44px] pr-2 pb-5">
+                        {item.a}
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
               </div>
             </div>
           </section>
@@ -739,10 +769,10 @@ const LandingPage = () => {
                   AI-powered genomic analysis for researchers and clinicians.
                 </p>
                 <a
-                  href="mailto:support@geneie.com"
+                  href="mailto:support@geneie.chat"
                   className="text-[#2F7F7A] hover:text-[#4ad6cd] text-sm font-medium transition-colors"
                 >
-                  support@geneie.com
+                  support@geneie.chat
                 </a>
               </div>
               <div className="flex items-center justify-between pt-10 pb-1 border-b border-zinc-800/60">
@@ -750,7 +780,7 @@ const LandingPage = () => {
                 <span className="flex items-center gap-1.5 text-zinc-500 text-xs sm:text-sm font-medium">
                   powered by 
                   <img src="/omixer-small-logo.png" alt="Omixir" className="h-4 sm:h-5 object-contain" />
-                  Omixer
+                  Omixir
                   </span>
               </div>
             </div>

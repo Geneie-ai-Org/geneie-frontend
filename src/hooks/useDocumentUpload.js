@@ -174,6 +174,7 @@ export function useDocumentUpload({
         setColumnInterpretationResult(null);
         setShowInterpretationModal(false);
         interpretationShownRef.current = false;
+        syncPipelineFromConversationRef.current(null);
         console.log('[App] Document removed successfully');
       } else {
         console.log('[App] Adding/updating document:', documentData);

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
 import { apiUrl } from '@/config/api';
+import { apiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
 import {
   convertToVcf,
   fetchChatEligibility,
@@ -300,7 +301,7 @@ export function useVariantPipeline({
       } catch (error) {
         setAnnovarMessageModal({
           title: 'VCF conversion failed',
-          message: error.message || 'Could not convert file to VCF.',
+          message: humanizeError(error.message) || 'Could not convert file to VCF.',
           variant: 'error',
         });
         throw error;
@@ -593,6 +594,10 @@ export function useVariantPipeline({
       return;
     }
     if (isRunningAnnovar) return;
+    if (pipelineSnapshot.hasAnnotatedFile) {
+      setAnnovarMessageModal({ title: 'Already annotated', message: 'ANNOVAR has already been run on this file. Edit sample metadata to re-run annotation.', variant: 'info' });
+      return;
+    }
 
     let annovarStartedAsync = false;
     try {
@@ -690,7 +695,7 @@ export function useVariantPipeline({
       console.error('[useVariantPipeline] Run ANNOVAR error:', error);
       setAnnovarMessageModal({
         title: 'Error',
-        message: error.message || 'Annotation failed. Please try again.',
+        message: humanizeError(error.message) || 'Annotation failed. Please try again.',
         variant: 'error',
       });
     } finally {
@@ -782,8 +787,10 @@ export function useVariantPipeline({
     let filterStartedAsync = false;
     setIsApplyingProprietaryFilter(true);
     prevFilterJobStatusRef.current = 'running';
-    interpretationDismissedRef.current = true;
-    setShowInterpretationModal(false);
+    // NOTE: Do NOT dismiss the File Analysis (interpretation) modal here.
+    // A rejected apply (e.g. backend refuses filter_2 as "not available") used to
+    // leave the user stranded with the modal closed and no way to choose another
+    // filter. We only dismiss on success below.
 
     try {
       const auth = getAuth();
@@ -802,21 +809,14 @@ export function useVariantPipeline({
 
       if (!res.ok && res.status !== 202) {
         const err = await res.json().catch(() => ({}));
-        const detail = err.detail;
-        const detailText =
-          typeof detail === 'string'
-            ? detail
-            : detail && typeof detail === 'object' && detail.message
-              ? detail.message
-              : Array.isArray(detail)
-                ? detail.map((d) => d.msg || d).join(', ')
-                : null;
-        throw new Error(detailText || `Failed to apply ${displayName}`);
+        throw new Error(apiErrorDetailToMessage(err.detail) || `Failed to apply ${displayName}`);
       }
 
       if (res.status === 202) {
         filterStartedAsync = true;
         await res.json().catch(() => ({}));
+        interpretationDismissedRef.current = true;
+        setShowInterpretationModal(false);
         setAnnovarMessageModal(null);
         setPipelineToast({
           title: `${displayName} started`,
@@ -826,6 +826,8 @@ export function useVariantPipeline({
       } else {
         const data = await res.json();
         const filteredCount = data.filtered_count ?? 0;
+        interpretationDismissedRef.current = true;
+        setShowInterpretationModal(false);
         await refreshConversationAfterAnnovar(activeConversationId);
         setConversationFilterState((prev) => ({
           ...prev,
@@ -844,7 +846,7 @@ export function useVariantPipeline({
       setAnnovarMessageModal({
         title: displayName,
         message:
-          error.message ||
+          humanizeError(error.message) ||
           `Failed to apply ${displayName}. Run ANNOVAR first if your file is not annotated yet.`,
         variant: 'error',
       });

@@ -185,9 +185,9 @@ const VariantAnalysisPipeline = ({
             {PIPELINE_STEP_DEFS.map((def, index) => {
               const status = steps[def.id];
               const isLast = index === PIPELINE_STEP_DEFS.length - 1;
+              const annovarDone = def.id === 'annovar' && status === 'done';
               const clickable =
-                !isGuest ||
-                (def.id !== 'annovar' && def.id !== 'reduce');
+                (!isGuest || (def.id !== 'annovar' && def.id !== 'reduce')) && !annovarDone;
               const guestLocked = isGuest && (def.id === 'annovar' || def.id === 'reduce');
 
               return (

@@ -311,12 +311,14 @@
   height: 1.25rem;
 }
 
-/* CORE SETUP */
+/* NOTE: do not set `overflow: hidden` on html/body/#root globally — that breaks
+ * document scrolling on pages that rely on normal flow (LandingPage). ChatPage
+ * contains its own scroll region via `.chat-app-shell { height: 100vh; overflow: hidden }`
+ * so it doesn't need help here. */
 body, html, #root {
     margin: 0;
     padding: 0;
-    height: 100%;
-    overflow: hidden;
+    min-height: 100%;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background-color: var(--bg-app);
     color: var(--text-primary);
@@ -494,26 +496,28 @@ body, html, #root {
 
 .variant-filter-sidebar .sidebar-header {
   background-color: var(--bg-sidebar);
-  border-color: var(--border-default);
-  padding: 0.75rem 1rem;
-  min-height: 3rem;
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.625rem 0.875rem;
+  min-height: 2.75rem;
 }
 
 .variant-filter-sidebar .sidebar-header h3 {
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   line-height: 1.3;
+  letter-spacing: -0.005em;
 }
 
 .variant-filter-sidebar .sidebar-scroll {
-  padding: 0.75rem;
-  gap: 0.75rem;
+  padding: 0.75rem 0.875rem 1rem;
+  gap: 0.625rem;
 }
 
 .variant-filter-sidebar .sidebar-card {
-  background-color: var(--bg-surface);
-  border-color: var(--border-default);
-  padding: 0.875rem;
+  background-color: transparent;
+  border: 1px solid var(--border-subtle);
+  padding: 0.75rem;
+  border-radius: 0.5rem;
 }
 
 .variant-filter-sidebar .sidebar-panel {

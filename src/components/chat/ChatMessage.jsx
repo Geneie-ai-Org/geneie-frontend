@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CheckCircle2, Copy, RotateCw } from 'lucide-react';
-import { MessageContent } from '../prompt-kit/message';
-import { Markdown } from '../prompt-kit/markdown';
-import { Source, SourceTrigger, SourceContent } from '../prompt-kit/source';
+import { Markdown } from './ChatMarkdown';
+import { Source, SourceTrigger, SourceContent } from './Source';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export const GlobalTypingStyles = () => (
   <style>{`
@@ -289,7 +290,7 @@ const ChatMessage = React.memo(({ role, text, sources, showRegenerate, onRegener
   return (
     <div className="group flex w-full gap-3" ref={messageRef}>
       <div className="flex-1 min-w-0">
-        <MessageContent className="text-sm bg-transparent p-0 rounded-none break-words overflow-wrap-anywhere">
+        <div className="text-sm break-words whitespace-normal overflow-wrap-anywhere">
           {processedText.type === 'withRefs' ? (
             <MarkdownWithReferences
               content={processedText.content}
@@ -301,7 +302,7 @@ const ChatMessage = React.memo(({ role, text, sources, showRegenerate, onRegener
               {processedText.content}
             </Markdown>
           )}
-        </MessageContent>
+        </div>
 
         {sources && sources.length > 0 && (
           <div className="mt-3 pt-2.5 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
@@ -328,27 +329,47 @@ const ChatMessage = React.memo(({ role, text, sources, showRegenerate, onRegener
           </div>
         )}
 
-        <div className="flex items-center gap-0.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="chat-chrome-btn-sm"
-            title={copied ? 'Copied!' : 'Copy'}
-          >
-            {copied ? <CheckCircle2 style={{ color: 'var(--success)' }} /> : <Copy />}
-          </button>
-          {showRegenerate && onRegenerate && (
-            <button
-              type="button"
-              onClick={onRegenerate}
-              disabled={regenerateDisabled}
-              className="chat-chrome-btn-sm disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Regenerate"
-            >
-              <RotateCw />
-            </button>
-          )}
-        </div>
+        <TooltipProvider>
+          <div className="flex items-center gap-0.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCopy}
+                    className="chat-chrome-btn-sm rounded-[0.375rem]"
+                    aria-label={copied ? 'Copied!' : 'Copy'}
+                  >
+                    {copied ? <CheckCircle2 style={{ color: 'var(--success)' }} /> : <Copy />}
+                  </Button>
+                }
+              />
+              <TooltipContent>{copied ? 'Copied!' : 'Copy'}</TooltipContent>
+            </Tooltip>
+            {showRegenerate && onRegenerate && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={onRegenerate}
+                      disabled={regenerateDisabled}
+                      className="chat-chrome-btn-sm rounded-[0.375rem] disabled:opacity-40 disabled:cursor-not-allowed"
+                      aria-label="Regenerate"
+                    >
+                      <RotateCw />
+                    </Button>
+                  }
+                />
+                <TooltipContent>Regenerate</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        </TooltipProvider>
       </div>
     </div>
   );

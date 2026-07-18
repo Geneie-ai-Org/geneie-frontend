@@ -43,6 +43,50 @@ const TypingText = React.memo(({ text, speed = 30, className, startDelay = 0 }) 
   );
 });
 
+const CHAT_TABLE_COMPONENTS = {
+  table: ({ node, ...props }) => (
+    <div
+      className="my-4 max-h-[420px] overflow-auto rounded-lg border"
+      style={{ borderColor: 'var(--border-default)' }}
+    >
+      <table
+        className="w-max min-w-full border-collapse text-sm"
+        style={{ borderColor: 'var(--border-default)' }}
+        {...props}
+      />
+    </div>
+  ),
+  thead: ({ node, ...props }) => (
+    <thead
+      className="sticky top-0 z-10"
+      style={{ backgroundColor: 'var(--bg-surface-raised)' }}
+      {...props}
+    />
+  ),
+  tbody: ({ node, ...props }) => <tbody {...props} />,
+  tr: ({ node, ...props }) => (
+    <tr
+      className="border-b hover:bg-white/5"
+      style={{ borderColor: 'var(--border-subtle)' }}
+      {...props}
+    />
+  ),
+  th: ({ node, ...props }) => (
+    <th
+      className="px-3 py-2 text-left font-semibold whitespace-nowrap border-b border-r last:border-r-0"
+      style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
+      {...props}
+    />
+  ),
+  td: ({ node, ...props }) => (
+    <td
+      className="px-3 py-2 align-top whitespace-nowrap border-r last:border-r-0"
+      style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }}
+      {...props}
+    />
+  ),
+};
+
 const MarkdownWithReferences = React.memo(({ content, placeholders, scrollToSource }) => {
   const containerRef = useRef(null);
 
@@ -192,16 +236,7 @@ const MarkdownWithReferences = React.memo(({ content, placeholders, scrollToSour
           em: createProcessedComponent('em'),
           li: createProcessedComponent('li'),
           span: createProcessedComponent('span'),
-          table: ({ node, ...props }) => (
-            <div className="overflow-x-auto my-4">
-              <table className="min-w-full border-collapse border text-sm" style={{ borderColor: 'var(--border-default)' }} {...props} />
-            </div>
-          ),
-          thead: ({ node, ...props }) => <thead style={{ backgroundColor: 'var(--bg-app)' }} {...props} />,
-          tbody: ({ node, ...props }) => <tbody {...props} />,
-          tr: ({ node, ...props }) => <tr className="border-b hover:bg-white/5" style={{ borderColor: 'var(--border-subtle)' }} {...props} />,
-          th: ({ node, ...props }) => <th className="border px-3 py-2 text-left font-semibold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} {...props} />,
-          td: ({ node, ...props }) => <td className="border px-3 py-2" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }} {...props} />,
+          ...CHAT_TABLE_COMPONENTS,
         }}
       >
         {content}
@@ -256,18 +291,7 @@ const ChatMessage = React.memo(({ role, text, sources, showRegenerate, onRegener
     return { type: 'withRefs', content: processedContent, placeholders: placeholderMap };
   }, [text, sources]);
 
-  const markdownComponents = {
-    table: ({ node, ...props }) => (
-      <div className="overflow-x-auto my-4">
-        <table className="min-w-full border-collapse border text-sm" style={{ borderColor: 'var(--border-default)' }} {...props} />
-      </div>
-    ),
-    thead: ({ node, ...props }) => <thead style={{ backgroundColor: 'var(--bg-app)' }} {...props} />,
-    tbody: ({ node, ...props }) => <tbody {...props} />,
-    tr: ({ node, ...props }) => <tr className="border-b hover:bg-white/5" style={{ borderColor: 'var(--border-subtle)' }} {...props} />,
-    th: ({ node, ...props }) => <th className="border px-3 py-2 text-left font-semibold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} {...props} />,
-    td: ({ node, ...props }) => <td className="border px-3 py-2" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }} {...props} />,
-  };
+  const markdownComponents = { ...CHAT_TABLE_COMPONENTS };
 
   if (isUser) {
     return (

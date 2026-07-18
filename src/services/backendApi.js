@@ -300,6 +300,78 @@ export async function exportVariants(conversationId) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Validate an import URL before showing the metadata form.
+ * POST /api/upload-variant-file/url-preflight
+ */
+export async function urlPreflight({ fileUrl, fileName, conversationId, isGuest = false }) {
+  const headers = isGuest
+    ? { 'Content-Type': 'application/json' }
+    : { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const body = { file_url: fileUrl, conversation_id: conversationId };
+  if (fileName) body.file_name = fileName;
+  const response = await fetch(apiUrl('/api/upload-variant-file/url-preflight'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'URL validation failed');
+  }
+  return data;
+}
+
+/**
+ * Import a variant file from URL server-side.
+ * POST /api/upload-variant-file/from-url
+ */
+export async function uploadFromUrl({
+  conversationId,
+  fileUrl,
+  fileName,
+  sampleMetadata,
+  experimentType,
+  phenotypeInfo,
+  isGuest = false,
+}) {
+  const headers = isGuest
+    ? { 'Content-Type': 'application/json' }
+    : { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const body = { conversation_id: conversationId, file_url: fileUrl, file_name: fileName };
+  if (sampleMetadata) body.sample_metadata = JSON.stringify(sampleMetadata);
+  if (experimentType) body.experiment_type = experimentType;
+  if (phenotypeInfo) body.phenotype_info = phenotypeInfo;
+  const response = await fetch(apiUrl('/api/upload-variant-file/from-url'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'URL import failed');
+  }
+  return data;
+}
+
+/**
+ * Client-side check: does the pasted URL look like a valid import URL?
+ * Accepts https://, s3://, or bare Drive/Dropbox domains.
+ */
+export function isRecognizedImportUrl(url) {
+  const raw = (url || '').trim();
+  if (!raw) return false;
+  if (raw.toLowerCase().startsWith('s3://')) return true;
+  if (/^https?:\/\//i.test(raw)) return true;
+  const lower = raw.toLowerCase();
+  return (
+    lower.includes('drive.google.com') ||
+    lower.includes('docs.google.com') ||
+    lower.includes('dropbox.com') ||
+    lower.includes('dropboxusercontent.com')
+  );
+}
+
 /** PUT file to S3 via presigned URL with byte progress. */
 export function putFileToPresignedUrl({ url, method = 'PUT', headers = {}, file, onProgress }) {
   return new Promise((resolve, reject) => {

@@ -272,6 +272,7 @@ const ConversationSidebar = ({
 
                             <NotificationBell
                                 onNavigateToConversation={(convId) => onSelectConversation(convId)}
+                                triggerClassName="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--text-secondary)] cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
                             />
                         </div>
                     )}

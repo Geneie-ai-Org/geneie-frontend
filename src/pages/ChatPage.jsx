@@ -74,6 +74,7 @@ const ChatPage = () => {
   const [activeFileTypeTab, setActiveFileTypeTab] = useState('tabular'); // Track active tab for modal color
   const [showFileTypeDropdown, setShowFileTypeDropdown] = useState(null); // 'new-chat' | 'conversation' | null
   const [preSelectedFile, setPreSelectedFile] = useState(null); // File selected via dropdown before modal
+  const [uploadModalImportMode, setUploadModalImportMode] = useState('file'); // 'file' | 'url' — initial mode for upload modal
   const [uploadingFileName, setUploadingFileName] = useState(null);
   const fileTypeDropdownRef = useRef(null);
   const tsvFileInputRef = useRef(null);
@@ -82,6 +83,7 @@ const ChatPage = () => {
   const [showSubscriptionCanceled, setShowSubscriptionCanceled] = useState(false);
   const [columnInterpretationResult, setColumnInterpretationResult] = useState(null); // 3-step interpretation results
   const [showInterpretationModal, setShowInterpretationModal] = useState(false); // Show interpretation results modal
+  const [interpretationModalStep, setInterpretationModalStep] = useState(null); // Override initial step when opening modal
   const interpretationShownRef = useRef(false); // Track if we've already shown the modal for current result
   const interpretationDismissedRef = useRef(false); // User closed File Analysis — do not auto-reopen until new upload
   const [annovarMessageModal, setAnnovarMessageModal] = useState(null); // { title, message, variant: 'success'|'error'|'info' } - styled in-app, no browser alert
@@ -831,6 +833,14 @@ const ChatPage = () => {
     vcfFileInputRef.current?.click();
   };
 
+  const onSelectImportFromUrl = () => {
+    setShowFileTypeDropdown(null);
+    setActiveFileTypeTab('tabular');
+    setUploadModalImportMode('url');
+    setPreSelectedFile(null);
+    setShowUploadModal(true);
+  };
+
   useEffect(() => {
     if (!columnInterpretationResult) {
       setIsAnnovarRecommended(false);
@@ -898,7 +908,13 @@ const ChatPage = () => {
           runAnnovarForCurrentConversation();
           break;
         case 'reduce':
-          setIsVariantSidebarOpen(true);
+          if (conversationFilterState.activeProprietaryFilter || conversationFilterState.activeVariantFilters) {
+            setIsVariantSidebarOpen(true);
+          } else {
+            setInterpretationModalStep(3);
+            interpretationDismissedRef.current = false;
+            setShowInterpretationModal(true);
+          }
           break;
         case 'chat':
           setPipelineExpanded(false);
@@ -1248,6 +1264,7 @@ const ChatPage = () => {
                   onUploadButtonClick={handleUploadButtonClick}
                   onSelectTabular={onSelectTabularFile}
                   onSelectVcf={onSelectVcfFile}
+                  onSelectFromUrl={userTier === 'guest' ? undefined : onSelectImportFromUrl}
                   isVariantSidebarOpen={isVariantSidebarOpen}
                   onToggleVariantSidebar={() => setIsVariantSidebarOpen(!isVariantSidebarOpen)}
                   hasDocument={!!currentDocument}
@@ -1385,6 +1402,7 @@ const ChatPage = () => {
                   onUploadButtonClick={handleUploadButtonClick}
                   onSelectTabular={onSelectTabularFile}
                   onSelectVcf={onSelectVcfFile}
+                  onSelectFromUrl={userTier === 'guest' ? undefined : onSelectImportFromUrl}
                   isVariantSidebarOpen={isVariantSidebarOpen}
                   onToggleVariantSidebar={() => setIsVariantSidebarOpen(!isVariantSidebarOpen)}
                   hasDocument={!!currentDocument}
@@ -1493,6 +1511,7 @@ const ChatPage = () => {
               onClick={() => {
                 setShowUploadModal(false);
                 setPreSelectedFile(null);
+                setUploadModalImportMode('file');
                 if (uploadSessionConversationId === activeConversationId) {
                   setPipelineToast({
                     title: 'Upload in progress',
@@ -1518,7 +1537,7 @@ const ChatPage = () => {
               className="rounded-2xl max-w-lg w-full transition-all pointer-events-auto"
               style={{
                 backgroundColor: 'var(--bg-surface-raised)',
-                border: '1px solid var(--accent-teal)',
+                border: '1px solid var(--border-default)',
                 boxShadow: 'var(--shadow-xl)',
               }}
               onClick={(e) => e.stopPropagation()}
@@ -1530,9 +1549,11 @@ const ChatPage = () => {
                   onUploadingChange={handleVariantUploadingChangeWithCleanup}
                   onUploadProgressChange={handleUploadProgressChange}
                   onUploadStarted={handleUploadStarted}
+                  initialImportMode={uploadModalImportMode}
                   onDismissForUpload={() => {
                     setShowUploadModal(false);
                     setMetadataFormOpen(false);
+                    setUploadModalImportMode('file');
                   }}
                   onUploadSuccess={async (doc) => {
                     await handleDocumentUpload(doc);
@@ -1542,6 +1563,7 @@ const ChatPage = () => {
                       setActiveFileTypeTab('tabular');
                       setPreSelectedFile(null);
                       setUploadingFileName(null);
+                      setUploadModalImportMode('file');
                     }
                   }}
                   existingDocument={currentDocument}
@@ -1554,6 +1576,7 @@ const ChatPage = () => {
                     setPreSelectedFile(null);
                     setMetadataFormOpen(false);
                     setUploadingFileName(null);
+                    setUploadModalImportMode('file');
                   }}
                 />
               </div>
@@ -1591,6 +1614,7 @@ const ChatPage = () => {
       {showFileAnalysisModal && (
         <ColumnInterpretationResults
           interpretationResult={columnInterpretationResult}
+          initialStep={interpretationModalStep}
           chatAllowed={!isChatPipelineGated}
           chatBlockedMessage={chatEligibility.message}
           onChatBlocked={() => promptChatBlocked()}
@@ -1602,6 +1626,7 @@ const ChatPage = () => {
           onClose={async () => {
             interpretationDismissedRef.current = true;
             setShowInterpretationModal(false);
+            setInterpretationModalStep(null);
             if (columnInterpretationResult && activeConversationId) {
               await syncAfterColumnInterpretation(activeConversationId, columnInterpretationResult);
             }
@@ -1609,12 +1634,14 @@ const ChatPage = () => {
           onTryVcfUpload={() => {
             interpretationDismissedRef.current = true;
             setShowInterpretationModal(false);
+            setInterpretationModalStep(null);
             setActiveFileTypeTab('vcf');
             setShowUploadModal(true);
           }}
           onConvertToVcf={async () => {
             interpretationDismissedRef.current = true;
             setShowInterpretationModal(false);
+            setInterpretationModalStep(null);
             const genome = currentDocument?.sample_metadata?.genome;
             const refGenome = genome?.includes('37') || genome?.includes('hg19') ? 'hg19' : 'hg38';
             await convertTabularToVcfForConversation(refGenome);

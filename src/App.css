@@ -538,6 +538,19 @@ body, html, #root {
   color: var(--text-tertiary);
 }
 
+/* Neutralize Chrome/Safari autofill: keep dark input surface instead of the
+   browser's forced white/lavender fill. Applies app-wide. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill {
+  -webkit-text-fill-color: var(--text-primary);
+  caret-color: var(--text-primary);
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-input) inset;
+  box-shadow: 0 0 0 1000px var(--bg-input) inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
 .variant-filter-sidebar .sidebar-icon-btn:hover {
   background-color: var(--bg-surface-hover);
 }

@@ -398,9 +398,8 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
               }
             }}
             disabled={disabled}
-            className={`w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent-teal)] focus:border-[var(--accent-teal)] select-text ${
-              disabled ? 'opacity-50 cursor-not-allowed bg-[var(--bg-surface)]' : ''
-            }`}
+            className={`w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent-teal)] focus:border-[var(--accent-teal)] select-text ${disabled ? 'opacity-50 cursor-not-allowed bg-[var(--bg-surface)]' : ''
+              }`}
             style={{ backgroundColor: 'var(--bg-surface-raised)' }}
             aria-label="Minimum filter value"
           />
@@ -424,9 +423,8 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
               }
             }}
             disabled={disabled}
-            className={`w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent-teal)] focus:border-[var(--accent-teal)] select-text ${
-              disabled ? 'opacity-50 cursor-not-allowed bg-[var(--bg-surface)]' : ''
-            }`}
+            className={`w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent-teal)] focus:border-[var(--accent-teal)] select-text ${disabled ? 'opacity-50 cursor-not-allowed bg-[var(--bg-surface)]' : ''
+              }`}
             style={{ backgroundColor: 'var(--bg-surface-raised)' }}
             aria-label="Maximum filter value"
           />
@@ -455,9 +453,8 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
           aria-valuenow={lo}
           disabled={disabled}
           onPointerDown={(e) => onThumbDown('low', e)}
-          className={`absolute w-4 h-4 rounded-full border-2 border-[var(--bg-surface-raised)] shadow-md focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[var(--accent-teal)] ${
-            dragging === 'low' ? 'z-20 scale-110' : 'z-10'
-          }`}
+          className={`absolute w-4 h-4 rounded-full border-2 border-[var(--bg-surface-raised)] shadow-md focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[var(--accent-teal)] ${dragging === 'low' ? 'z-20 scale-110' : 'z-10'
+            }`}
           style={{
             left: `${loPct}%`,
             top: '50%',
@@ -475,9 +472,8 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
           aria-valuenow={hi}
           disabled={disabled}
           onPointerDown={(e) => onThumbDown('high', e)}
-          className={`absolute w-4 h-4 rounded-full border-2 border-[var(--bg-surface-raised)] shadow-md focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[var(--accent-teal)] ${
-            dragging === 'high' ? 'z-20 scale-110' : 'z-10'
-          }`}
+          className={`absolute w-4 h-4 rounded-full border-2 border-[var(--bg-surface-raised)] shadow-md focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[var(--accent-teal)] ${dragging === 'high' ? 'z-20 scale-110' : 'z-10'
+            }`}
           style={{
             left: `${hiPct}%`,
             top: '50%',
@@ -554,7 +550,7 @@ const VariantFilterSidebar = ({
   const [gardenApplyMissingColumns, setGardenApplyMissingColumns] = useState([]);
   const [gardenFeedback, setGardenFeedback] = useState(null);
   const proprietaryPreviewLoadedForRef = useRef(null);
-  
+
   // Define isGuest early so it can be used in functions below
   const isGuest = userTier === 'guest';
   // Manual filters can narrow the ACMG (or other) Postgres working set; proprietary apply still
@@ -586,7 +582,7 @@ const VariantFilterSidebar = ({
         } else {
           setFilters({});
         }
-        
+
         // Initialize categorical filters - start fresh for this conversation
         if (variantData.categorical_columns) {
           const initialCategorical = {};
@@ -730,90 +726,90 @@ const VariantFilterSidebar = ({
           const appId = typeof window !== 'undefined' && window.__app_id ? window.__app_id : 'default-app-id';
           const conversationRef = doc(db, 'artifacts', appId, 'users', userId, 'conversations', conversationId);
           const conversationDoc = await getDoc(conversationRef);
-        
+
           if (conversationDoc.exists()) {
-          const data = conversationDoc.data();
-          const activeFilters = data.activeVariantFilters;
-          const count = data.filteredVariantCount;
-          
-          if (activeFilters) {
-            setAppliedFilters(activeFilters);
-            // Update filter inputs with active values - ensure filters state is initialized first
-            setFilters(prevFilters => {
-              const updatedFilters = { ...prevFilters };
-              for (const param in activeFilters) {
-                if (param === '_numeric_logic') continue;
-                const filter = activeFilters[param];
-                if (filter.min !== undefined || filter.max !== undefined) {
-                  // Numeric filter - ensure the parameter exists in filters state
-                  if (!updatedFilters[param] && variantData.parameter_ranges && variantData.parameter_ranges[param]) {
-                    const range = variantData.parameter_ranges[param];
-                    updatedFilters[param] = {
-                      min: range.min,
-                      max: range.max,
-                      currentMin: null,
-                      currentMax: null
-                    };
-                  }
-                  if (updatedFilters[param]) {
-                    updatedFilters[param].currentMin = filter.min !== undefined && filter.min !== null ? filter.min : null;
-                    updatedFilters[param].currentMax = filter.max !== undefined && filter.max !== null ? filter.max : null;
+            const data = conversationDoc.data();
+            const activeFilters = data.activeVariantFilters;
+            const count = data.filteredVariantCount;
+
+            if (activeFilters) {
+              setAppliedFilters(activeFilters);
+              // Update filter inputs with active values - ensure filters state is initialized first
+              setFilters(prevFilters => {
+                const updatedFilters = { ...prevFilters };
+                for (const param in activeFilters) {
+                  if (param === '_numeric_logic') continue;
+                  const filter = activeFilters[param];
+                  if (filter.min !== undefined || filter.max !== undefined) {
+                    // Numeric filter - ensure the parameter exists in filters state
+                    if (!updatedFilters[param] && variantData.parameter_ranges && variantData.parameter_ranges[param]) {
+                      const range = variantData.parameter_ranges[param];
+                      updatedFilters[param] = {
+                        min: range.min,
+                        max: range.max,
+                        currentMin: null,
+                        currentMax: null
+                      };
+                    }
+                    if (updatedFilters[param]) {
+                      updatedFilters[param].currentMin = filter.min !== undefined && filter.min !== null ? filter.min : null;
+                      updatedFilters[param].currentMax = filter.max !== undefined && filter.max !== null ? filter.max : null;
+                    }
                   }
                 }
-              }
-              return updatedFilters;
-            });
-            
-            setCategoricalFilters(prevCategorical => {
-              const updatedCategorical = { ...prevCategorical };
-              for (const param in activeFilters) {
-                if (param === '_numeric_logic') continue;
-                const filter = activeFilters[param];
-                if (filter.values && Array.isArray(filter.values)) {
-                  // Categorical filter - ensure the parameter exists
-                  updatedCategorical[param] = filter.values;
+                return updatedFilters;
+              });
+
+              setCategoricalFilters(prevCategorical => {
+                const updatedCategorical = { ...prevCategorical };
+                for (const param in activeFilters) {
+                  if (param === '_numeric_logic') continue;
+                  const filter = activeFilters[param];
+                  if (filter.values && Array.isArray(filter.values)) {
+                    // Categorical filter - ensure the parameter exists
+                    updatedCategorical[param] = filter.values;
+                  }
                 }
-              }
-              return updatedCategorical;
-            });
-          } else {
-            // No active filters in Firestore - clear applied filters
-            setAppliedFilters(null);
-            // Reset filter inputs to null (but keep the filter structure from variantData)
-            setFilters(prevFilters => {
-              const resetFilters = { ...prevFilters };
-              for (const param in resetFilters) {
-                resetFilters[param] = {
-                  ...resetFilters[param],
-                  currentMin: null,
-                  currentMax: null
-                };
-              }
-              return resetFilters;
-            });
-            setCategoricalFilters(prevCategorical => {
-              const resetCategorical = { ...prevCategorical };
-              for (const param in resetCategorical) {
-                resetCategorical[param] = [];
-              }
-              return resetCategorical;
-            });
-          }
-          
-          if (count !== undefined && count !== null) {
-            setFilteredCount(count);
-          } else {
-            setFilteredCount(null);
-          }
-          
-          // Load proprietary filter state
-          const activeProprietary = data.activeProprietaryFilter;
-          if (activeProprietary) {
-            setActiveProprietaryFilter(activeProprietary);
-          } else {
-            // Clear proprietary filter if not active
-            setActiveProprietaryFilter(null);
-          }
+                return updatedCategorical;
+              });
+            } else {
+              // No active filters in Firestore - clear applied filters
+              setAppliedFilters(null);
+              // Reset filter inputs to null (but keep the filter structure from variantData)
+              setFilters(prevFilters => {
+                const resetFilters = { ...prevFilters };
+                for (const param in resetFilters) {
+                  resetFilters[param] = {
+                    ...resetFilters[param],
+                    currentMin: null,
+                    currentMax: null
+                  };
+                }
+                return resetFilters;
+              });
+              setCategoricalFilters(prevCategorical => {
+                const resetCategorical = { ...prevCategorical };
+                for (const param in resetCategorical) {
+                  resetCategorical[param] = [];
+                }
+                return resetCategorical;
+              });
+            }
+
+            if (count !== undefined && count !== null) {
+              setFilteredCount(count);
+            } else {
+              setFilteredCount(null);
+            }
+
+            // Load proprietary filter state
+            const activeProprietary = data.activeProprietaryFilter;
+            if (activeProprietary) {
+              setActiveProprietaryFilter(activeProprietary);
+            } else {
+              // Clear proprietary filter if not active
+              setActiveProprietaryFilter(null);
+            }
           }
         }
 
@@ -871,7 +867,7 @@ const VariantFilterSidebar = ({
     try {
       const auth = getAuth();
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      
+
       const API_URL = apiUrl('/api/filter-variants');
 
       const filterObject = buildFilterPayloadFromState(filters, categoricalFilters);
@@ -930,11 +926,11 @@ const VariantFilterSidebar = ({
             type: 'warning',
           });
         }
-        
+
         // IMPORTANT: Keep filter state intact - don't clear the inputs
         // The filters state and categoricalFilters state should remain as-is
         // so users can see what they selected and modify if needed
-        
+
         // Show notification message
         notify({
           message: variantData?.sample_only_ingest
@@ -942,9 +938,9 @@ const VariantFilterSidebar = ({
             : `Filters applied: ${(Number.isFinite(fc) ? fc : 0).toLocaleString()} of ${(Number.isFinite(tc) ? tc : displayTotalVariants).toLocaleString()} variants`,
           type: fc === 0 && Object.keys(filterObject).length > 0 ? 'warning' : 'success',
         });
-        
+
         // Auto-hide notification after 4 seconds
-        
+
         if (onFiltersChange) {
           onFiltersChange(filterObject, data.filtered_count, data.total_count, {
             parameter_ranges: data.parameter_ranges,
@@ -980,7 +976,7 @@ const VariantFilterSidebar = ({
 
   const resetFilters = async () => {
     if (!conversationId || !userId) return;
-    
+
     // Reset local state first
     const resetFiltersState = {};
     for (const param in filters) {
@@ -991,21 +987,21 @@ const VariantFilterSidebar = ({
       };
     }
     setFilters(resetFiltersState);
-    
+
     // Reset categorical filters
     const resetCategorical = {};
     for (const param in categoricalFilters) {
       resetCategorical[param] = [];
     }
     setCategoricalFilters(resetCategorical);
-    
+
     // Clear applied filters state
     setAppliedFilters(null);
     setFilteredCount(null);
-    
+
     // Clear proprietary filter state
     setActiveProprietaryFilter(null);
-    
+
     // Clear filters in backend and Firestore
     setIsApplying(true);
     // Show processing notification via parent component
@@ -1015,9 +1011,9 @@ const VariantFilterSidebar = ({
     try {
       const auth = getAuth();
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      
+
       const API_URL = apiUrl('/api/filter-variants');
-      
+
       // Send empty filters object to clear all filters
       const response = await fetch(API_URL, {
         method: 'POST',
@@ -1033,7 +1029,7 @@ const VariantFilterSidebar = ({
 
       if (response.ok) {
         const data = await response.json();
-        
+
         // Validate response - if total_count is 0, something is wrong
         if (data.total_count === 0) {
           console.error('[VariantFilterSidebar] Reset failed: total_count is 0. Variant data may be missing.');
@@ -1043,10 +1039,10 @@ const VariantFilterSidebar = ({
           // Reset successful - filtered count should equal total count
           setFilteredCount(data.filtered_count);
         }
-        
+
         // Clear applied filters
         setAppliedFilters(null);
-        
+
         // Show notification
         if (data.total_count > 0) {
           notify({
@@ -1079,7 +1075,7 @@ const VariantFilterSidebar = ({
       setIsApplying(false);
     }
   };
-  
+
   const handleCategoricalChange = (param, value, checked) => {
     setCategoricalFilters(prev => {
       const current = prev[param] || [];
@@ -1366,14 +1362,14 @@ const VariantFilterSidebar = ({
       if (typeof onUploadSuccess === 'function') {
         const refreshDoc = currentDocument
           ? {
-              ...currentDocument,
-              storageType: currentDocument.storageType || 's3',
-              is_variant_file: true
-            }
+            ...currentDocument,
+            storageType: currentDocument.storageType || 's3',
+            is_variant_file: true
+          }
           : {
-              storageType: 's3',
-              is_variant_file: true
-            };
+            storageType: 's3',
+            is_variant_file: true
+          };
         await onUploadSuccess(refreshDoc);
       }
     } catch (error) {
@@ -1386,14 +1382,14 @@ const VariantFilterSidebar = ({
   // Load proprietary filter previews
   const loadProprietaryFilterPreviews = async () => {
     if (!conversationId || !userId) return;
-    
+
     try {
       const auth = getAuth();
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      
+
       const base = getApiOrigin();
       const API_URL = `${base}/api/preview-proprietary-filters`;
-      
+
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: {
@@ -1404,7 +1400,7 @@ const VariantFilterSidebar = ({
           conversation_id: conversationId
         })
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setProprietaryFilterPreviews(data);
@@ -1422,25 +1418,25 @@ const VariantFilterSidebar = ({
     if (!conversationId || !userId) return;
     if (hasAppliedManualFilters && activeProprietaryFilter !== filterType) {
       notify({
-        message: 'Manual filters are active. Reset manual filters before applying a proprietary filter.',
+        message: 'Manual filters are active. Reset manual filters before applying an annotation-stage filter.',
         type: 'warning'
       });
       return;
     }
-    
+
     // If clicking the same filter that's already active, remove it
     if (activeProprietaryFilter === filterType) {
       await handleRemoveProprietaryFilter();
       return;
     }
-    
+
     setIsApplyingProprietaryFilter(true);
     try {
       const auth = getAuth();
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      
+
       const API_URL = apiUrl('/api/apply-proprietary-filter');
-      
+
       const apiBase = getApiOrigin();
 
       const response = await fetch(API_URL, {
@@ -1455,7 +1451,7 @@ const VariantFilterSidebar = ({
           filter_type: filterType
         })
       });
-      
+
       if (response.ok || response.status === 202) {
         let filteredCount = 0;
         let totalCount = null;
@@ -1484,12 +1480,12 @@ const VariantFilterSidebar = ({
         }
 
         await loadProprietaryFilterPreviews();
-        
+
         notify({
           message: `${filterType === 'filter_1' ? ACMG_FILTER_DISPLAY_NAME : 'Functional Impact'} applied: ${filteredCount.toLocaleString()} variants`,
           type: 'success'
         });
-        
+
         if (onFiltersChange) {
           onFiltersChange({ proprietary: filterType }, filteredCount, totalCount);
         }
@@ -1513,14 +1509,14 @@ const VariantFilterSidebar = ({
   // Remove proprietary filter
   const handleRemoveProprietaryFilter = async () => {
     if (!conversationId || !userId) return;
-    
+
     setIsApplyingProprietaryFilter(true);
     try {
       const auth = getAuth();
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      
+
       const API_URL = apiUrl('/api/remove-proprietary-filter');
-      
+
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: {
@@ -1531,7 +1527,7 @@ const VariantFilterSidebar = ({
           conversation_id: conversationId
         })
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setActiveProprietaryFilter(null);
@@ -1540,13 +1536,13 @@ const VariantFilterSidebar = ({
 
         // Reload previews to update counts
         await loadProprietaryFilterPreviews();
-        
+
         // Show notification
         notify({
           message: 'Recommended filter removed',
           type: 'success'
         });
-        
+
         // Notify parent
         if (onFiltersChange) {
           onFiltersChange({ proprietary: null }, data.total_count, data.total_count);
@@ -1731,14 +1727,12 @@ const VariantFilterSidebar = ({
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto sidebar-scroll flex flex-col space-y-3 relative">
           {/* Active Filter Summary Strip */}
-          {currentActiveFilterLabel && (
+          {/* {currentActiveFilterLabel && (
             <div className="px-3 py-1.5 rounded-md text-[11px] flex items-center gap-1.5 border border-[var(--accent-teal)]/30 bg-[var(--accent-teal-soft)]">
               <span className="text-[var(--text-tertiary)]">Filtered by</span>
               <span className="font-semibold text-[var(--accent-teal)] truncate">{currentActiveFilterLabel}</span>
             </div>
-          )}
-
-          {/* File-context explanation moved into an Info popover next to the "Under consideration" title. */}
+          )} */}
 
           {/* Variant Count Display with graphical bar */}
           {hasActiveManualFilters &&
@@ -1746,93 +1740,14 @@ const VariantFilterSidebar = ({
             filteredCount === 1 &&
             filterWorkingSetCount === 1 &&
             fileTotalVariants > 100 && (
-            <div
-              className="mx-4 mb-2 p-2.5 rounded-lg border text-xs leading-relaxed"
-              style={{ backgroundColor: 'var(--warning-soft)', borderColor: 'var(--warning)', color: 'var(--warning)' }}
-            >
-              Only 1 variant is loaded in the database. Click <strong>Reset</strong>, then apply ACMG or your first
-              sidebar filter again to reload a larger working set.
-            </div>
-          )}
-
-          {fileTotalVariants > 0 && (
-            <div className="sidebar-card">
-              <div className="flex items-baseline justify-between mb-2 gap-2">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-[13px] font-medium text-[var(--text-primary)]">Under consideration</span>
-                  {variantData?.sample_only_ingest && (
-                    <Popover>
-                      <PopoverTrigger
-                        className="inline-flex items-center justify-center w-4 h-4 rounded text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
-                        aria-label="About this file"
-                      >
-                        <Info className="w-3.5 h-3.5" />
-                      </PopoverTrigger>
-                      <PopoverContent
-                        side="bottom"
-                        align="start"
-                        sideOffset={6}
-                        className="w-72 p-3 text-[12px] leading-relaxed text-[var(--text-secondary)] bg-[var(--bg-surface-raised)] border border-[var(--border-default)] rounded-lg shadow-xl"
-                      >
-                        {variantData.s3_line_count_status === 'pending' || variantData.s3_line_count_status === 'running' ? (
-                          <>
-                            Counting all variant rows in your file on the server (very large files can take several minutes).
-                            Column mapping already used the first {variantData.interpretation_sample_rows || 50} rows.
-                          </>
-                        ) : annotatedRowBaseline > 0 ? (
-                          variantData?.annotated_row_count || variantData?.sample_only_ingest ? (
-                            <>
-                              Annotated variant file ({annotatedRowBaseline.toLocaleString()} rows). Each Apply re-scans this full annotated file on S3 (all active filters combined). Uploaded VCF may list more rows before annotation.
-                            </>
-                          ) : (
-                            <>
-                              Full file on cloud storage ({annotatedRowBaseline.toLocaleString()} data rows). Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only — not loaded into the database yet. Run ANNOVAR, then apply the ACMG filter (or apply sidebar filters once) to load a working set. Use Reset to clear filters and start over from the full file.
-                            </>
-                          )
-                        ) : (
-                          <>
-                            Full file on cloud storage. Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only. Run ANNOVAR, then apply the ACMG filter. Use Reset to reload the full file row count.
-                          </>
-                        )}
-                      </PopoverContent>
-                    </Popover>
-                  )}
-                </div>
-                <span className="text-[13px] font-semibold tabular-nums text-[var(--accent-teal)]">
-                  {underConsiderationCount.toLocaleString()}
-                  <span className="text-[var(--text-tertiary)] font-normal">
-                    {` / ${displayTotalVariants.toLocaleString()}`}
-                  </span>
-                </span>
-              </div>
               <div
-                className="w-full h-1.5 rounded-full overflow-hidden flex bg-[var(--bg-surface-hover)]"
-                title={
-                  (hasActiveManualFilters || activeProprietaryFilter) &&
-                  underConsiderationCount < displayTotalVariants
-                    ? `${underConsiderationCount.toLocaleString()} under consideration, ${(displayTotalVariants - underConsiderationCount).toLocaleString()} filtered out`
-                    : 'All loaded variants under consideration'
-                }
+                className="mx-4 mb-2 p-2.5 rounded-lg border text-xs leading-relaxed"
+                style={{ backgroundColor: 'var(--warning-soft)', borderColor: 'var(--warning)', color: 'var(--warning)' }}
               >
-                <div
-                  className="h-full bg-[var(--accent-teal)] transition-[width] duration-300"
-                  style={{
-                    width: displayTotalVariants > 0
-                      ? `${Math.max(0, Math.min(100, (underConsiderationCount / displayTotalVariants) * 100))}%`
-                      : '0%',
-                    minWidth: displayTotalVariants > 0 ? '4px' : 0
-                  }}
-                />
+                Only 1 variant is loaded in the database. Click <strong>Reset</strong>, then apply ACMG or your first
+                sidebar filter again to reload a larger working set.
               </div>
-              {(hasActiveManualFilters || activeProprietaryFilter) &&
-                underConsiderationCount < displayTotalVariants && (
-                <p className="mt-1.5 text-[11px] text-[var(--text-tertiary)]">
-                  {(displayTotalVariants - underConsiderationCount).toLocaleString()} filtered out
-                </p>
-              )}
-            </div>
-          )}
-
+            )}
           {/* Segmented Filter Mode Selector */}
           {(() => {
             const TABS = [
@@ -1914,11 +1829,10 @@ const VariantFilterSidebar = ({
                       tabIndex={selected ? 0 : -1}
                       onClick={() => handleTabSwitch(t.key)}
                       data-state={selected ? 'active' : 'inactive'}
-                      className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)] ${
-                        selected
+                      className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)] ${selected
                           ? 'bg-[var(--accent-teal)] text-[var(--bg-app)]'
                           : 'bg-[var(--bg-surface-raised)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
-                      }`}
+                        }`}
                     >
                       {t.label}
                       {renderCount(t.filterKey)}
@@ -1928,6 +1842,84 @@ const VariantFilterSidebar = ({
               </div>
             );
           })()}
+
+          {fileTotalVariants > 0 && (
+            <div className="sidebar-card">
+              <div className="flex items-baseline justify-between mb-2 gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-[13px] font-medium text-[var(--text-primary)]">Under consideration</span>
+                  {variantData?.sample_only_ingest && (
+                    <Popover>
+                      <PopoverTrigger
+                        className="inline-flex items-center justify-center w-4 h-4 rounded text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                        aria-label="About this file"
+                      >
+                        <Info className="w-3.5 h-3.5" />
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="bottom"
+                        align="start"
+                        sideOffset={6}
+                        className="w-72 p-3 text-[12px] leading-relaxed text-[var(--text-secondary)] bg-[var(--bg-surface-raised)] border border-[var(--border-default)] rounded-lg shadow-xl"
+                      >
+                        {variantData.s3_line_count_status === 'pending' || variantData.s3_line_count_status === 'running' ? (
+                          <>
+                            Counting all variant rows in your file on the server (very large files can take several minutes).
+                            Column mapping already used the first {variantData.interpretation_sample_rows || 50} rows.
+                          </>
+                        ) : annotatedRowBaseline > 0 ? (
+                          variantData?.annotated_row_count || variantData?.sample_only_ingest ? (
+                            <>
+                              Annotated variant file ({annotatedRowBaseline.toLocaleString()} rows). Each Apply re-scans this full annotated file on S3 (all active filters combined). Uploaded VCF may list more rows before annotation.
+                            </>
+                          ) : (
+                            <>
+                              Full file on cloud storage ({annotatedRowBaseline.toLocaleString()} data rows). Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only — not loaded into the database yet. Run ANNOVAR, then apply the ACMG filter (or apply sidebar filters once) to load a working set. Use Reset to clear filters and start over from the full file.
+                            </>
+                          )
+                        ) : (
+                          <>
+                            Full file on cloud storage. Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only. Run ANNOVAR, then apply the ACMG filter. Use Reset to reload the full file row count.
+                          </>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+                <span className="text-[13px] font-semibold tabular-nums text-[var(--accent-teal)]">
+                  {underConsiderationCount.toLocaleString()}
+                  <span className="text-[var(--text-tertiary)] font-normal">
+                    {` / ${displayTotalVariants.toLocaleString()}`}
+                  </span>
+                </span>
+              </div>
+              <div
+                className="w-full h-1.5 rounded-full overflow-hidden flex bg-[var(--bg-surface-hover)]"
+                title={
+                  (hasActiveManualFilters || activeProprietaryFilter) &&
+                    underConsiderationCount < displayTotalVariants
+                    ? `${underConsiderationCount.toLocaleString()} under consideration, ${(displayTotalVariants - underConsiderationCount).toLocaleString()} filtered out`
+                    : 'All loaded variants under consideration'
+                }
+              >
+                <div
+                  className="h-full bg-[var(--accent-teal)] transition-[width] duration-300"
+                  style={{
+                    width: displayTotalVariants > 0
+                      ? `${Math.max(0, Math.min(100, (underConsiderationCount / displayTotalVariants) * 100))}%`
+                      : '0%',
+                    minWidth: displayTotalVariants > 0 ? '4px' : 0
+                  }}
+                />
+              </div>
+              {(hasActiveManualFilters || activeProprietaryFilter) &&
+                underConsiderationCount < displayTotalVariants && (
+                  <p className="mt-1.5 text-[11px] text-[var(--text-tertiary)]">
+                    {(displayTotalVariants - underConsiderationCount).toLocaleString()} filtered out
+                  </p>
+                )}
+            </div>
+          )}
 
           {/* Remove variant file confirmation dialog */}
           <AlertDialog
@@ -1989,60 +1981,59 @@ const VariantFilterSidebar = ({
                   <p className="text-xs text-[var(--text-tertiary)] px-1 italic">Select columns below to build a custom filter</p>
                 ) : (
                   <div className="rounded-lg overflow-hidden border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)]">
-                  {allColumns.map((colName) => {
-                    const isNumeric = columnIsNumeric(colName);
-                    const filter = filters[colName] || {};
-                    const isCategorical = columnIsCategoricalOnly(colName);
-                    const selectedValues = categoricalFilters[colName] || [];
-                    const isColumnUnusable = noValidValuesColumns.includes(colName);
-                    let filterCount = 0;
-                    if (isNumeric) {
-                      if (filter.currentMin !== null && filter.currentMin !== undefined) filterCount++;
-                      if (filter.currentMax !== null && filter.currentMax !== undefined) filterCount++;
-                    } else if (isCategorical) {
-                      filterCount = selectedValues.length;
-                    }
-                    const appliedFilter = appliedFilters && appliedFilters[colName];
-                    if (appliedFilter) {
-                      if (appliedFilter.min !== undefined || appliedFilter.max !== undefined) {
-                        filterCount = (appliedFilter.min !== null && appliedFilter.min !== undefined ? 1 : 0) +
-                                      (appliedFilter.max !== null && appliedFilter.max !== undefined ? 1 : 0);
-                      } else if (appliedFilter.values && Array.isArray(appliedFilter.values)) {
-                        filterCount = appliedFilter.values.length;
+                    {allColumns.map((colName) => {
+                      const isNumeric = columnIsNumeric(colName);
+                      const filter = filters[colName] || {};
+                      const isCategorical = columnIsCategoricalOnly(colName);
+                      const selectedValues = categoricalFilters[colName] || [];
+                      const isColumnUnusable = noValidValuesColumns.includes(colName);
+                      let filterCount = 0;
+                      if (isNumeric) {
+                        if (filter.currentMin !== null && filter.currentMin !== undefined) filterCount++;
+                        if (filter.currentMax !== null && filter.currentMax !== undefined) filterCount++;
+                      } else if (isCategorical) {
+                        filterCount = selectedValues.length;
                       }
-                    }
-                    const isOpen = openFilterPopup === colName;
-                    const isDisabled = isManualFiltersDisabled || isColumnUnusable;
-                    return (
-                      <button
-                        key={colName}
-                        onClick={() => {
-                          if (!isDisabled) {
-                            setOpenFilterPopup(colName);
-                            setPopupSearchQuery('');
-                          }
-                        }}
-                        disabled={isDisabled}
-                        aria-pressed={isOpen}
-                        className={`group w-full text-left px-3 py-2 flex items-center justify-between gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)] ${
-                          isDisabled
-                            ? 'opacity-50 cursor-not-allowed'
-                            : `cursor-pointer hover:bg-[var(--bg-surface-hover)] ${isOpen ? 'bg-[var(--bg-surface-hover)]' : ''}`
-                        }`}
-                      >
-                        <span
-                          className={`text-[13px] truncate flex-1 ${isOpen ? 'font-medium text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'} ${isColumnUnusable ? 'text-[var(--text-tertiary)]' : ''}`}
+                      const appliedFilter = appliedFilters && appliedFilters[colName];
+                      if (appliedFilter) {
+                        if (appliedFilter.min !== undefined || appliedFilter.max !== undefined) {
+                          filterCount = (appliedFilter.min !== null && appliedFilter.min !== undefined ? 1 : 0) +
+                            (appliedFilter.max !== null && appliedFilter.max !== undefined ? 1 : 0);
+                        } else if (appliedFilter.values && Array.isArray(appliedFilter.values)) {
+                          filterCount = appliedFilter.values.length;
+                        }
+                      }
+                      const isOpen = openFilterPopup === colName;
+                      const isDisabled = isManualFiltersDisabled || isColumnUnusable;
+                      return (
+                        <button
+                          key={colName}
+                          onClick={() => {
+                            if (!isDisabled) {
+                              setOpenFilterPopup(colName);
+                              setPopupSearchQuery('');
+                            }
+                          }}
+                          disabled={isDisabled}
+                          aria-pressed={isOpen}
+                          className={`group w-full text-left px-3 py-2 flex items-center justify-between gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)] ${isDisabled
+                              ? 'opacity-50 cursor-not-allowed'
+                              : `cursor-pointer hover:bg-[var(--bg-surface-hover)] ${isOpen ? 'bg-[var(--bg-surface-hover)]' : ''}`
+                            }`}
                         >
-                          {colName}
-                        </span>
-                        {filterCount > 0 && (
-                          <span className="px-1.5 h-[18px] inline-flex items-center rounded-full text-[10px] font-semibold tabular-nums bg-[var(--accent-teal-soft)] text-[var(--accent-teal)] flex-shrink-0">
-                            {filterCount}
+                          <span
+                            className={`text-[13px] truncate flex-1 ${isOpen ? 'font-medium text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'} ${isColumnUnusable ? 'text-[var(--text-tertiary)]' : ''}`}
+                          >
+                            {colName}
                           </span>
-                        )}
-                      </button>
-                    );
-                  })}
+                          {filterCount > 0 && (
+                            <span className="px-1.5 h-[18px] inline-flex items-center rounded-full text-[10px] font-semibold tabular-nums bg-[var(--accent-teal-soft)] text-[var(--accent-teal)] flex-shrink-0">
+                              {filterCount}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -2199,7 +2190,7 @@ const VariantFilterSidebar = ({
             setOpenFilterPopup(null);
             setPopupSearchQuery(''); // Clear search when closing
           }}>
-            <div 
+            <div
               className="bg-[var(--bg-surface-raised)] rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
               onClick={(e) => e.stopPropagation()}
               style={{ margin: '20px' }}
@@ -2292,11 +2283,11 @@ const VariantFilterSidebar = ({
                   if (isCategorical && catData) {
                     // Filter values based on search query
                     const filteredValues = popupSearchQuery
-                      ? catData.values.filter(val => 
-                          String(val).toLowerCase().includes(popupSearchQuery.toLowerCase())
-                        )
+                      ? catData.values.filter(val =>
+                        String(val).toLowerCase().includes(popupSearchQuery.toLowerCase())
+                      )
                       : catData.values;
-                    
+
                     return (
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
@@ -2304,7 +2295,7 @@ const VariantFilterSidebar = ({
                             Select values ({filteredValues.length} of {catData.count} shown):
                           </div>
                         </div>
-                        
+
                         {/* Search Bar */}
                         <div className="relative">
                           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
@@ -2317,13 +2308,12 @@ const VariantFilterSidebar = ({
                             style={{ backgroundColor: 'var(--bg-surface-raised)' }}
                           />
                         </div>
-                        
+
                         <div className="space-y-1 max-h-96 overflow-y-auto border border-[var(--border-default)] rounded p-2">
                           {filteredValues.length > 0 ? (
                             filteredValues.map((value) => (
-                              <label key={value} className={`flex items-center gap-2 text-sm p-2 rounded ${
-                                isManualFiltersDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-[var(--bg-surface-hover)]'
-                              }`}>
+                              <label key={value} className={`flex items-center gap-2 text-sm p-2 rounded ${isManualFiltersDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-[var(--bg-surface-hover)]'
+                                }`}>
                                 <Checkbox
                                   checked={selectedValues.includes(value)}
                                   onCheckedChange={(checked) => !isManualFiltersDisabled && handleCategoricalChange(colName, value, checked === true)}
@@ -2335,10 +2325,10 @@ const VariantFilterSidebar = ({
                             ))
                           ) : (
                             <div className="text-sm text-[var(--text-secondary)] text-center py-4">
-                                No values match "{popupSearchQuery}"
-            </div>
-          )}
-          </div>
+                              No values match "{popupSearchQuery}"
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   }
@@ -2392,11 +2382,10 @@ const VariantFilterSidebar = ({
                     }
                   }}
                   disabled={isManualFiltersDisabled}
-                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
-                    isManualFiltersDisabled
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isManualFiltersDisabled
                       ? 'opacity-50 cursor-not-allowed bg-[var(--bg-surface)] text-[var(--text-tertiary)]'
                       : 'text-[var(--text-primary)] bg-[var(--bg-surface-raised)] border border-[var(--border-default)] hover:bg-[var(--bg-surface-hover)]'
-                  }`}
+                    }`}
                 >
                   <RotateCcw className="w-4 h-4" />
                   Reset
@@ -2421,11 +2410,10 @@ const VariantFilterSidebar = ({
                             ? 'No changes to apply — selection matches what is already applied'
                             : 'Apply all current filter settings to the variant set'
                     }
-                    className={`px-4 py-2 text-sm font-medium rounded-lg flex items-center justify-center gap-2 text-white ${
-                      isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges
+                    className={`px-4 py-2 text-sm font-medium rounded-lg flex items-center justify-center gap-2 text-white ${isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges
                         ? 'opacity-60 cursor-not-allowed'
                         : 'hover:opacity-90'
-                    }`}
+                      }`}
                     style={{
                       backgroundColor:
                         isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges
@@ -2538,11 +2526,10 @@ const VariantFilterSidebar = ({
                         ? 'No changes to apply — adjust filters first'
                         : 'Apply all current filter settings'
                 }
-                className={`flex-1 h-9 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-medium whitespace-nowrap text-[var(--bg-app)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${
-                  isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges
+                className={`flex-1 h-9 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-medium whitespace-nowrap text-[var(--bg-app)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges
                     ? 'opacity-50 cursor-not-allowed bg-[var(--text-tertiary)]'
                     : 'bg-[var(--accent-teal)] hover:brightness-110'
-                }`}
+                  }`}
               >
                 {isApplying ? (
                   <>
@@ -2566,9 +2553,8 @@ const VariantFilterSidebar = ({
                   ? 'Clear all filters and restore all preview variants for chat'
                   : 'Clear all active filters (manual and proprietary) and restore all variants'
               }
-              className={`flex-1 h-9 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-medium whitespace-nowrap border border-[var(--border-subtle)] bg-transparent text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${
-                isApplying ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
+              className={`flex-1 h-9 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-medium whitespace-nowrap border border-[var(--border-subtle)] bg-transparent text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${isApplying ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
             >
               <RotateCcw className="w-3.5 h-3.5" />
               Reset all
@@ -2700,13 +2686,12 @@ const VariantFilterSidebar = ({
 
               {gardenFeedback && (
                 <div
-                  className={`p-3 rounded-lg text-sm ${
-                    gardenFeedback.type === 'success'
+                  className={`p-3 rounded-lg text-sm ${gardenFeedback.type === 'success'
                       ? 'sidebar-feedback-success border'
                       : gardenFeedback.type === 'error'
                         ? 'sidebar-feedback-error border'
                         : 'sidebar-feedback-warning border'
-                  }`}
+                    }`}
                 >
                   {gardenFeedback.message}
                 </div>
@@ -2721,9 +2706,8 @@ const VariantFilterSidebar = ({
                       type="button"
                       onClick={handleSaveCurrentToGarden}
                       disabled={isSavingPreset || isManualFiltersDisabled}
-                      className={`px-4 py-2 text-sm rounded-xl font-medium text-white shadow-sm ${
-                        isSavingPreset || isManualFiltersDisabled ? 'opacity-60 cursor-not-allowed' : ''
-                      }`}
+                      className={`px-4 py-2 text-sm rounded-xl font-medium text-white shadow-sm ${isSavingPreset || isManualFiltersDisabled ? 'opacity-60 cursor-not-allowed' : ''
+                        }`}
                       style={{ backgroundColor: isSavingPreset || isManualFiltersDisabled ? 'var(--text-tertiary)' : 'var(--accent-teal)' }}
                     >
                       {isSavingPreset ? 'Saving...' : 'Save to Filter Garden'}
@@ -2734,11 +2718,10 @@ const VariantFilterSidebar = ({
                       type="button"
                       onClick={handleApplySelectedGarden}
                       disabled={isApplyingPreset || !selectedPresetId || isManualFiltersDisabled}
-                      className={`px-4 py-2 text-sm rounded-xl font-medium text-white shadow-sm ${
-                        isApplyingPreset || !selectedPresetId || isManualFiltersDisabled
+                      className={`px-4 py-2 text-sm rounded-xl font-medium text-white shadow-sm ${isApplyingPreset || !selectedPresetId || isManualFiltersDisabled
                           ? 'opacity-60 cursor-not-allowed'
                           : ''
-                      }`}
+                        }`}
                       style={{
                         backgroundColor:
                           isApplyingPreset || !selectedPresetId || isManualFiltersDisabled ? 'var(--text-tertiary)' : 'var(--accent-teal)'
@@ -2752,11 +2735,10 @@ const VariantFilterSidebar = ({
                       type="button"
                       onClick={handleUpdateSelectedGarden}
                       disabled={!selectedPresetId || isManualFiltersDisabled}
-                      className={`px-4 py-2 text-sm rounded-xl font-medium ${
-                        !selectedPresetId || isManualFiltersDisabled
+                      className={`px-4 py-2 text-sm rounded-xl font-medium ${!selectedPresetId || isManualFiltersDisabled
                           ? 'opacity-60 cursor-not-allowed bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]'
                           : 'bg-[var(--bg-surface-raised)] border border-[var(--border-default)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
-                      }`}
+                        }`}
                     >
                       Save entry edits
                     </button>
@@ -2766,11 +2748,10 @@ const VariantFilterSidebar = ({
                       type="button"
                       onClick={handleDeleteSelectedGarden}
                       disabled={!selectedPresetId || isManualFiltersDisabled}
-                      className={`px-4 py-2 text-sm rounded-xl font-medium ${
-                        !selectedPresetId || isManualFiltersDisabled
+                      className={`px-4 py-2 text-sm rounded-xl font-medium ${!selectedPresetId || isManualFiltersDisabled
                           ? 'opacity-60 cursor-not-allowed bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]'
                           : 'bg-[var(--bg-surface-raised)] border border-red-300 text-red-700 hover:bg-red-50'
-                      }`}
+                        }`}
                     >
                       Delete selected entry
                     </button>
@@ -2780,11 +2761,10 @@ const VariantFilterSidebar = ({
                       type="button"
                       onClick={handleRunAnnovarFromGarden}
                       disabled={isRunningAnnovar}
-                      className={`px-4 py-2 text-sm rounded-xl font-medium ${
-                        isRunningAnnovar
+                      className={`px-4 py-2 text-sm rounded-xl font-medium ${isRunningAnnovar
                           ? 'opacity-60 cursor-not-allowed bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]'
                           : 'bg-[var(--bg-surface-raised)] border border-[var(--border-default)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
-                      }`}
+                        }`}
                     >
                       <span className="inline-flex items-center gap-2">
                         <img

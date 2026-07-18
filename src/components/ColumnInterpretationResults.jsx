@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2, Check, Filter, Stethoscope } from 'lucide-react';
 import qiagenLogo from '../Qiagen.svg.png';
 import { ACMG_FILTER_DISPLAY_NAME } from './VariantFilterSidebar';
 import { Card, CardContent } from '@/components/ui/card';
@@ -57,8 +57,9 @@ const ColumnInterpretationResults = ({
   onChatBlocked,
   isRunningAnnovar = false,
   hasAnnotatedFile = false,
+  initialStep = null,
 }) => {
-  const [expandedStep, setExpandedStep] = useState(null); // Track which step is expanded
+  const [expandedStep, setExpandedStep] = useState(initialStep ?? (hasAnnotatedFile ? 2 : null)); // Track which step is expanded
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // Explicit remove-file confirmation only
   const [showAnnovarConfirm, setShowAnnovarConfirm] = useState(false); // Confirm ANNOVAR when all columns present
 
@@ -197,6 +198,14 @@ const ColumnInterpretationResults = ({
     return 'Incomplete';
   };
 
+  // Short status line shown under each stepper node.
+  const getStepSubtitle = (status) => {
+    if (status === 'passed') return 'Complete';
+    if (status === 'pending') return 'Pending';
+    if (status === 'partial') return 'Partially met';
+    return 'Needs columns';
+  };
+
   const getStepColor = (status) => {
     if (status === 'passed') return C.success;
     if (status === 'pending') return C.info;
@@ -276,45 +285,48 @@ const ColumnInterpretationResults = ({
       );
     }
 
-    /* Issues present: show problems directly, found columns behind expand */
+    /* Issues present: compact inline pills for missing, found behind expand */
     return (
       <div>
-        <p className="font-semibold mb-1.5 text-xs" style={{ color: C.text }}>{label}:</p>
-        <div className="space-y-1">
-          {issues.map(([colName, colInfo]) => (
-            <div key={colName} className="flex items-center justify-between text-sm">
-              <span style={{ color: C.textMuted }}>{colName}:</span>
-              {columnsNoValidValues.includes(colName) ? (
-                <span className="font-medium text-xs" style={{ color: C.warningText }}>○ No valid values</span>
-              ) : (
-                <span className="font-medium text-xs" style={{ color: opts.missingColor || C.warning }}>
-                  ○ {opts.missingLabel || 'Missing'}
-                </span>
-              )}
-            </div>
-          ))}
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" style={{ color: opts.missingColor || C.warning }} />
+          <span className="text-xs font-medium" style={{ color: C.text }}>
+            {label}: {found.length}/{entries.length} found
+          </span>
         </div>
-        {found.length > 0 && (
-          <Accordion>
-            <AccordionItem value={sectionKey} className="border-0">
-              <AccordionTrigger className="py-0 mt-1.5 text-[11px] font-normal hover:no-underline items-center">
-                <span className="text-[11px]" style={{ color: C.textDim }}>
-                  {found.length} column{found.length > 1 ? 's' : ''} found
-                </span>
-              </AccordionTrigger>
-              <AccordionContent className="pb-0">
-                <div className="mt-1 ml-1 space-y-1">
-                  {found.map(([colName, colInfo]) => (
-                    <div key={colName} className="flex items-center justify-between text-sm">
-                      <span style={{ color: C.textMuted }}>{colName}:</span>
-                      <span className="font-medium text-xs" style={{ color: C.success }}>✓ {colInfo.matched_column || 'Found'}</span>
-                    </div>
-                  ))}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        )}
+        <div className="flex flex-wrap gap-1.5 ml-5">
+          {issues.map(([colName]) => (
+            <span
+              key={colName}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+              style={{
+                backgroundColor: C.warningSoft || `${C.warning}18`,
+                borderColor: `${(opts.missingColor || C.warning)}40`,
+                color: opts.missingColor || C.warning,
+              }}
+            >
+              {columnsNoValidValues.includes(colName) ? 'No values' : (opts.missingLabel || 'Missing')} · {colName}
+            </span>
+          ))}
+          {found.map(([colName, colInfo]) => {
+            const pillLabel = colInfo.matched_column || colName;
+            return (
+              <span
+                key={colName}
+                title={colInfo.matched_column && colInfo.matched_column !== colName ? `Role: ${colName}` : pillLabel}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+                style={{
+                  backgroundColor: C.successSoft || `${C.success}18`,
+                  borderColor: `${C.success}40`,
+                  color: C.success,
+                }}
+              >
+                <CheckCircle2 className="w-3 h-3 shrink-0" />
+                {pillLabel}
+              </span>
+            );
+          })}
+        </div>
       </div>
     );
   };
@@ -341,16 +353,32 @@ const ColumnInterpretationResults = ({
               </span>
             </AccordionTrigger>
             <AccordionContent className="pb-0">
-              <div className="mt-1.5 ml-5 space-y-1">
-                {entries.map(([colName, colInfo]) => (
-                  <div key={colName} className="flex items-center justify-between text-sm">
-                    <span style={{ color: C.textMuted }}>{colName}:</span>
-                    <span className="font-medium text-xs" style={{ color: C.success }}>
-                      ✓ {colInfo.matched_column || 'Found'}
-                      {colInfo.required && <span className="ml-1">(Required)</span>}
+              <div className="mt-2 ml-5 flex flex-wrap gap-1.5">
+                {entries.map(([colName, colInfo]) => {
+                  const pillLabel = colInfo.matched_column || colName;
+                  const roleDiffers = colInfo.matched_column && colInfo.matched_column !== colName;
+                  const tip = roleDiffers
+                    ? `Role: ${colName}${colInfo.required ? ' (Required)' : ''}`
+                    : colInfo.required
+                      ? `${pillLabel} (Required)`
+                      : pillLabel;
+                  return (
+                    <span
+                      key={colName}
+                      title={tip}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+                      style={{
+                        backgroundColor: C.successSoft || `${C.success}18`,
+                        borderColor: `${C.success}40`,
+                        color: C.success,
+                      }}
+                    >
+                      <CheckCircle2 className="w-3 h-3 shrink-0" />
+                      {pillLabel}
+                      {colInfo.required && <span className="opacity-70">•</span>}
                     </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </AccordionContent>
           </AccordionItem>
@@ -360,16 +388,44 @@ const ColumnInterpretationResults = ({
 
     return (
       <div>
-        <p className="font-semibold mb-1.5 text-xs" style={{ color: C.text }}>{label}:</p>
-        <div className="space-y-1">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" style={{ color: C.warning }} />
+          <span className="text-xs font-medium" style={{ color: C.text }}>
+            {label}: {found.length}/{entries.length} found
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5 ml-5">
           {issues.map(([colName, colInfo]) => (
-            <div key={colName} className="flex items-center justify-between text-sm">
-              <span style={{ color: C.textMuted }}>{colName}:</span>
-              <span className="font-medium text-xs" style={{ color: colInfo.required ? C.warning : C.textDim }}>
-                {colInfo.required ? '○ Missing (Required)' : '○ Not found (Optional)'}
-              </span>
-            </div>
+            <span
+              key={colName}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+              style={{
+                backgroundColor: colInfo.required ? (C.warningSoft || `${C.warning}18`) : 'transparent',
+                borderColor: colInfo.required ? `${C.warning}40` : C.border,
+                color: colInfo.required ? C.warning : C.textDim,
+              }}
+            >
+              {colInfo.required ? 'Missing' : 'Optional'} · {colName}
+            </span>
           ))}
+          {found.map(([colName, colInfo]) => {
+            const pillLabel = colInfo.matched_column || colName;
+            return (
+              <span
+                key={colName}
+                title={colInfo.required ? `${pillLabel} (Required)` : pillLabel}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+                style={{
+                  backgroundColor: C.successSoft || `${C.success}18`,
+                  borderColor: `${C.success}40`,
+                  color: C.success,
+                }}
+              >
+                <CheckCircle2 className="w-3 h-3 shrink-0" />
+                {pillLabel}
+              </span>
+            );
+          })}
         </div>
       </div>
     );
@@ -474,6 +530,7 @@ const ColumnInterpretationResults = ({
     {
       n: 1,
       name: isVcfFile ? 'ANNOVAR ready' : 'VCF Reconstruction',
+      icon: FileText,
       status: step1Status,
       progress: step1Progress,
       data: step1,
@@ -481,6 +538,7 @@ const ColumnInterpretationResults = ({
     {
       n: 2,
       name: step2?.step_name || 'Annotation Stage',
+      icon: Filter,
       status: step2Status,
       progress: step2Progress,
       data: step2,
@@ -488,17 +546,19 @@ const ColumnInterpretationResults = ({
     {
       n: 3,
       name: 'Clinical Decision',
+      icon: Stethoscope,
       status: step3Status,
       progress: step3Progress,
       data: step3,
     },
   ];
 
-  // Default to the first step that needs attention so the detail panel is never empty.
-  const firstIncompleteStep =
-    step1Status !== 'passed' ? 1 : step2Status !== 'passed' ? 2 : step3Status !== 'passed' ? 3 : 3;
-  const selectedStep = expandedStep || firstIncompleteStep;
+  // Always start on Step 1 — users walk through the pipeline in order via Next/Prev.
+  const selectedStep = expandedStep ?? 1;
   const selectedStepData = stepperSteps.find((s) => s.n === selectedStep);
+  const canGoBack = selectedStep > 1;
+  const canGoForward = selectedStep < stepperSteps.length;
+  const goToStep = (n) => setExpandedStep(Math.max(1, Math.min(stepperSteps.length, n)));
 
   return (
     <>
@@ -511,7 +571,7 @@ const ColumnInterpretationResults = ({
             style={{ border: `1px solid ${C.border}`, backgroundColor: C.surface, boxShadow: C.shadow }}
           >
             <div className="px-6 py-4 flex items-center gap-2.5" style={{ borderBottom: `1px solid ${C.border}` }}>
-              <AlertCircle className="w-5 h-5" style={{ color: C.error }} />
+              <Trash2 className="w-4 h-4" />
               <h2 className="text-base font-semibold" style={{ color: C.text }}>Remove file?</h2>
             </div>
 
@@ -523,7 +583,7 @@ const ColumnInterpretationResults = ({
             </div>
 
             {/* Actions */}
-            <div className="px-6 py-4 border-t flex items-center justify-end gap-3 rounded-b-2xl" style={{ borderColor: C.border }}>
+            <div className="px-6 py-4 flex items-center justify-end gap-3 rounded-b-2xl" style={{ borderColor: C.border }}>
               <button
                 onClick={handleCancelDelete}
                 className="px-6 py-2 text-sm font-semibold rounded-xl transition-colors shadow-sm"
@@ -560,7 +620,6 @@ const ColumnInterpretationResults = ({
                   e.target.style.color = C.error; 
                 }}
               >
-                <Trash2 className="w-4 h-4" />
                 Delete File
               </button>
             </div>
@@ -647,7 +706,7 @@ const ColumnInterpretationResults = ({
               style={{ backgroundColor: C.successSoft, border: `1px solid ${C.success}`, color: C.text }}
             >
               {isRunningAnnovar
-                ? 'ANNOVAR is running in the background. You can close this window and continue in chat — progress appears in the pipeline bar at the top.'
+                ? 'ANNOVAR is running in the background. You can close this window and continue in chat, progress appears in the pipeline bar at the top.'
                 : 'The ACMG filter is running in the background. You can close this window and continue in chat.'}
             </div>
           )}
@@ -700,53 +759,65 @@ const ColumnInterpretationResults = ({
           })()}
 
           {/* Horizontal stepper */}
-          <div className="flex items-start pt-1">
+          <div className="flex items-start p-4">
             {stepperSteps.map((s, i) => {
               const isSel = s.n === selectedStep;
+              const passed = s.status === 'passed';
+              const attention = s.status === 'failed' || s.status === 'partial';
               const color = getStepColor(s.status);
               const prevDone = i > 0 && stepperSteps[i - 1].status === 'passed';
+              const StepIcon = s.icon;
+
+              let nodeStyle;
+              let iconColor;
+              let NodeGlyph = StepIcon;
+              if (passed) {
+                nodeStyle = { backgroundColor: C.success, border: 'none' };
+                iconColor = '#0F0F0F';
+                NodeGlyph = Check;
+              } else if (isSel) {
+                nodeStyle = { backgroundColor: attention ? C.warning : C.teal, border: 'none' };
+                iconColor = '#0F0F0F';
+              } else if (attention) {
+                nodeStyle = { backgroundColor: 'transparent', border: `1.5px solid ${color}` };
+                iconColor = color;
+              } else {
+                nodeStyle = { backgroundColor: C.surfaceCard, border: `1.5px solid ${C.border}` };
+                iconColor = C.textDim;
+              }
+              const ringColor = passed ? C.successSoft : (attention ? C.warningSoft : C.tealSoft);
+
               return (
                 <React.Fragment key={s.n}>
                   {i > 0 && (
                     <div
-                      className="flex-1 h-0.5 mt-[18px] rounded-full transition-colors"
+                      className="flex-1 h-px mt-5 -mx-4 rounded-full transition-colors"
                       style={{ backgroundColor: prevDone ? C.success : C.border }}
                     />
                   )}
                   <button
                     type="button"
                     onClick={() => setExpandedStep(s.n)}
-                    className="flex flex-col items-center gap-1.5 flex-shrink-0 px-1 group whitespace-nowrap"
-                    style={{ minWidth: '6.5rem' }}
+                    className="flex flex-col items-center gap-2.5 flex-shrink-0 px-2 group whitespace-nowrap"
                   >
                     <div
-                      className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
-                      style={{
-                        backgroundColor: isSel ? `${C.surfaceHover}` : 'transparent',
-                        border: `2px solid ${isSel ? color : C.border}`,
-                        boxShadow: isSel ? `0 0 0 4px ${C.tealSoft}` : 'none',
-                      }}
+                      className="w-8 h-8 rounded-full flex items-center justify-center transition-all"
+                      style={{ ...nodeStyle, boxShadow: isSel ? `0 0 0 8px ${ringColor}` : 'none' }}
                     >
-                      {s.status === 'passed' ? (
-                        <CheckCircle2 className="w-4 h-4" style={{ color }} />
-                      ) : s.status === 'pending' ? (
-                        <Info className="w-4 h-4" style={{ color }} />
-                      ) : (
-                        <AlertCircle className="w-4 h-4" style={{ color }} />
-                      )}
+                      <NodeGlyph className="w-[16px] h-[16px]" style={{ color: iconColor }} strokeWidth={2} />
                     </div>
                     <div className="text-center">
                       <div
-                        className="text-[11px] font-semibold uppercase tracking-wide"
-                        style={{ color: isSel ? C.text : C.textDim }}
-                      >
-                        Step {s.n}
-                      </div>
-                      <div
-                        className="text-xs leading-tight mt-0.5"
-                        style={{ color: isSel ? C.text : C.textMuted }}
+                        className="text-[13px] font-semibold leading-tight"
+                        style={{ color: isSel || passed ? C.text : C.textMuted }}
                       >
                         {s.name}
+                      </div>
+                      <div
+                        className="text-[11px] leading-tight mt-1"
+                        style={{ color: passed ? C.success : (attention && isSel ? C.warning : C.textDim) }}
+                      >
+                        {getStepSubtitle(s.status)}
                       </div>
                     </div>
                   </button>
@@ -777,12 +848,14 @@ const ColumnInterpretationResults = ({
             </div>
           )}
 
-          {/* Tools — annotation + proprietary filters */}
+          {/* Tools — per-step actions */}
           <div className="pt-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: C.textDim }}>
-              Proprietary Filters
+              {selectedStep === 1 ? 'Review' : selectedStep === 2 ? 'Annotate' : 'Apply filters'}
             </p>
             <div className="flex flex-wrap items-center gap-2">
+            {selectedStep === 1 && (
+              <>
               {/* VCF Upload Button - Highlighted when recommended */}
               {showVcfTabHighlight && (
                 <>
@@ -833,8 +906,37 @@ const ColumnInterpretationResults = ({
                 </>
               )}
 
-              {/* Run ANNOVAR */}
-              {!hasAnnotatedFile && (
+              {!showVcfTabHighlight && step1?.passed && (
+                <p className="text-xs" style={{ color: C.textMuted }}>
+                  All required columns present, proceed to the next step.
+                </p>
+              )}
+              </>
+            )}
+
+            {selectedStep === 2 && (
+              <>
+              {/* ANNOVAR complete indicator */}
+              {hasAnnotatedFile && (
+                <div className="flex items-center gap-2">
+                  {/* <span
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border"
+                    style={{
+                      backgroundColor: C.successSoft || `${C.success}18`,
+                      borderColor: `${C.success}40`,
+                      color: C.success,
+                    }}
+                  >
+                    ANNOVAR complete
+                  </span> */}
+                  <p className="text-xs" style={{ color: C.success }}>
+                    Columns added, proceed to the next step to apply filters.
+                  </p>
+                </div>
+              )}
+
+              {/* Run ANNOVAR — shown when step2 has missing columns */}
+              {!hasAnnotatedFile && !step2?.passed && (
               <div className="relative group">
                 <button
                   onClick={(step1?.passed && !genomeMismatch) ? () => {
@@ -883,6 +985,17 @@ const ColumnInterpretationResults = ({
               </div>
               )}
 
+              {/* Step 2 all passed, no ANNOVAR needed */}
+              {!hasAnnotatedFile && step2?.passed && (
+                <p className="text-xs" style={{ color: C.textMuted }}>
+                  All annotation columns present — proceed to the next step.
+                </p>
+              )}
+              </>
+            )}
+
+            {selectedStep === 3 && (
+              <>
               {/* ACMG Filter */}
               <div className="relative group">
                 <button
@@ -936,22 +1049,54 @@ const ColumnInterpretationResults = ({
                   </div>
                 )}
               </div>
+
+              <p className="text-xs w-full mt-1" style={{ color: C.textDim }}>
+                You can also skip filters and chat directly.
+              </p>
+              </>
+            )}
             </div>
           </div>
         </div>
 
         {/* Actions */}
-        <div className="flex-shrink-0 px-6 py-4 border-t flex items-center justify-end rounded-b-2xl" style={{ borderColor: C.border }}>
+        <div className="flex-shrink-0 px-6 py-4 flex items-center justify-between gap-3 rounded-b-2xl">
           <button
             type="button"
-            onClick={handleDismiss}
-            className="px-4 py-2 text-sm font-semibold rounded-xl transition-colors"
-            style={{ backgroundColor: 'var(--accent-teal)', border: 'none', color: '#0F0F0F' }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal-hover)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal)'; }}
+            onClick={() => goToStep(selectedStep - 1)}
+            disabled={!canGoBack}
+            className="px-4 py-2 text-sm font-medium rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ backgroundColor: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted }}
+            onMouseEnter={(e) => { if (canGoBack) e.currentTarget.style.backgroundColor = C.surfaceHover; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            {backgroundJobActive ? 'Continue in background' : chatAllowed ? 'Continue Chatting' : 'Continue to chat'}
+            ← Previous
           </button>
+          <div className="flex items-center gap-2">
+            {canGoForward ? (
+              <button
+                type="button"
+                onClick={() => goToStep(selectedStep + 1)}
+                className="px-4 py-2 text-sm font-medium rounded-xl transition-colors"
+                style={{ backgroundColor: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = C.surfaceHover; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              >
+                Next →
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleDismiss}
+                className="px-4 py-2 text-sm font-semibold rounded-xl transition-colors"
+                style={{ backgroundColor: 'var(--accent-teal)', border: 'none', color: '#0F0F0F' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal-hover)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal)'; }}
+              >
+                {backgroundJobActive ? 'Continue in background' : chatAllowed ? 'Continue Chatting' : 'Continue to chat'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

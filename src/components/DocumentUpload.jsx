@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2, Link2, Info, Plus } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import { apiUrl as buildApiUrl } from '@/config/api';
 import { getUploadDisplayMessage } from '@/lib/uploadProcessingPhases';
@@ -12,6 +12,9 @@ import {
   putFileToPresignedUrl,
   shouldUsePresignedUpload,
   detectGenomeBuild,
+  urlPreflight,
+  uploadFromUrl,
+  isRecognizedImportUrl,
 } from '@/services/backendApi';
 import { patchSampleMetadata } from '@/services/mongodbApi';
 import {
@@ -93,6 +96,7 @@ const DocumentUpload = ({
   editMode = false,
   initialMetadata = null,
   onEditSaved = null,
+  initialImportMode = 'file',
 }) => {
   const { subscriptionStatus } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
@@ -128,6 +132,16 @@ const DocumentUpload = ({
   const [isDetectingGenome, setIsDetectingGenome] = useState(false);
   const [genomeDetection, setGenomeDetection] = useState(null); // { detected_build, genome, confidence, source }
   const [editImpact, setEditImpact] = useState(null); // metadata_edit_impact from PATCH response
+  const [importMode, setImportMode] = useState(initialImportMode); // 'file' | 'url'
+  const [fileUrl, setFileUrl] = useState('');
+  const [urlFilenameOverride, setUrlFilenameOverride] = useState('');
+  const [showUrlFilename, setShowUrlFilename] = useState(false);
+  const [urlFieldFocused, setUrlFieldFocused] = useState(false);
+  const [importUrlMeta, setImportUrlMeta] = useState(null); // preflight result
+  const [isPreflighting, setIsPreflighting] = useState(false);
+  useEffect(() => {
+    setImportMode(initialImportMode);
+  }, [initialImportMode]);
   useEffect(() => {
     if (editMode && initialMetadata) {
       setSampleMetadata({
@@ -224,7 +238,7 @@ const DocumentUpload = ({
       try {
         const auth = getAuth();
         const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-        
+
         if (!token) {
           console.log('[DocumentUpload] No auth token, skipping project fetch');
           return;
@@ -381,13 +395,13 @@ const DocumentUpload = ({
       fileReader.onload = (e) => {
         // Now that we have the file data, open the database and store it
         const request = indexedDB.open('BioinfoChatbot_GuestFiles', 1);
-        
+
         request.onerror = () => reject(request.error);
         request.onsuccess = () => {
           const db = request.result;
           const transaction = db.transaction(['files'], 'readwrite');
           const store = transaction.objectStore('files');
-          
+
           const fileData = {
             id: `${conversationId}_${Date.now()}`,
             conversationId: conversationId,
@@ -397,18 +411,18 @@ const DocumentUpload = ({
             data: e.target.result, // ArrayBuffer
             uploadedAt: new Date().toISOString()
           };
-          
+
           const addRequest = store.put(fileData);
           addRequest.onsuccess = () => resolve(fileData);
           addRequest.onerror = () => reject(addRequest.error);
-          
+
           // Keep transaction alive until operation completes
           transaction.oncomplete = () => {
             // Transaction completed successfully
           };
           transaction.onerror = () => reject(transaction.error);
         };
-        
+
         request.onupgradeneeded = (event) => {
           const db = event.target.result;
           if (!db.objectStoreNames.contains('files')) {
@@ -417,7 +431,7 @@ const DocumentUpload = ({
           }
         };
       };
-      
+
       // Start reading the file
       fileReader.readAsArrayBuffer(file);
     });
@@ -460,16 +474,21 @@ const DocumentUpload = ({
       return;
     }
 
-    console.log('[DocumentUpload] Form submitted, selectedFile:', selectedFile);
-    
-    if (!selectedFile) {
+    console.log('[DocumentUpload] Form submitted, selectedFile:', selectedFile, 'importUrlMeta:', importUrlMeta);
+
+    if (importMode === 'url') {
+      if (!importUrlMeta) {
+        setError('URL preflight info missing. Please validate the URL again.');
+        return;
+      }
+    } else if (!selectedFile) {
       setError('No file selected');
       return;
     }
-    
+
     // Mark validation as attempted
     setValidationAttempted(true);
-    
+
     // Validate mandatory fields
     if (!sampleMetadata.genome) {
       setError('Please select a Genome (required)');
@@ -483,7 +502,7 @@ const DocumentUpload = ({
       setError('Please select an Analysis Type (required)');
       return;
     }
-    
+
     // Check for optional fields that are empty - show encouragement but allow proceeding
     const emptyOptionalFields = [];
     if (!sampleMetadata.sampleSex) emptyOptionalFields.push('Sample Sex');
@@ -494,17 +513,21 @@ const DocumentUpload = ({
       if (!sampleMetadata.inheritanceModel) emptyOptionalFields.push('Inheritance Model');
       if (!sampleMetadata.phenotype) emptyOptionalFields.push('Phenotype');
     }
-    
+
     // If optional fields are empty, show custom warning modal
     if (emptyOptionalFields.length > 0) {
       setShowOptionalFieldsWarning(true);
       return; // Wait for user decision
     }
-    
-    // Notify parent first so DocumentUpload stays mounted while POST /api/upload-variant-file runs.
-    notifyUploadStarting(selectedFile);
+
+    // Notify parent first so DocumentUpload stays mounted while upload runs.
+    notifyUploadStarting(importMode === 'url' ? { name: importUrlMeta.file_name } : selectedFile);
     dismissUploadUiForBackgroundUpload();
-    await uploadFile(selectedFile, sampleMetadata);
+    if (importMode === 'url') {
+      await performUrlImport(sampleMetadata);
+    } else {
+      await uploadFile(selectedFile, sampleMetadata);
+    }
   };
 
   const handleInfoFormCancel = () => {
@@ -517,6 +540,12 @@ const DocumentUpload = ({
     }
     setShowInfoForm(false);
     setSelectedFile(null);
+    setImportUrlMeta(null);
+    setFileUrl('');
+    setUrlFilenameOverride('');
+    setShowUrlFilename(false);
+    setUrlFieldFocused(false);
+    setImportMode('file');
     setSampleMetadata({
       name: '',
       project: '',
@@ -552,15 +581,15 @@ const DocumentUpload = ({
 
     try {
       console.log('[DocumentUpload] Upload started for file:', file.name);
-      
+
       if (isGuest) {
         // For guests: Store in IndexedDB
         console.log('[DocumentUpload] Using IndexedDB (Guest Mode)');
         setUploadProgress(50); // Simulate progress
-        
+
         const fileData = await storeFileInIndexedDB(file, conversationId);
         setUploadProgress(100);
-        
+
         // Create a data URL for the file so we can use it for validation
         const blob = new Blob([fileData.data], { type: file.type || 'text/plain' });
         const dataUrl = await new Promise((resolve) => {
@@ -568,7 +597,7 @@ const DocumentUpload = ({
           reader.onload = () => resolve(reader.result);
           reader.readAsDataURL(blob);
         });
-        
+
         const documentData = {
           url: dataUrl, // Data URL for guest files
           name: fileData.name,
@@ -605,7 +634,7 @@ const DocumentUpload = ({
         setTimeout(() => setSuccess(''), 3000);
         return;
       }
-      
+
       // For authenticated users: Use backend API (S3)
       console.log('[DocumentUpload] Using backend API (S3)');
 
@@ -615,47 +644,6 @@ const DocumentUpload = ({
       if (!token) {
         throw new Error('Authentication required. Please log in.');
       }
-
-      const finishSuccessfulUpload = async (response) => {
-        console.log('[DocumentUpload] Upload response:', response);
-
-        const documentData = {
-          url: response.s3_url,
-          name: response.file_name,
-          type: response.file_type,
-          size: response.file_size,
-          uploadedAt: new Date().toISOString(),
-          storageType: 's3',
-          s3_key: response.s3_key,
-          is_variant_file: response.is_variant_file,
-          variant_count: response.variant_count,
-          free_tier_preview: response.free_tier_preview || null,
-          column_interpretation: response.column_interpretation || null,
-          variant_metadata: response.variant_metadata || null,
-        };
-
-        if (onUploadSuccess) {
-          try {
-            // console.log('[DocumentUpload] calling onUploadSuccess, isUploading is still true');
-            await onUploadSuccess(documentData);
-            // console.log('[DocumentUpload] onUploadSuccess returned');
-          } catch (callbackError) {
-            console.error('[DocumentUpload] Error in onUploadSuccess callback:', callbackError);
-            setError(`Upload succeeded but failed to save metadata: ${callbackError.message}`);
-            return;
-          }
-        }
-
-        setSuccess(
-          `Document "${file.name}" uploaded successfully! ${response.is_variant_file ? `(${response.variant_count} variants)` : ''}`
-        );
-        // console.log('[DocumentUpload] setting isUploading=false NOW');
-        setIsUploading(false);
-        setUploadProgress(0);
-        onUploadProgressChange?.(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        setTimeout(() => setSuccess(''), 5000);
-      };
 
       const handleUploadFailure = (status, responseText) => {
         let errorMsg = `Upload failed (${status})`;
@@ -689,10 +677,10 @@ const DocumentUpload = ({
 
       const sampleMetaPayload = userInfo
         ? {
-            sampleMetadata: userInfo,
-            experimentType: userInfo.sequencingType || '',
-            phenotypeInfo: userInfo.phenotype || '',
-          }
+          sampleMetadata: userInfo,
+          experimentType: userInfo.sequencingType || '',
+          phenotypeInfo: userInfo.phenotype || '',
+        }
         : null;
 
       if (shouldUsePresignedUpload(userTier, file.size)) {
@@ -726,7 +714,7 @@ const DocumentUpload = ({
           experimentType: sampleMetaPayload?.experimentType,
           phenotypeInfo: sampleMetaPayload?.phenotypeInfo,
         });
-        await finishSuccessfulUpload(response);
+        await finishUploadSuccess(response, file.name);
         return;
       }
 
@@ -759,7 +747,7 @@ const DocumentUpload = ({
         if (xhr.status === 200) {
           try {
             const response = JSON.parse(xhr.responseText);
-            await finishSuccessfulUpload(response);
+            await finishUploadSuccess(response, file.name);
           } catch (error) {
             console.error('[DocumentUpload] Error parsing response:', error);
             setError('Upload succeeded but failed to process response');
@@ -781,7 +769,7 @@ const DocumentUpload = ({
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       xhr.setRequestHeader('X-Device-Id', getOrCreateDeviceId());
       xhr.send(formData);
-      
+
     } catch (error) {
       console.error('[DocumentUpload] Upload error:', error);
       setError(`Upload failed: ${error.message}`);
@@ -789,6 +777,143 @@ const DocumentUpload = ({
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+    }
+  };
+
+  /** Shared success handler for both file upload and URL import. */
+  const finishUploadSuccess = useCallback(async (response, displayName) => {
+    console.log('[DocumentUpload] Upload response:', response);
+
+    const documentData = {
+      url: response.s3_url,
+      name: response.file_name,
+      type: response.file_type,
+      size: response.file_size,
+      uploadedAt: new Date().toISOString(),
+      storageType: 's3',
+      s3_key: response.s3_key,
+      is_variant_file: response.is_variant_file,
+      variant_count: response.variant_count,
+      free_tier_preview: response.free_tier_preview || null,
+      column_interpretation: response.column_interpretation || null,
+      variant_metadata: response.variant_metadata || null,
+    };
+
+    if (onUploadSuccess) {
+      try {
+        await onUploadSuccess(documentData);
+      } catch (callbackError) {
+        console.error('[DocumentUpload] Error in onUploadSuccess callback:', callbackError);
+        setError(`Upload succeeded but failed to save metadata: ${callbackError.message}`);
+        return;
+      }
+    }
+
+    setSuccess(
+      `Document "${displayName}" uploaded successfully! ${response.is_variant_file ? `(${response.variant_count} variants)` : ''}`
+    );
+    setIsUploading(false);
+    setUploadProgress(0);
+    onUploadProgressChange?.(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setTimeout(() => setSuccess(''), 5000);
+  }, [onUploadSuccess, onUploadProgressChange]);
+
+  /** Preflight a pasted URL: validate, get filename/size/genome hint, then open metadata form. */
+  const handleUrlContinue = async () => {
+    setError('');
+    const url = fileUrl.trim();
+    if (!url) {
+      setError('Please enter a URL');
+      return;
+    }
+    if (!isRecognizedImportUrl(url)) {
+      setError('Enter a full URL starting with https://, or a Google Drive / Dropbox share link.');
+      return;
+    }
+
+    setIsPreflighting(true);
+    try {
+      const isGuest = userTier === 'guest' || userId === 'guest';
+      const result = await urlPreflight({
+        fileUrl: url,
+        fileName: urlFilenameOverride.trim() || undefined,
+        conversationId: conversationId || 'guest-session',
+        isGuest,
+      });
+
+      const fn = (result.file_name || '').toLowerCase();
+      if (!isAllowedVariantFilename(result.file_name)) {
+        setError('Invalid file type. Only .TSV, .CSV, .VCF, and .vcf.gz files are allowed.');
+        setIsPreflighting(false);
+        return;
+      }
+
+      if (result.content_length != null) {
+        const maxSize = getMaxUploadBytes(result.file_name, isGuest ? 'guest' : userTier, subscriptionStatus);
+        if (result.content_length > maxSize) {
+          const limitMb = Math.round(maxSize / (1024 * 1024));
+          const limitGb = maxSize / (1024 ** 3);
+          const limitLabel = limitGb >= 1 ? `${limitGb.toFixed(1)}GB` : `${limitMb}MB`;
+          setError(`This file is too large (${Math.round(result.content_length / (1024 * 1024))} MB). Maximum allowed for your plan: ${limitLabel}.`);
+          setIsPreflighting(false);
+          return;
+        }
+      }
+
+      setImportUrlMeta(result);
+
+      const nameWithoutExt = result.file_name.endsWith('.vcf.gz')
+        ? result.file_name.substring(0, result.file_name.length - '.vcf.gz'.length)
+        : result.file_name.includes('.') ? result.file_name.substring(0, result.file_name.lastIndexOf('.')) : result.file_name;
+
+      let detectedFileType = '';
+      if (fn.endsWith('.vcf.gz') || fn.endsWith('.vcf')) detectedFileType = 'VCF';
+      else if (fn.endsWith('.tsv')) detectedFileType = 'TSV';
+      else if (fn.endsWith('.csv')) detectedFileType = 'CSV';
+
+      setSampleMetadata(prev => ({
+        ...prev,
+        name: nameWithoutExt || result.file_name,
+        sampleFileType: detectedFileType,
+        genome: result.genome_hint?.genome || '',
+      }));
+      setValidationAttempted(false);
+      setError('');
+      setShowInfoForm(true);
+    } catch (err) {
+      setError(err.message || 'Failed to validate URL');
+    } finally {
+      setIsPreflighting(false);
+    }
+  };
+
+  /** Perform the actual URL import after metadata form submit. */
+  const performUrlImport = async (metadata) => {
+    if (!importUrlMeta) {
+      setError('URL preflight info missing. Please go back and validate the URL again.');
+      return;
+    }
+
+    const isGuest = userTier === 'guest' || userId === 'guest';
+    const displayName = importUrlMeta.file_name;
+
+    try {
+      const response = await uploadFromUrl({
+        conversationId: conversationId || 'guest-session',
+        fileUrl: importUrlMeta.file_url,
+        fileName: importUrlMeta.file_name,
+        sampleMetadata: metadata,
+        experimentType: metadata.sequencingType || '',
+        phenotypeInfo: metadata.phenotype || '',
+        isGuest,
+      });
+      await finishUploadSuccess(response, displayName);
+    } catch (err) {
+      console.error('[DocumentUpload] URL import error:', err);
+      setError(`Import failed: ${err.message}`);
+      setIsUploading(false);
+      onUploadProgressChange?.(null);
     }
   };
 
@@ -845,9 +970,8 @@ const DocumentUpload = ({
         ) : (
           <label
             htmlFor="document-upload-compact"
-            className={`text-xs px-3 py-1.5 border rounded transition-colors cursor-pointer flex items-center gap-1 ${
-              isUploading ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
+            className={`text-xs px-3 py-1.5 border rounded transition-colors cursor-pointer flex items-center gap-1 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
             style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
           >
             {isUploading ? (
@@ -878,7 +1002,7 @@ const DocumentUpload = ({
             {error || success}
           </div>
         )}
-        
+
       </div>
     );
   }
@@ -890,83 +1014,189 @@ const DocumentUpload = ({
       {/* Hide upload UI when form is showing or file was pre-selected */}
       {!showInfoForm && !preSelectedFile && (
         <>
-      {/* Existing Document Display */}
-      {existingDocument && !isUploading && (
-        <div className="mb-3 p-3 border rounded-lg flex items-center justify-between" style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--accent-teal)' }}>
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'var(--accent-teal-soft)' }}>
-              <FileText className="w-4 h-4" style={{ color: 'var(--accent-teal)' }} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
-                {existingDocument.name}
+          {/* Import from a link — public URL / Drive / Dropbox */}
+          {importMode === 'url' && !compact && (
+            <div>
+              <p className="text-[13px] font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
+                Import from a link
               </p>
-              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                {existingDocument.type.toUpperCase()} • {(existingDocument.size / 1024).toFixed(1)} KB
-              </p>
+              {/* Optional filename — progressive disclosure */}
+              {showUrlFilename || urlFilenameOverride ? (
+                <input
+                  type="text"
+                  value={urlFilenameOverride}
+                  onChange={(e) => setUrlFilenameOverride(e.target.value)}
+                  placeholder="Filename"
+                  autoFocus={showUrlFilename && !urlFilenameOverride}
+                  className="w-full h-9 px-3 mb-2 text-[13px] rounded-lg border transition-all focus:outline-none placeholder:text-[var(--text-tertiary)]"
+                  style={{ borderColor: 'var(--border-default)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--accent-teal)')}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border-default)')}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleUrlContinue(); }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowUrlFilename(true)}
+                  className="inline-flex items-center gap-1 mt-2 text-xs transition-colors"
+                  style={{ color: 'var(--text-tertiary)' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-tertiary)')}
+                >
+                  <Plus className="w-3 h-3" />
+                  Set a filename
+                </button>
+              )}
+              {/* URL field with inline icon + clear */}
+              <div className="relative">
+                <input
+                  type="url"
+                  inputMode="url"
+                  value={fileUrl}
+                  onChange={(e) => setFileUrl(e.target.value)}
+                  placeholder="https://drive.google.com/file/uefaebf/view?usp=sharing"
+                  autoFocus
+                  className="w-full h-10 px-3 text-sm rounded-lg border transition-all focus:outline-none placeholder:text-[var(--text-tertiary)]"
+                  style={{
+                    borderColor: error ? 'var(--error)' : (urlFieldFocused ? 'var(--accent-teal)' : 'var(--border-default)'),
+                    background: 'var(--bg-input)',
+                    color: 'var(--text-primary)',
+                  }}
+                  onFocus={() => setUrlFieldFocused(true)}
+                  onBlur={() => setUrlFieldFocused(false)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleUrlContinue(); }}
+                />
+                {fileUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setFileUrl('')}
+                    aria-label="Clear URL"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-md flex items-center justify-center transition-colors"
+                    style={{ color: 'var(--text-tertiary)' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-tertiary)'; }}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              {/* Inline error replaces the guidance line, in red */}
+              {error ? (
+                <div className="flex items-start gap-2 mt-3 ml-3">
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: 'var(--error)' }} />
+                  <p className="text-[11px] leading-relaxed" style={{ color: 'var(--error)' }}>{error}</p>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 mt-3 ml-3">
+                  <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-tertiary)' }}>
+                    Links must be shared as{' '}
+                    <span style={{ color: 'var(--text-secondary)' }}>&ldquo;Anyone with the link.&rdquo;</span>
+                  </p>
+                </div>
+              )}
+
+              {/* Primary action */}
+              <div className="flex justify-end mt-3">
+                <button
+                  type="button"
+                  onClick={handleUrlContinue}
+                  disabled={isPreflighting || !fileUrl.trim()}
+                  className="h-9 px-5 rounded-lg text-[13px] font-medium inline-flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
+                  onMouseEnter={(e) => { if (!isPreflighting && fileUrl.trim()) e.currentTarget.style.backgroundColor = 'var(--accent-teal-hover)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal)'; }}
+                >
+                  {isPreflighting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Validating link…
+                    </>
+                  ) : (
+                    'Continue'
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
-          <button
-            onClick={handleRemoveDocument}
-            className="p-1.5 rounded-lg transition-colors"
-            style={{ color: 'var(--text-tertiary)' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--error-soft)';
-              e.currentTarget.style.color = 'var(--error)';
-            }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-tertiary)'; }}
-            aria-label="Remove document"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+          )}
 
-      {/* Replace Document Button */}
-      {existingDocument && !isUploading && (
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full py-2 px-4 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2"
-          style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--accent-teal)', color: 'var(--accent-teal)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; }}
-        >
-          <Upload className="w-4 h-4" />
-          Replace Document
-        </button>
-      )}
+          {/* Existing Document Display */}
+          {existingDocument && !isUploading && (
+            <div className="mb-3 p-3 border rounded-lg flex items-center justify-between" style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--accent-teal)' }}>
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'var(--accent-teal-soft)' }}>
+                  <FileText className="w-4 h-4" style={{ color: 'var(--accent-teal)' }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                    {existingDocument.name}
+                  </p>
+                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    {existingDocument.type.toUpperCase()} • {(existingDocument.size / 1024).toFixed(1)} KB
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleRemoveDocument}
+                className="p-1.5 rounded-lg transition-colors"
+                style={{ color: 'var(--text-tertiary)' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--error-soft)';
+                  e.currentTarget.style.color = 'var(--error)';
+                }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-tertiary)'; }}
+                aria-label="Remove document"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
-      {/* Hidden file input for replace */}
-      {existingDocument && (
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".tsv,.csv,.vcf,.vcf.gz,.gz,application/gzip"
-          onChange={handleFileSelect}
-          className="hidden"
-          disabled={isUploading}
-        />
-      )}
+          {/* Replace Document Button */}
+          {existingDocument && !isUploading && (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-2 px-4 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2"
+              style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--accent-teal)', color: 'var(--accent-teal)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; }}
+            >
+              <Upload className="w-4 h-4" />
+              Replace Document
+            </button>
+          )}
 
-      {/* Error Message - Only show upload-related errors, not form validation errors */}
-      {error && !showInfoForm && (
-        <div className="mt-3 p-3 border rounded-lg flex items-start gap-2" style={{ backgroundColor: 'var(--bg-surface)', borderColor: '#8B2F3C' }}>
-          <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#8B2F3C' }} />
-          <p className="text-sm" style={{ color: '#8B2F3C' }}>{error}</p>
-        </div>
-      )}
+          {/* Hidden file input for replace */}
+          {existingDocument && (
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".tsv,.csv,.vcf,.vcf.gz,.gz,application/gzip"
+              onChange={handleFileSelect}
+              className="hidden"
+              disabled={isUploading}
+            />
+          )}
 
-      {/* Success Message */}
-      {success && (
-        <div className="mt-3 p-3 border rounded-lg flex items-start gap-2" style={{ backgroundColor: 'var(--bg-surface)', borderColor: '#3E8E7E' }}>
-          <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#3E8E7E' }} />
-          <p className="text-sm" style={{ color: '#3E8E7E' }}>{success}</p>
-        </div>
-      )}
-      
+          {/* Error Message - Only show upload-related errors, not form validation errors.
+          URL mode renders its own inline error under the panel. */}
+          {error && !showInfoForm && importMode !== 'url' && (
+            <div className="mt-3 p-3 border rounded-lg flex items-start gap-2" style={{ backgroundColor: 'var(--bg-surface)', borderColor: '#8B2F3C' }}>
+              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#8B2F3C' }} />
+              <p className="text-sm" style={{ color: '#8B2F3C' }}>{error}</p>
+            </div>
+          )}
+
+          {/* Success Message */}
+          {success && (
+            <div className="mt-3 p-3 border rounded-lg flex items-start gap-2" style={{ backgroundColor: 'var(--bg-surface)', borderColor: '#3E8E7E' }}>
+              <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#3E8E7E' }} />
+              <p className="text-sm" style={{ color: '#3E8E7E' }}>{success}</p>
+            </div>
+          )}
+
         </>
       )}
-      
+
       {/* Sample Metadata — always a centered popup (portal), never inline in sidebar/parent */}
       <Dialog open={showInfoForm} onOpenChange={(open) => { if (!open) handleInfoFormCancel(); }}>
         <DialogContent
@@ -982,18 +1212,18 @@ const DocumentUpload = ({
           <DialogDescription className="sr-only">
             {editMode ? 'Update metadata for this variant file.' : 'Provide details about your variant file for better analysis.'}
           </DialogDescription>
-            <div className="flex-shrink-0 px-7 pt-6 pb-4 relative">
+          <div className="flex-shrink-0 px-7 pt-6 pb-4 relative">
             <h3 id="sample-metadata-title" className="text-base font-semibold mb-1 pr-8" style={{ color: 'var(--text-primary)' }}>
               {editMode ? 'Edit Sample Information' : 'Sample Metadata'}
             </h3>
             <p className="text-[13px] mb-0" style={{ color: 'var(--text-tertiary)' }}>
               {editMode ? 'Update metadata for this variant file. Changes may require re-running analysis steps.' : 'Provide details about your variant file for better analysis.'}
             </p>
-            {!editMode && selectedFile && (
-              <div className="inline-flex items-center gap-2 mt-4 max-w-full pl-2.5 pr-3 py-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]" title={selectedFile.name}>
+            {!editMode && (selectedFile || importUrlMeta) && (
+              <div className="inline-flex items-center gap-2 mt-4 max-w-full pl-2.5 pr-3 py-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]" title={selectedFile ? selectedFile.name : importUrlMeta?.file_name}>
                 <FileText className="w-3.5 h-3.5 shrink-0 text-[var(--accent-teal)]" />
                 <span className="text-xs font-medium truncate text-[var(--text-secondary)]">
-                  {selectedFile.name}
+                  {selectedFile ? selectedFile.name : (importUrlMeta ? `URL: ${importUrlMeta.file_name}` : '')}
                 </span>
               </div>
             )}
@@ -1003,10 +1233,10 @@ const DocumentUpload = ({
                 <p className="text-xs" style={{ color: 'var(--error)' }}>{error}</p>
               </div>
             )}
-            </div>
+          </div>
 
-            <form onSubmit={handleInfoFormSubmit} className="flex flex-col flex-1 min-h-0">
-              <div className="flex-1 overflow-y-auto px-7 pb-4 space-y-5">
+          <form onSubmit={handleInfoFormSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto px-7 pb-4 space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
                 {/* Name - Editable */}
                 <div>
@@ -1257,7 +1487,7 @@ const DocumentUpload = ({
 
               {/* Conditional Fields - Only shown if Analysis Type = Germline */}
               {sampleMetadata.analysisType === 'Germline' && (
-                <div 
+                <div
                   className="border-t border-[var(--border-default)] pt-4 mt-4 transition-all duration-500 ease-in-out"
                   style={{
                     animation: 'fadeInSlide 0.5s ease-out'
@@ -1345,87 +1575,87 @@ const DocumentUpload = ({
                       onChange={(e) => setSampleMetadata({ ...sampleMetadata, phenotype: e.target.value })}
                       placeholder="Describe the phenotype or clinical presentation..."
                       rows={3}
-                    className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all"
-                    style={{ 
-                      borderColor: 'var(--border-default)',
-                      background: 'var(--bg-input)',
-                      backdropFilter: 'blur(10px)',
-                      WebkitBackdropFilter: 'blur(10px)',
-                      color: 'var(--text-primary)' 
-                    }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Tumor Type - Only shown for Somatic/Tumor analyses (NOT Germline) */}
-              {(sampleMetadata.analysisType === 'Somatic' || 
-                sampleMetadata.analysisType === 'Tumor-Normal Paired' || 
-                sampleMetadata.analysisType === 'Tumor-Only') && (
-                <div 
-                  className="border-t border-[var(--border-default)] pt-4 mt-4 transition-all duration-500 ease-in-out"
-                  style={{
-                    animation: 'fadeInSlide 0.5s ease-out'
-                  }}
-                >
-                  <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
-                    Tumor Analysis Fields
-                  </h4>
-                  <div>
-                    <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                      Tumor Type
-                    </label>
-                    <input
-                      type="text"
-                      value={sampleMetadata.tumorType}
-                      onChange={(e) => setSampleMetadata({ ...sampleMetadata, tumorType: e.target.value })}
-                      placeholder="Enter tumor type (e.g., Breast Cancer, Lung Adenocarcinoma)..."
-                      className="w-full px-3 h-10 border rounded-lg focus:outline-none focus:ring-1 text-sm transition-all"
+                      className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all"
                       style={{
                         borderColor: 'var(--border-default)',
                         background: 'var(--bg-input)',
-                        color: 'var(--text-primary)',
-                        height: '40px'
+                        backdropFilter: 'blur(10px)',
+                        WebkitBackdropFilter: 'blur(10px)',
+                        color: 'var(--text-primary)'
                       }}
                     />
                   </div>
                 </div>
               )}
 
-              </div>
+              {/* Tumor Type - Only shown for Somatic/Tumor analyses (NOT Germline) */}
+              {(sampleMetadata.analysisType === 'Somatic' ||
+                sampleMetadata.analysisType === 'Tumor-Normal Paired' ||
+                sampleMetadata.analysisType === 'Tumor-Only') && (
+                  <div
+                    className="border-t border-[var(--border-default)] pt-4 mt-4 transition-all duration-500 ease-in-out"
+                    style={{
+                      animation: 'fadeInSlide 0.5s ease-out'
+                    }}
+                  >
+                    <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
+                      Tumor Analysis Fields
+                    </h4>
+                    <div>
+                      <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Tumor Type
+                      </label>
+                      <input
+                        type="text"
+                        value={sampleMetadata.tumorType}
+                        onChange={(e) => setSampleMetadata({ ...sampleMetadata, tumorType: e.target.value })}
+                        placeholder="Enter tumor type (e.g., Breast Cancer, Lung Adenocarcinoma)..."
+                        className="w-full px-3 h-10 border rounded-lg focus:outline-none focus:ring-1 text-sm transition-all"
+                        style={{
+                          borderColor: 'var(--border-default)',
+                          background: 'var(--bg-input)',
+                          color: 'var(--text-primary)',
+                          height: '40px'
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
 
-              {/* Form Actions — pinned footer */}
-              <div className="flex-shrink-0 flex gap-2 justify-end px-7 py-4 border-t border-[var(--border-subtle)]">
-                <button
-                  type="button"
-                  onClick={handleInfoFormCancel}
-                  disabled={isUploading}
-                  className="h-10 px-4 rounded-lg transition-colors text-sm font-medium disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
-                  style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
-                  onMouseEnter={(e) => { if (!isUploading) e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isUploading}
-                  className="h-10 px-5 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface-raised)]"
-                  style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
-                  onMouseEnter={(e) => { if (!isUploading) e.currentTarget.style.opacity = '0.9'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
-                >
-                  {isUploading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      {editMode ? 'Saving…' : (uploadStatusMessage || 'Processing…')}
-                    </>
-                  ) : (
-                    editMode ? 'Save Changes' : 'Upload File'
-                  )}
-                </button>
-              </div>
-            </form>
+            </div>
+
+            {/* Form Actions — pinned footer */}
+            <div className="flex-shrink-0 flex gap-2 justify-end px-7 py-4 border-t border-[var(--border-subtle)]">
+              <button
+                type="button"
+                onClick={handleInfoFormCancel}
+                disabled={isUploading}
+                className="h-10 px-4 rounded-lg transition-colors text-sm font-medium disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
+                onMouseEnter={(e) => { if (!isUploading) e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isUploading}
+                className="h-10 px-5 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface-raised)]"
+                style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
+                onMouseEnter={(e) => { if (!isUploading) e.currentTarget.style.opacity = '0.9'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {editMode ? 'Saving…' : (uploadStatusMessage || 'Processing…')}
+                  </>
+                ) : (
+                  editMode ? 'Save Changes' : (importMode === 'url' ? 'Import File' : 'Upload File')
+                )}
+              </button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -1444,9 +1674,13 @@ const DocumentUpload = ({
               className="bg-[var(--accent-teal)] text-[#0F0F0F] hover:bg-[var(--accent-teal-hover)]"
               onClick={async () => {
                 setShowOptionalFieldsWarning(false);
-                notifyUploadStarting(selectedFile);
+                notifyUploadStarting(importMode === 'url' ? { name: importUrlMeta.file_name } : selectedFile);
                 dismissUploadUiForBackgroundUpload();
-                await uploadFile(selectedFile, sampleMetadata);
+                if (importMode === 'url') {
+                  await performUrlImport(sampleMetadata);
+                } else {
+                  await uploadFile(selectedFile, sampleMetadata);
+                }
               }}
             >
               Continue

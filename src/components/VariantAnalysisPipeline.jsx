@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Check, Circle, Loader2, Minus, AlertCircle, ChevronDown, ChevronUp, FileText, X, Pencil } from 'lucide-react';
 import {
   PIPELINE_STEP_DEFS,
@@ -84,6 +84,35 @@ const VariantAnalysisPipeline = ({
   const displayName = fileName || 'Variant file';
   const showReadyMinimal = compactReadyOnly || (dismissed && chatReady && !expanded);
 
+  // While ANNOVAR runs, the component's border doubles as a progress ring.
+  const annovarPct =
+    isRunningAnnovar && annovarJob?.progress_percent != null
+      ? Math.max(0, Math.min(100, Math.round(annovarJob.progress_percent)))
+      : null;
+
+  // Measure the section so the ring path (which needs real px, unlike a %-sized
+  // <rect>) can start at the top-left corner and travel down the left edge first.
+  const sectionRef = useRef(null);
+  const [ringSize, setRingSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const update = () => setRingSize({ w: el.clientWidth, h: el.clientHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Perimeter path: top-left → down left → bottom → up right → across top (counter-clockwise).
+  const ringPath = (() => {
+    const { w, h } = ringSize;
+    if (!w || !h) return '';
+    const x0 = 1, y0 = 1, x1 = w - 1, y1 = h - 1;
+    const r = Math.min(11, (x1 - x0) / 2, (y1 - y0) / 2);
+    return `M${x0},${y0 + r} L${x0},${y1 - r} A${r},${r} 0 0 0 ${x0 + r},${y1} L${x1 - r},${y1} A${r},${r} 0 0 0 ${x1},${y1 - r} L${x1},${y0 + r} A${r},${r} 0 0 0 ${x1 - r},${y0} L${x0 + r},${y0} A${r},${r} 0 0 0 ${x0},${y0 + r} Z`;
+  })();
+
   const chipStatusText = (() => {
     if (showReadyMinimal) {
       return variantCount != null
@@ -113,14 +142,43 @@ const VariantAnalysisPipeline = ({
 
   return (
     <section
-      className="mb-2 rounded-xl border overflow-hidden transition-all"
+      ref={sectionRef}
+      className="relative mb-2 rounded-xl border overflow-hidden transition-all"
       style={{
         backgroundColor: 'var(--bg-surface)',
-        borderColor: chatReady && showReadyMinimal ? 'var(--accent-teal)' : '',
+        borderColor:
+          annovarPct != null
+            ? 'var(--border-subtle)'
+            : chatReady && showReadyMinimal
+              ? 'var(--accent-teal)'
+              : '',
         boxShadow: expanded ? 'var(--shadow-md)' : 'none',
       }}
       aria-label="Variant analysis pipeline"
     >
+      {/* ANNOVAR progress ring — starts top-left, fills down the left edge first
+          (top-left → bottom-left → bottom-right → top-right → back to top-left). */}
+      {annovarPct != null && ringSize.w > 0 && (
+        <svg
+          className="pointer-events-none absolute inset-0 z-10 h-full w-full"
+          width={ringSize.w}
+          height={ringSize.h}
+          viewBox={`0 0 ${ringSize.w} ${ringSize.h}`}
+          aria-hidden
+        >
+          <path
+            d={ringPath}
+            fill="none"
+            stroke="var(--accent-teal)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            pathLength="100"
+            strokeDasharray={`${annovarPct} 100`}
+            style={{ transition: 'stroke-dasharray 0.35s ease' }}
+          />
+        </svg>
+      )}
+
       {/* Compact chip header */}
       <div className="flex items-center gap-2 px-3 py-2 min-h-[40px]">
         <div

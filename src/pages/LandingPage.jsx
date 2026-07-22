@@ -117,7 +117,7 @@ const LandingPage = () => {
   const sequencingTypes = [
     { label: "Whole Genome Sequencing", icon: <Activity className="w-4 h-4" /> },
     { label: "Whole Exome Sequencing", icon: <FileText className="w-4 h-4" /> },
-    { label: "Targeted Exome Sequencing", icon: <Microscope className="w-4 h-4" /> },
+    // { label: "Targeted Exome Sequencing", icon: <Microscope className="w-4 h-4" /> },
   ];
 
   const exampleQuestions = [
@@ -167,7 +167,7 @@ const LandingPage = () => {
         >
 
           {/* Navigation Bar */}
-          <nav className={`fixed top-0 w-full z-50 transition-colors duration-300 hero-fade ${isNavSolid ? 'bg-zinc-900 border-b border-white/10 shadow-lg' : 'bg-transparent border-transparent'}`}>
+          <nav className={`fixed top-0 w-full z-50 transition-colors duration-300 hero-fade ${isNavSolid ? 'bg-zinc-900 shadow-lg' : 'bg-transparent border-transparent'}`}>
             <div className="container mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <img
@@ -213,14 +213,22 @@ const LandingPage = () => {
             ref={heroRef}
             className="relative w-full bg-zinc-950 text-white flex flex-col items-center justify-center overflow-hidden min-h-[100dvh]"
           >
-            <div className="absolute inset-0 z-0 opacity-80">
-              <Silk
+            <div className="absolute inset-0 z-0">
+              {/* <Silk
                 speed={7}
                 scale={1}
                 color="#7B7481"
                 noiseIntensity={3}
                 rotation={0}
-              />
+              /> */}
+              <video
+              autoPlay
+              loop
+              muted
+              playsInline
+              className=" md:block absolute w-auto pointer-events-none select-none"
+              src="/helix_2_ascii.mp4"
+            />
             </div>
             <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/40 via-zinc-950/60 to-zinc-950 z-0 pointer-events-none" />
 
@@ -231,7 +239,7 @@ const LandingPage = () => {
                 style={{ '--reveal-delay': '300ms' }}>
                 Chat with your Genomic Data
               </h1>
-              <p className="text-base sm:text-lg md:text-xl text-zinc-400 max-w-lg sm:max-w-2xl mb-8 sm:mb-10 leading-relaxed hero-reveal" style={{ '--reveal-delay': '900ms' }}>
+              <p className="text-base sm:text-lg md:text-xl text-zinc-300 max-w-lg sm:max-w-2xl mb-8 sm:mb-10 leading-relaxed hero-reveal" style={{ '--reveal-delay': '900ms' }}>
                 Explore your variants, ask complex questions, and receive instant insights backed by peer-reviewed research.
               </p>
 
@@ -247,7 +255,7 @@ const LandingPage = () => {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="border-zinc-600/50 text-zinc-500 text-base px-8 py-6 font-medium opacity-70 cursor-not-allowed hover:bg-transparent hover:text-zinc-500"
+                  className="border-zinc-400 text-zinc-500 text-base px-8 py-6 font-medium cursor-not-allowed hover:bg-transparent hover:text-zinc-500"
                   onClick={() =>
                     toast.info("Coming soon!")
                   }
@@ -258,7 +266,7 @@ const LandingPage = () => {
 
               {/* Professional cards — compact inline on mobile */}
               <div className="hero-reveal w-full max-w-2xl" style={{ '--reveal-delay': '2100ms' }}>
-                <p className="text-zinc-500 text-[10px] sm:text-xs sm:mb-4 uppercase font-medium text-center">
+                <p className="text-zinc-300 sm:text-md sm:mb-4 uppercase font-medium text-center">
                   Built for genomics professionals including
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-x-2 sm:gap-x-3 gap-y-1">
@@ -271,7 +279,7 @@ const LandingPage = () => {
                     {i > 0 && (
                       <span className="text-zinc-600 select-none" aria-hidden="true">·</span>
                     )}
-                    <span className="text-[10px] sm:text-[11px] text-zinc-500 font-medium tracking-wide uppercase">
+                    <span className="text-[14px] sm:text-[14px] text-zinc-300/80 font-medium tracking-wide uppercase">
                       {card.title}
                     </span>
                   </div>
@@ -525,8 +533,17 @@ const LandingPage = () => {
           </section>
 
           {/* 3. Ask Anything Section (Dark Theme) */}
-          <section className="bg-black py-24 text-white min-h-[100dvh] flex flex-col justify-center">
-            <div className="container px-4 md:px-6 max-w-5xl mx-auto flex flex-col items-center">
+          <section className="bg-black py-24 text-white min-h-[100dvh] flex flex-col justify-center relative overflow-hidden">
+            {/* Background video – right-aligned, decorative */}
+            {/* <video
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="hidden md:block absolute -right-[5%] top-1/2 -translate-y-1/2 h-[110%] w-auto object-cover opacity-60 pointer-events-none select-none"
+              src="/helix_2_ascii.mp4"
+            /> */}
+            <div className="relative z-10 container px-4 md:px-6 max-w-5xl mx-auto flex flex-col items-center">
               <div ref={askTitleRef} className="text-center mb-12">
                 <h2 className="text-3xl md:text-5xl font-semibold font-heading tracking-tight mb-4 text-zinc-50">Ask Anything About Your Data</h2>
                 <p className="text-zinc-400 text-base md:text-lg">From variant finding to clinical interpretation. We got answers for all your queries.</p>
@@ -557,9 +574,6 @@ const LandingPage = () => {
                     >
                       <AccordionTrigger className="hover:no-underline font-medium text-zinc-100 text-left py-4 md:py-5 text-sm sm:text-[15px] items-start gap-4">
                         <div className="flex items-start gap-4 min-w-0 flex-1">
-                          <div className="w-7 h-7 min-w-7 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-mono text-zinc-400 mt-0.5">
-                            {i + 1}
-                          </div>
                           <span className="min-w-0">{item.q}</span>
                         </div>
                       </AccordionTrigger>
@@ -651,7 +665,7 @@ const LandingPage = () => {
               </div>
 
               {/* Mobile: Carousel below, outside the box */}
-              <div className="lg:hidden flex items-center justify-center mt-2" style={{ height: 340, position: 'relative' }}>
+              {/* <div className="lg:hidden flex items-center justify-center mt-2" style={{ height: 340, position: 'relative' }}>
                 <Carousel
                   baseWidth={340}
                   autoplay={true}
@@ -664,7 +678,7 @@ const LandingPage = () => {
                     { id: 3, icon: <HugeiconsIcon icon={SpeedTrain01Icon} className="w-5 h-5" />, title: 'Speed & Performance', description: 'Delivers clinically relevant insights in minutes — optimized for fast turnaround without compromising accuracy.' },
                   ]}
                 />
-              </div>
+              </div> */}
 
             </div>
           </section>

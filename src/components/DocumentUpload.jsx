@@ -67,7 +67,7 @@ const CustomSelect = ({ value, onChange, placeholder, options, error, className 
       >
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
-      <SelectContent className="min-w-[var(--radix-select-trigger-width)] p-1.5">
+      <SelectContent className="p-1.5">
         {(options || []).map((opt) => (
           <SelectItem key={opt.value} value={opt.value}>
             {opt.label}
@@ -1071,10 +1071,8 @@ const DocumentUpload = ({
                     type="button"
                     onClick={() => setFileUrl('')}
                     aria-label="Clear URL"
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-md flex items-center justify-center transition-colors"
-                    style={{ color: 'var(--text-tertiary)' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-tertiary)'; }}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-md flex items-center justify-center"
+                    style={{ backgroundColor: 'var(--bg-surface-hover)', color: 'var(--text-secondary)' }}
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -1109,7 +1107,7 @@ const DocumentUpload = ({
                   {isPreflighting ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Validating link…
+                      Validating
                     </>
                   ) : (
                     'Continue'

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { FileText, X, RotateCcw, CheckCircle, Upload, Trash2, Info, Zap, Search } from 'lucide-react';
+import { FileText, X, RotateCcw, CheckCircle, Upload, Trash2, Info, Zap, Search, Sprout, PencilLine, ChevronDown } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import DocumentUpload from './DocumentUpload';
@@ -7,6 +7,7 @@ import { useProcessingToast } from '@/hooks/useProcessingToast';
 import ExportVariantsButton from './ExportVariantsButton';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,13 +58,6 @@ const PROPRIETARY_FILTER_1_DESCRIPTION = "ClinVar and/or InterVar pathogenic cla
 const PROPRIETARY_FILTER_2_DESCRIPTION = "Filters for rare, potentially deleterious coding and regulatory variants, including novel candidates, using functional impact and population frequency criteria.";
 
 const DEVICE_ID_STORAGE_KEY = 'geneie_device_id';
-
-const GARDEN_ACTION_LABELS = {
-  create: 'Create new entry from current filters',
-  apply: 'Apply existing entry',
-  edit: 'Edit name/notes of existing entry',
-  delete: 'Delete existing entry',
-};
 
 function getOrCreateDeviceId() {
   try {
@@ -528,6 +522,7 @@ const VariantFilterSidebar = ({
       setFilteredCount(null);
       setFilterWorkingSetCount(null);
       setActiveProprietaryFilter(null);
+      setAppliedPresetId(null);
       notify({ message: 'File removed from conversation', type: 'success' });
     } catch (error) {
       console.error('[VariantFilterSidebar] Error removing file:', error);
@@ -542,13 +537,13 @@ const VariantFilterSidebar = ({
   const [isApplyingPreset, setIsApplyingPreset] = useState(false);
   // useProcessingToast(isApplying ? 'Processing filters...' : null, isApplying);
   const [isRunningAnnovar, setIsRunningAnnovar] = useState(false);
-  const [isGardenModalOpen, setIsGardenModalOpen] = useState(false);
   const [gardenNameInput, setGardenNameInput] = useState('');
   const [gardenNotesInput, setGardenNotesInput] = useState('');
   const [isEditingGardenEntry, setIsEditingGardenEntry] = useState(false);
-  const [gardenAction, setGardenAction] = useState('create');
   const [gardenApplyMissingColumns, setGardenApplyMissingColumns] = useState([]);
-  const [gardenFeedback, setGardenFeedback] = useState(null);
+  const [isGardenExpanded, setIsGardenExpanded] = useState(false);
+  const [isGardenSaveFormOpen, setIsGardenSaveFormOpen] = useState(false);
+  const [appliedPresetId, setAppliedPresetId] = useState(null);
   const proprietaryPreviewLoadedForRef = useRef(null);
 
   // Define isGuest early so it can be used in functions below
@@ -897,6 +892,8 @@ const VariantFilterSidebar = ({
           setFilterWorkingSetCount(tc);
         }
         setAppliedFilters(filterObject);
+        // Manual Apply invalidates any previously applied preset (filters no longer match a saved entry)
+        setAppliedPresetId(null);
 
         if (data.parameter_ranges && Object.keys(data.parameter_ranges).length > 0) {
           setFilters((prev) => mergeParameterRangesIntoFilters(prev, data.parameter_ranges));
@@ -998,6 +995,7 @@ const VariantFilterSidebar = ({
     // Clear applied filters state
     setAppliedFilters(null);
     setFilteredCount(null);
+    setAppliedPresetId(null);
 
     // Clear proprietary filter state
     setActiveProprietaryFilter(null);
@@ -1125,16 +1123,6 @@ const VariantFilterSidebar = ({
     }
   }, [selectedGardenEntry, isEditingGardenEntry]);
 
-  useEffect(() => {
-    if (savedFilterPresets.length === 0) {
-      setGardenAction('create');
-    } else if (gardenAction === 'create') {
-      // keep as create unless user switches; do nothing
-    } else if (!selectedPresetId) {
-      setGardenAction('apply');
-    }
-  }, [savedFilterPresets, selectedPresetId, gardenAction]);
-
   const applyFilterPayloadToInputs = useCallback((payload) => {
     const nextPayload = payload || {};
     setFilters(prev => {
@@ -1174,36 +1162,16 @@ const VariantFilterSidebar = ({
     });
   }, [variantData]);
 
-  const handleOpenGardenModal = () => {
-    setIsGardenModalOpen(true);
-    setIsEditingGardenEntry(false);
-    if (savedFilterPresets.length > 0) {
-      setGardenAction('apply');
-      const current = selectedGardenEntry || savedFilterPresets[0];
-      if (current) {
-        setSelectedPresetId(current.id);
-        setGardenNameInput(current.name || '');
-        setGardenNotesInput(current.notes || '');
-      }
-    } else {
-      setGardenAction('create');
-      setGardenNameInput('');
-      setGardenNotesInput('');
-    }
-    setGardenApplyMissingColumns([]);
-    setGardenFeedback(null);
-  };
-
   const handleSaveCurrentToGarden = async () => {
     if (!conversationId || !userId || isGuest || isManualFiltersDisabled) return;
     const payload = buildFilterPayloadFromState(filters, categoricalFilters);
     const colCount = Object.keys(payload).length;
     if (colCount === 0) {
-      setGardenFeedback({ type: 'warning', message: 'Set at least one manual filter before saving.' });
+      notify({ message: 'Set at least one manual filter before saving.', type: 'warning' });
       return;
     }
     if (!gardenNameInput || !gardenNameInput.trim()) {
-      setGardenFeedback({ type: 'warning', message: 'Entry name is required.' });
+      notify({ message: 'Entry name is required.', type: 'warning' });
       return;
     }
     setIsSavingPreset(true);
@@ -1226,19 +1194,21 @@ const VariantFilterSidebar = ({
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail || 'Failed to save Filter Garden entry');
-      setGardenFeedback({ type: 'success', message: `Saved: "${data.name}".` });
+      notify({ message: `Saved: "${data.name}"`, type: 'success' });
       await loadSavedFilterPresets();
       if (data.id) setSelectedPresetId(data.id);
       setIsEditingGardenEntry(false);
     } catch (error) {
-      setGardenFeedback({ type: 'error', message: error.message || 'Failed to save Filter Garden entry.' });
+      notify({ message: error.message || 'Failed to save Filter Garden entry.', type: 'error' });
     } finally {
       setIsSavingPreset(false);
     }
   };
 
-  const handleApplySelectedGarden = async () => {
-    if (!conversationId || !userId || !selectedPresetId || isGuest || isManualFiltersDisabled) return;
+  const handleApplySelectedGarden = async (overrideId) => {
+    const presetId = overrideId || selectedPresetId;
+    if (!conversationId || !userId || !presetId || isGuest || isManualFiltersDisabled) return;
+    setSelectedPresetId(presetId);
     setIsApplyingPreset(true);
     try {
       const auth = getAuth();
@@ -1252,17 +1222,14 @@ const VariantFilterSidebar = ({
         },
         body: JSON.stringify({
           conversation_id: conversationId,
-          preset_id: selectedPresetId
+          preset_id: presetId
         })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail || 'Failed to apply Filter Garden entry');
       if (!data.applied) {
         setGardenApplyMissingColumns(Array.isArray(data.missing_columns) ? data.missing_columns : []);
-        setGardenFeedback({
-          type: 'warning',
-          message: 'Cannot apply this entry to this file. Missing columns are listed above.'
-        });
+        notify({ message: 'Cannot apply — missing columns for this file.', type: 'warning' });
         return;
       }
       setGardenApplyMissingColumns([]);
@@ -1270,28 +1237,27 @@ const VariantFilterSidebar = ({
       applyFilterPayloadToInputs(payload);
       setAppliedFilters(payload);
       setFilteredCount(data.filtered_count ?? null);
-      setGardenFeedback({
-        type: 'success',
-        message: `${data.message || 'Applied.'} ${Number(data.filtered_count || 0).toLocaleString()} / ${Number(data.total_count || 0).toLocaleString()} variants.`
-      });
+      setAppliedPresetId(presetId);
+      notify({ message: `${data.message || 'Applied.'} ${Number(data.filtered_count || 0).toLocaleString()} / ${Number(data.total_count || 0).toLocaleString()} variants.`, type: 'success' });
       if (onFiltersChange) {
         onFiltersChange(payload, data.filtered_count, data.total_count);
       }
     } catch (error) {
-      setGardenFeedback({ type: 'error', message: error.message || 'Failed to apply Filter Garden entry.' });
+      notify({ message: error.message || 'Failed to apply Filter Garden entry.', type: 'error' });
     } finally {
       setIsApplyingPreset(false);
     }
   };
 
-  const handleDeleteSelectedGarden = async () => {
-    if (!selectedPresetId || !userId || isGuest) return;
+  const handleDeleteSelectedGarden = async (overrideId) => {
+    const presetId = overrideId || selectedPresetId;
+    if (!presetId || !userId || isGuest) return;
     if (!window.confirm('Delete this Filter Garden entry?')) return;
     try {
       const auth = getAuth();
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
       const base = getApiOrigin();
-      const response = await fetch(`${base}/api/saved-filters/${encodeURIComponent(selectedPresetId)}`, {
+      const response = await fetch(`${base}/api/saved-filters/${encodeURIComponent(presetId)}`, {
         method: 'DELETE',
         headers: {
           ...(token && { 'Authorization': `Bearer ${token}` })
@@ -1299,10 +1265,11 @@ const VariantFilterSidebar = ({
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail || 'Failed to delete Filter Garden entry');
-      setGardenFeedback({ type: 'success', message: 'Entry deleted.' });
+      if (appliedPresetId === presetId) setAppliedPresetId(null);
+      notify({ message: 'Entry deleted.', type: 'success' });
       await loadSavedFilterPresets();
     } catch (error) {
-      setGardenFeedback({ type: 'error', message: error.message || 'Failed to delete Filter Garden entry.' });
+      notify({ message: error.message || 'Failed to delete Filter Garden entry.', type: 'error' });
     }
   };
 
@@ -1332,11 +1299,11 @@ const VariantFilterSidebar = ({
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail || 'Failed to update Filter Garden entry');
-      setGardenFeedback({ type: 'success', message: `Updated: "${data.name}".` });
+      notify({ message: `Updated: "${data.name}"`, type: 'success' });
       setIsEditingGardenEntry(false);
       await loadSavedFilterPresets();
     } catch (error) {
-      setGardenFeedback({ type: 'error', message: error.message || 'Failed to update Filter Garden entry.' });
+      notify({ message: error.message || 'Failed to update Filter Garden entry.', type: 'error' });
     }
   };
 
@@ -1358,7 +1325,7 @@ const VariantFilterSidebar = ({
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail || 'Failed to run ANNOVAR');
-      setGardenFeedback({ type: 'success', message: data.message || 'ANNOVAR finished. Retry apply.' });
+      notify({ message: data.message || 'ANNOVAR finished. Retry apply.', type: 'success' });
       if (typeof onUploadSuccess === 'function') {
         const refreshDoc = currentDocument
           ? {
@@ -1373,7 +1340,7 @@ const VariantFilterSidebar = ({
         await onUploadSuccess(refreshDoc);
       }
     } catch (error) {
-      setGardenFeedback({ type: 'error', message: error.message || 'Failed to try ANNOVAR.' });
+      notify({ message: error.message || 'Failed to try ANNOVAR.', type: 'error' });
     } finally {
       setIsRunningAnnovar(false);
     }
@@ -1524,7 +1491,8 @@ const VariantFilterSidebar = ({
           ...(token && { 'Authorization': `Bearer ${token}` })
         },
         body: JSON.stringify({
-          conversation_id: conversationId
+          conversation_id: conversationId,
+          filter_type: activeProprietaryFilter || 'filter_1'
         })
       });
 
@@ -1725,7 +1693,7 @@ const VariantFilterSidebar = ({
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto sidebar-scroll flex flex-col space-y-3 relative">
+        <div className="flex-1 min-h-0 overflow-hidden sidebar-scroll flex flex-col space-y-3 relative">
           {/* Active Filter Summary Strip */}
           {/* {currentActiveFilterLabel && (
             <div className="px-3 py-1.5 rounded-md text-[11px] flex items-center gap-1.5 border border-[var(--accent-teal)]/30 bg-[var(--accent-teal-soft)]">
@@ -1810,7 +1778,7 @@ const VariantFilterSidebar = ({
             };
             return (
               <div
-                className="flex rounded-lg overflow-hidden border border-[var(--border-subtle)]"
+                className="flex shrink-0 rounded-lg overflow-hidden border border-[var(--border-subtle)]"
                 role="tablist"
                 aria-label="Filter mode"
                 aria-orientation="horizontal"
@@ -1912,12 +1880,6 @@ const VariantFilterSidebar = ({
                   }}
                 />
               </div>
-              {(hasActiveManualFilters || activeProprietaryFilter) &&
-                underConsiderationCount < displayTotalVariants && (
-                  <p className="mt-1.5 text-[11px] text-[var(--text-tertiary)]">
-                    {(displayTotalVariants - underConsiderationCount).toLocaleString()} filtered out
-                  </p>
-                )}
             </div>
           )}
 
@@ -1969,18 +1931,43 @@ const VariantFilterSidebar = ({
             id="filter-tabpanel"
             aria-labelledby={`filter-tab-${filterMode}`}
             tabIndex={0}
-            className="focus-visible:outline-none"
+            className="focus-visible:outline-none flex-1 min-h-0 flex flex-col"
           >
+            {/* Filter Garden — compact trigger, opens modal */}
+            {filterMode === 'manual' && !isGuest && (
+              <button
+                type="button"
+                onClick={() => setIsGardenExpanded(true)}
+                className="w-full sidebar-card mb-1.5 flex items-center justify-between gap-2 hover:bg-[var(--bg-surface)] transition-colors"
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Sprout className="w-3.5 h-3.5 text-[var(--accent-teal)] shrink-0" />
+                  <span className="text-[13px] font-medium text-[var(--text-primary)]">Filter Garden</span>
+                  {appliedPresetId && savedFilterPresets.find(p => p.id === appliedPresetId) ? (
+                    <span className="px-1.5 h-[18px] inline-flex items-center gap-1 rounded-full text-[10px] font-semibold bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]">
+                      <CheckCircle className="w-2.5 h-2.5" />
+                      Active
+                    </span>
+                  ) : savedFilterPresets.length > 0 ? (
+                    <span className="text-[11px] tabular-nums text-[var(--text-tertiary)]">
+                      {savedFilterPresets.length} saved
+                    </span>
+                  ) : null}
+                </div>
+                <span className="text-[11px] text-[var(--text-tertiary)]">Open</span>
+              </button>
+            )}
+
             {filterMode === 'manual' && allColumns.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between px-1">
+              <div className="flex flex-col flex-1 min-h-0 space-y-1.5">
+                <div className="flex items-center justify-between px-1 shrink-0">
                   <h4 className="text-[11px] font-medium text-[var(--text-tertiary)]">Columns</h4>
                   <span className="text-[11px] text-[var(--text-disabled)] tabular-nums">{allColumns.length}</span>
                 </div>
                 {allColumns.length === 0 ? (
                   <p className="text-xs text-[var(--text-tertiary)] px-1 italic">Select columns below to build a custom filter</p>
                 ) : (
-                  <div className="rounded-lg overflow-hidden border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)]">
+                  <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)]">
                     {allColumns.map((colName) => {
                       const isNumeric = columnIsNumeric(colName);
                       const filter = filters[colName] || {};
@@ -2450,7 +2437,7 @@ const VariantFilterSidebar = ({
         )}
 
         {/* Footer with Actions */}
-        <div className="sidebar-header border-t space-y-3">
+        <div className="sidebar-header border-t border-zinc-800 space-y-1">
           {/* Show pending filters (set but not yet applied) — Manual tab only */}
           {filterMode === 'manual' && (() => {
             if (!hasUnappliedFilterChanges) return null;
@@ -2486,30 +2473,6 @@ const VariantFilterSidebar = ({
               </div>
             );
           })()}
-
-          {/* filter garden disabled for now */}
-          {/* {!isGuest && (
-            <div className="p-3 border rounded-lg space-y-2" style={{ backgroundColor: 'var(--bg-surface-raised)', borderColor: 'var(--border-default)' }}>
-              <div className="text-xs font-semibold text-[var(--text-primary)]">Filter Garden</div>
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-[11px] text-[var(--text-secondary)]">
-                  Save, apply, edit, and delete entries in one place.
-                </div>
-                <button
-                  type="button"
-                  onClick={handleOpenGardenModal}
-                  disabled={isManualFiltersDisabled}
-                  className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap ${
-                    isManualFiltersDisabled
-                      ? 'opacity-60 cursor-not-allowed bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]'
-                      : 'bg-[var(--bg-surface-raised)] border border-[var(--border-default)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
-                  }`}
-                >
-                  Open Filter Garden
-                </button>
-              </div>
-            </div>
-          )} */}
 
           <div className="flex gap-2">
             {filterMode === 'manual' && (
@@ -2575,221 +2538,253 @@ const VariantFilterSidebar = ({
         )}
       </div>
 
-      {isGardenModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[70]">
-          <div className="bg-[var(--bg-surface-raised)] rounded-xl shadow-xl w-full max-w-2xl mx-4 border border-[var(--border-default)] sidebar-modal">
-            <div className="sidebar-modal-header px-5 py-4 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-[var(--text-primary)]">Filter Garden</h3>
+      {/* Filter Garden Modal */}
+      <Dialog open={isGardenExpanded} onOpenChange={(open) => {
+        setIsGardenExpanded(open);
+        if (!open) {
+          setIsGardenSaveFormOpen(false);
+          setIsEditingGardenEntry(false);
+          setGardenApplyMissingColumns([]);
+        }
+      }}>
+        <DialogContent
+          className="!max-w-lg w-full max-h-[min(85vh,700px)] flex flex-col p-0 gap-0 overflow-hidden"
+          style={{ backgroundColor: 'var(--bg-surface-raised)', borderColor: 'var(--border-default)' }}
+        >
+          <div className="flex-shrink-0 px-5 py-4 border-b border-[var(--border-subtle)]">
+            <DialogTitle className="flex items-center gap-2 text-base font-semibold text-[var(--text-primary)]">
+              <Sprout className="w-4 h-4 text-[var(--accent-teal)]" />
+              Filter Garden
+            </DialogTitle>
+            <DialogDescription className="text-[12px] text-[var(--text-tertiary)] mt-1">
+              Save your manual filters as presets and apply them across variant files.
+            </DialogDescription>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+            {/* Save current filters */}
+            {!isGardenSaveFormOpen ? (
               <button
                 type="button"
                 onClick={() => {
-                  setIsGardenModalOpen(false);
-                  setIsEditingGardenEntry(false);
+                  setIsGardenSaveFormOpen(true);
+                  setGardenNameInput('');
+                  setGardenNotesInput('');
                 }}
-                className="p-1 rounded hover:bg-[var(--bg-surface-hover)]"
-                aria-label="Close Filter Garden"
+                disabled={!hasAppliedManualFilters && Object.keys(pendingFilterPayload).length === 0}
+                title={
+                  hasAppliedManualFilters || Object.keys(pendingFilterPayload).length > 0
+                    ? 'Save current manual filters as a preset'
+                    : 'Set at least one manual filter first'
+                }
+                className={`w-full h-10 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-medium border border-dashed transition-colors ${
+                  hasAppliedManualFilters || Object.keys(pendingFilterPayload).length > 0
+                    ? 'border-[var(--accent-teal)] text-[var(--accent-teal)] hover:bg-[var(--accent-teal-soft)] cursor-pointer'
+                    : 'border-[var(--border-subtle)] text-[var(--text-tertiary)] cursor-not-allowed opacity-50'
+                }`}
               >
-                <X className="w-5 h-5 text-[var(--text-secondary)]" />
+                + Save current filters as preset
               </button>
-            </div>
-            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div className="sidebar-garden-step p-3 rounded-lg border">
-                <div className="text-xs font-semibold text-[var(--text-primary)] mb-2">Step 1: Choose action</div>
-                <Select
-                  value={gardenAction}
-                  items={GARDEN_ACTION_LABELS}
-                  onValueChange={(value) => {
-                    setGardenAction(value);
-                    setGardenFeedback(null);
-                    setGardenApplyMissingColumns([]);
-                  }}
-                >
-                  <SelectTrigger className="w-full bg-[var(--bg-surface-raised)]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="create">Create new entry from current filters</SelectItem>
-                    <SelectItem value="apply" disabled={savedFilterPresets.length === 0}>Apply existing entry</SelectItem>
-                    <SelectItem value="edit" disabled={savedFilterPresets.length === 0}>Edit name/notes of existing entry</SelectItem>
-                    <SelectItem value="delete" disabled={savedFilterPresets.length === 0}>Delete existing entry</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {(gardenAction === 'apply' || gardenAction === 'edit' || gardenAction === 'delete') && (
-                <div className="sidebar-garden-step p-3 rounded-lg border">
-                  <div className="text-xs font-semibold text-[var(--text-primary)] mb-2">Step 2: Choose existing entry</div>
-                  <Select
-                    value={selectedPresetId}
-                    items={Object.fromEntries(savedFilterPresets.map((p) => [p.id, p.name]))}
-                    onValueChange={(value) => {
-                      setSelectedPresetId(value);
-                      setIsEditingGardenEntry(false);
+            ) : (
+              <div className="p-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] space-y-2">
+                <input
+                  type="text"
+                  value={gardenNameInput}
+                  onChange={(e) => setGardenNameInput(e.target.value)}
+                  placeholder="Preset name"
+                  autoFocus
+                  maxLength={80}
+                  className="w-full px-3 py-2 text-[13px] border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)]"
+                />
+                <textarea
+                  value={gardenNotesInput}
+                  onChange={(e) => setGardenNotesInput(e.target.value)}
+                  rows={2}
+                  placeholder="Notes (optional)"
+                  maxLength={500}
+                  className="w-full px-3 py-2 text-[13px] border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)] resize-none"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await handleSaveCurrentToGarden();
+                      setIsGardenSaveFormOpen(false);
                     }}
-                  >
-                    <SelectTrigger className="w-full bg-[var(--bg-surface-raised)]">
-                      <SelectValue placeholder="Select an entry" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {savedFilterPresets.length === 0 ? (
-                        <SelectItem value="__none__" disabled>No entries yet</SelectItem>
-                      ) : (
-                        savedFilterPresets.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {(gardenAction === 'create' || gardenAction === 'edit') && (
-                <div className="p-3 rounded-lg border border-[var(--border-default)]">
-                  <div className="text-xs font-semibold text-[var(--text-primary)] mb-2">
-                    Step 2: {gardenAction === 'create' ? 'Set new entry details' : 'Update selected entry details'}
-                  </div>
-                  <div className="space-y-2">
-                    <input
-                      type="text"
-                      value={gardenNameInput}
-                      onChange={(e) => setGardenNameInput(e.target.value)}
-                      placeholder="Entry name (e.g. Rare pathogenic shortlist)"
-                      className="w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent-teal)]"
-                    />
-                    <textarea
-                      value={gardenNotesInput}
-                      onChange={(e) => setGardenNotesInput(e.target.value)}
-                      rows={2}
-                      className="w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent-teal)]"
-                      placeholder="Optional notes"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {selectedGardenEntry && (gardenAction === 'apply' || gardenAction === 'edit' || gardenAction === 'delete') && (
-                <div className="p-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-xs text-[var(--text-primary)] space-y-1">
-                  <div><span className="font-semibold">Required columns:</span> {(selectedGardenEntry.required_columns || []).join(', ') || '—'}</div>
-                  <div><span className="font-semibold">Genome (stored):</span> {selectedGardenEntry?.metadata?.genome_build || 'Not set'}</div>
-                </div>
-              )}
-
-              {gardenAction === 'apply' && gardenApplyMissingColumns.length > 0 && (
-                <div className="p-3 rounded-lg sidebar-warning-banner border text-xs space-y-1">
-                  <div className="font-semibold">Cannot apply to this file.</div>
-                  <div>Missing columns: {gardenApplyMissingColumns.join(', ')}</div>
-                  <div>Try ANNOVAR, then retry.</div>
-                </div>
-              )}
-
-              {gardenFeedback && (
-                <div
-                  className={`p-3 rounded-lg text-sm ${gardenFeedback.type === 'success'
-                      ? 'sidebar-feedback-success border'
-                      : gardenFeedback.type === 'error'
-                        ? 'sidebar-feedback-error border'
-                        : 'sidebar-feedback-warning border'
+                    disabled={isSavingPreset || !gardenNameInput.trim()}
+                    className={`flex-1 h-8 rounded-md text-[12px] font-medium ${
+                      isSavingPreset || !gardenNameInput.trim()
+                        ? 'opacity-50 cursor-not-allowed bg-[var(--text-tertiary)] text-[var(--bg-app)]'
+                        : 'bg-[var(--accent-teal)] text-[var(--bg-app)] hover:brightness-110'
                     }`}
-                >
-                  {gardenFeedback.message}
+                  >
+                    {isSavingPreset ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsGardenSaveFormOpen(false)}
+                    className="h-8 px-3 rounded-md text-[12px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
+                  >
+                    Cancel
+                  </button>
                 </div>
-              )}
-            </div>
-            <div className="px-5 py-4 border-t border-[var(--border-default)]">
-              <div className="text-xs font-semibold text-[var(--text-primary)] mb-2">Step 3: Confirm action</div>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  {gardenAction === 'create' && (
-                    <button
-                      type="button"
-                      onClick={handleSaveCurrentToGarden}
-                      disabled={isSavingPreset || isManualFiltersDisabled}
-                      className={`px-4 py-2 text-sm rounded-xl font-medium text-white shadow-sm ${isSavingPreset || isManualFiltersDisabled ? 'opacity-60 cursor-not-allowed' : ''
-                        }`}
-                      style={{ backgroundColor: isSavingPreset || isManualFiltersDisabled ? 'var(--text-tertiary)' : 'var(--accent-teal)' }}
-                    >
-                      {isSavingPreset ? 'Saving...' : 'Save to Filter Garden'}
-                    </button>
-                  )}
-                  {gardenAction === 'apply' && (
-                    <button
-                      type="button"
-                      onClick={handleApplySelectedGarden}
-                      disabled={isApplyingPreset || !selectedPresetId || isManualFiltersDisabled}
-                      className={`px-4 py-2 text-sm rounded-xl font-medium text-white shadow-sm ${isApplyingPreset || !selectedPresetId || isManualFiltersDisabled
-                          ? 'opacity-60 cursor-not-allowed'
-                          : ''
-                        }`}
-                      style={{
-                        backgroundColor:
-                          isApplyingPreset || !selectedPresetId || isManualFiltersDisabled ? 'var(--text-tertiary)' : 'var(--accent-teal)'
-                      }}
-                    >
-                      {isApplyingPreset ? 'Applying...' : 'Apply selected entry'}
-                    </button>
-                  )}
-                  {gardenAction === 'edit' && (
-                    <button
-                      type="button"
-                      onClick={handleUpdateSelectedGarden}
-                      disabled={!selectedPresetId || isManualFiltersDisabled}
-                      className={`px-4 py-2 text-sm rounded-xl font-medium ${!selectedPresetId || isManualFiltersDisabled
-                          ? 'opacity-60 cursor-not-allowed bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]'
-                          : 'bg-[var(--bg-surface-raised)] border border-[var(--border-default)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
-                        }`}
-                    >
-                      Save entry edits
-                    </button>
-                  )}
-                  {gardenAction === 'delete' && (
-                    <button
-                      type="button"
-                      onClick={handleDeleteSelectedGarden}
-                      disabled={!selectedPresetId || isManualFiltersDisabled}
-                      className={`px-4 py-2 text-sm rounded-xl font-medium ${!selectedPresetId || isManualFiltersDisabled
-                          ? 'opacity-60 cursor-not-allowed bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]'
-                          : 'bg-[var(--bg-surface-raised)] border border-red-300 text-red-700 hover:bg-red-50'
-                        }`}
-                    >
-                      Delete selected entry
-                    </button>
-                  )}
-                  {gardenAction === 'apply' && gardenApplyMissingColumns.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={handleRunAnnovarFromGarden}
-                      disabled={isRunningAnnovar}
-                      className={`px-4 py-2 text-sm rounded-xl font-medium ${isRunningAnnovar
-                          ? 'opacity-60 cursor-not-allowed bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]'
-                          : 'bg-[var(--bg-surface-raised)] border border-[var(--border-default)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
-                        }`}
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <img
-                          src={qiagenLogo}
-                          alt="Qiagen"
-                          className="w-4 h-4 object-contain"
-                          style={{ filter: isRunningAnnovar ? 'grayscale(100%) opacity(0.5)' : 'none' }}
-                        />
-                        {isRunningAnnovar ? 'Trying ANNOVAR...' : 'Try ANNOVAR'}
-                      </span>
-                    </button>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsGardenModalOpen(false)}
-                  className="px-4 py-2 text-sm rounded-xl font-medium bg-[var(--bg-surface-raised)] border border-[var(--border-default)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]"
-                >
-                  Done
-                </button>
               </div>
-            </div>
+            )}
+
+            <div className="border-t border-[var(--border-subtle)]" />
+
+            {/* Preset list */}
+            {savedFilterPresets.length === 0 ? (
+              <div className="text-center py-10">
+                <Sprout className="w-8 h-8 text-[var(--text-tertiary)] mx-auto mb-3 opacity-40" />
+                <p className="text-[13px] text-[var(--text-secondary)]">No saved presets yet.</p>
+                <p className="text-[11px] text-[var(--text-disabled)] mt-1">Save your current filters to see them here.</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {savedFilterPresets.map((preset) => {
+                  const isActive = appliedPresetId === preset.id;
+                  const isEditing = isEditingGardenEntry && selectedPresetId === preset.id;
+                  return (
+                    <div
+                      key={preset.id}
+                      className={`group rounded-lg overflow-hidden border transition-all ${
+                        isActive
+                          ? 'border-[var(--accent-teal)]/50 bg-[var(--accent-teal-soft)]'
+                          : 'border-[var(--border-subtle)] hover:border-[var(--border-default)] bg-[var(--bg-surface)]'
+                      }`}
+                    >
+
+                      {isEditing ? (
+                        <div className="p-3 space-y-2">
+                          <input
+                            type="text"
+                            value={gardenNameInput}
+                            onChange={(e) => setGardenNameInput(e.target.value)}
+                            autoFocus
+                            maxLength={80}
+                            className="w-full px-2.5 py-1.5 text-[13px] border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)]"
+                          />
+                          <textarea
+                            value={gardenNotesInput}
+                            onChange={(e) => setGardenNotesInput(e.target.value)}
+                            rows={2}
+                            maxLength={500}
+                            placeholder="Notes"
+                            className="w-full px-2.5 py-1.5 text-[12px] border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)] resize-none"
+                          />
+                          <div className="flex gap-1.5">
+                            <button
+                              type="button"
+                              onClick={handleUpdateSelectedGarden}
+                              className="h-7 px-3 rounded-md text-[11px] font-medium bg-[var(--accent-teal)] text-[var(--bg-app)] hover:brightness-110"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingGardenEntry(false)}
+                              className="h-7 px-3 rounded-md text-[11px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 py-2.5 pl-3.5 pr-2">
+                          {/* Content */}
+                          <div className="min-w-0 flex-1">
+                            <div className="min-w-0">
+                              <span className="text-[13px] font-semibold text-[var(--text-primary)] truncate block">
+                                {preset.name}
+                              </span>
+                            </div>
+                            {preset.notes && (
+                              <div className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5">{preset.notes}</div>
+                            )}
+                            <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5 flex items-center gap-1.5">
+                              <span>{(preset.required_columns || []).length} col{(preset.required_columns || []).length === 1 ? '' : 's'}</span>
+                              {preset.metadata?.genome_build && (
+                                <>
+                                  <span aria-hidden>·</span>
+                                  <span>{preset.metadata.genome_build}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            {isActive ? (
+                              <button
+                                type="button"
+                                title="Deactivate this preset and clear its filters"
+                                onClick={resetFilters}
+                                disabled={isApplying}
+                                className="h-7 px-2.5 rounded-md text-[11px] font-medium inline-flex items-center gap-1 text-[var(--accent-teal)] hover:bg-[var(--accent-teal)]/15 transition-colors disabled:opacity-50"
+                              >
+                                <X className="w-3 h-3" />
+                                Deactivate
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                title="Apply preset"
+                                onClick={() => handleApplySelectedGarden(preset.id)}
+                                disabled={isApplyingPreset}
+                                className="h-7 px-2.5 rounded-md text-[11px] font-medium inline-flex items-center gap-1 border border-[var(--accent-teal)]/60 text-[var(--accent-teal)] hover:bg-[var(--accent-teal-soft)] hover:border-[var(--accent-teal)] transition-colors disabled:opacity-50"
+                              >
+                                Apply
+                              </button>
+                            )}
+                            <div className="w-px h-4 bg-[var(--border-subtle)] mx-0.5" aria-hidden />
+                            <button
+                              type="button"
+                              title="Edit name/notes"
+                              onClick={() => {
+                                setSelectedPresetId(preset.id);
+                                setIsEditingGardenEntry(true);
+                                setGardenNameInput(preset.name || '');
+                                setGardenNotesInput(preset.notes || '');
+                              }}
+                              className="p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] transition-colors"
+                            >
+                              <PencilLine className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Delete preset"
+                              onClick={() => handleDeleteSelectedGarden(preset.id)}
+                              className="p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--bg-surface-hover)] transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedPresetId === preset.id && gardenApplyMissingColumns.length > 0 && (
+                        <div className="mx-3 mb-3 p-2 rounded-md text-[11px] sidebar-warning-banner border">
+                          <div className="font-medium mb-1">Missing columns: {gardenApplyMissingColumns.join(', ')}</div>
+                          <button
+                            type="button"
+                            onClick={handleRunAnnovarFromGarden}
+                            disabled={isRunningAnnovar}
+                            className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium underline"
+                          >
+                            <img src={qiagenLogo} alt="" className="w-3 h-3 object-contain" />
+                            {isRunningAnnovar ? 'Running ANNOVAR...' : 'Try ANNOVAR'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* Processing Notification */}
     </div>

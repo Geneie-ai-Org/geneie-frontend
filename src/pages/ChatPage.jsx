@@ -78,7 +78,6 @@ const ChatPage = () => {
   const [uploadingFileName, setUploadingFileName] = useState(null);
   const fileTypeDropdownRef = useRef(null);
   const tsvFileInputRef = useRef(null);
-  const vcfFileInputRef = useRef(null);
   const [showSubscriptionSuccess, setShowSubscriptionSuccess] = useState(false);
   const [showSubscriptionCanceled, setShowSubscriptionCanceled] = useState(false);
   const [columnInterpretationResult, setColumnInterpretationResult] = useState(null); // 3-step interpretation results
@@ -330,10 +329,12 @@ const ChatPage = () => {
   }, [showFileTypeDropdown]);
 
   // Handle file selected from dropdown file inputs
-  const handleDropdownFileSelect = (e, fileType) => {
+  const handleDropdownFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setActiveFileTypeTab(fileType === 'vcf' ? 'vcf' : 'tabular');
+    const name = (file.name || '').toLowerCase();
+    const isVcf = name.endsWith('.vcf') || name.endsWith('.vcf.gz');
+    setActiveFileTypeTab(isVcf ? 'vcf' : 'tabular');
     setPreSelectedFile(file);
     setShowUploadModal(true);
     setShowFileTypeDropdown(null);
@@ -821,16 +822,9 @@ const ChatPage = () => {
     (userTier === 'guest' && guestLimitExceeded) ||
     (userTier !== 'guest' && currentExchanges >= tierLimit);
 
-  const onSelectTabularFile = () => {
+  const onSelectLocalFile = () => {
     setShowFileTypeDropdown(null);
-    setActiveFileTypeTab('tabular');
     tsvFileInputRef.current?.click();
-  };
-
-  const onSelectVcfFile = () => {
-    setShowFileTypeDropdown(null);
-    setActiveFileTypeTab('vcf');
-    vcfFileInputRef.current?.click();
   };
 
   const onSelectImportFromUrl = () => {
@@ -1262,8 +1256,7 @@ const ChatPage = () => {
                   showFileTypeDropdown={showFileTypeDropdown}
                   fileTypeDropdownRef={fileTypeDropdownRef}
                   onUploadButtonClick={handleUploadButtonClick}
-                  onSelectTabular={onSelectTabularFile}
-                  onSelectVcf={onSelectVcfFile}
+                  onSelectLocalFile={onSelectLocalFile}
                   onSelectFromUrl={userTier === 'guest' ? undefined : onSelectImportFromUrl}
                   isVariantSidebarOpen={isVariantSidebarOpen}
                   onToggleVariantSidebar={() => setIsVariantSidebarOpen(!isVariantSidebarOpen)}
@@ -1400,8 +1393,7 @@ const ChatPage = () => {
                   showFileTypeDropdown={showFileTypeDropdown}
                   fileTypeDropdownRef={fileTypeDropdownRef}
                   onUploadButtonClick={handleUploadButtonClick}
-                  onSelectTabular={onSelectTabularFile}
-                  onSelectVcf={onSelectVcfFile}
+                  onSelectLocalFile={onSelectLocalFile}
                   onSelectFromUrl={userTier === 'guest' ? undefined : onSelectImportFromUrl}
                   isVariantSidebarOpen={isVariantSidebarOpen}
                   onToggleVariantSidebar={() => setIsVariantSidebarOpen(!isVariantSidebarOpen)}
@@ -1485,15 +1477,8 @@ const ChatPage = () => {
       <input
         ref={tsvFileInputRef}
         type="file"
-        accept=".tsv,.csv"
-        onChange={(e) => handleDropdownFileSelect(e, 'tabular')}
-        className="hidden"
-      />
-      <input
-        ref={vcfFileInputRef}
-        type="file"
-        accept=".vcf,.vcf.gz,.gz,application/gzip"
-        onChange={(e) => handleDropdownFileSelect(e, 'vcf')}
+        accept=".tsv,.csv,.vcf,.vcf.gz,.gz,application/gzip"
+        onChange={handleDropdownFileSelect}
         className="hidden"
       />
 

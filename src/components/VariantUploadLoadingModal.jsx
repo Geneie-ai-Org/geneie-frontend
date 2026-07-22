@@ -15,9 +15,7 @@ export default function VariantUploadLoadingModal({
   uploadProgress,
   fileName,
 }) {
-  const statusMessage =
-    getUploadDisplayMessage({ uploadProgress }) ||
-    'Uploading your variant file…';
+  const statusMessage = getUploadDisplayMessage({ uploadProgress }) || '';
   const bytesSending = uploadProgress != null && uploadProgress < 100;
   const progressPct = bytesSending ? Math.round(uploadProgress) : null;
   const displayFileName = fileName;

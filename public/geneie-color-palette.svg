@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+  <rect width="1200" height="800" fill="#0F0F0F"/>
+
+  <!-- Title -->
+  <text x="60" y="60" fill="#ffffff" font-family="Inter, sans-serif" font-size="28" font-weight="600">Geneie Color Palette</text>
+
+  <!-- Brand / Primary -->
+  <text x="60" y="110" fill="#a1a1aa" font-family="Inter, sans-serif" font-size="14" font-weight="500">BRAND / PRIMARY</text>
+
+  <rect x="60" y="130" width="100" height="70" rx="8" fill="#2F7F7A"/>
+  <text x="110" y="225" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#2F7F7A</text>
+  <text x="110" y="240" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Primary</text>
+
+  <rect x="180" y="130" width="100" height="70" rx="8" fill="#4AD6CD"/>
+  <text x="230" y="225" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#4AD6CD</text>
+  <text x="230" y="240" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Accent</text>
+
+  <rect x="300" y="130" width="100" height="70" rx="8" fill="#256B67"/>
+  <text x="350" y="225" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#256B67</text>
+  <text x="350" y="240" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Dark</text>
+
+  <rect x="420" y="130" width="100" height="70" rx="8" fill="#EDF7F6"/>
+  <text x="470" y="225" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#EDF7F6</text>
+  <text x="470" y="240" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Wash</text>
+
+  <rect x="540" y="130" width="100" height="70" rx="8" fill="#4DB6AC"/>
+  <text x="590" y="225" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#4DB6AC</text>
+  <text x="590" y="240" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Mid</text>
+
+  <rect x="660" y="130" width="100" height="70" rx="8" fill="#80CBC4"/>
+  <text x="710" y="225" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#80CBC4</text>
+  <text x="710" y="240" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Light</text>
+
+  <!-- Backgrounds / Surfaces -->
+  <text x="60" y="290" fill="#a1a1aa" font-family="Inter, sans-serif" font-size="14" font-weight="500">BACKGROUNDS / SURFACES</text>
+
+  <rect x="60" y="310" width="100" height="70" rx="8" fill="#000000" stroke="#333" stroke-width="1"/>
+  <text x="110" y="405" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#000000</text>
+  <text x="110" y="420" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Black</text>
+
+  <rect x="180" y="310" width="100" height="70" rx="8" fill="#0F0F0F" stroke="#333" stroke-width="1"/>
+  <text x="230" y="405" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#0F0F0F</text>
+  <text x="230" y="420" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Body dark</text>
+
+  <rect x="300" y="310" width="100" height="70" rx="8" fill="#111111" stroke="#333" stroke-width="1"/>
+  <text x="350" y="405" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#111111</text>
+  <text x="350" y="420" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Card dark</text>
+
+  <rect x="420" y="310" width="100" height="70" rx="8" fill="#18181B" stroke="#333" stroke-width="1"/>
+  <text x="470" y="405" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#18181B</text>
+  <text x="470" y="420" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Zinc 900</text>
+
+  <rect x="540" y="310" width="100" height="70" rx="8" fill="#FAF9F6"/>
+  <text x="590" y="405" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#FAF9F6</text>
+  <text x="590" y="420" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Off-white</text>
+
+  <rect x="660" y="310" width="100" height="70" rx="8" fill="#FFFFFF"/>
+  <text x="710" y="405" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#FFFFFF</text>
+  <text x="710" y="420" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">White</text>
+
+  <!-- Text Colors -->
+  <text x="60" y="470" fill="#a1a1aa" font-family="Inter, sans-serif" font-size="14" font-weight="500">TEXT</text>
+
+  <rect x="60" y="490" width="100" height="70" rx="8" fill="#FFFFFF"/>
+  <text x="110" y="585" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#FFFFFF</text>
+  <text x="110" y="600" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Heading (dark)</text>
+
+  <rect x="180" y="490" width="100" height="70" rx="8" fill="#D4D4D8"/>
+  <text x="230" y="585" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#D4D4D8</text>
+  <text x="230" y="600" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Zinc 300</text>
+
+  <rect x="300" y="490" width="100" height="70" rx="8" fill="#A1A1AA"/>
+  <text x="350" y="585" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#A1A1AA</text>
+  <text x="350" y="600" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Zinc 400</text>
+
+  <rect x="420" y="490" width="100" height="70" rx="8" fill="#6B7280"/>
+  <text x="470" y="585" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#6B7280</text>
+  <text x="470" y="600" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Gray 500</text>
+
+  <rect x="540" y="490" width="100" height="70" rx="8" fill="#18181B" stroke="#333" stroke-width="1"/>
+  <text x="590" y="585" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#18181B</text>
+  <text x="590" y="600" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Heading (light)</text>
+
+  <!-- Status / Feedback -->
+  <text x="60" y="650" fill="#a1a1aa" font-family="Inter, sans-serif" font-size="14" font-weight="500">STATUS / FEEDBACK</text>
+
+  <rect x="60" y="670" width="100" height="70" rx="8" fill="#81C995"/>
+  <text x="110" y="765" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#81C995</text>
+  <text x="110" y="780" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Success</text>
+
+  <rect x="180" y="670" width="100" height="70" rx="8" fill="#FCA5A5"/>
+  <text x="230" y="765" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#FCA5A5</text>
+  <text x="230" y="780" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Error</text>
+
+  <rect x="300" y="670" width="100" height="70" rx="8" fill="#8AB4F8"/>
+  <text x="350" y="765" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#8AB4F8</text>
+  <text x="350" y="780" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Info</text>
+
+  <rect x="420" y="670" width="100" height="70" rx="8" fill="#FDD663"/>
+  <text x="470" y="765" fill="#d4d4d8" font-family="Inter, sans-serif" font-size="11" text-anchor="middle">#FDD663</text>
+  <text x="470" y="780" fill="#71717a" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Warning</text>
+</svg>

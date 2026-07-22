@@ -16,7 +16,7 @@ const SIMULATION_PAIRS = [
 ];
 
 const CHAR_SPEED_INPUT = 45;
-const WORD_SPEED_RESPONSE = 60; // ms per word (streaming effect)
+const WORD_SPEED_RESPONSE = 60;
 
 const initialState = {
   phase: 'idle',

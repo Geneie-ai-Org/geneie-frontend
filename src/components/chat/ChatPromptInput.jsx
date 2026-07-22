@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from 'react';
-import { Upload, FileText, PanelRight, ArrowUp, Plus, Square, Link2 } from 'lucide-react';
+import { Upload, FileText, PanelRight, ArrowUp, Plus, Square, Link2, FolderOpen } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -21,15 +21,14 @@ const FileTypeDropdown = ({
   showFileTypeDropdown,
   fileTypeDropdownRef,
   onUploadButtonClick,
-  onSelectTabular,
-  onSelectVcf,
+  onSelectLocalFile,
   onSelectFromUrl,
 }) => {
   if (!showFileTypeDropdown) return null;
 
   return (
     <div
-      className="absolute bottom-full left-0 mb-2 rounded-lg border overflow-hidden shadow-xl min-w-[140px] z-50"
+      className="absolute bottom-full left-0 mb-2 rounded-lg border overflow-hidden shadow-xl min-w-[160px] z-50"
       style={{
         backgroundColor: 'var(--bg-surface-raised)',
         borderColor: 'var(--border-default)',
@@ -37,22 +36,12 @@ const FileTypeDropdown = ({
     >
       <button
         type="button"
-        onClick={onSelectTabular}
+        onClick={onSelectLocalFile}
         className="w-full px-3 py-2.5 text-sm text-left flex items-center gap-2.5 transition-colors hover:bg-white/5"
         style={{ color: 'var(--text-primary)' }}
       >
-        <FileText className="w-3.5 h-3.5" style={{ color: 'var(--accent-teal)' }} />
-        TSV / CSV
-      </button>
-      <div style={{ height: '1px', backgroundColor: 'var(--border-default)' }} />
-      <button
-        type="button"
-        onClick={onSelectVcf}
-        className="w-full px-3 py-2.5 text-sm text-left flex items-center gap-2.5 transition-colors hover:bg-white/5"
-        style={{ color: 'var(--text-primary)' }}
-      >
-        <FileText className="w-3.5 h-3.5" style={{ color: 'var(--accent-blue)' }} />
-        VCF
+        <FolderOpen className="w-3.5 h-3.5" style={{ color: 'var(--accent-teal)' }} />
+        Local File
       </button>
       {onSelectFromUrl && (
         <>
@@ -86,8 +75,7 @@ const ChatPromptInput = ({
   showFileTypeDropdown,
   fileTypeDropdownRef,
   onUploadButtonClick,
-  onSelectTabular,
-  onSelectVcf,
+  onSelectLocalFile,
   onSelectFromUrl,
   isVariantSidebarOpen,
   onToggleVariantSidebar,
@@ -147,8 +135,7 @@ const ChatPromptInput = ({
         showFileTypeDropdown={showFileTypeDropdown === dropdownSource ? dropdownSource : null}
         fileTypeDropdownRef={fileTypeDropdownRef}
         onUploadButtonClick={onUploadButtonClick}
-        onSelectTabular={onSelectTabular}
-        onSelectVcf={onSelectVcf}
+        onSelectLocalFile={onSelectLocalFile}
         onSelectFromUrl={onSelectFromUrl}
       />
     </div>

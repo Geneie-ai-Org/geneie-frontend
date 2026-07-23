@@ -577,7 +577,7 @@ const LandingPage = () => {
                           <span className="min-w-0">{item.q}</span>
                         </div>
                       </AccordionTrigger>
-                      <AccordionContent className="text-zinc-400 text-sm leading-relaxed pl-[44px] pr-2 pb-5">
+                      <AccordionContent className="text-zinc-400 text-sm leading-relaxed pl-0 pr-2 pb-5">
                         {item.a}
                       </AccordionContent>
                     </AccordionItem>

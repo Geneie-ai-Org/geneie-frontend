@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { FileText, X, RotateCcw, CheckCircle, Upload, Trash2, Info, Zap, Search, Sprout, PencilLine, ChevronDown } from 'lucide-react';
+import { FileText, X, RotateCcw, CheckCircle, Upload, Trash2, Info, Zap, Search, Sprout, PencilLine, ChevronDown, PanelRightClose } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import DocumentUpload from './DocumentUpload';
@@ -29,6 +29,7 @@ import { apiUrl, getApiOrigin } from '@/config/api';
 import qiagenLogo from '../Qiagen.svg.png';
 import { toast } from 'sonner';
 import { apiErrorDetailToMessage as sharedApiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
+import { groupColumns } from '@/lib/variantColumnGroups';
 
 /**
  * Backwards-compatible replacement for the old in-panel notification overlay.
@@ -369,64 +370,6 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
 
   return (
     <div className="space-y-3 select-none">
-      <p className="text-xs text-[var(--text-secondary)]">
-        Type bounds and/or drag the handles. Spanning the full bar clears this column&apos;s filter.
-      </p>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs text-[var(--text-secondary)] mb-1">Minimum</label>
-          <input
-            type="text"
-            inputMode="decimal"
-            autoComplete="off"
-            value={minInputValue}
-            onFocus={() => {
-              if (!disabled) setMinDraft(Number.isFinite(lo) ? String(lo) : '');
-            }}
-            onChange={(e) => setMinDraft(e.target.value)}
-            onBlur={(e) => commitMinInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                e.currentTarget.blur();
-              }
-            }}
-            disabled={disabled}
-            className={`w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent-teal)] focus:border-[var(--accent-teal)] select-text ${disabled ? 'opacity-50 cursor-not-allowed bg-[var(--bg-surface)]' : ''
-              }`}
-            style={{ backgroundColor: 'var(--bg-surface-raised)' }}
-            aria-label="Minimum filter value"
-          />
-        </div>
-        <div>
-          <label className="block text-xs text-[var(--text-secondary)] mb-1">Maximum</label>
-          <input
-            type="text"
-            inputMode="decimal"
-            autoComplete="off"
-            value={maxInputValue}
-            onFocus={() => {
-              if (!disabled) setMaxDraft(Number.isFinite(hi) ? String(hi) : '');
-            }}
-            onChange={(e) => setMaxDraft(e.target.value)}
-            onBlur={(e) => commitMaxInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                e.currentTarget.blur();
-              }
-            }}
-            disabled={disabled}
-            className={`w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent-teal)] focus:border-[var(--accent-teal)] select-text ${disabled ? 'opacity-50 cursor-not-allowed bg-[var(--bg-surface)]' : ''
-              }`}
-            style={{ backgroundColor: 'var(--bg-surface-raised)' }}
-            aria-label="Maximum filter value"
-          />
-        </div>
-      </div>
-      <p className="text-xs text-[var(--text-tertiary)]">
-        Allowed range: {fmt(rangeMin)} (min of data) to {fmt(rangeMax)} (max of data).
-      </p>
       <div
         ref={trackRef}
         className={`relative h-10 flex items-center ${disabled ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}
@@ -476,6 +419,62 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
             touchAction: 'none',
           }}
         />
+      </div>
+      <div className="flex items-center justify-between text-[10px] text-[var(--text-tertiary)] tabular-nums px-0.5 -mt-1">
+        <span>{fmt(rangeMin)}</span>
+        <span>{fmt(rangeMax)}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs text-[var(--text-secondary)] mb-1">Min</label>
+          <input
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            value={minInputValue}
+            onFocus={() => {
+              if (!disabled) setMinDraft(Number.isFinite(lo) ? String(lo) : '');
+            }}
+            onChange={(e) => setMinDraft(e.target.value)}
+            onBlur={(e) => commitMinInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
+            }}
+            disabled={disabled}
+            className={`w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent-teal)] focus:border-[var(--accent-teal)] select-text ${disabled ? 'opacity-50 cursor-not-allowed bg-[var(--bg-surface)]' : ''
+              }`}
+            style={{ backgroundColor: 'var(--bg-surface-raised)' }}
+            aria-label="Minimum filter value"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-[var(--text-secondary)] mb-1">Max</label>
+          <input
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            value={maxInputValue}
+            onFocus={() => {
+              if (!disabled) setMaxDraft(Number.isFinite(hi) ? String(hi) : '');
+            }}
+            onChange={(e) => setMaxDraft(e.target.value)}
+            onBlur={(e) => commitMaxInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
+            }}
+            disabled={disabled}
+            className={`w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent-teal)] focus:border-[var(--accent-teal)] select-text ${disabled ? 'opacity-50 cursor-not-allowed bg-[var(--bg-surface)]' : ''
+              }`}
+            style={{ backgroundColor: 'var(--bg-surface-raised)' }}
+            aria-label="Maximum filter value"
+          />
+        </div>
       </div>
     </div>
   );
@@ -544,6 +543,9 @@ const VariantFilterSidebar = ({
   const [isGardenExpanded, setIsGardenExpanded] = useState(false);
   const [isGardenSaveFormOpen, setIsGardenSaveFormOpen] = useState(false);
   const [appliedPresetId, setAppliedPresetId] = useState(null);
+  const [columnSearchQuery, setColumnSearchQuery] = useState('');
+  const [openColumnGroup, setOpenColumnGroup] = useState(null);
+  const [filterPopupParentGroup, setFilterPopupParentGroup] = useState(null);
   const proprietaryPreviewLoadedForRef = useRef(null);
 
   // Define isGuest early so it can be used in functions below
@@ -1665,43 +1667,104 @@ const VariantFilterSidebar = ({
   return (
     <div className="variant-filter-sidebar w-full h-full flex flex-col min-w-0 relative">
       <div className="h-full flex flex-col">
-        {/* Header */}
-        <div className="sidebar-header flex items-center justify-between">
-          <h3 className="text-[var(--text-primary)] flex items-center gap-1.5 min-w-0">
-            <FileText className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />
-            <span className="truncate">Variant File Filters</span>
-          </h3>
-          <div className="flex items-center gap-0.5">
-            {(variantData && variantData.total_variants > 0) && (
-              <button
-                onClick={() => setRemoveFileDialogOpen(true)}
-                className="p-1.5 rounded-md text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--error)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
-                aria-label="Remove variant file"
-                title="Remove variant file"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
-            <button
-              onClick={onToggle}
-              className="p-1.5 rounded-md text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
-              aria-label="Close sidebar"
-            >
-              <X className="w-4 h-4" />
-            </button>
+        {/* Header — tabs inline, actions on the right */}
+        <div className="sidebar-header flex">
+          <div className="flex-1 min-w-0">
+            {(() => {
+              const TABS = [
+                { key: 'manual', label: 'Manual', filterKey: null },
+                { key: 'acmg', label: 'ACMG', filterKey: 'filter_1' },
+                { key: 'functional', label: 'Func.Imp', filterKey: 'filter_2' },
+              ];
+              const activeIndex = TABS.findIndex((t) => t.key === filterMode);
+              const focusTab = (i) => {
+                const el = document.getElementById(`filter-tab-${TABS[i].key}`);
+                if (el) el.focus();
+              };
+              const onTablistKeyDown = (e) => {
+                switch (e.key) {
+                  case 'ArrowRight':
+                  case 'ArrowDown':
+                    e.preventDefault();
+                    focusTab((activeIndex + 1) % TABS.length);
+                    break;
+                  case 'ArrowLeft':
+                  case 'ArrowUp':
+                    e.preventDefault();
+                    focusTab((activeIndex - 1 + TABS.length) % TABS.length);
+                    break;
+                  case 'Home':
+                    e.preventDefault();
+                    focusTab(0);
+                    break;
+                  case 'End':
+                    e.preventDefault();
+                    focusTab(TABS.length - 1);
+                    break;
+                  default:
+                }
+              };
+              const renderCount = (filterKey) => {
+                if (!filterKey) return null;
+                if (proprietaryFilterPreviews == null) {
+                  return (
+                    <span className="ml-1.5 inline-block h-2.5 w-6 align-middle rounded bg-[var(--bg-surface-hover)] animate-pulse" aria-hidden />
+                  );
+                }
+                const isActive =
+                  (filterKey === 'filter_1' && activeProprietaryFilter === 'filter_1') ||
+                  (filterKey === 'filter_2' && activeProprietaryFilter === 'filter_2');
+                if (isActive) {
+                  return (
+                    <span className="ml-1 opacity-70 tabular-nums">
+                      ({filteredCount != null ? filteredCount.toLocaleString() : '…'})
+                    </span>
+                  );
+                }
+                const count = proprietaryFilterPreviews?.[filterKey]?.preview_count;
+                if (count == null) return null;
+                return <span className="ml-1 opacity-70 tabular-nums">({count.toLocaleString()})</span>;
+              };
+              return (
+                <div
+                  className="flex shrink-0 rounded-lg overflow-hidden border border-[var(--border-subtle)]"
+                  role="tablist"
+                  aria-label="Filter mode"
+                  aria-orientation="horizontal"
+                  onKeyDown={onTablistKeyDown}
+                >
+                  {TABS.map((t) => {
+                    const selected = filterMode === t.key;
+                    return (
+                      <button
+                        key={t.key}
+                        id={`filter-tab-${t.key}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={selected}
+                        aria-controls="filter-tabpanel"
+                        tabIndex={selected ? 0 : -1}
+                        onClick={() => handleTabSwitch(t.key)}
+                        data-state={selected ? 'active' : 'inactive'}
+                        className={`flex-1 px-2.5 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)] ${
+                          selected
+                            ? 'bg-[var(--accent-teal)] text-[var(--bg-app)]'
+                            : 'bg-[var(--bg-surface-raised)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
+                        }`}
+                      >
+                        {t.label}
+                        {renderCount(t.filterKey)}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 min-h-0 overflow-hidden sidebar-scroll flex flex-col space-y-3 relative">
-          {/* Active Filter Summary Strip */}
-          {/* {currentActiveFilterLabel && (
-            <div className="px-3 py-1.5 rounded-md text-[11px] flex items-center gap-1.5 border border-[var(--accent-teal)]/30 bg-[var(--accent-teal-soft)]">
-              <span className="text-[var(--text-tertiary)]">Filtered by</span>
-              <span className="font-semibold text-[var(--accent-teal)] truncate">{currentActiveFilterLabel}</span>
-            </div>
-          )} */}
-
+        <div className="flex-1 min-h-0 overflow-hidden sidebar-scroll flex flex-col space-y-1 relative">
           {/* Variant Count Display with graphical bar */}
           {hasActiveManualFilters &&
             filterWorkingSetCount != null &&
@@ -1716,101 +1779,6 @@ const VariantFilterSidebar = ({
                 sidebar filter again to reload a larger working set.
               </div>
             )}
-          {/* Segmented Filter Mode Selector */}
-          {(() => {
-            const TABS = [
-              { key: 'manual', label: 'Manual', filterKey: null },
-              { key: 'acmg', label: 'ACMG', filterKey: 'filter_1' },
-              { key: 'functional', label: 'Func.Imp', filterKey: 'filter_2' },
-            ];
-            const activeIndex = TABS.findIndex((t) => t.key === filterMode);
-            const focusTab = (i) => {
-              const el = document.getElementById(`filter-tab-${TABS[i].key}`);
-              if (el) el.focus();
-            };
-            const onTablistKeyDown = (e) => {
-              switch (e.key) {
-                case 'ArrowRight':
-                case 'ArrowDown':
-                  e.preventDefault();
-                  focusTab((activeIndex + 1) % TABS.length);
-                  break;
-                case 'ArrowLeft':
-                case 'ArrowUp':
-                  e.preventDefault();
-                  focusTab((activeIndex - 1 + TABS.length) % TABS.length);
-                  break;
-                case 'Home':
-                  e.preventDefault();
-                  focusTab(0);
-                  break;
-                case 'End':
-                  e.preventDefault();
-                  focusTab(TABS.length - 1);
-                  break;
-                default:
-              }
-            };
-            const renderCount = (filterKey) => {
-              if (!filterKey) return null;
-              // Loading: previews haven't arrived yet — show skeleton
-              if (proprietaryFilterPreviews == null) {
-                return (
-                  <span
-                    className="ml-1.5 inline-block h-2.5 w-8 align-middle rounded bg-[var(--bg-surface-hover)] animate-pulse"
-                    aria-hidden
-                  />
-                );
-              }
-              const isActive =
-                (filterKey === 'filter_1' && activeProprietaryFilter === 'filter_1') ||
-                (filterKey === 'filter_2' && activeProprietaryFilter === 'filter_2');
-              if (isActive) {
-                return (
-                  <span className="ml-1 opacity-70 tabular-nums">
-                    ({filteredCount != null ? filteredCount.toLocaleString() : '…'})
-                  </span>
-                );
-              }
-              const count = proprietaryFilterPreviews?.[filterKey]?.preview_count;
-              if (count == null) return null;
-              return <span className="ml-1 opacity-70 tabular-nums">({count.toLocaleString()})</span>;
-            };
-            return (
-              <div
-                className="flex shrink-0 rounded-lg overflow-hidden border border-[var(--border-subtle)]"
-                role="tablist"
-                aria-label="Filter mode"
-                aria-orientation="horizontal"
-                onKeyDown={onTablistKeyDown}
-              >
-                {TABS.map((t) => {
-                  const selected = filterMode === t.key;
-                  return (
-                    <button
-                      key={t.key}
-                      id={`filter-tab-${t.key}`}
-                      type="button"
-                      role="tab"
-                      aria-selected={selected}
-                      aria-controls="filter-tabpanel"
-                      tabIndex={selected ? 0 : -1}
-                      onClick={() => handleTabSwitch(t.key)}
-                      data-state={selected ? 'active' : 'inactive'}
-                      className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)] ${selected
-                          ? 'bg-[var(--accent-teal)] text-[var(--bg-app)]'
-                          : 'bg-[var(--bg-surface-raised)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
-                        }`}
-                    >
-                      {t.label}
-                      {renderCount(t.filterKey)}
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })()}
-
           {fileTotalVariants > 0 && (
             <div className="sidebar-card">
               <div className="flex items-baseline justify-between mb-2 gap-2">
@@ -1958,73 +1926,176 @@ const VariantFilterSidebar = ({
               </button>
             )}
 
-            {filterMode === 'manual' && allColumns.length > 0 && (
-              <div className="flex flex-col flex-1 min-h-0 space-y-1.5">
-                <div className="flex items-center justify-between px-1 shrink-0">
-                  <h4 className="text-[11px] font-medium text-[var(--text-tertiary)]">Columns</h4>
-                  <span className="text-[11px] text-[var(--text-disabled)] tabular-nums">{allColumns.length}</span>
-                </div>
-                {allColumns.length === 0 ? (
-                  <p className="text-xs text-[var(--text-tertiary)] px-1 italic">Select columns below to build a custom filter</p>
-                ) : (
-                  <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)]">
-                    {allColumns.map((colName) => {
-                      const isNumeric = columnIsNumeric(colName);
-                      const filter = filters[colName] || {};
-                      const isCategorical = columnIsCategoricalOnly(colName);
-                      const selectedValues = categoricalFilters[colName] || [];
-                      const isColumnUnusable = noValidValuesColumns.includes(colName);
-                      let filterCount = 0;
-                      if (isNumeric) {
-                        if (filter.currentMin !== null && filter.currentMin !== undefined) filterCount++;
-                        if (filter.currentMax !== null && filter.currentMax !== undefined) filterCount++;
-                      } else if (isCategorical) {
-                        filterCount = selectedValues.length;
+            {filterMode === 'manual' && allColumns.length > 0 && (() => {
+              // --- Helpers scoped to this block ---
+              const columnFilterCount = (colName) => {
+                const isNumeric = columnIsNumeric(colName);
+                const filter = filters[colName] || {};
+                const isCategorical = columnIsCategoricalOnly(colName);
+                const selectedValues = categoricalFilters[colName] || [];
+                let count = 0;
+                if (isNumeric) {
+                  if (filter.currentMin !== null && filter.currentMin !== undefined) count++;
+                  if (filter.currentMax !== null && filter.currentMax !== undefined) count++;
+                } else if (isCategorical) {
+                  count = selectedValues.length;
+                }
+                const appliedFilter = appliedFilters && appliedFilters[colName];
+                if (appliedFilter) {
+                  if (appliedFilter.min !== undefined || appliedFilter.max !== undefined) {
+                    count = (appliedFilter.min !== null && appliedFilter.min !== undefined ? 1 : 0) +
+                      (appliedFilter.max !== null && appliedFilter.max !== undefined ? 1 : 0);
+                  } else if (appliedFilter.values && Array.isArray(appliedFilter.values)) {
+                    count = appliedFilter.values.length;
+                  }
+                }
+                return count;
+              };
+
+              const renderRow = (colName, parentGroup = null) => {
+                const isColumnUnusable = noValidValuesColumns.includes(colName);
+                const isOpen = openFilterPopup === colName;
+                const isDisabled = isManualFiltersDisabled || isColumnUnusable;
+                const count = columnFilterCount(colName);
+                return (
+                  <button
+                    key={colName}
+                    onClick={() => {
+                      if (isDisabled) return;
+                      if (parentGroup) {
+                        setOpenColumnGroup(null);
+                        setFilterPopupParentGroup(parentGroup);
+                      } else {
+                        setFilterPopupParentGroup(null);
                       }
-                      const appliedFilter = appliedFilters && appliedFilters[colName];
-                      if (appliedFilter) {
-                        if (appliedFilter.min !== undefined || appliedFilter.max !== undefined) {
-                          filterCount = (appliedFilter.min !== null && appliedFilter.min !== undefined ? 1 : 0) +
-                            (appliedFilter.max !== null && appliedFilter.max !== undefined ? 1 : 0);
-                        } else if (appliedFilter.values && Array.isArray(appliedFilter.values)) {
-                          filterCount = appliedFilter.values.length;
-                        }
-                      }
-                      const isOpen = openFilterPopup === colName;
-                      const isDisabled = isManualFiltersDisabled || isColumnUnusable;
-                      return (
-                        <button
-                          key={colName}
-                          onClick={() => {
-                            if (!isDisabled) {
-                              setOpenFilterPopup(colName);
-                              setPopupSearchQuery('');
-                            }
-                          }}
-                          disabled={isDisabled}
-                          aria-pressed={isOpen}
-                          className={`group w-full text-left px-3 py-2 flex items-center justify-between gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)] ${isDisabled
-                              ? 'opacity-50 cursor-not-allowed'
-                              : `cursor-pointer hover:bg-[var(--bg-surface-hover)] ${isOpen ? 'bg-[var(--bg-surface-hover)]' : ''}`
-                            }`}
-                        >
-                          <span
-                            className={`text-[13px] truncate flex-1 ${isOpen ? 'font-medium text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'} ${isColumnUnusable ? 'text-[var(--text-tertiary)]' : ''}`}
-                          >
-                            {colName}
-                          </span>
-                          {filterCount > 0 && (
-                            <span className="px-1.5 h-[18px] inline-flex items-center rounded-full text-[10px] font-semibold tabular-nums bg-[var(--accent-teal-soft)] text-[var(--accent-teal)] flex-shrink-0">
-                              {filterCount}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
+                      setOpenFilterPopup(colName);
+                      setPopupSearchQuery('');
+                    }}
+                    disabled={isDisabled}
+                    aria-pressed={isOpen}
+                    className={`group w-full text-left px-3 py-2 flex items-center justify-between gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)] ${
+                      isDisabled
+                        ? 'opacity-50 cursor-not-allowed'
+                        : `cursor-pointer hover:bg-[var(--bg-surface-hover)] ${isOpen ? 'bg-[var(--bg-surface-hover)]' : ''}`
+                    }`}
+                  >
+                    <span
+                      className={`text-[13px] truncate flex-1 ${isOpen ? 'font-medium text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'} ${isColumnUnusable ? 'text-[var(--text-tertiary)]' : ''}`}
+                    >
+                      {colName}
+                    </span>
+                    {count > 0 && (
+                      <span className="px-1.5 h-[18px] inline-flex items-center rounded-full text-[10px] font-semibold tabular-nums bg-[var(--accent-teal-soft)] text-[var(--accent-teal)] flex-shrink-0">
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              };
+
+              const q = columnSearchQuery.trim().toLowerCase();
+              const searchMatches = q
+                ? allColumns.filter((c) => c.toLowerCase().includes(q))
+                : null;
+              const grouped = searchMatches ? null : groupColumns(allColumns);
+
+              const openGroupCols = openColumnGroup
+                ? (groupColumns(allColumns).find(([g]) => g === openColumnGroup)?.[1] || [])
+                : [];
+
+              return (
+                <>
+                <div className="flex flex-col flex-1 min-h-0 space-y-1.5">
+                  {/* Search box */}
+                  <div className="relative shrink-0">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-tertiary)] pointer-events-none" />
+                    <input
+                      type="text"
+                      value={columnSearchQuery}
+                      onChange={(e) => setColumnSearchQuery(e.target.value)}
+                      placeholder="Search columns…"
+                      className="w-full h-8 pl-8 pr-8 text-[12px] rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-teal)] transition-colors"
+                    />
+                    {columnSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setColumnSearchQuery('')}
+                        aria-label="Clear search"
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
+
+                  {/* Body: search results OR grouped */}
+                  <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-[var(--border-subtle)]">
+                    {searchMatches ? (
+                      searchMatches.length === 0 ? (
+                        <p className="p-4 text-[11px] text-[var(--text-tertiary)] italic text-center">
+                          No columns match &ldquo;{columnSearchQuery}&rdquo;
+                        </p>
+                      ) : (
+                        <div className="divide-y divide-[var(--border-subtle)]">
+                          {searchMatches.map(renderRow)}
+                        </div>
+                      )
+                    ) : (
+                      <div className="divide-y divide-[var(--border-subtle)]">
+                        {grouped.map(([groupName, cols]) => {
+                          const activeCount = cols.reduce((acc, c) => acc + (columnFilterCount(c) > 0 ? 1 : 0), 0);
+                          return (
+                            <button
+                              key={groupName}
+                              type="button"
+                              onClick={() => setOpenColumnGroup(groupName)}
+                              className="w-full flex items-center justify-between gap-2 px-3 py-2.5 hover:bg-[var(--bg-surface-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)]"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-[13px] font-medium text-[var(--text-primary)] truncate">
+                                  {groupName}
+                                </span>
+                                <span className="text-[11px] text-[var(--text-tertiary)] tabular-nums">
+                                  {cols.length}
+                                </span>
+                                {activeCount > 0 && (
+                                  <span
+                                    className="w-1.5 h-1.5 rounded-full bg-[var(--accent-teal)]"
+                                    aria-label={`${activeCount} active filter${activeCount === 1 ? '' : 's'}`}
+                                  />
+                                )}
+                              </div>
+                              <ChevronDown className="w-3.5 h-3.5 text-[var(--text-tertiary)] -rotate-90" aria-hidden />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Group columns modal */}
+                <Dialog open={!!openColumnGroup} onOpenChange={(open) => { if (!open) setOpenColumnGroup(null); }}>
+                  <DialogContent
+                    className="!max-w-md w-full max-h-[min(80vh,640px)] flex flex-col p-0 gap-0 overflow-hidden"
+                    style={{ backgroundColor: 'var(--bg-surface-raised)', borderColor: 'var(--border-default)' }}
+                  >
+                    <div className="flex-shrink-0 px-5 py-4 border-b border-[var(--border-subtle)]">
+                      <DialogTitle className="text-base font-semibold text-[var(--text-primary)]">
+                        {openColumnGroup}
+                      </DialogTitle>
+                      <DialogDescription className="text-[12px] text-[var(--text-tertiary)] mt-1">
+                        {openGroupCols.length} column{openGroupCols.length === 1 ? '' : 's'} · click a column to configure its filter
+                      </DialogDescription>
+                    </div>
+                    <div className="flex-1 overflow-y-auto divide-y divide-[var(--border-subtle)]">
+                      {openGroupCols.map((c) => renderRow(c, openColumnGroup))}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+                </>
+              );
+            })()}
 
             {filterMode === 'acmg' && (
               <div className="sidebar-card rounded-lg shadow-sm">
@@ -2040,13 +2111,9 @@ const VariantFilterSidebar = ({
                       <span className="text-xs font-medium text-[var(--text-secondary)]">
                         {proprietaryFilterPreviews.filter_1.preview_pending && activeProprietaryFilter !== 'filter_1'
                           ? 'Apply to load preview count'
-                          : `${(proprietaryFilterPreviews.filter_1.preview_count ?? 0).toLocaleString()} of ${(proprietaryFilterPreviews.filter_1.total_count ?? 0).toLocaleString()} variants match`}
+                          : ''
+                        }
                       </span>
-                      {activeProprietaryFilter === 'filter_1' && (
-                        <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--bg-app)' }}>
-                          Active
-                        </span>
-                      )}
                     </div>
                     {activeProprietaryFilter === 'filter_1' ? (
                       <button
@@ -2117,13 +2184,9 @@ const VariantFilterSidebar = ({
                         <span className="text-xs font-medium text-[var(--text-secondary)]">
                           {f2.preview_pending && activeProprietaryFilter !== 'filter_2'
                             ? 'Apply to load preview count'
-                            : `${(f2.preview_count ?? 0).toLocaleString()} of ${(f2.total_count ?? 0).toLocaleString()} variants match`}
+                            : ''
+                          }
                         </span>
-                        {activeProprietaryFilter === 'filter_2' && (
-                          <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--bg-app)' }}>
-                            Active
-                          </span>
-                        )}
                       </div>
                       {activeProprietaryFilter === 'filter_2' ? (
                         <button
@@ -2173,8 +2236,9 @@ const VariantFilterSidebar = ({
 
         {/* Floating Filter Popup */}
         {openFilterPopup && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={() => {
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50" onClick={() => {
             setOpenFilterPopup(null);
+            setFilterPopupParentGroup(null);
             setPopupSearchQuery(''); // Clear search when closing
           }}>
             <div
@@ -2184,13 +2248,33 @@ const VariantFilterSidebar = ({
             >
               {/* Popup Header */}
               <div className="sidebar-modal-header flex items-center justify-between p-4 border-b">
-                <h3 className="text-lg font-semibold text-[var(--text-primary)]">{openFilterPopup}</h3>
+                <div className="flex items-center gap-2 min-w-0">
+                  {filterPopupParentGroup && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const parent = filterPopupParentGroup;
+                        setOpenFilterPopup(null);
+                        setPopupSearchQuery('');
+                        setFilterPopupParentGroup(null);
+                        setOpenColumnGroup(parent);
+                      }}
+                      className="p-1 rounded hover:bg-[var(--bg-surface-hover)] transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] shrink-0"
+                      aria-label={`Back to ${filterPopupParentGroup}`}
+                      title={`Back to ${filterPopupParentGroup}`}
+                    >
+                      <ChevronDown className="w-5 h-5 rotate-90" />
+                    </button>
+                  )}
+                  <h3 className="text-lg font-semibold text-[var(--text-primary)] truncate">{openFilterPopup}</h3>
+                </div>
                 <button
                   onClick={() => {
                     setOpenFilterPopup(null);
+                    setFilterPopupParentGroup(null);
                     setPopupSearchQuery(''); // Clear search when closing
                   }}
-                  className="p-1 rounded hover:bg-[var(--bg-surface-hover)] transition-colors"
+                  className="p-1 rounded hover:bg-[var(--bg-surface-hover)] transition-colors shrink-0"
                   aria-label="Close"
                 >
                   <X className="w-5 h-5 text-[var(--text-secondary)]" />
@@ -2231,26 +2315,43 @@ const VariantFilterSidebar = ({
 
                   // Numeric filter controls (dual-thumb range slider)
                   if (isNumeric && range) {
-                    const numericActive =
-                      filter.currentMin != null || filter.currentMax != null;
+                    const span = range.max - range.min;
+                    // Preset chips — pick sensible defaults per column type.
+                    const isFrequencyColumn = /(^|_)(af|maf|freq|gnomad|1000g|all\.sites)/i.test(colName);
+                    const presets = (isFrequencyColumn && range.min === 0 && range.max <= 1)
+                      ? [
+                          { label: '< 0.001', min: null, max: 0.001 },
+                          { label: '< 0.01', min: null, max: 0.01 },
+                          { label: '< 0.05', min: null, max: 0.05 },
+                        ]
+                      : span > 0
+                        ? [
+                            { label: 'Bottom 10%', min: null, max: range.min + span * 0.1 },
+                            { label: 'Bottom 25%', min: null, max: range.min + span * 0.25 },
+                            { label: 'Top 25%', min: range.min + span * 0.75, max: null },
+                            { label: 'Top 10%', min: range.min + span * 0.9, max: null },
+                          ]
+                        : [];
                     return (
-                      <div className="space-y-4">
-                        <div className="text-sm text-[var(--text-secondary)]">
-                          Data range in{' '}
-                          {variantData?.parameter_ranges_from_full_file
-                            ? 'full annotated file'
-                            : 'interpretation sample'}
-                          :{' '}
-                          <span className="font-medium">
-                            {range.min.toFixed(2)} – {range.max.toFixed(2)}
-                          </span>
-                        </div>
-                        {!numericActive && (
-                          <p className="text-xs rounded-lg px-3 py-2 sidebar-warning-banner border">
-                            Drag the handles away from the full span (or type tighter min/max), then click{' '}
-                            <span className="font-medium">Apply filters</span>. A full-width range does not
-                            filter this column — the match count will stay the same until you narrow it.
-                          </p>
+                      <div className="space-y-3">
+                        {presets.length > 0 && (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[11px] text-[var(--text-tertiary)] mr-1">Quick:</span>
+                            {presets.map((p) => (
+                              <button
+                                key={p.label}
+                                type="button"
+                                onClick={() => {
+                                  handleFilterChange(colName, 'Min', p.min);
+                                  handleFilterChange(colName, 'Max', p.max);
+                                }}
+                                disabled={isManualFiltersDisabled}
+                                className="h-6 px-2 rounded-md text-[11px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--accent-teal)] hover:text-[var(--accent-teal)] hover:bg-[var(--accent-teal-soft)] transition-colors disabled:opacity-50"
+                              >
+                                {p.label}
+                              </button>
+                            ))}
+                          </div>
                         )}
                         <NumericRangeSlider
                           key={colName}
@@ -2384,6 +2485,7 @@ const VariantFilterSidebar = ({
                       const ok = await applyFilters();
                       if (ok) {
                         setOpenFilterPopup(null);
+                        setFilterPopupParentGroup(null);
                         setPopupSearchQuery('');
                       }
                     }}
@@ -2424,6 +2526,7 @@ const VariantFilterSidebar = ({
                     type="button"
                     onClick={() => {
                       setOpenFilterPopup(null);
+                      setFilterPopupParentGroup(null);
                       setPopupSearchQuery('');
                     }}
                     className="px-4 py-2 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-surface-raised)] border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-surface-hover)] transition-colors"
@@ -2437,7 +2540,7 @@ const VariantFilterSidebar = ({
         )}
 
         {/* Footer with Actions */}
-        <div className="sidebar-header border-t border-zinc-800 space-y-1">
+        <div className="shrink-0 px-3.5 py-2 border-t border-[var(--border-subtle)]">
           {/* Show pending filters (set but not yet applied) — Manual tab only */}
           {filterMode === 'manual' && (() => {
             if (!hasUnappliedFilterChanges) return null;
@@ -2527,7 +2630,7 @@ const VariantFilterSidebar = ({
 
         {/* Sticky footer: primary export action, always visible */}
         {!isGuest && variantData && (
-          <div className="shrink-0 px-3.5 py-3 border-t border-[var(--border-subtle)] bg-[var(--bg-sidebar)]">
+          <div className="shrink-0 px-3.5 py-2 bg-[var(--bg-sidebar)]">
             <ExportVariantsButton
               conversationId={conversationId}
               variantData={variantData}
@@ -2562,76 +2665,7 @@ const VariantFilterSidebar = ({
           </div>
 
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-            {/* Save current filters */}
-            {!isGardenSaveFormOpen ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsGardenSaveFormOpen(true);
-                  setGardenNameInput('');
-                  setGardenNotesInput('');
-                }}
-                disabled={!hasAppliedManualFilters && Object.keys(pendingFilterPayload).length === 0}
-                title={
-                  hasAppliedManualFilters || Object.keys(pendingFilterPayload).length > 0
-                    ? 'Save current manual filters as a preset'
-                    : 'Set at least one manual filter first'
-                }
-                className={`w-full h-10 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-medium border border-dashed transition-colors ${
-                  hasAppliedManualFilters || Object.keys(pendingFilterPayload).length > 0
-                    ? 'border-[var(--accent-teal)] text-[var(--accent-teal)] hover:bg-[var(--accent-teal-soft)] cursor-pointer'
-                    : 'border-[var(--border-subtle)] text-[var(--text-tertiary)] cursor-not-allowed opacity-50'
-                }`}
-              >
-                + Save current filters as preset
-              </button>
-            ) : (
-              <div className="p-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] space-y-2">
-                <input
-                  type="text"
-                  value={gardenNameInput}
-                  onChange={(e) => setGardenNameInput(e.target.value)}
-                  placeholder="Preset name"
-                  autoFocus
-                  maxLength={80}
-                  className="w-full px-3 py-2 text-[13px] border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)]"
-                />
-                <textarea
-                  value={gardenNotesInput}
-                  onChange={(e) => setGardenNotesInput(e.target.value)}
-                  rows={2}
-                  placeholder="Notes (optional)"
-                  maxLength={500}
-                  className="w-full px-3 py-2 text-[13px] border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)] resize-none"
-                />
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await handleSaveCurrentToGarden();
-                      setIsGardenSaveFormOpen(false);
-                    }}
-                    disabled={isSavingPreset || !gardenNameInput.trim()}
-                    className={`flex-1 h-8 rounded-md text-[12px] font-medium ${
-                      isSavingPreset || !gardenNameInput.trim()
-                        ? 'opacity-50 cursor-not-allowed bg-[var(--text-tertiary)] text-[var(--bg-app)]'
-                        : 'bg-[var(--accent-teal)] text-[var(--bg-app)] hover:brightness-110'
-                    }`}
-                  >
-                    {isSavingPreset ? 'Saving...' : 'Save'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsGardenSaveFormOpen(false)}
-                    className="h-8 px-3 rounded-md text-[12px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="border-t border-[var(--border-subtle)]" />
+            
 
             {/* Preset list */}
             {savedFilterPresets.length === 0 ? (
@@ -2737,7 +2771,7 @@ const VariantFilterSidebar = ({
                                 Apply
                               </button>
                             )}
-                            <div className="w-px h-4 bg-[var(--border-subtle)] mx-0.5" aria-hidden />
+                            {/* <div className="w-px h-4 bg-[var(--border-subtle)] mx-0.5" aria-hidden /> */}
                             <button
                               type="button"
                               title="Edit name/notes"
@@ -2780,6 +2814,75 @@ const VariantFilterSidebar = ({
                     </div>
                   );
                 })}
+              </div>
+            )}
+            
+            {/* Save current filters */}
+            {!isGardenSaveFormOpen ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsGardenSaveFormOpen(true);
+                  setGardenNameInput('');
+                  setGardenNotesInput('');
+                }}
+                disabled={!hasAppliedManualFilters && Object.keys(pendingFilterPayload).length === 0}
+                title={
+                  hasAppliedManualFilters || Object.keys(pendingFilterPayload).length > 0
+                    ? 'Save current manual filters as a preset'
+                    : 'Set at least one manual filter first'
+                }
+                className={`w-full h-10 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-medium border border-dashed transition-colors ${
+                  hasAppliedManualFilters || Object.keys(pendingFilterPayload).length > 0
+                    ? 'border-[var(--accent-teal)] text-[var(--accent-teal)] hover:bg-[var(--accent-teal-soft)] cursor-pointer'
+                    : 'border-[var(--border-subtle)] text-[var(--text-tertiary)] cursor-not-allowed opacity-50'
+                }`}
+              >
+                + Save current filters as preset
+              </button>
+            ) : (
+              <div className="p-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] space-y-2">
+                <input
+                  type="text"
+                  value={gardenNameInput}
+                  onChange={(e) => setGardenNameInput(e.target.value)}
+                  placeholder="Preset name"
+                  autoFocus
+                  maxLength={80}
+                  className="w-full px-3 py-2 text-[13px] border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)]"
+                />
+                <textarea
+                  value={gardenNotesInput}
+                  onChange={(e) => setGardenNotesInput(e.target.value)}
+                  rows={2}
+                  placeholder="Notes (optional)"
+                  maxLength={500}
+                  className="w-full px-3 py-2 text-[13px] border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)] resize-none"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await handleSaveCurrentToGarden();
+                      setIsGardenSaveFormOpen(false);
+                    }}
+                    disabled={isSavingPreset || !gardenNameInput.trim()}
+                    className={`flex-1 h-8 rounded-md text-[12px] font-medium ${
+                      isSavingPreset || !gardenNameInput.trim()
+                        ? 'opacity-50 cursor-not-allowed bg-[var(--text-tertiary)] text-[var(--bg-app)]'
+                        : 'bg-[var(--accent-teal)] text-[var(--bg-app)] hover:brightness-110'
+                    }`}
+                  >
+                    {isSavingPreset ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsGardenSaveFormOpen(false)}
+                    className="h-8 px-3 rounded-md text-[12px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             )}
           </div>

@@ -71,11 +71,11 @@ export default function ExportVariantsButton({ conversationId, variantData, filt
         className={`w-full h-10 rounded-lg flex items-center justify-center gap-2 text-[13px] font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${
           canExport && !isExporting
             ? 'bg-[var(--accent-teal)] text-[var(--bg-app)] hover:brightness-110'
-            : 'bg-[var(--bg-surface)] text-[var(--text-tertiary)] border border-[var(--border-subtle)] cursor-not-allowed'
+            : 'bg-[var(--bg-surface)] text-[var(--text-tertiary)] cursor-not-allowed'
         }`}
       >
         {isExporting ? (
-          <div className="w-3.5 h-3.5 border-2 border-[var(--bg-app)] border-t-transparent rounded-full animate-spin" />
+          <div className="w-3.5 h-3.5 rounded-full animate-spin" />
         ) : (
           <Download className="w-4 h-4" />
         )}

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Check, Circle, Loader2, Minus, AlertCircle, ChevronDown, ChevronUp, FileText, X, Pencil } from 'lucide-react';
+import { Check, Circle, Loader2, Minus, AlertCircle, ChevronDown, ChevronUp, FileText, X, Pencil, Trash2 } from 'lucide-react';
 import {
   PIPELINE_STEP_DEFS,
   computePipelineSteps,
@@ -7,6 +7,16 @@ import {
   getPipelineStatusLine,
   getPipelineChipSummary,
 } from '@/lib/variantPipelineSteps';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 function StepIcon({ status, size = 'w-3.5 h-3.5' }) {
   if (status === 'running') {
@@ -53,7 +63,9 @@ const VariantAnalysisPipeline = ({
   s3LineCountStatus,
   variantsUnderConsideration,
   onEditSampleInfo,
+  onRemoveFile,
 }) => {
+  const [removeFileDialogOpen, setRemoveFileDialogOpen] = useState(false);
   const pipelineProps = {
     uploadInProgress,
     uploadProgress,
@@ -220,6 +232,20 @@ const VariantAnalysisPipeline = ({
               <Pencil className="w-3.5 h-3.5" />
             </button>
           )}
+          {onRemoveFile && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setRemoveFileDialogOpen(true); }}
+              className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+              style={{ color: 'var(--text-tertiary)' }}
+              title="Remove variant file"
+              aria-label="Remove variant file"
+              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--error)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)'; }}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onExpandedChange?.(!expanded)}
@@ -231,6 +257,23 @@ const VariantAnalysisPipeline = ({
             {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
           </button>
         </div>
+
+        <AlertDialog open={removeFileDialogOpen} onOpenChange={setRemoveFileDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove this variant file?</AlertDialogTitle>
+              <AlertDialogDescription>
+                All filters and variant data for this conversation will be cleared. You&apos;ll need to upload the file again to run analysis.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" onClick={() => { setRemoveFileDialogOpen(false); onRemoveFile?.(); }}>
+                Remove
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {/* Expanded stepper + status */}

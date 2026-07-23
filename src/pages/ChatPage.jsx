@@ -950,6 +950,7 @@ const ChatPage = () => {
         conversationFilterState.filteredVariantCount
       }
       onEditSampleInfo={() => { setIsEditSampleModalOpen(true); }}
+      onRemoveFile={userTier === 'guest' ? undefined : () => handleDocumentUpload(null)}
     />
   ) : null;
 

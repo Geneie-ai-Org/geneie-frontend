@@ -497,8 +497,10 @@ body, html, #root {
 .variant-filter-sidebar .sidebar-header {
   background-color: var(--bg-sidebar);
   border-bottom: 1px solid var(--border-subtle);
-  padding: 0.625rem 0.875rem;
-  min-height: 2.75rem;
+  padding: 0.5rem 0.875rem 0.25rem;
+  height: 47px;
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .variant-filter-sidebar .sidebar-header h3 {

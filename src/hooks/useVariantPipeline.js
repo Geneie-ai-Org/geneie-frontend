@@ -46,6 +46,7 @@ export function useVariantPipeline({
   });
   const [pipelineSnapshot, setPipelineSnapshot] = useState({
     hasAnnotatedFile: false,
+    vcfAnnotated: false,
     annovarJob: null,
     filterJob: null,
   });
@@ -213,6 +214,7 @@ export function useVariantPipeline({
     });
     setPipelineSnapshot({
       hasAnnotatedFile: Boolean(convData.annotated_file_s3_key),
+      vcfAnnotated: Boolean(convData.vcf_annotated),
       annovarJob: convData.annovar_job || null,
       filterJob: convData.filter_job || null,
     });
@@ -422,6 +424,7 @@ export function useVariantPipeline({
 
         setPipelineSnapshot({
           hasAnnotatedFile: Boolean(convData.annotated_file_s3_key) || annJob.status === 'completed',
+          vcfAnnotated: Boolean(convData.vcf_annotated),
           annovarJob: annJob.status ? annJob : null,
           filterJob: filtJob.status ? filtJob : null,
         });
@@ -598,6 +601,14 @@ export function useVariantPipeline({
       setAnnovarMessageModal({ title: 'Already annotated', message: 'ANNOVAR has already been run on this file. Edit sample metadata to re-run annotation.', variant: 'info' });
       return;
     }
+    if (pipelineSnapshot.vcfAnnotated) {
+      setAnnovarMessageModal({
+        title: 'File already annotated',
+        message: 'Your uploaded VCF already contains ANNOVAR annotations. Running ANNOVAR again is not needed.',
+        variant: 'info',
+      });
+      return;
+    }
 
     let annovarStartedAsync = false;
     try {
@@ -721,7 +732,7 @@ export function useVariantPipeline({
 
   const FILTER_DISPLAY_NAMES = {
     filter_1: 'ACMG filter',
-    filter_2: 'Functional Impact',
+    filter_3: 'Exomiser',
   };
 
   const runProprietaryFilter = useCallback(async (filterType) => {
@@ -763,27 +774,6 @@ export function useVariantPipeline({
         return;
       }
     }
-    // filter_2 gate: requires all columns mapped and step2 partially passed
-    if (filterType === 'filter_2') {
-      const step2 = columnInterpretationResult?.step2;
-      if (!step2 || step2.not_implemented) {
-        setAnnovarMessageModal({
-          title: 'Cannot apply filter',
-          message: 'Column mapping for this filter is not available. Run ANNOVAR first.',
-          variant: 'info',
-        });
-        return;
-      }
-      if (!step2.passed && !step2.partially_passed) {
-        setAnnovarMessageModal({
-          title: 'Missing columns',
-          message: 'Required predictor columns are missing for the Functional Impact filter.',
-          variant: 'info',
-        });
-        return;
-      }
-    }
-
     let filterStartedAsync = false;
     setIsApplyingProprietaryFilter(true);
     prevFilterJobStatusRef.current = 'running';
@@ -876,13 +866,134 @@ export function useVariantPipeline({
   const step2AcmgReady = Boolean(step2ReqGate.CLNSIG?.found || step2ReqGate.InterVar_automated?.found);
   const acmgFilterCanApply = !!step2AcmgReady && !chatEligibility.requires_annovar;
 
-  const step2Filter2Ready = columnInterpretationResult?.step2?.passed || columnInterpretationResult?.step2?.partially_passed;
-  const filter2CanApply = !!step2Filter2Ready && !chatEligibility.requires_annovar;
+  // Exomiser eligibility is decided by GET /api/exomiser-eligibility — components fetch it directly.
+  const [isRunningExomiser, setIsRunningExomiser] = useState(false);
+  const [exomiserStatus, setExomiserStatus] = useState(null); // { status, phase, message, progress_percent, matched_count }
+
+  const fetchExomiserEligibility = useCallback(async () => {
+    if (!activeConversationId || userTier === 'guest') return null;
+    try {
+      const auth = getAuth();
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      if (!token) return null;
+      const res = await fetch(apiUrl(`/api/exomiser-eligibility/${encodeURIComponent(activeConversationId)}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (err) {
+      console.warn('[useVariantPipeline] fetchExomiserEligibility failed:', err);
+      return null;
+    }
+  }, [activeConversationId, userTier]);
+
+  const runExomiser = useCallback(async () => {
+    if (!activeConversationId || userTier === 'guest') return;
+    if (isRunningExomiser) return;
+
+    setIsRunningExomiser(true);
+    setExomiserStatus({ status: 'running', phase: 'queued', message: 'Starting Exomiser…', progress_percent: 0 });
+
+    try {
+      const auth = getAuth();
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      if (!token) throw new Error('Authentication required');
+
+      const res = await fetch(apiUrl('/api/run-exomiser'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'X-Device-Id': getDeviceId(),
+        },
+        body: JSON.stringify({ conversation_id: activeConversationId }),
+      });
+
+      if (!res.ok && res.status !== 202) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(apiErrorDetailToMessage(err.detail) || 'Failed to start Exomiser');
+      }
+
+      // Poll every 3s until done/failed
+      const pollOnce = async () => {
+        const t = auth.currentUser ? await auth.currentUser.getIdToken() : token;
+        const sres = await fetch(apiUrl(`/api/exomiser-status/${encodeURIComponent(activeConversationId)}`), {
+          headers: { Authorization: `Bearer ${t}` },
+        });
+        if (!sres.ok) throw new Error('Exomiser status check failed');
+        return await sres.json();
+      };
+
+      const terminal = new Set(['complete', 'done', 'failed', 'error']);
+      let attempts = 0;
+      const maxAttempts = 400; // ~20 min at 3s
+      while (attempts < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 3000));
+        attempts++;
+        let payload;
+        try {
+          payload = await pollOnce();
+        } catch (e) {
+          console.warn('[useVariantPipeline] Exomiser poll error:', e);
+          continue;
+        }
+        const status = (payload?.status || payload?.exomiser_job?.status || '').toLowerCase();
+        setExomiserStatus({
+          status,
+          phase: payload?.phase || payload?.exomiser_job?.phase || '',
+          message: payload?.message || payload?.exomiser_job?.message || '',
+          error: payload?.exomiser_job?.error || payload?.error || '',
+          progress_percent: payload?.progress_percent ?? payload?.exomiser_job?.progress_percent ?? null,
+          matched_count: payload?.matched_count ?? payload?.exomiser_job?.matched_count ?? null,
+        });
+        if (terminal.has(status)) {
+          if (status === 'failed' || status === 'error') {
+            // Prefer the detailed `error` field — `message` is often just a generic "Exomiser failed."
+            const detail =
+              payload?.exomiser_job?.error ||
+              payload?.error ||
+              payload?.exomiser_job?.message ||
+              payload?.message ||
+              'Exomiser did not complete successfully.';
+            const friendly =
+              /no valid hpo/i.test(detail)
+                ? 'Could not derive any valid HPO terms from the phenotype description. Edit the sample metadata and provide a clearer clinical phenotype (e.g. specific symptoms or HPO terms), then try again.'
+                : humanizeError(detail) || detail;
+            setAnnovarMessageModal({
+              title: 'Exomiser failed',
+              message: friendly,
+              variant: 'error',
+            });
+          } else {
+            await refreshConversationAfterAnnovar(activeConversationId);
+          }
+          break;
+        }
+      }
+    } catch (error) {
+      console.error('[useVariantPipeline] runExomiser error:', error);
+      setAnnovarMessageModal({
+        title: 'Exomiser',
+        message: humanizeError(error.message) || 'Failed to start Exomiser.',
+        variant: 'error',
+      });
+    } finally {
+      setIsRunningExomiser(false);
+    }
+  }, [
+    activeConversationId,
+    userTier,
+    isRunningExomiser,
+    getDeviceId,
+    refreshConversationAfterAnnovar,
+    setAnnovarMessageModal,
+  ]);
 
   const resetConversationPipeline = useCallback(() => {
     setChatEligibility(defaultChatEligibility());
     setPipelineSnapshot({
       hasAnnotatedFile: false,
+      vcfAnnotated: false,
       annovarJob: null,
       filterJob: null,
     });
@@ -899,6 +1010,7 @@ export function useVariantPipeline({
     }
     setPipelineSnapshot({
       hasAnnotatedFile: Boolean(convData.annotated_file_s3_key),
+      vcfAnnotated: Boolean(convData.vcf_annotated),
       annovarJob: convData.annovar_job || null,
       filterJob: convData.filter_job || null,
     });
@@ -937,7 +1049,10 @@ export function useVariantPipeline({
     pipelineJobActive,
     variantUploadInProgress,
     acmgFilterCanApply,
-    filter2CanApply,
+    isRunningExomiser,
+    exomiserStatus,
+    fetchExomiserEligibility,
+    runExomiser,
     syncPipelineFromConversation,
     resetConversationPipeline,
     normalizeChatEligibilityMessage,

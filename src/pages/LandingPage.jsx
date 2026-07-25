@@ -537,10 +537,10 @@ const LandingPage = () => {
   {/* Background Image with Left-to-Right Gradient Overlay */}
   <div className="absolute inset-0 z-0 pointer-events-none select-none">
     <img
-      src="/gemini.png"
+      src="/black-bg-helix.png"
       alt=""
       aria-hidden="true"
-      className="w-full h-full object-cover object-right opacity-90"
+      className="h-full object-cover object-right"
     />
     {/* Gradient: Dark on left for text readability, clearer on right */}
     <div className="absolute inset-0 bg-gradient-to-r from-black via-black/85 to-black/20" />
@@ -549,11 +549,11 @@ const LandingPage = () => {
   {/* Foreground Content */}
   <div className="relative z-10 container px-4 md:px-6 max-w-7xl mx-auto">
     <div className="w-full lg:w-[60%] flex flex-col">
-      <div ref={askTitleRef} className="text-center mb-8">
+      <div ref={askTitleRef} className="text-left mb-8">
         <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold font-heading tracking-tight mb-4 text-white">
           Ask Anything About Your Data
         </h2>
-        <p className="text-zinc-400 text-base sm:text-lg max-w-xl mx-auto text-center">
+        <p className="text-zinc-400 text-base sm:text-lg max-w-xl text-left">
           Instant clinical insights for complex genomic data
         </p>
       </div>

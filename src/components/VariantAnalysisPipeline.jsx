@@ -51,6 +51,7 @@ const VariantAnalysisPipeline = ({
   hasUploadedFile,
   columnInterpretationResult,
   hasAnnotatedFile,
+  vcfAnnotated,
   requiresAnnovar,
   isRunningAnnovar,
   isApplyingProprietaryFilter,
@@ -209,9 +210,20 @@ const VariantAnalysisPipeline = ({
           onClick={() => onExpandedChange?.(!expanded)}
           className="flex-1 min-w-0 text-left"
         >
-          <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }} title={displayName}>
-            {displayName}
-          </p>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }} title={displayName}>
+              {displayName}
+            </p>
+            {(hasAnnotatedFile || vcfAnnotated) && (
+              <span
+                className="shrink-0 inline-flex items-center gap-0.5 px-1.5 h-[16px] rounded-full text-[9px] font-medium uppercase tracking-wide"
+                style={{ backgroundColor: 'var(--accent-teal-soft)', color: 'var(--accent-teal)' }}
+                title={hasAnnotatedFile ? 'ANNOVAR annotations added by Geneie' : 'This VCF already contains ANNOVAR annotations'}
+              >
+                Annotated
+              </span>
+            )}
+          </div>
           <p
             className="text-[11px] truncate leading-tight mt-0.5"
             style={{ color: chatReady && showReadyMinimal ? 'var(--accent-teal)' : 'var(--text-secondary)' }}

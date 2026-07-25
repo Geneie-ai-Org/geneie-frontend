@@ -56,7 +56,7 @@ function notify(payload) {
 export const ACMG_FILTER_DISPLAY_NAME = 'ACMG filter';
 
 const PROPRIETARY_FILTER_1_DESCRIPTION = "ClinVar and/or InterVar pathogenic classes, with rare gnomAD frequency (<1%) or missing frequency retained.";
-const PROPRIETARY_FILTER_2_DESCRIPTION = "Filters for rare, potentially deleterious coding and regulatory variants, including novel candidates, using functional impact and population frequency criteria.";
+const EXOMISER_FILTER_DESCRIPTION = "Phenotype-driven variant prioritization for Germline cases using HPO terms and Exomiser gene/variant scoring. Requires ANNOVAR annotation and a phenotype description.";
 
 const DEVICE_ID_STORAGE_KEY = 'geneie_device_id';
 
@@ -496,6 +496,12 @@ const VariantFilterSidebar = ({
   filteredVariantCountFromConv = null,
   activeProprietaryFilterFromConv = null,
   filterWorkingSetCountFromConv = null,
+  isRunningExomiser = false,
+  exomiserStatus = null,
+  fetchExomiserEligibility = null,
+  runExomiser = null,
+  requestedTab = null,
+  onRequestedTabConsumed = null,
 }) => {
   const [filters, setFilters] = useState({});
   const [categoricalFilters, setCategoricalFilters] = useState({});
@@ -546,6 +552,8 @@ const VariantFilterSidebar = ({
   const [columnSearchQuery, setColumnSearchQuery] = useState('');
   const [openColumnGroup, setOpenColumnGroup] = useState(null);
   const [filterPopupParentGroup, setFilterPopupParentGroup] = useState(null);
+  const [exomiserEligibility, setExomiserEligibility] = useState(null);
+  const [isFetchingExomiserEligibility, setIsFetchingExomiserEligibility] = useState(false);
   const proprietaryPreviewLoadedForRef = useRef(null);
 
   // Define isGuest early so it can be used in functions below
@@ -621,8 +629,30 @@ const VariantFilterSidebar = ({
 
   useEffect(() => {
     if (activeProprietaryFilter === 'filter_1') setFilterMode('acmg');
-    else if (activeProprietaryFilter === 'filter_2') setFilterMode('functional');
+    else if (activeProprietaryFilter === 'filter_3') setFilterMode('exomiser');
   }, [activeProprietaryFilter]);
+
+  // Fetch Exomiser eligibility whenever the tab is opened or after job state changes
+  useEffect(() => {
+    let cancelled = false;
+    if (filterMode !== 'exomiser' || !fetchExomiserEligibility) return;
+    (async () => {
+      setIsFetchingExomiserEligibility(true);
+      const result = await fetchExomiserEligibility();
+      if (!cancelled) {
+        setExomiserEligibility(result);
+        setIsFetchingExomiserEligibility(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [filterMode, fetchExomiserEligibility, isRunningExomiser, activeProprietaryFilter]);
+
+  // External request to switch tabs (e.g. from the File Analysis modal "Prioritize with Exomiser")
+  useEffect(() => {
+    if (!requestedTab) return;
+    setFilterMode(requestedTab);
+    onRequestedTabConsumed?.();
+  }, [requestedTab, onRequestedTabConsumed]);
 
   // Sync sidebar state from MongoDB conversation (when parent loads conversation from backend)
   // Ensures apply/reset filter state in backend and DB is reflected in the UI after refresh or switch conversation
@@ -1451,7 +1481,7 @@ const VariantFilterSidebar = ({
         await loadProprietaryFilterPreviews();
 
         notify({
-          message: `${filterType === 'filter_1' ? ACMG_FILTER_DISPLAY_NAME : 'Functional Impact'} applied: ${filteredCount.toLocaleString()} variants`,
+          message: `${ACMG_FILTER_DISPLAY_NAME} applied: ${filteredCount.toLocaleString()} variants`,
           type: 'success'
         });
 
@@ -1553,7 +1583,7 @@ const VariantFilterSidebar = ({
 
   const currentActiveFilterLabel = useMemo(() => {
     if (activeProprietaryFilter === 'filter_1') return 'ACMG filter';
-    if (activeProprietaryFilter === 'filter_2') return 'Functional Impact';
+    if (activeProprietaryFilter === 'filter_3') return 'Exomiser';
     if (hasAppliedManualFilters) {
       const cols = Object.keys(normalizeAppliedFiltersForCompare(appliedFilters)).filter(k => k !== '_numeric_logic');
       if (cols.length === 0) return null;
@@ -1564,7 +1594,7 @@ const VariantFilterSidebar = ({
 
   const getCurrentActiveMode = useCallback(() => {
     if (activeProprietaryFilter === 'filter_1') return 'acmg';
-    if (activeProprietaryFilter === 'filter_2') return 'functional';
+    if (activeProprietaryFilter === 'filter_3') return 'exomiser';
     if (hasAppliedManualFilters) return 'manual';
     return null;
   }, [activeProprietaryFilter, hasAppliedManualFilters]);
@@ -1674,7 +1704,7 @@ const VariantFilterSidebar = ({
               const TABS = [
                 { key: 'manual', label: 'Manual', filterKey: null },
                 { key: 'acmg', label: 'ACMG', filterKey: 'filter_1' },
-                { key: 'functional', label: 'Func.Imp', filterKey: 'filter_2' },
+                { key: 'exomiser', label: 'Exomiser', filterKey: 'filter_3' },
               ];
               const activeIndex = TABS.findIndex((t) => t.key === filterMode);
               const focusTab = (i) => {
@@ -1706,15 +1736,23 @@ const VariantFilterSidebar = ({
               };
               const renderCount = (filterKey) => {
                 if (!filterKey) return null;
+                // Exomiser (filter_3) has no preview count — only show the count once it's active.
+                if (filterKey === 'filter_3') {
+                  if (activeProprietaryFilter === 'filter_3') {
+                    return (
+                      <span className="ml-1 opacity-70 tabular-nums">
+                        ({filteredCount != null ? filteredCount.toLocaleString() : '…'})
+                      </span>
+                    );
+                  }
+                  return null;
+                }
                 if (proprietaryFilterPreviews == null) {
                   return (
                     <span className="ml-1.5 inline-block h-2.5 w-6 align-middle rounded bg-[var(--bg-surface-hover)] animate-pulse" aria-hidden />
                   );
                 }
-                const isActive =
-                  (filterKey === 'filter_1' && activeProprietaryFilter === 'filter_1') ||
-                  (filterKey === 'filter_2' && activeProprietaryFilter === 'filter_2');
-                if (isActive) {
+                if (filterKey === 'filter_1' && activeProprietaryFilter === 'filter_1') {
                   return (
                     <span className="ml-1 opacity-70 tabular-nums">
                       ({filteredCount != null ? filteredCount.toLocaleString() : '…'})
@@ -1880,10 +1918,10 @@ const VariantFilterSidebar = ({
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>
-                  Switch to {pendingTabSwitch === 'manual' ? 'Manual' : pendingTabSwitch === 'acmg' ? 'ACMG' : 'Functional Impact'}?
+                  Switch to {pendingTabSwitch === 'manual' ? 'Manual' : pendingTabSwitch === 'acmg' ? 'ACMG' : 'Exomiser'}?
                 </AlertDialogTitle>
                 <AlertDialogDescription>
-                  Your current {getCurrentActiveMode() === 'manual' ? 'manual filters' : getCurrentActiveMode() === 'acmg' ? 'ACMG filter' : 'Functional Impact filter'} will be cleared. You can re-apply after switching.
+                  Your current {getCurrentActiveMode() === 'manual' ? 'manual filters' : getCurrentActiveMode() === 'acmg' ? 'ACMG filter' : 'Exomiser prioritization'} will be cleared. You can re-apply after switching.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -2162,75 +2200,122 @@ const VariantFilterSidebar = ({
               </div>
             )}
 
-            {filterMode === 'functional' && (
-              <div className="sidebar-card rounded-lg shadow-sm">
-                <label className="block text-sm font-bold text-[var(--text-primary)] mb-3">
-                  Functional Impact
-                </label>
-                <p className="text-xs text-[var(--text-secondary)] mb-3 leading-relaxed">
-                  {PROPRIETARY_FILTER_2_DESCRIPTION}
-                </p>
-                {(() => {
-                  const f2 = proprietaryFilterPreviews?.filter_2 || {
-                    name: 'Functional Impact',
-                    can_apply: proprietaryFilterPreviews?.filter_1?.can_apply ?? false,
-                    preview_pending: true,
-                    total_count: proprietaryFilterPreviews?.filter_1?.total_count ?? 0,
-                    preview_count: 0,
-                  };
-                  return (
-                    <div className="mb-2">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-[var(--text-secondary)]">
-                          {f2.preview_pending && activeProprietaryFilter !== 'filter_2'
-                            ? 'Apply to load preview count'
-                            : ''
-                          }
+            {filterMode === 'exomiser' && (() => {
+              const isActive = activeProprietaryFilter === 'filter_3';
+              const canRun = exomiserEligibility?.can_run === true;
+              const reasons = exomiserEligibility?.reasons || [];
+              const exoStatus = (exomiserStatus?.status || '').toLowerCase();
+              const failed = exoStatus === 'failed' || exoStatus === 'error';
+              const running = !failed && (isRunningExomiser || (exoStatus && !['done', 'complete'].includes(exoStatus)));
+              const rawFailure = exomiserStatus?.error || exomiserStatus?.message || '';
+              const failureDetail = failed
+                ? (/no valid hpo/i.test(rawFailure)
+                    ? 'Could not derive valid HPO terms from the phenotype description. Edit the sample metadata with a clearer clinical phenotype (specific symptoms or HPO terms), then retry.'
+                    : (rawFailure || 'Exomiser did not complete successfully.'))
+                : null;
+              const REASON_LABELS = {
+                germline_only: 'Analysis type must be Germline.',
+                phenotype_required: 'Add a phenotype description to the sample metadata (edit the file pill).',
+                annovar_required: 'Run ANNOVAR first — Exomiser requires an annotated file.',
+                proprietary_filter_active: 'Another proprietary filter is active. Remove it first.',
+                manual_filter_active: 'Manual filters are active. Reset them first.',
+                manual_filters_active: 'Manual filters are active. Reset them first.',
+                variant_limit_exceeded: 'File exceeds the Exomiser variant limit.',
+                not_configured: 'Exomiser service is not configured on the server.',
+                genome_build_mismatch: 'Genome build mismatch — resolve in sample metadata.',
+                job_running: 'An Exomiser job is already running on this conversation.',
+              };
+              return (
+                <div className="sidebar-card rounded-lg shadow-sm">
+                  <label className="block text-sm font-bold text-[var(--text-primary)] mb-2">
+                    Exomiser
+                  </label>
+                  <p className="text-xs text-[var(--text-secondary)] mb-3 leading-relaxed">
+                    {EXOMISER_FILTER_DESCRIPTION}
+                  </p>
+
+                  {/* Progress area while running */}
+                  {running && (
+                    <div className="mb-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-3.5 h-3.5 border-2 border-[var(--accent-teal)] border-t-transparent rounded-full animate-spin" />
+                        <span className="text-[12px] font-medium text-[var(--text-primary)]">
+                          {exomiserStatus?.message || 'Starting Exomiser…'}
                         </span>
                       </div>
-                      {activeProprietaryFilter === 'filter_2' ? (
-                        <button
-                          type="button"
-                          onClick={() => handleApplyProprietaryFilter('filter_2')}
-                          disabled={isApplyingProprietaryFilter}
-                          className="w-full px-4 py-2 rounded-lg text-sm font-medium border transition-colors"
-                          style={{ borderColor: 'var(--error)', color: 'var(--error)', backgroundColor: 'var(--bg-surface-raised)' }}
-                        >
-                          {isApplyingProprietaryFilter ? (
-                            <span className="flex items-center justify-center gap-2">
-                              <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                              Removing...
-                            </span>
-                          ) : (
-                            'Remove Functional Impact Filter'
-                          )}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleApplyProprietaryFilter('filter_2')}
-                          disabled={
-                            !f2.can_apply ||
-                            isApplyingProprietaryFilter
-                          }
-                          className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          style={{ backgroundColor: 'var(--accent-teal)' }}
-                        >
-                          {isApplyingProprietaryFilter ? (
-                            <span className="flex items-center justify-center gap-2">
-                              <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                              Applying...
-                            </span>
-                          ) : (
-                            'Apply Functional Impact Filter'
-                          )}
-                        </button>
+                      {exomiserStatus?.progress_percent != null && (
+                        <div className="w-full h-1.5 rounded-full bg-[var(--bg-surface-hover)] overflow-hidden">
+                          <div
+                            className="h-full bg-[var(--accent-teal)] transition-all"
+                            style={{ width: `${Math.max(0, Math.min(100, Number(exomiserStatus.progress_percent)))}%` }}
+                          />
+                        </div>
                       )}
+                      <p className="text-[11px] text-[var(--text-tertiary)] mt-1.5">
+                        This can take several minutes. You can leave this tab open or come back later.
+                      </p>
                     </div>
-                  );
-                })()}
-              </div>
-            )}
+                  )}
+
+                  {/* Failure banner */}
+                  {failed && failureDetail && (
+                    <div className="mb-3 p-3 rounded-lg border text-[12px]" style={{ borderColor: 'var(--error)', backgroundColor: 'var(--error-soft)', color: 'var(--error)' }}>
+                      <div className="font-medium mb-0.5">Exomiser failed</div>
+                      <div className="leading-relaxed">{failureDetail}</div>
+                    </div>
+                  )}
+
+                  {/* Eligibility issues (only if not running and not active) */}
+                  {!running && !failed && !isActive && !canRun && reasons.length > 0 && (
+                    <div className="mb-3 p-3 rounded-lg sidebar-warning-banner border text-[12px] space-y-1">
+                      <div className="font-medium mb-1">Cannot run Exomiser yet:</div>
+                      <ul className="list-disc pl-4 space-y-0.5">
+                        {reasons.map((r) => (
+                          <li key={r}>{REASON_LABELS[r] || r}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Loading eligibility */}
+                  {!running && !isActive && isFetchingExomiserEligibility && !exomiserEligibility && (
+                    <p className="text-xs text-[var(--text-tertiary)] italic mb-3">
+                      Checking eligibility…
+                    </p>
+                  )}
+
+                  {/* Action buttons */}
+                  {isActive ? (
+                    <button
+                      type="button"
+                      onClick={() => handleApplyProprietaryFilter('filter_3')}
+                      disabled={isApplyingProprietaryFilter}
+                      className="w-full px-4 py-2 rounded-lg text-sm font-medium border transition-colors"
+                      style={{ borderColor: 'var(--error)', color: 'var(--error)', backgroundColor: 'var(--bg-surface-raised)' }}
+                    >
+                      {isApplyingProprietaryFilter ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          Removing…
+                        </span>
+                      ) : (
+                        'Remove Exomiser prioritization'
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => runExomiser && runExomiser()}
+                      disabled={!canRun || running || !runExomiser}
+                      className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: 'var(--accent-teal)' }}
+                    >
+                      {running ? 'Running…' : failed ? 'Retry Exomiser' : 'Run Exomiser'}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 

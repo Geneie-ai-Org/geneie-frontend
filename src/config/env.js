@@ -1,10 +1,3 @@
-/**
- * Central Vite environment reads. Use import.meta.env only here.
- * Copy .env.example → .env and set VITE_* values for local/production.
- *
- * Also accepts legacy VITE_APP_* names (older .env files on this branch).
- */
-
 const DEFAULT_API_ORIGIN = 'http://localhost:8000';
 
 /** Read VITE_FOO or legacy VITE_APP_FOO */
@@ -41,9 +34,17 @@ export const env = {
     messagingSenderId: viteVar('FIREBASE_MESSAGING_SENDER_ID'),
     appId: viteVar('FIREBASE_APP_ID'),
   },
+  posthog: {
+    key: viteVar('POSTHOG_KEY'),
+    host: viteVar('POSTHOG_HOST') || 'https://us.i.posthog.com',
+  },
 };
 
 export function isFirebaseConfigured() {
   const { apiKey, projectId, appId } = env.firebase;
   return Boolean(apiKey && projectId && appId);
+}
+
+export function isPostHogConfigured() {
+  return Boolean(env.posthog.key);
 }

@@ -475,11 +475,11 @@ body, html, #root {
 @keyframes fade-in {
     0% {
         opacity: 0;
-        transform: translate(-50%, -10px);
+        transform: translateY(-10px);
     }
     100% {
         opacity: 1;
-        transform: translate(-50%, 0);
+        transform: translateY(0);
     }
 }
 
@@ -496,7 +496,6 @@ body, html, #root {
 
 .variant-filter-sidebar .sidebar-header {
   background-color: var(--bg-sidebar);
-  border-bottom: 1px solid var(--border-subtle);
   padding: 0.5rem 0.875rem 0.25rem;
   height: 47px;
   flex-shrink: 0;

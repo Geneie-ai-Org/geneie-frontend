@@ -43,6 +43,11 @@ export function useVariantPipeline({
     requires_annovar: false,
     requires_filter: false,
     variants_under_consideration: null,
+    enrichment_status: null,
+    enrichment_phase: null,
+    enrichment_message: null,
+    enrichment_progress_percent: null,
+    literature_status: null,
   });
   const [pipelineSnapshot, setPipelineSnapshot] = useState({
     hasAnnotatedFile: false,
@@ -91,6 +96,11 @@ export function useVariantPipeline({
       requires_filter: false,
       variants_under_consideration: null,
       s3_line_count_status: null,
+      enrichment_status: null,
+      enrichment_phase: null,
+      enrichment_message: null,
+      enrichment_progress_percent: null,
+      literature_status: null,
     }),
     []
   );
@@ -131,6 +141,11 @@ export function useVariantPipeline({
           requires_filter: !!ce.requires_filter,
           variants_under_consideration: ce.variants_under_consideration ?? null,
           s3_line_count_status: ce.s3_line_count_status || null,
+          enrichment_status: ce.enrichment_status || null,
+          enrichment_phase: ce.enrichment_phase || null,
+          enrichment_message: ce.enrichment_message || null,
+          enrichment_progress_percent: ce.enrichment_progress_percent ?? null,
+          literature_status: ce.literature_status || null,
         });
       } else {
         setChatEligibility(defaultChatEligibility());
@@ -175,6 +190,11 @@ export function useVariantPipeline({
           requires_filter: !!data.requires_filter,
           variants_under_consideration: data.variants_under_consideration ?? null,
           s3_line_count_status: data.s3_line_count_status || null,
+          enrichment_status: data.enrichment_status || null,
+          enrichment_phase: data.enrichment_phase || null,
+          enrichment_message: data.enrichment_message || null,
+          enrichment_progress_percent: data.enrichment_progress_percent ?? null,
+          literature_status: data.literature_status || null,
         });
         return data;
       } catch (error) {
@@ -563,8 +583,76 @@ export function useVariantPipeline({
     !!activeConversationId &&
     !chatEligibility.allowed;
 
+  // Derived view of the (fully automatic, backend-driven) variant enrichment gate.
+  // Enrichment has no dedicated endpoint — its state is surfaced only via /api/chat-eligibility.
+  const enrichmentState = (() => {
+    const reason = chatEligibility.reason;
+    const running = reason === 'ENRICHMENT_RUNNING';
+    const pending = reason === 'ENRICHMENT_PENDING';
+    const failed = reason === 'ENRICHMENT_FAILED';
+    const active = running || pending;
+    return {
+      active,
+      running,
+      pending,
+      failed,
+      status:
+        chatEligibility.enrichment_status ||
+        (failed ? 'failed' : running ? 'running' : pending ? 'pending' : null),
+      phase: chatEligibility.enrichment_phase || null,
+      message: chatEligibility.enrichment_message || (active || failed ? chatEligibility.message : null),
+      progress: chatEligibility.enrichment_progress_percent ?? null,
+      literatureStatus: chatEligibility.literature_status || null,
+    };
+  })();
+
+  // Auto-poll chat-eligibility while enrichment is pending/running. The main pipeline
+  // poll loop stops once annovar/filter jobs finish, so enrichment needs its own poll to
+  // show live progress and auto-unlock chat on completion (polling also self-heals a
+  // stuck-pending job server-side).
+  const enrichmentActive = enrichmentState.active;
+  useEffect(() => {
+    if (!enrichmentActive || !activeConversationId || userTier === 'guest') return;
+    let cancelled = false;
+    let timer = null;
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        await refreshChatEligibilityFromApiRef.current?.(activeConversationId, { announceReady: true });
+      } catch (e) {
+        console.warn('[useVariantPipeline] enrichment poll failed:', e);
+      }
+      if (!cancelled) timer = setTimeout(tick, 4000);
+    };
+    timer = setTimeout(tick, 4000);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [enrichmentActive, activeConversationId, userTier]);
+
   const promptChatBlocked = useCallback(() => {
     if (!isChatPipelineGated) return false;
+    if (enrichmentState.failed) {
+      setAnnovarMessageModal({
+        title: 'Enrichment failed',
+        message:
+          enrichmentState.message ||
+          'Variant enrichment failed. Reset your filters and apply them again to retry.',
+        variant: 'error',
+      });
+      return true;
+    }
+    if (enrichmentState.active) {
+      setAnnovarMessageModal({
+        title: 'Enriching your variants',
+        message:
+          enrichmentState.message ||
+          'Enriching your variants with ClinGen, OMIM, CIViC, OncoKB, and literature data. Chat will unlock automatically when this finishes.',
+        variant: 'info',
+      });
+      return true;
+    }
     setAnnovarMessageModal({
       title: 'Chat not available',
       message:
@@ -573,7 +661,7 @@ export function useVariantPipeline({
       variant: 'warning',
     });
     return true;
-  }, [isChatPipelineGated, chatEligibility.message, setAnnovarMessageModal]);
+  }, [isChatPipelineGated, enrichmentState.failed, enrichmentState.active, enrichmentState.message, chatEligibility.message, setAnnovarMessageModal]);
 
   const runAnnovarForCurrentConversation = useCallback(async () => {
     if (userTier === 'guest') {
@@ -1046,6 +1134,7 @@ export function useVariantPipeline({
     runProprietaryFilter,
     promptChatBlocked,
     isChatPipelineGated,
+    enrichmentState,
     pipelineJobActive,
     variantUploadInProgress,
     acmgFilterCanApply,

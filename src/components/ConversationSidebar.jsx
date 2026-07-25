@@ -170,7 +170,7 @@ const ConversationSidebar = ({
                                 {group.items.map((conv) => {
                                     const active = activeConversationId === conv.id;
                                     return (
-                                        <div key={conv.id} className="group relative">
+                                        <div key={conv.id} className="group relative mb-0.5 last:mb-0">
                                             <button
                                                 type="button"
                                                 onClick={() => onSelectConversation(conv.id)}
@@ -187,7 +187,7 @@ const ConversationSidebar = ({
                                                     e.stopPropagation();
                                                     setPendingDeleteId(conv.id);
                                                 }}
-                                                className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-1 rounded text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                                                className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--error)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
                                                 aria-label={`Delete "${conv.title || 'New Conversation'}"`}
                                             >
                                                 <Trash2 className="w-4 h-4" />

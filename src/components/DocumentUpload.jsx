@@ -449,6 +449,10 @@ const DocumentUpload = ({
       if (!sampleMetadata.genome) { setError('Please select a Genome (required)'); return; }
       if (!sampleMetadata.sequencingType) { setError('Please select a Sequencing Type (required)'); return; }
       if (!sampleMetadata.analysisType) { setError('Please select an Analysis Type (required)'); return; }
+      if (sampleMetadata.analysisType === 'Germline' && !sampleMetadata.phenotype?.trim()) {
+        setError('Phenotype is required for Germline analysis (needed for Exomiser prioritization).');
+        return;
+      }
 
       setIsUploading(true);
       try {
@@ -502,6 +506,10 @@ const DocumentUpload = ({
       setError('Please select an Analysis Type (required)');
       return;
     }
+    if (sampleMetadata.analysisType === 'Germline' && !sampleMetadata.phenotype?.trim()) {
+      setError('Phenotype is required for Germline analysis (needed for Exomiser prioritization).');
+      return;
+    }
 
     // Check for optional fields that are empty - show encouragement but allow proceeding
     const emptyOptionalFields = [];
@@ -511,7 +519,6 @@ const DocumentUpload = ({
       if (!sampleMetadata.sampleRole) emptyOptionalFields.push('Sample Role');
       if (!sampleMetadata.affectedStatus) emptyOptionalFields.push('Affected Status');
       if (!sampleMetadata.inheritanceModel) emptyOptionalFields.push('Inheritance Model');
-      if (!sampleMetadata.phenotype) emptyOptionalFields.push('Phenotype');
     }
 
     // If optional fields are empty, show custom warning modal
@@ -797,6 +804,12 @@ const DocumentUpload = ({
       free_tier_preview: response.free_tier_preview || null,
       column_interpretation: response.column_interpretation || null,
       variant_metadata: response.variant_metadata || null,
+      // Carry the metadata the user just submitted so "Edit Sample Information" is prefilled
+      // before the conversation reloads from the backend (the upload response omits it).
+      sample_metadata: response.sample_metadata || {
+        ...sampleMetadata,
+        sampleFileType: sampleMetadata?.sampleFileType || response.file_type || '',
+      },
     };
 
     if (onUploadSuccess) {
@@ -817,7 +830,7 @@ const DocumentUpload = ({
     onUploadProgressChange?.(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     setTimeout(() => setSuccess(''), 5000);
-  }, [onUploadSuccess, onUploadProgressChange]);
+  }, [onUploadSuccess, onUploadProgressChange, sampleMetadata]);
 
   /** Preflight a pasted URL: validate, get filename/size/genome hint, then open metadata form. */
   const handleUrlContinue = async () => {
@@ -1258,115 +1271,25 @@ const DocumentUpload = ({
                   />
                 </div>
 
-                {/* Project */}
-                {/* <div>
-                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                    Project
-                  </label>
-                  {!showCreateProject ? (
-                    <div className="flex gap-2 items-stretch">
-                      <CustomSelect
-                        value={sampleMetadata.project}
-                        onChange={(val) => setSampleMetadata({ ...sampleMetadata, project: val })}
-                        placeholder="Select Project..."
-                        options={existingProjects.map(proj => ({ value: proj, label: proj }))}
-                        className="flex-1"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowCreateProject(true)}
-                        className="px-2.5 py-1.5 text-xs font-medium border rounded-lg transition-colors whitespace-nowrap"
-                        style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)', backgroundColor: 'var(--bg-surface)' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; }}
-                      >
-                        + New
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex gap-2 items-stretch">
-                      <input
-                        type="text"
-                        value={newProjectName}
-                        onChange={(e) => setNewProjectName(e.target.value)}
-                        placeholder="Enter project name..."
-                        className="flex-1 px-2.5 py-1.5 border rounded-lg focus:outline-none focus:ring-1 text-xs transition-all"
-                        style={{
-                          borderColor: 'var(--border-default)',
-                          background: 'var(--bg-input)',
-                          color: 'var(--text-primary)',
-                        }}
-                        onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent-blue)'}
-                        onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-default)'}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (newProjectName.trim()) {
-                            setSampleMetadata({ ...sampleMetadata, project: newProjectName.trim() });
-                            setExistingProjects(prev => [...prev, newProjectName.trim()]);
-                            setNewProjectName('');
-                          }
-                          setShowCreateProject(false);
-                        }}
-                        className="px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap"
-                        style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
-                      >
-                        Add
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowCreateProject(false);
-                          setNewProjectName('');
-                        }}
-                        className="px-2.5 py-1.5 text-xs font-medium border rounded-lg transition-colors whitespace-nowrap"
-                        style={{ borderColor: 'var(--border-default)', color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-input)' }}
-                        onMouseEnter={(e) => { e.target.style.backgroundColor = '#F9FBFF'; e.target.style.borderColor = '#9CA3AF'; }}
-                        onMouseLeave={(e) => { e.target.style.backgroundColor = '#FFFFFF'; e.target.style.borderColor = '#D1D5DB'; }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
-                </div> */}
-
                 {/* Genome - Mandatory Field (auto-detected when possible) */}
                 <div>
                   <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Genome <span style={{ color: 'var(--error)' }}>*</span>
                   </label>
-                  {editMode ? (
-                    <input
-                      type="text"
-                      value={sampleMetadata.genome}
-                      readOnly
-                      className="w-full px-3 h-10 border rounded-lg text-sm"
-                      style={{
-                        borderColor: 'var(--border-default)',
-                        background: 'var(--bg-surface-hover)',
-                        color: 'var(--text-tertiary)',
-                        height: '40px',
-                      }}
-                    />
-                  ) : (
-                    <CustomSelect
-                      value={sampleMetadata.genome}
-                      onChange={(val) => {
-                        setSampleMetadata({ ...sampleMetadata, genome: val });
-                        // Clear auto-detection badge when user manually picks
-                        if (genomeDetection) setGenomeDetection((prev) => prev ? { ...prev, _userOverride: true } : prev);
-                      }}
-                      placeholder={isDetectingGenome ? 'Detecting…' : 'Choose one'}
-                      options={[
-                        { value: 'hg19 (GRCh37)', label: 'hg19 (GRCh37)' },
-                        { value: 'hg38 (GRCh38)', label: 'hg38 (GRCh38)' },
-                      ]}
-                      error={validationAttempted && !sampleMetadata.genome}
-                    />
-                  )}
+                  <CustomSelect
+                    value={sampleMetadata.genome}
+                    onChange={(val) => {
+                      setSampleMetadata({ ...sampleMetadata, genome: val });
+                      // Clear auto-detection badge when user manually picks
+                      if (genomeDetection) setGenomeDetection((prev) => prev ? { ...prev, _userOverride: true } : prev);
+                    }}
+                    placeholder={isDetectingGenome ? 'Detecting…' : 'Choose one'}
+                    options={[
+                      { value: 'hg19 (GRCh37)', label: 'hg19 (GRCh37)' },
+                      { value: 'hg38 (GRCh38)', label: 'hg38 (GRCh38)' },
+                    ]}
+                    error={validationAttempted && !sampleMetadata.genome}
+                  />
                   {/* Auto-detection feedback */}
                   {!editMode && isDetectingGenome && (
                     <div className="flex items-center gap-1.5 mt-1">
@@ -1503,10 +1426,10 @@ const DocumentUpload = ({
                       }
                     }
                   `}</style>
-                  <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
+                  <h4 className="text-md font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
                     Germline Analysis Fields
                   </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                     {/* Sample Role */}
                     <div>
                       <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
@@ -1563,26 +1486,36 @@ const DocumentUpload = ({
 
                   </div>
 
-                  {/* Phenotype - Full width */}
-                  <div>
-                    <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                      Phenotype
-                    </label>
-                    <textarea
-                      value={sampleMetadata.phenotype}
-                      onChange={(e) => setSampleMetadata({ ...sampleMetadata, phenotype: e.target.value })}
-                      placeholder="Describe the phenotype or clinical presentation..."
-                      rows={3}
-                      className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all"
-                      style={{
-                        borderColor: 'var(--border-default)',
-                        background: 'var(--bg-input)',
-                        backdropFilter: 'blur(10px)',
-                        WebkitBackdropFilter: 'blur(10px)',
-                        color: 'var(--text-primary)'
-                      }}
-                    />
-                  </div>
+                  {/* Phenotype - Full width — required for Germline */}
+                  {(() => {
+                    const phenotypeInvalid = validationAttempted && !sampleMetadata.phenotype?.trim();
+                    return (
+                      <div>
+                        <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                          Phenotype <span style={{ color: 'var(--error)' }}>*</span>
+                        </label>
+                        <textarea
+                          value={sampleMetadata.phenotype}
+                          onChange={(e) => setSampleMetadata({ ...sampleMetadata, phenotype: e.target.value })}
+                          placeholder="Describe the phenotype or clinical presentation..."
+                          rows={3}
+                          className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all"
+                          style={{
+                            borderColor: phenotypeInvalid ? 'var(--error)' : 'var(--border-default)',
+                            background: 'var(--bg-input)',
+                            backdropFilter: 'blur(10px)',
+                            WebkitBackdropFilter: 'blur(10px)',
+                            color: 'var(--text-primary)'
+                          }}
+                        />
+                        {phenotypeInvalid && (
+                          <p className="mt-1 text-[12px]" style={{ color: 'var(--error)' }}>
+                            Required for Germline analysis — used for Exomiser phenotype prioritization.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 

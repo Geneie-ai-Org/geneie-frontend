@@ -27,7 +27,7 @@ import ColumnInterpretationResults from '../components/ColumnInterpretationResul
 import VariantAnalysisPipeline from '../components/VariantAnalysisPipeline';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
 import VariantUploadLoadingModal from '@/components/VariantUploadLoadingModal';
-import { Skeleton } from '@/components/ui/skeleton';
+import ThinkingIndicator from '@/components/chat/ThinkingIndicator';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -157,6 +157,7 @@ const ChatPage = () => {
     runProprietaryFilter,
     promptChatBlocked,
     isChatPipelineGated,
+    enrichmentState,
     pipelineJobActive,
     variantUploadInProgress,
     acmgFilterCanApply,
@@ -177,6 +178,20 @@ const ChatPage = () => {
   syncPipelineFromConversationRef.current = syncPipelineFromConversation;
   const refreshConversationAfterAnnovarRef = useRef(refreshConversationAfterAnnovar);
   refreshConversationAfterAnnovarRef.current = refreshConversationAfterAnnovar;
+
+  // Keep the local conversation list (drives sidebar + chat header) in sync with the
+  // backend `title` field — whether it changed via our own generation or server-side.
+  const applyConversationTitle = useCallback((conversationId, title) => {
+    if (!conversationId || !title) return;
+    const sid = String(conversationId);
+    setConversations((prev) =>
+      prev.map((c) =>
+        (String(c.id) === sid || String(c.conversation_id) === sid) && c.title !== title
+          ? { ...c, title }
+          : c
+      )
+    );
+  }, []);
 
   const updateConversationTitle = useCallback(async (conversationId, firstMessage) => {
     if (!userId) return;
@@ -204,16 +219,18 @@ const ChatPage = () => {
       }
 
       await mongodbApi.updateConversation(conversationId, { title });
+      applyConversationTitle(conversationId, title);
     } catch (error) {
       console.error('Error updating conversation title:', error);
       try {
         const fallbackTitle = firstMessage.slice(0, 50) + (firstMessage.length > 50 ? '...' : '');
         await mongodbApi.updateConversation(conversationId, { title: fallbackTitle });
+        applyConversationTitle(conversationId, fallbackTitle);
       } catch (fallbackError) {
         console.error('Error with fallback title update:', fallbackError);
       }
     }
-  }, [userId]);
+  }, [userId, applyConversationTitle]);
 
   const {
     messages,
@@ -578,6 +595,10 @@ const ChatPage = () => {
         if (cancelled) return;
 
         if (convData) {
+          // Pick up any backend-side title change (e.g. auto-generated "Greeting and Initial Contact")
+          // so the sidebar entry and chat header reflect it.
+          applyConversationTitle(conversationId, convData.title);
+
           if (convData.document?.s3_url && convData.document?.file_name) {
             setCurrentDocument({
               url: convData.document.s3_url,
@@ -956,6 +977,7 @@ const ChatPage = () => {
       }
       onEditSampleInfo={() => { setIsEditSampleModalOpen(true); }}
       onRemoveFile={userTier === 'guest' ? undefined : () => handleDocumentUpload(null)}
+      enrichmentState={enrichmentState}
     />
   ) : null;
 
@@ -1336,11 +1358,7 @@ const ChatPage = () => {
                                 {typingText}
                               </Markdown>
                             ) : (
-                              <div className="space-y-2.5 pt-1" aria-label="Assistant is thinking" role="status">
-                                <Skeleton className="h-3.5 w-[85%]" />
-                                <Skeleton className="h-3.5 w-[92%]" />
-                                <Skeleton className="h-3.5 w-[70%]" />
-                              </div>
+                              <ThinkingIndicator />
                             )}
                           </div>
                         </div>

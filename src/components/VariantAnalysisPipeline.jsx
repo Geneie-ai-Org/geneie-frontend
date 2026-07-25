@@ -65,6 +65,7 @@ const VariantAnalysisPipeline = ({
   variantsUnderConsideration,
   onEditSampleInfo,
   onRemoveFile,
+  enrichmentState,
 }) => {
   const [removeFileDialogOpen, setRemoveFileDialogOpen] = useState(false);
   const pipelineProps = {
@@ -127,6 +128,14 @@ const VariantAnalysisPipeline = ({
   })();
 
   const chipStatusText = (() => {
+    // Enrichment is the final automatic gate before chat — surface it above everything else.
+    if (enrichmentState?.active) {
+      const pct = enrichmentState.progress != null ? ` · ${Math.round(enrichmentState.progress)}%` : '';
+      return `Enriching variants${pct}`;
+    }
+    if (enrichmentState?.failed) {
+      return 'Enrichment failed';
+    }
     if (showReadyMinimal) {
       return variantCount != null
         ? `Ready · ${Number(variantCount).toLocaleString()} variants`
@@ -226,7 +235,15 @@ const VariantAnalysisPipeline = ({
           </div>
           <p
             className="text-[11px] truncate leading-tight mt-0.5"
-            style={{ color: chatReady && showReadyMinimal ? 'var(--accent-teal)' : 'var(--text-secondary)' }}
+            style={{
+              color: enrichmentState?.active
+                ? 'var(--accent-teal)'
+                : enrichmentState?.failed
+                  ? 'var(--error)'
+                  : chatReady && showReadyMinimal
+                    ? 'var(--accent-teal)'
+                    : 'var(--text-secondary)',
+            }}
           >
             {chipStatusText}
           </p>
@@ -287,6 +304,35 @@ const VariantAnalysisPipeline = ({
           </AlertDialogContent>
         </AlertDialog>
       </div>
+
+      {/* Enrichment status strip — automatic post-filter gate before chat */}
+      {enrichmentState?.active && (
+        <div className="px-3 pb-2.5 pt-0">
+          <div className="flex items-center gap-1.5 mb-1">
+            <div className="w-3 h-3 border-2 rounded-full animate-spin shrink-0" style={{ borderColor: 'var(--accent-teal)', borderTopColor: 'transparent' }} />
+            <span className="text-[11px] truncate" style={{ color: 'var(--text-secondary)' }}>
+              {enrichmentState.message || 'Enriching your variants…'}
+            </span>
+          </div>
+          <div className="w-full h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-surface-hover)' }}>
+            <div
+              className="h-full rounded-full transition-all"
+              style={{
+                width: `${Math.max(4, Math.min(100, Number(enrichmentState.progress ?? 5)))}%`,
+                backgroundColor: 'var(--accent-teal)',
+              }}
+            />
+          </div>
+        </div>
+      )}
+      {enrichmentState?.failed && (
+        <div className="px-3 pb-2.5 pt-0">
+          <div className="p-2 rounded-lg border text-[11px] leading-relaxed" style={{ borderColor: 'var(--error)', backgroundColor: 'var(--error-soft)', color: 'var(--error)' }}>
+            <span className="font-medium">Enrichment failed. </span>
+            {enrichmentState.message || 'Reset your filters and apply them again to retry.'}
+          </div>
+        </div>
+      )}
 
       {/* Expanded stepper + status */}
       {expanded && (

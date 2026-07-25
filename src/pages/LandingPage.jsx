@@ -9,6 +9,8 @@ import CardSwap, { Card } from '@/components/ui/CardSwap';
 import Carousel from '@/components/ui/Carousel';
 import '@/components/ui/Carousel.css';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import wgsIcon from '@/WGS.svg';
+import wesIcon from '@/WES.svg';
 import Silk from '@/components/Silk';
 import ClickSpark from '@/components/ClickSpark';
 import { useScrollReveal, useStaggerReveal } from '@/hooks/useScrollReveal';
@@ -115,9 +117,8 @@ const LandingPage = () => {
   ];
 
   const sequencingTypes = [
-    { label: "Whole Genome Sequencing", icon: <Activity className="w-4 h-4" /> },
-    { label: "Whole Exome Sequencing", icon: <FileText className="w-4 h-4" /> },
-    // { label: "Targeted Exome Sequencing", icon: <Microscope className="w-4 h-4" /> },
+    { label: "Whole Genome Sequencing", icon: <img src={wgsIcon} alt="" aria-hidden className="w-full h-full object-contain" /> },
+    { label: "Whole Exome Sequencing", icon: <img src={wesIcon} alt="" aria-hidden className="w-full h-full object-contain" /> },
   ];
 
   const exampleQuestions = [
@@ -197,13 +198,13 @@ const LandingPage = () => {
                     {item.label}
                   </button>
                 ))}
-                  <Button
-                    variant="ghost"
-                    className="text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors border border-white/60"
-                    onClick={() => { console.log('[LandingPage] Sign In clicked — navigating to /auth'); navigate('/auth'); }}
-                  >
-                    Sign In
-                  </Button>
+                <Button
+                  variant="ghost"
+                  className="text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors border border-white/60"
+                  onClick={() => { console.log('[LandingPage] Sign In clicked — navigating to /auth'); navigate('/auth'); }}
+                >
+                  Sign In
+                </Button>
               </div>
             </div>
           </nav>
@@ -222,13 +223,13 @@ const LandingPage = () => {
                 rotation={0}
               /> */}
               <video
-              autoPlay
-              loop
-              muted
-              playsInline
-              className=" md:block absolute w-auto pointer-events-none select-none"
-              src="/helix_2_ascii.mp4"
-            />
+                autoPlay
+                loop
+                muted
+                playsInline
+                className=" md:block absolute w-auto pointer-events-none select-none"
+                src="/helix_2_ascii.mp4"
+              />
             </div>
             <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/40 via-zinc-950/60 to-zinc-950 z-0 pointer-events-none" />
 
@@ -245,13 +246,13 @@ const LandingPage = () => {
 
               {/* CTA */}
               <div className="hero-reveal mb-10 sm:mb-14 flex flex-col sm:flex-row items-center gap-3" style={{ '--reveal-delay': '1500ms' }}>
-                  <Button
-                    size="lg"
-                    className="bg-white text-black hover:bg-zinc-200 text-base px-8 py-6 font-medium transition-all hover:scale-105 active:scale-95"
-                    onClick={() => navigate('/auth')}
-                  >
-                    Get Started
-                  </Button>
+                <Button
+                  size="lg"
+                  className="bg-white text-black hover:bg-zinc-200 text-base px-8 py-6 font-medium transition-all hover:scale-105 active:scale-95"
+                  onClick={() => navigate('/auth')}
+                >
+                  Get Started
+                </Button>
                 <Button
                   size="lg"
                   variant="outline"
@@ -271,18 +272,18 @@ const LandingPage = () => {
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-x-2 sm:gap-x-3 gap-y-1">
                   {professionalCards.map((card, i) => (
-                  <div
-                    key={i}
-                    className="hero-reveal flex items-center gap-2 sm:gap-3"
-                    style={{ '--reveal-delay': `${2400 + i * 150}ms` }}
-                  >
-                    {i > 0 && (
-                      <span className="text-zinc-600 select-none" aria-hidden="true">·</span>
-                    )}
-                    <span className="text-[14px] sm:text-[14px] text-zinc-300/80 font-medium tracking-wide uppercase">
-                      {card.title}
-                    </span>
-                  </div>
+                    <div
+                      key={i}
+                      className="hero-reveal flex items-center gap-2 sm:gap-3"
+                      style={{ '--reveal-delay': `${2400 + i * 150}ms` }}
+                    >
+                      {i > 0 && (
+                        <span className="text-zinc-600 select-none" aria-hidden="true">·</span>
+                      )}
+                      <span className="text-[14px] sm:text-[14px] text-zinc-300/80 font-medium tracking-wide uppercase">
+                        {card.title}
+                      </span>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -298,10 +299,10 @@ const LandingPage = () => {
                     <h2
                       key={word}
                       className={`absolute text-3xl md:text-5xl font-semibold font-heading tracking-tight transition-all duration-700 ease-in-out ${i === activeWord
-                          ? 'opacity-100 translate-y-0 scale-100'
-                          : i === (activeWord - 1 + workflowWords.length) % workflowWords.length
-                            ? 'opacity-0 -translate-y-8 scale-95'
-                            : 'opacity-0 translate-y-8 scale-95'
+                        ? 'opacity-100 translate-y-0 scale-100'
+                        : i === (activeWord - 1 + workflowWords.length) % workflowWords.length
+                          ? 'opacity-0 -translate-y-8 scale-95'
+                          : 'opacity-0 translate-y-8 scale-95'
                         }`}
                       style={{ color: '#18181b' }}
                     >
@@ -379,11 +380,10 @@ const LandingPage = () => {
                                   initial={{ opacity: 0, y: 8 }}
                                   animate={{ opacity: 1, y: 0 }}
                                 >
-                                  <div className={`px-3 py-1.5 rounded-xl text-[10px] leading-relaxed max-w-[80%] ${
-                                    msg.role === 'user'
-                                      ? 'bg-[#2F7F7A] text-white rounded-br-sm'
-                                      : 'bg-zinc-100 text-zinc-800 rounded-bl-sm'
-                                  }`}>{msg.text}</div>
+                                  <div className={`px-3 py-1.5 rounded-xl text-[10px] leading-relaxed max-w-[80%] ${msg.role === 'user'
+                                    ? 'bg-[#2F7F7A] text-white rounded-br-sm'
+                                    : 'bg-zinc-100 text-zinc-800 rounded-bl-sm'
+                                    }`}>{msg.text}</div>
                                 </motion.div>
                               ))}
                               {sim.phase === 'thinking' && (
@@ -467,11 +467,10 @@ const LandingPage = () => {
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ duration: 0.3 }}
                             >
-                              <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed max-w-[75%] text-left ${
-                                msg.role === 'user'
-                                  ? 'bg-[#2F7F7A] text-white rounded-br-md'
-                                  : 'bg-zinc-100 text-zinc-800 rounded-bl-md'
-                              }`}>
+                              <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed max-w-[75%] text-left ${msg.role === 'user'
+                                ? 'bg-[#2F7F7A] text-white rounded-br-md'
+                                : 'bg-zinc-100 text-zinc-800 rounded-bl-md'
+                                }`}>
                                 {msg.text}
                               </div>
                             </motion.div>
@@ -531,68 +530,80 @@ const LandingPage = () => {
               </div>
             </div>
           </section>
+          
+{/* 3. Ask Anything Section */}
+<section className="bg-black py-24 text-white min-h-[100dvh] flex flex-col justify-center relative overflow-hidden">
+  
+  {/* Background Image with Left-to-Right Gradient Overlay */}
+  <div className="absolute inset-0 z-0 pointer-events-none select-none">
+    <img
+      src="/gemini.png"
+      alt=""
+      aria-hidden="true"
+      className="w-full h-full object-cover object-right opacity-90"
+    />
+    {/* Gradient: Dark on left for text readability, clearer on right */}
+    <div className="absolute inset-0 bg-gradient-to-r from-black via-black/85 to-black/20" />
+  </div>
 
-          {/* 3. Ask Anything Section (Dark Theme) */}
-          <section className="bg-black py-24 text-white min-h-[100dvh] flex flex-col justify-center relative overflow-hidden">
-            {/* Background video – right-aligned, decorative */}
-            {/* <video
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="hidden md:block absolute -right-[5%] top-1/2 -translate-y-1/2 h-[110%] w-auto object-cover opacity-60 pointer-events-none select-none"
-              src="/helix_2_ascii.mp4"
-            /> */}
-            <div className="relative z-10 container px-4 md:px-6 max-w-5xl mx-auto flex flex-col items-center">
-              <div ref={askTitleRef} className="text-center mb-12">
-                <h2 className="text-3xl md:text-5xl font-semibold font-heading tracking-tight mb-4 text-zinc-50">Ask Anything About Your Data</h2>
-                <p className="text-zinc-400 text-base md:text-lg">From variant finding to clinical interpretation. We got answers for all your queries.</p>
-              </div>
+  {/* Foreground Content */}
+  <div className="relative z-10 container px-4 md:px-6 max-w-7xl mx-auto">
+    <div className="w-full lg:w-[60%] flex flex-col">
+      <div ref={askTitleRef} className="text-center mb-8">
+        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold font-heading tracking-tight mb-4 text-white">
+          Ask Anything About Your Data
+        </h2>
+        <p className="text-zinc-400 text-base sm:text-lg max-w-xl mx-auto text-center">
+          Instant clinical insights for complex genomic data
+        </p>
+      </div>
 
-              <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 mb-12">
-                {sequencingTypes.map((type, i) => (
-                  <div key={i} className="flex items-center gap-2.5 px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg bg-neutral-900 cursor-default">
-                    <span className="w-4 h-4 sm:w-[18px] sm:h-[18px] flex items-center justify-center flex-shrink-0">
-                      {React.cloneElement(type.icon, {
-                        className: 'text-[#4ad6cd]/70 w-4 h-4 sm:w-[18px] sm:h-[18px]',
-                      })}
-                    </span>
-                    <span className="text-xs sm:text-[13px] text-zinc-300 font-medium tracking-wide">
-                      {type.label}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div ref={askQuestionsRef} className="w-full">
-                <Accordion defaultValue={[]} className="w-full space-y-3">
-                  {askAnythingFaqs.map((item, i) => (
-                    <AccordionItem
-                      key={i}
-                      value={`ask-${i}`}
-                      className="rounded-xl border border-zinc-800/50 bg-[#111] px-4 md:px-5 overflow-hidden transition-colors hover:border-zinc-700 border-b-0"
-                    >
-                      <AccordionTrigger className="hover:no-underline font-medium text-zinc-100 text-left py-4 md:py-5 text-sm sm:text-[15px] items-start gap-4">
-                        <div className="flex items-start gap-4 min-w-0 flex-1">
-                          <span className="min-w-0">{item.q}</span>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="text-zinc-400 text-sm leading-relaxed pl-0 pr-2 pb-5">
-                        {item.a}
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              </div>
+      {/* Cards */}
+      <div className="w-full grid grid-cols-2 gap-3 sm:gap-4 mb-8">
+        {sequencingTypes.map((type, i) => (
+          <div
+            key={i}
+            className="relative flex flex-col justify-between w-full rounded-2xl bg-zinc-900/70 backdrop-blur-sm border border-zinc-800/80 p-4 min-h-[180px] sm:min-h-[200px]"
+          >
+            {/* Icon Badge */}
+            <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center p-2 text-[#4ad6cd]">
+              {React.cloneElement(type.icon, {
+                className: 'w-8 h-8 sm:w-10 sm:h-10 text-[#4ad6cd] object-contain',
+              })}
             </div>
-          </section>
 
-          {/* <div className="w-full overflow-hidden -mb-px">
-          <svg viewBox="0 0 1440 20" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-5 block" preserveAspectRatio="none">
-            <path d="M0 0 L0 10 Q 18 17, 36 10 Q 54 3, 72 10 Q 90 17, 108 10 Q 126 3, 144 10 Q 162 17, 180 10 Q 198 3, 216 10 Q 234 17, 252 10 Q 270 3, 288 10 Q 306 17, 324 10 Q 342 3, 360 10 Q 378 17, 396 10 Q 414 3, 432 10 Q 450 17, 468 10 Q 486 3, 504 10 Q 522 17, 540 10 Q 558 3, 576 10 Q 594 17, 612 10 Q 630 3, 648 10 Q 666 17, 684 10 Q 702 3, 720 10 Q 738 17, 756 10 Q 774 3, 792 10 Q 810 17, 828 10 Q 846 3, 864 10 Q 882 17, 900 10 Q 918 3, 936 10 Q 954 17, 972 10 Q 990 3, 1008 10 Q 1026 17, 1044 10 Q 1062 3, 1080 10 Q 1098 17, 1116 10 Q 1134 3, 1152 10 Q 1170 17, 1188 10 Q 1206 3, 1224 10 Q 1242 17, 1260 10 Q 1278 3, 1296 10 Q 1314 17, 1332 10 Q 1350 3, 1368 10 Q 1386 17, 1404 10 Q 1422 3, 1440 10 L1440 0 Z"
-              fill="black" />
-          </svg>
-        </div> */}
+            {/* Centered Text */}
+            <div className="mt-auto text-center">
+              <h3 className="text-base sm:text-lg lg:text-xl text-zinc-100 leading-snug text-center">
+                {type.label}
+              </h3>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Accordion List */}
+      <div ref={askQuestionsRef} className="w-full">
+        <Accordion defaultValue={[]} className="w-full space-y-3">
+          {askAnythingFaqs.map((item, i) => (
+            <AccordionItem
+              key={i}
+              value={`ask-${i}`}
+              className="rounded-2xl border border-zinc-800/80 bg-zinc-900/70 backdrop-blur-sm px-5 sm:px-6 overflow-hidden data-[state=open]:border-[#2F7F7A]/50 data-[state=open]:bg-zinc-900/90 border-b-0"
+            >
+              <AccordionTrigger className="hover:no-underline font-medium text-zinc-100 text-left py-4 sm:py-5 text-sm sm:text-base items-center gap-4">
+                <span className="flex-1">{item.q}</span>
+              </AccordionTrigger>
+              <AccordionContent className="text-zinc-400 text-sm sm:text-base leading-relaxed pt-1 pb-5 pr-2">
+                {item.a}
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      </div>
+    </div>
+  </div>
+</section>
 
           {/* 4. Built for Genomics + FAQ (combined) */}
           <section id="faq" className="py-24 bg-zinc-950 lg:bg-[#EDF7F6] relative isolate min-h-[100dvh] flex flex-col justify-center">
@@ -792,10 +803,10 @@ const LandingPage = () => {
               <div className="flex items-center justify-between pt-10 pb-1 border-b border-zinc-800/60">
                 <span className="text-zinc-600 text-xs sm:text-sm">&copy; {new Date().getFullYear()} geneie</span>
                 <span className="flex items-center gap-1.5 text-zinc-500 text-xs sm:text-sm font-medium">
-                  powered by 
+                  powered by
                   <img src="/omixer-small-logo.png" alt="Omixir" className="h-4 sm:h-5 object-contain" />
                   Omixir
-                  </span>
+                </span>
               </div>
             </div>
           </div>

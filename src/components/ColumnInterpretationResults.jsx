@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2, Check, Filter, Stethoscope } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2, Check, Filter, Stethoscope, X } from 'lucide-react';
 import qiagenLogo from '../Qiagen.svg.png';
 import { ACMG_FILTER_DISPLAY_NAME } from './VariantFilterSidebar';
 import { Card, CardContent } from '@/components/ui/card';
@@ -61,6 +61,18 @@ const ColumnInterpretationResults = ({
   const [expandedStep, setExpandedStep] = useState(initialStep ?? (hasAnnotatedFile ? 2 : null)); // Track which step is expanded
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // Explicit remove-file confirmation only
   const [showAnnovarConfirm, setShowAnnovarConfirm] = useState(false); // Confirm ANNOVAR when all columns present
+
+  // Close on ESC — a nested confirm dialog takes precedence over closing the whole modal.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (showDeleteConfirm) { setShowDeleteConfirm(false); return; }
+      if (showAnnovarConfirm) { setShowAnnovarConfirm(false); return; }
+      onClose?.();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showDeleteConfirm, showAnnovarConfirm, onClose]);
 
   const backgroundJobActive = isRunningAnnovar || isApplyingProprietaryFilter;
   const genomeMismatch = interpretationResult?.genome_build_check?.status === 'mismatch';
@@ -239,6 +251,9 @@ const ColumnInterpretationResults = ({
     const entries = Object.entries(columns);
     if (!entries.length) return null;
 
+    // Missing/not-found columns are rendered muted (gray) rather than accent-colored.
+    const missingColor = opts.missingColor || C.textDim;
+
     const found = entries.filter(([, c]) => c.found);
     const issues = entries.filter(([colName, c]) => !c.found);
     const allFound = issues.length === 0;
@@ -288,20 +303,20 @@ const ColumnInterpretationResults = ({
     return (
       <div>
         <div className="flex items-center gap-1.5 mb-1.5">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" style={{ color: opts.missingColor || C.warning }} />
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" style={{ color: missingColor }} />
           <span className="text-xs font-medium" style={{ color: C.text }}>
             {label}: {found.length}/{entries.length} found
           </span>
         </div>
-        <div className="flex flex-wrap gap-1.5 ml-5">
+        <div className="flex flex-wrap gap-1.5">
           {issues.map(([colName]) => (
             <span
               key={colName}
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
               style={{
-                backgroundColor: C.warningSoft || `${C.warning}18`,
-                borderColor: `${(opts.missingColor || C.warning)}40`,
-                color: opts.missingColor || C.warning,
+                backgroundColor: `${missingColor}14`,
+                borderColor: `${missingColor}40`,
+                color: missingColor,
               }}
             >
               {columnsNoValidValues.includes(colName) ? 'No values' : (opts.missingLabel || 'Missing')} · {colName}
@@ -460,8 +475,8 @@ const ColumnInterpretationResults = ({
 
           {missing_groups.length > 0 && (
             <div className="p-2 rounded" style={{ backgroundColor: C.warningSoft, border: `1px solid ${C.warning}` }}>
-              <p className="font-semibold mb-1" style={{ color: C.warning }}>Missing Groups:</p>
-              <ul className="list-disc list-inside" style={{ color: C.warningText }}>
+              <p className="mb-1" style={{ color: C.warning }}>Missing Groups</p>
+              <ul className="list-inside" style={{ color: C.warningText }}>
                 {missing_groups.map((group, idx) => (
                   <li key={idx}>{group}</li>
                 ))}
@@ -678,19 +693,17 @@ const ColumnInterpretationResults = ({
         >
         {/* Header — matches Sample Metadata style: plain title + subtitle, no divider */}
         <div className="flex-shrink-0 px-6 pt-5 pb-3 relative">
-          {onDeleteDocument && (
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="absolute top-4 right-4 transition-colors p-1.5 rounded-lg"
-              style={{ color: C.textMuted }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = C.error; e.currentTarget.style.backgroundColor = C.errorSoft; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = C.textMuted; e.currentTarget.style.backgroundColor = 'transparent'; }}
-              aria-label="Remove file"
-              title="Remove file"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )}
+          <button
+            onClick={() => onClose?.()}
+            className="absolute top-4 right-4 transition-colors p-1.5 rounded-lg"
+            style={{ color: C.textMuted }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = C.text; e.currentTarget.style.backgroundColor = C.surfaceHover; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = C.textMuted; e.currentTarget.style.backgroundColor = 'transparent'; }}
+            aria-label="Close"
+            title="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
           <h2 className="text-sm font-semibold pr-8" style={{ color: C.text }}>File Analysis</h2>
           <p className="text-xs mt-0.5" style={{ color: C.textMuted }}>
             {overall_status === 'passed' ? 'Your file is ready for analysis.' : 'Some features may be limited.'}
@@ -731,7 +744,6 @@ const ColumnInterpretationResults = ({
                   className="p-3 rounded-lg text-xs flex items-start gap-2"
                   style={{ backgroundColor: C.errorSoft, border: `1px solid ${C.error}`, color: C.text }}
                 >
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: C.error }} />
                   <div>
                     <span className="font-semibold" style={{ color: C.error }}>Genome mismatch</span>
                     <span className="ml-1">{gbc.message || `You selected ${(gbc.declared || '').toUpperCase()}, but coordinates match ${(gbc.likely || '').toUpperCase()}. ANNOVAR and Exomiser cannot run until this is resolved — update the genome in sample information or re-upload.`}</span>
@@ -1036,7 +1048,7 @@ const ColumnInterpretationResults = ({
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = C.surfaceHover; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = C.surfaceCard; }}
                 >
-                  Prioritize with Exomiser →
+                  Prioritize with Exomiser
                 </button>
               )}
 
@@ -1083,7 +1095,7 @@ const ColumnInterpretationResults = ({
                 onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal-hover)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal)'; }}
               >
-                {backgroundJobActive ? 'Continue in background' : chatAllowed ? 'Continue Chatting' : 'Continue to chat'}
+                {backgroundJobActive ? 'Continue in background' : chatAllowed ? 'Continue' : 'Continue to chat'}
               </button>
             )}
           </div>

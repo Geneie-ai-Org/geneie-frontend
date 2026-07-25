@@ -1036,7 +1036,7 @@ const ColumnInterpretationResults = ({
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = C.surfaceHover; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = C.surfaceCard; }}
                 >
-                  Prioritize with Exomiser →
+                  Prioritize with Exomiser
                 </button>
               )}
 

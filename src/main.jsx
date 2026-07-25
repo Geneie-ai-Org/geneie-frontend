@@ -2,35 +2,24 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
-import * as Sentry from "@sentry/react";
 import { AuthProvider } from './hooks/useAuth';
 import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import ChatPage from './pages/ChatPage';
 import PublicRoute from './components/PublicRoute';
+import ErrorBoundary from './components/ErrorBoundary';
+import { initAnalytics } from './lib/analytics';
 import { Toaster } from '@/components/ui/sonner';
 import './index.css';
 import './App.css';
 
-Sentry.init({
-  dsn: "https://21eb629f3af2e173607c06c6affe5e7c@o4511525430427648.ingest.de.sentry.io/4511525433245776",
-  sendDefaultPii: true,
-  integrations: [
-    Sentry.browserTracingIntegration(),
-    Sentry.replayIntegration(),
-  ],
-  tracesSampleRate: 1.0,
-  tracePropagationTargets: ["localhost", /^https:\/\/api\.geneie\.chat/],
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1.0,
-  enableLogs: true,
-});
+initAnalytics();
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
 root.render(
   <React.StrictMode>
-    <Sentry.ErrorBoundary fallback={<p style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>Something went wrong. Please refresh the page.</p>}>
+    <ErrorBoundary>
     <MotionConfig reducedMotion="user">
     <BrowserRouter>
       <AuthProvider>
@@ -75,6 +64,6 @@ root.render(
       </AuthProvider>
     </BrowserRouter>
     </MotionConfig>
-    </Sentry.ErrorBoundary>
+    </ErrorBoundary>
   </React.StrictMode>
 );

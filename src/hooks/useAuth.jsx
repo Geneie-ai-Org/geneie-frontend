@@ -4,6 +4,7 @@ import { onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
 import { fetchSubscriptionStatus } from '@/services/backendApi';
+import { identifyUser, resetAnalytics } from '@/lib/analytics';
 
 // Define the initial state for an authenticated user's profile
 const initialProfileState = {
@@ -113,6 +114,18 @@ export const AuthProvider = ({ children }) => {
     return () => unsubscribeAuth();
   }, []);
 
+
+  // --- Analytics identity ---
+  // Keyed on tier too, so the person property updates once Firestore resolves the
+  // plan (userId lands first, tier follows). Firebase UID only — no email is sent.
+  useEffect(() => {
+    if (userId) {
+      identifyUser(userId, userTier);
+    } else if (isAuthReady) {
+      // Signed out: drop the identity so the next visitor starts a fresh person.
+      resetAnalytics();
+    }
+  }, [userId, userTier, isAuthReady]);
 
   // --- Step B: Fetch User Profile (Tier Status) from Firestore ---
   useEffect(() => {

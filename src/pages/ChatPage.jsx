@@ -50,6 +50,7 @@ const ChatPage = () => {
   const [currentDocument, setCurrentDocument] = useState(null);
   const [variantData, setVariantData] = useState(null);
   const [isVariantSidebarOpen, setIsVariantSidebarOpen] = useState(false);
+  const [sidebarRequestedTab, setSidebarRequestedTab] = useState(null);
   const [isEditSampleModalOpen, setIsEditSampleModalOpen] = useState(false);
 
   // Stick-to-bottom for the message list (replaces prompt-kit ChatContainer)
@@ -159,7 +160,10 @@ const ChatPage = () => {
     pipelineJobActive,
     variantUploadInProgress,
     acmgFilterCanApply,
-    filter2CanApply,
+    isRunningExomiser,
+    exomiserStatus,
+    fetchExomiserEligibility,
+    runExomiser,
     syncPipelineFromConversation,
     resetConversationPipeline,
     refreshConversationAfterAnnovar,
@@ -935,6 +939,7 @@ const ChatPage = () => {
       hasUploadedFile={!!currentDocument || variantUploadInProgress}
       columnInterpretationResult={columnInterpretationResult}
       hasAnnotatedFile={pipelineSnapshot.hasAnnotatedFile}
+      vcfAnnotated={pipelineSnapshot.vcfAnnotated}
       requiresAnnovar={chatEligibility.requires_annovar}
       isRunningAnnovar={isRunningAnnovar}
       isApplyingProprietaryFilter={isApplyingProprietaryFilter}
@@ -1471,6 +1476,12 @@ const ChatPage = () => {
             filteredVariantCountFromConv={conversationFilterState.filteredVariantCount}
             activeProprietaryFilterFromConv={conversationFilterState.activeProprietaryFilter}
             filterWorkingSetCountFromConv={conversationFilterState.filterWorkingSetCount}
+            isRunningExomiser={isRunningExomiser}
+            exomiserStatus={exomiserStatus}
+            fetchExomiserEligibility={fetchExomiserEligibility}
+            runExomiser={runExomiser}
+            requestedTab={sidebarRequestedTab}
+            onRequestedTabConsumed={() => setSidebarRequestedTab(null)}
           />
       </aside>
 
@@ -1634,13 +1645,21 @@ const ChatPage = () => {
           }}
           onAnnovarClick={runAnnovarForCurrentConversation}
           onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
+          onOpenExomiser={async () => {
+            interpretationDismissedRef.current = true;
+            setShowInterpretationModal(false);
+            setInterpretationModalStep(null);
+            if (columnInterpretationResult && activeConversationId) {
+              await syncAfterColumnInterpretation(activeConversationId, columnInterpretationResult);
+            }
+            setIsVariantSidebarOpen(true);
+            setSidebarRequestedTab('exomiser');
+          }}
           isApplyingProprietaryFilter={isApplyingProprietaryFilter}
           isRunningAnnovar={isRunningAnnovar}
           hasAnnotatedFile={pipelineSnapshot.hasAnnotatedFile}
           acmgFilterActive={conversationFilterState.activeProprietaryFilter === 'filter_1'}
           acmgFilterCanApply={acmgFilterCanApply}
-          filter2Active={conversationFilterState.activeProprietaryFilter === 'filter_2'}
-          filter2CanApply={filter2CanApply}
           showVcfTabHighlight={columnInterpretationResult?.step1?.passed === false}
           onDeleteDocument={() => handleDocumentUpload(null)}
         />

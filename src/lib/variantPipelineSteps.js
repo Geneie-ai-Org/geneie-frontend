@@ -75,7 +75,7 @@ export function computePipelineSteps({
   })();
 
   const hasReduction =
-    (activeProprietaryFilter === 'filter_1' || activeProprietaryFilter === 'filter_2') || hasManualFilters(activeVariantFilters);
+    (activeProprietaryFilter === 'filter_1' || activeProprietaryFilter === 'filter_3') || hasManualFilters(activeVariantFilters);
   const filterRunning =
     isApplyingProprietaryFilter ||
     filterJob?.status === 'running' ||

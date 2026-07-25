@@ -24,11 +24,6 @@ const FRIENDLY_ERROR_MAP = [
       return `This filter needs annotations we couldn't find in your file: ${list}. Run ANNOVAR first, then try again.`;
     },
   },
-  {
-    // Backend refuses filter_2 with "Proprietary Filter 2 is not available in this release. Use filter_1."
-    match: /proprietary filter 2 is not available|use filter_1/i,
-    transform: () => "Functional Impact isn't available in this release yet.",
-  },
 ];
 
 export function humanizeError(msg) {

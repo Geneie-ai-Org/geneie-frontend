@@ -1086,6 +1086,8 @@ export function useVariantPipeline({
       filterJob: null,
     });
     setPipelineToast(null);
+    setIsRunningAnnovar(false);
+    setIsApplyingProprietaryFilter(false);
     prevAnnovarJobStatusRef.current = null;
     prevFilterJobStatusRef.current = null;
     prevChatAllowedRef.current = null;
@@ -1102,8 +1104,12 @@ export function useVariantPipeline({
       annovarJob: convData.annovar_job || null,
       filterJob: convData.filter_job || null,
     });
-    prevAnnovarJobStatusRef.current = convData.annovar_job?.status || null;
-    prevFilterJobStatusRef.current = convData.filter_job?.status || null;
+    const annStatus = convData.annovar_job?.status;
+    const filtStatus = convData.filter_job?.status;
+    setIsRunningAnnovar(annStatus === 'running');
+    setIsApplyingProprietaryFilter(filtStatus === 'running' || filtStatus === 'pending');
+    prevAnnovarJobStatusRef.current = annStatus || null;
+    prevFilterJobStatusRef.current = filtStatus || null;
     applyChatEligibilityFromConversation(convData);
     if (activeConversationId && convData.document) {
       refreshChatEligibilityFromApi(activeConversationId, { convFallback: convData });

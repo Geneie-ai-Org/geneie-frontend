@@ -88,15 +88,21 @@ export async function mapProprietaryFilters(conversationId, columnInterpretation
   return data;
 }
 
-/**
- * Send a file slice to POST /api/detect-genome-build and return
- * { detected_build, genome, confidence, source }.
- * Sends only the first ~512 KB to keep the request fast.
- */
-const DETECT_GENOME_SLICE_BYTES = 512 * 1024;
+
+const DETECT_GENOME_SLICE_BYTES = 10 * 1024 * 1024;
+
+async function sliceToLastNewline(file, maxBytes) {
+  if (file.size <= maxBytes) return file;
+  const rawSlice = file.slice(0, maxBytes);
+  const text = await rawSlice.text();
+  const lastNewline = text.lastIndexOf('\n');
+  if (lastNewline === -1) return rawSlice;
+  const completeByteLength = new TextEncoder().encode(text.slice(0, lastNewline + 1)).length;
+  return file.slice(0, completeByteLength);
+}
 
 export async function detectGenomeBuild(file) {
-  const slice = file.slice(0, DETECT_GENOME_SLICE_BYTES);
+  const slice = await sliceToLastNewline(file, DETECT_GENOME_SLICE_BYTES);
   const formData = new FormData();
   formData.append('file', slice, file.name);
 

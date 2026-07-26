@@ -71,6 +71,26 @@
   --shell-right-col: 0px;
 }
 
+/* Dark scrollbars — match the app background */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-surface-hover) transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--bg-surface-hover);
+  border-radius: 3px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
 /* --- Chat app grid (left nav | messages | variant filters) --- */
 .chat-app-shell {
   display: grid;

@@ -502,6 +502,7 @@ const VariantFilterSidebar = ({
   runExomiser = null,
   requestedTab = null,
   onRequestedTabConsumed = null,
+  acmgFilterCanApply = false,
 }) => {
   const [filters, setFilters] = useState({});
   const [categoricalFilters, setCategoricalFilters] = useState({});
@@ -2143,60 +2144,48 @@ const VariantFilterSidebar = ({
                 <p className="text-xs text-[var(--text-secondary)] mb-3 leading-relaxed">
                   {PROPRIETARY_FILTER_1_DESCRIPTION}
                 </p>
-                {proprietaryFilterPreviews?.filter_1 ? (
-                  <div className="mb-2">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-[var(--text-secondary)]">
-                        {proprietaryFilterPreviews.filter_1.preview_pending && activeProprietaryFilter !== 'filter_1'
-                          ? 'Apply to load preview count'
-                          : ''
-                        }
-                      </span>
-                    </div>
-                    {activeProprietaryFilter === 'filter_1' ? (
-                      <button
-                        type="button"
-                        onClick={() => handleApplyProprietaryFilter('filter_1')}
-                        disabled={isApplyingProprietaryFilter}
-                        className="w-full px-4 py-2 rounded-lg text-sm font-medium border transition-colors"
-                        style={{ borderColor: 'var(--error)', color: 'var(--error)', backgroundColor: 'var(--bg-surface-raised)' }}
-                      >
-                        {isApplyingProprietaryFilter ? (
-                          <span className="flex items-center justify-center gap-2">
-                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                            Removing...
-                          </span>
-                        ) : (
-                          'Remove ACMG Filter'
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleApplyProprietaryFilter('filter_1')}
-                        disabled={
-                          !proprietaryFilterPreviews.filter_1.can_apply ||
-                          isApplyingProprietaryFilter
-                        }
-                        className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{ backgroundColor: 'var(--accent-teal)' }}
-                      >
-                        {isApplyingProprietaryFilter ? (
-                          <span className="flex items-center justify-center gap-2">
-                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                            Applying...
-                          </span>
-                        ) : (
-                          'Apply ACMG Filter'
-                        )}
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-xs text-[var(--text-tertiary)] italic">
-                    ACMG filter previews are loading...
-                  </p>
-                )}
+                <div className="mb-2">
+                  {proprietaryFilterPreviews?.filter_1?.preview_pending && activeProprietaryFilter !== 'filter_1' && (
+                    <p className="text-xs font-medium text-[var(--text-secondary)] mb-2">
+                      Apply to load preview count
+                    </p>
+                  )}
+                  {activeProprietaryFilter === 'filter_1' ? (
+                    <button
+                      type="button"
+                      onClick={() => handleApplyProprietaryFilter('filter_1')}
+                      disabled={isApplyingProprietaryFilter}
+                      className="w-full px-4 py-2 rounded-lg text-sm font-medium border transition-colors"
+                      style={{ borderColor: 'var(--error)', color: 'var(--error)', backgroundColor: 'var(--bg-surface-raised)' }}
+                    >
+                      {isApplyingProprietaryFilter ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          Removing...
+                        </span>
+                      ) : (
+                        'Remove ACMG Filter'
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleApplyProprietaryFilter('filter_1')}
+                      disabled={!acmgFilterCanApply || isApplyingProprietaryFilter}
+                      className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: 'var(--accent-teal)' }}
+                    >
+                      {isApplyingProprietaryFilter ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          Applying...
+                        </span>
+                      ) : (
+                        'Apply ACMG Filter'
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 

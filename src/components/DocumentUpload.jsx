@@ -1302,7 +1302,6 @@ const DocumentUpload = ({
                       className="flex items-center gap-1.5 mt-1 min-w-0"
                       title={genomeDetection.source ? `Source: ${genomeDetection.source.replace(/_/g, ' ')}` : undefined}
                     >
-                      <CheckCircle className="w-3 h-3 shrink-0" style={{ color: 'var(--accent-teal)' }} />
                       <span className="text-[11px] truncate text-[var(--text-tertiary)]">
                         Auto-detected {genomeDetection.detected_build.toUpperCase()}
                         {genomeDetection.confidence !== 'high' && ' — verify'}
@@ -1331,8 +1330,8 @@ const DocumentUpload = ({
 
                 {/* Sample File Type - Auto-detected */}
                 <div>
-                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                    Sample File Type
+                  <label className="flex items-baseline gap-1.5 text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                    Sample File Type <span className="text-[11px] font-normal items-baseline" style={{ color: 'var(--text-tertiary)' }}>(auto-detected)</span>
                   </label>
                   <input
                     type="text"
@@ -1345,7 +1344,6 @@ const DocumentUpload = ({
                     }}
                     readOnly
                   />
-                  <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">Auto-detected from file</p>
                 </div>
 
                 {/* Sample Sex - Optional */}

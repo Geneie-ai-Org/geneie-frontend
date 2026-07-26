@@ -1504,6 +1504,7 @@ const ChatPage = () => {
             runExomiser={runExomiser}
             requestedTab={sidebarRequestedTab}
             onRequestedTabConsumed={() => setSidebarRequestedTab(null)}
+            acmgFilterCanApply={acmgFilterCanApply}
           />
       </aside>
 

@@ -2206,7 +2206,7 @@ const VariantFilterSidebar = ({
               const reasons = exomiserEligibility?.reasons || [];
               const exoStatus = (exomiserStatus?.status || '').toLowerCase();
               const failed = exoStatus === 'failed' || exoStatus === 'error';
-              const running = !failed && (isRunningExomiser || (exoStatus && !['done', 'complete'].includes(exoStatus)));
+              const running = !failed && (isRunningExomiser || (exoStatus && exoStatus !== 'completed'));
               const rawFailure = exomiserStatus?.error || exomiserStatus?.message || '';
               const failureDetail = failed
                 ? (/no valid hpo/i.test(rawFailure)
@@ -2299,7 +2299,7 @@ const VariantFilterSidebar = ({
                           Removing…
                         </span>
                       ) : (
-                        'Remove Exomiser prioritization'
+                        'Remove Exomiser'
                       )}
                     </button>
                   ) : (

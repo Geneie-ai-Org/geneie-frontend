@@ -66,6 +66,9 @@ const VariantAnalysisPipeline = ({
   onEditSampleInfo,
   onRemoveFile,
   enrichmentState,
+  indexingState,
+  isRunningExomiser,
+  exomiserStatus,
 }) => {
   const [removeFileDialogOpen, setRemoveFileDialogOpen] = useState(false);
   const pipelineProps = {
@@ -85,6 +88,8 @@ const VariantAnalysisPipeline = ({
     filteredVariantCount,
     s3LineCountStatus,
     variantsUnderConsideration,
+    isRunningExomiser,
+    exomiserStatus,
   };
 
   const steps = useMemo(() => computePipelineSteps(pipelineProps), [pipelineProps]);
@@ -136,6 +141,12 @@ const VariantAnalysisPipeline = ({
     if (enrichmentState?.failed) {
       return 'Enrichment failed';
     }
+    if (indexingState?.active) {
+      return 'Indexing variants for chat…';
+    }
+    if (indexingState?.failed) {
+      return 'Indexing failed';
+    }
     if (showReadyMinimal) {
       return variantCount != null
         ? `Ready · ${Number(variantCount).toLocaleString()} variants`
@@ -146,7 +157,9 @@ const VariantAnalysisPipeline = ({
         ? ` · ${Math.round(annovarJob.progress_percent)}%`
         : isApplyingProprietaryFilter && filterJob?.progress_percent != null
           ? ` · ${Math.round(filterJob.progress_percent)}%`
-          : '';
+          : isRunningExomiser && exomiserStatus?.progress_percent != null
+            ? ` · ${Math.round(exomiserStatus.progress_percent)}%`
+            : '';
       return `Step ${summary.stepIndex}/${summary.total} · ${summary.label}${pct}`;
     }
     if (summary.focusId === 'chat' && steps.chat === 'done') {
@@ -178,8 +191,7 @@ const VariantAnalysisPipeline = ({
       }}
       aria-label="Variant analysis pipeline"
     >
-      {/* ANNOVAR progress ring — starts top-left, fills down the left edge first
-          (top-left → bottom-left → bottom-right → top-right → back to top-left). */}
+      {/* ANNOVAR progress ring */}
       {annovarPct != null && ringSize.w > 0 && (
         <svg
           className="pointer-events-none absolute inset-0 z-10 h-full w-full"
@@ -236,9 +248,9 @@ const VariantAnalysisPipeline = ({
           <p
             className="text-[11px] truncate leading-tight mt-0.5"
             style={{
-              color: enrichmentState?.active
+              color: enrichmentState?.active || indexingState?.active
                 ? 'var(--accent-teal)'
-                : enrichmentState?.failed
+                : enrichmentState?.failed || indexingState?.failed
                   ? 'var(--error)'
                   : chatReady && showReadyMinimal
                     ? 'var(--accent-teal)'
@@ -330,6 +342,25 @@ const VariantAnalysisPipeline = ({
           <div className="p-2 rounded-lg border text-[11px] leading-relaxed" style={{ borderColor: 'var(--error)', backgroundColor: 'var(--error-soft)', color: 'var(--error)' }}>
             <span className="font-medium">Enrichment failed. </span>
             {enrichmentState.message || 'Reset your filters and apply them again to retry.'}
+          </div>
+        </div>
+      )}
+
+      {indexingState?.active && (
+        <div className="px-3 pb-2.5 pt-0">
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 border-2 rounded-full animate-spin shrink-0" style={{ borderColor: 'var(--accent-teal)', borderTopColor: 'transparent' }} />
+            <span className="text-[11px] truncate" style={{ color: 'var(--text-secondary)' }}>
+              {indexingState.message || 'Indexing variants for chat…'}
+            </span>
+          </div>
+        </div>
+      )}
+      {indexingState?.failed && (
+        <div className="px-3 pb-2.5 pt-0">
+          <div className="p-2 rounded-lg border text-[11px] leading-relaxed" style={{ borderColor: 'var(--error)', backgroundColor: 'var(--error-soft)', color: 'var(--error)' }}>
+            <span className="font-medium">Indexing failed. </span>
+            {indexingState.message || 'Try applying filters again to retry.'}
           </div>
         </div>
       )}

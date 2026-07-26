@@ -158,6 +158,7 @@ const ChatPage = () => {
     promptChatBlocked,
     isChatPipelineGated,
     enrichmentState,
+    indexingState,
     pipelineJobActive,
     variantUploadInProgress,
     acmgFilterCanApply,
@@ -978,6 +979,9 @@ const ChatPage = () => {
       onEditSampleInfo={() => { setIsEditSampleModalOpen(true); }}
       onRemoveFile={userTier === 'guest' ? undefined : () => handleDocumentUpload(null)}
       enrichmentState={enrichmentState}
+      indexingState={indexingState}
+      isRunningExomiser={isRunningExomiser}
+      exomiserStatus={exomiserStatus}
     />
   ) : null;
 

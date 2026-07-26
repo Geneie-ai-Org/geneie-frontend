@@ -48,6 +48,7 @@ export function useVariantPipeline({
     enrichment_message: null,
     enrichment_progress_percent: null,
     literature_status: null,
+    advanced_chat_status: null,
   });
   const [pipelineSnapshot, setPipelineSnapshot] = useState({
     hasAnnotatedFile: false,
@@ -101,6 +102,7 @@ export function useVariantPipeline({
       enrichment_message: null,
       enrichment_progress_percent: null,
       literature_status: null,
+      advanced_chat_status: null,
     }),
     []
   );
@@ -146,6 +148,7 @@ export function useVariantPipeline({
           enrichment_message: ce.enrichment_message || null,
           enrichment_progress_percent: ce.enrichment_progress_percent ?? null,
           literature_status: ce.literature_status || null,
+          advanced_chat_status: ce.advanced_chat_status || null,
         });
       } else {
         setChatEligibility(defaultChatEligibility());
@@ -195,6 +198,7 @@ export function useVariantPipeline({
           enrichment_message: data.enrichment_message || null,
           enrichment_progress_percent: data.enrichment_progress_percent ?? null,
           literature_status: data.literature_status || null,
+          advanced_chat_status: data.advanced_chat_status || null,
         });
         return data;
       } catch (error) {
@@ -606,13 +610,24 @@ export function useVariantPipeline({
     };
   })();
 
-  // Auto-poll chat-eligibility while enrichment is pending/running. The main pipeline
-  // poll loop stops once annovar/filter jobs finish, so enrichment needs its own poll to
-  // show live progress and auto-unlock chat on completion (polling also self-heals a
-  // stuck-pending job server-side).
+  const indexingState = (() => {
+    const reason = chatEligibility.reason;
+    const isIndexing = reason === 'ADVANCED_CHAT_INDEXING';
+    const acs = chatEligibility.advanced_chat_status;
+    const active = isIndexing && acs !== 'ready' && acs !== 'failed';
+    const failed = isIndexing && acs === 'failed';
+    return {
+      active,
+      failed,
+      status: acs || null,
+      message: isIndexing ? (chatEligibility.message || 'Indexing variants for chat…') : null,
+    };
+  })();
+
   const enrichmentActive = enrichmentState.active;
+  const indexingActive = indexingState.active;
   useEffect(() => {
-    if (!enrichmentActive || !activeConversationId || userTier === 'guest') return;
+    if ((!enrichmentActive && !indexingActive) || !activeConversationId || userTier === 'guest') return;
     let cancelled = false;
     let timer = null;
     const tick = async () => {
@@ -620,7 +635,7 @@ export function useVariantPipeline({
       try {
         await refreshChatEligibilityFromApiRef.current?.(activeConversationId, { announceReady: true });
       } catch (e) {
-        console.warn('[useVariantPipeline] enrichment poll failed:', e);
+        console.warn('[useVariantPipeline] eligibility poll failed:', e);
       }
       if (!cancelled) timer = setTimeout(tick, 4000);
     };
@@ -629,7 +644,7 @@ export function useVariantPipeline({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [enrichmentActive, activeConversationId, userTier]);
+  }, [enrichmentActive, indexingActive, activeConversationId, userTier]);
 
   const promptChatBlocked = useCallback(() => {
     if (!isChatPipelineGated) return false;
@@ -653,6 +668,22 @@ export function useVariantPipeline({
       });
       return true;
     }
+    if (indexingState.failed) {
+      setAnnovarMessageModal({
+        title: 'Indexing failed',
+        message: indexingState.message || 'Variant indexing failed. Try applying filters again to retry.',
+        variant: 'error',
+      });
+      return true;
+    }
+    if (indexingState.active) {
+      setAnnovarMessageModal({
+        title: 'Indexing variants for chat',
+        message: indexingState.message || 'Building the search index for your variants. Chat will unlock automatically when this finishes.',
+        variant: 'info',
+      });
+      return true;
+    }
     setAnnovarMessageModal({
       title: 'Chat not available',
       message:
@@ -661,7 +692,7 @@ export function useVariantPipeline({
       variant: 'warning',
     });
     return true;
-  }, [isChatPipelineGated, enrichmentState.failed, enrichmentState.active, enrichmentState.message, chatEligibility.message, setAnnovarMessageModal]);
+  }, [isChatPipelineGated, enrichmentState.failed, enrichmentState.active, enrichmentState.message, indexingState.failed, indexingState.active, indexingState.message, chatEligibility.message, setAnnovarMessageModal]);
 
   const runAnnovarForCurrentConversation = useCallback(async () => {
     if (userTier === 'guest') {
@@ -957,6 +988,7 @@ export function useVariantPipeline({
   // Exomiser eligibility is decided by GET /api/exomiser-eligibility — components fetch it directly.
   const [isRunningExomiser, setIsRunningExomiser] = useState(false);
   const [exomiserStatus, setExomiserStatus] = useState(null); // { status, phase, message, progress_percent, matched_count }
+  const exomiserPollAbortRef = useRef(null);
 
   const fetchExomiserEligibility = useCallback(async () => {
     if (!activeConversationId || userTier === 'guest') return null;
@@ -974,6 +1006,72 @@ export function useVariantPipeline({
       return null;
     }
   }, [activeConversationId, userTier]);
+
+  const pollExomiserUntilDone = useCallback(async (conversationId) => {
+    if (exomiserPollAbortRef.current) exomiserPollAbortRef.current.aborted = true;
+    const abort = { aborted: false };
+    exomiserPollAbortRef.current = abort;
+
+    const pollOnce = async () => {
+      const auth = getAuth();
+      const t = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      if (!t) throw new Error('Authentication required');
+      const sres = await fetch(apiUrl(`/api/exomiser-status/${encodeURIComponent(conversationId)}`), {
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      if (!sres.ok) throw new Error('Exomiser status check failed');
+      return await sres.json();
+    };
+
+    const terminal = new Set(['completed', 'failed']);
+    let attempts = 0;
+    const maxAttempts = 400;
+    while (attempts < maxAttempts && !abort.aborted) {
+      await new Promise((r) => setTimeout(r, 3000));
+      if (abort.aborted) break;
+      attempts++;
+      let payload;
+      try {
+        payload = await pollOnce();
+      } catch (e) {
+        console.warn('[useVariantPipeline] Exomiser poll error:', e);
+        continue;
+      }
+      if (abort.aborted) break;
+      const status = (payload?.status || payload?.exomiser_job?.status || '').toLowerCase();
+      setExomiserStatus({
+        status,
+        phase: payload?.phase || payload?.exomiser_job?.phase || '',
+        message: payload?.message || payload?.exomiser_job?.message || '',
+        error: payload?.exomiser_job?.error || payload?.error || '',
+        progress_percent: payload?.progress_percent ?? payload?.exomiser_job?.progress_percent ?? null,
+        matched_count: payload?.matched_count ?? payload?.exomiser_job?.matched_count ?? null,
+      });
+      if (terminal.has(status)) {
+        if (status === 'failed') {
+          const detail =
+            payload?.exomiser_job?.error ||
+            payload?.error ||
+            payload?.exomiser_job?.message ||
+            payload?.message ||
+            'Exomiser did not complete successfully.';
+          const friendly =
+            /no valid hpo/i.test(detail)
+              ? 'Could not derive any valid HPO terms from the phenotype description. Edit the sample metadata and provide a clearer clinical phenotype (e.g. specific symptoms or HPO terms), then try again.'
+              : humanizeError(detail) || detail;
+          setAnnovarMessageModal({
+            title: 'Exomiser failed',
+            message: friendly,
+            variant: 'error',
+          });
+        } else {
+          await refreshConversationAfterAnnovar(conversationId);
+        }
+        break;
+      }
+    }
+    if (!abort.aborted) setIsRunningExomiser(false);
+  }, [refreshConversationAfterAnnovar, setAnnovarMessageModal]);
 
   const runExomiser = useCallback(async () => {
     if (!activeConversationId || userTier === 'guest') return;
@@ -1002,62 +1100,7 @@ export function useVariantPipeline({
         throw new Error(apiErrorDetailToMessage(err.detail) || 'Failed to start Exomiser');
       }
 
-      // Poll every 3s until done/failed
-      const pollOnce = async () => {
-        const t = auth.currentUser ? await auth.currentUser.getIdToken() : token;
-        const sres = await fetch(apiUrl(`/api/exomiser-status/${encodeURIComponent(activeConversationId)}`), {
-          headers: { Authorization: `Bearer ${t}` },
-        });
-        if (!sres.ok) throw new Error('Exomiser status check failed');
-        return await sres.json();
-      };
-
-      const terminal = new Set(['complete', 'done', 'failed', 'error']);
-      let attempts = 0;
-      const maxAttempts = 400; // ~20 min at 3s
-      while (attempts < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 3000));
-        attempts++;
-        let payload;
-        try {
-          payload = await pollOnce();
-        } catch (e) {
-          console.warn('[useVariantPipeline] Exomiser poll error:', e);
-          continue;
-        }
-        const status = (payload?.status || payload?.exomiser_job?.status || '').toLowerCase();
-        setExomiserStatus({
-          status,
-          phase: payload?.phase || payload?.exomiser_job?.phase || '',
-          message: payload?.message || payload?.exomiser_job?.message || '',
-          error: payload?.exomiser_job?.error || payload?.error || '',
-          progress_percent: payload?.progress_percent ?? payload?.exomiser_job?.progress_percent ?? null,
-          matched_count: payload?.matched_count ?? payload?.exomiser_job?.matched_count ?? null,
-        });
-        if (terminal.has(status)) {
-          if (status === 'failed' || status === 'error') {
-            // Prefer the detailed `error` field — `message` is often just a generic "Exomiser failed."
-            const detail =
-              payload?.exomiser_job?.error ||
-              payload?.error ||
-              payload?.exomiser_job?.message ||
-              payload?.message ||
-              'Exomiser did not complete successfully.';
-            const friendly =
-              /no valid hpo/i.test(detail)
-                ? 'Could not derive any valid HPO terms from the phenotype description. Edit the sample metadata and provide a clearer clinical phenotype (e.g. specific symptoms or HPO terms), then try again.'
-                : humanizeError(detail) || detail;
-            setAnnovarMessageModal({
-              title: 'Exomiser failed',
-              message: friendly,
-              variant: 'error',
-            });
-          } else {
-            await refreshConversationAfterAnnovar(activeConversationId);
-          }
-          break;
-        }
-      }
+      await pollExomiserUntilDone(activeConversationId);
     } catch (error) {
       console.error('[useVariantPipeline] runExomiser error:', error);
       setAnnovarMessageModal({
@@ -1065,7 +1108,6 @@ export function useVariantPipeline({
         message: humanizeError(error.message) || 'Failed to start Exomiser.',
         variant: 'error',
       });
-    } finally {
       setIsRunningExomiser(false);
     }
   }, [
@@ -1073,7 +1115,7 @@ export function useVariantPipeline({
     userTier,
     isRunningExomiser,
     getDeviceId,
-    refreshConversationAfterAnnovar,
+    pollExomiserUntilDone,
     setAnnovarMessageModal,
   ]);
 
@@ -1088,6 +1130,9 @@ export function useVariantPipeline({
     setPipelineToast(null);
     setIsRunningAnnovar(false);
     setIsApplyingProprietaryFilter(false);
+    setIsRunningExomiser(false);
+    setExomiserStatus(null);
+    if (exomiserPollAbortRef.current) exomiserPollAbortRef.current.aborted = true;
     prevAnnovarJobStatusRef.current = null;
     prevFilterJobStatusRef.current = null;
     prevChatAllowedRef.current = null;
@@ -1115,11 +1160,50 @@ export function useVariantPipeline({
       refreshChatEligibilityFromApi(activeConversationId, { convFallback: convData });
     }
     setPipelineToast(null);
+
+    const exoStatus = (convData.exomiser_job?.status || '').toLowerCase();
+    if (exoStatus === 'running' || exoStatus === 'queued') {
+      setIsRunningExomiser(true);
+      setExomiserStatus({
+        status: exoStatus,
+        phase: convData.exomiser_job?.phase || '',
+        message: convData.exomiser_job?.message || 'Exomiser is running…',
+        error: '',
+        progress_percent: convData.exomiser_job?.progress_percent ?? 0,
+        matched_count: convData.exomiser_job?.matched_count ?? null,
+      });
+      pollExomiserUntilDone(activeConversationId);
+    } else {
+      if (exomiserPollAbortRef.current) exomiserPollAbortRef.current.aborted = true;
+      setIsRunningExomiser(false);
+      if (exoStatus === 'completed') {
+        setExomiserStatus({
+          status: 'completed',
+          phase: convData.exomiser_job?.phase || 'complete',
+          message: convData.exomiser_job?.message || 'Exomiser complete.',
+          error: '',
+          progress_percent: 100,
+          matched_count: convData.exomiser_job?.matched_count ?? null,
+        });
+      } else if (exoStatus === 'failed') {
+        setExomiserStatus({
+          status: exoStatus,
+          phase: convData.exomiser_job?.phase || '',
+          message: convData.exomiser_job?.message || '',
+          error: convData.exomiser_job?.error || '',
+          progress_percent: null,
+          matched_count: null,
+        });
+      } else {
+        setExomiserStatus(null);
+      }
+    }
   }, [
     activeConversationId,
     applyChatEligibilityFromConversation,
     refreshChatEligibilityFromApi,
     resetConversationPipeline,
+    pollExomiserUntilDone,
   ]);
 
   return {
@@ -1141,6 +1225,7 @@ export function useVariantPipeline({
     promptChatBlocked,
     isChatPipelineGated,
     enrichmentState,
+    indexingState,
     pipelineJobActive,
     variantUploadInProgress,
     acmgFilterCanApply,

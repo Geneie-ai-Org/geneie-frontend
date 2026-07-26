@@ -2,7 +2,7 @@ export const PIPELINE_STEP_DEFS = [
   { id: 'upload', label: 'Upload', shortLabel: 'Upload' },
   { id: 'interpret', label: 'Interpretation', shortLabel: 'Interpret' },
   { id: 'annovar', label: 'ANNOVAR', shortLabel: 'ANNOVAR' },
-  { id: 'reduce', label: 'Reduce variants', shortLabel: 'Reduce' },
+  { id: 'reduce', label: 'Reduce variants', shortLabel: 'Filter' },
   { id: 'chat', label: 'Chat ready', shortLabel: 'Chat' },
 ];
 
@@ -33,6 +33,8 @@ export function computePipelineSteps({
   s3LineCountStatus,
   uploadInProgress = false,
   uploadProgress = null,
+  isRunningExomiser = false,
+  exomiserStatus = null,
 }) {
   const interpretationReady = Boolean(columnInterpretationResult?.step1);
   const bytesSent = uploadProgress == null || uploadProgress >= 100;
@@ -79,8 +81,11 @@ export function computePipelineSteps({
   const filterRunning =
     isApplyingProprietaryFilter ||
     filterJob?.status === 'running' ||
-    filterJob?.status === 'pending';
-  const filterFailed = filterJob?.status === 'failed';
+    filterJob?.status === 'pending' ||
+    isRunningExomiser ||
+    exomiserStatus?.status === 'running' ||
+    exomiserStatus?.status === 'queued';
+  const filterFailed = filterJob?.status === 'failed' || exomiserStatus?.status === 'failed';
 
   const reduce = (() => {
     if (filterFailed) return 'failed';
@@ -112,6 +117,8 @@ export function getPipelineBackgroundActive({
   filterJob,
   s3LineCountStatus,
   columnInterpretationResult,
+  isRunningExomiser,
+  exomiserStatus,
 }) {
   const interpretationReady = Boolean(columnInterpretationResult?.step1);
   const lineCountInProgress =
@@ -123,6 +130,9 @@ export function getPipelineBackgroundActive({
     isApplyingProprietaryFilter ||
     annovarJob?.status === 'running' ||
     filterJob?.status === 'running' ||
+    isRunningExomiser ||
+    exomiserStatus?.status === 'running' ||
+    exomiserStatus?.status === 'queued' ||
     lineCountInProgress
   );
 }
@@ -142,6 +152,8 @@ export function getPipelineStatusLine(props, steps) {
     filteredVariantCount,
     columnInterpretationResult,
     s3LineCountStatus,
+    isRunningExomiser,
+    exomiserStatus,
   } = props;
 
   const interpretationReady = Boolean(columnInterpretationResult?.step1);
@@ -164,6 +176,9 @@ export function getPipelineStatusLine(props, steps) {
   }
   if (isApplyingProprietaryFilter || filterJob?.status === 'running') {
     return filterJob?.message || 'Prioritizing variants in the background.';
+  }
+  if (isRunningExomiser || exomiserStatus?.status === 'running' || exomiserStatus?.status === 'queued') {
+    return exomiserStatus?.message || 'Exomiser is running in the background.';
   }
   if (chatEligibility?.allowed) {
     const n = variantsUnderConsideration ?? filteredVariantCount;

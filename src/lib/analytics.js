@@ -9,7 +9,7 @@ import { env, isPostHogConfigured } from '@/config/env';
 let started = false;
 
 export function initAnalytics() {
-  if (started || !isPostHogConfigured()) return;
+  if (started || !import.meta.env.PROD || !isPostHogConfigured()) return;
   started = true;
 
   posthog.init(env.posthog.key, {

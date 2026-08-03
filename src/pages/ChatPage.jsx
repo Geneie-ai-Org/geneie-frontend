@@ -1050,7 +1050,7 @@ const ChatPage = () => {
     );
   }
 
-  // Eligibility is a hard gate, not just advisory copy (Case A F1).
+  // Eligibility is a hard gate, not just advisory copy.
   const isInputDisabled =
     !isAuthReady ||
     isCurrentlyActive ||
@@ -1087,11 +1087,11 @@ const ChatPage = () => {
       : `Limit reached (${tierChatLimit} exchanges). Please upgrade to Pro.`;
   }
 
-  // Shown above the input in both empty and conversation modes (F1).
+  // Shown above the input in both empty and conversation modes.
   const pipelineGatedMessage = isChatPipelineGated
     ? chatEligibility.message || inputPlaceholder
     : null;
-  // >1000 files need a filter before chat — give the user a way there (B-FE1).
+  // >1000 files need a filter before chat — give the user a way there.
   const gatedAction =
     isChatPipelineGated && chatEligibility.reason === 'CHAT_REQUIRES_FILTER'
       ? { label: 'Apply a filter', onClick: () => setIsVariantSidebarOpen(true) }

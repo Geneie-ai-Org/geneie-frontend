@@ -37,7 +37,7 @@ export function useVariantPipeline({
   getDeviceId,
 }) {
   // `allowed: null` means "not confirmed yet" — never assume chat is open before
-  // /api/chat-eligibility has answered (Case A F2).
+  // /api/chat-eligibility has answered.
   const [chatEligibility, setChatEligibility] = useState({
     allowed: null,
     message: null,
@@ -212,7 +212,7 @@ export function useVariantPipeline({
         if (convFallback) {
           applyChatEligibilityFromConversation(convFallback, { announceReady });
         } else {
-          // Don't keep a stale `allowed: true` on a failed refresh — fall back to unknown (F8).
+          // Don't keep a stale `allowed: true` on a failed refresh — fall back to unknown.
           setChatEligibility((prev) => ({
             ...prev,
             allowed: null,
@@ -281,7 +281,7 @@ export function useVariantPipeline({
    * land back on CHAT_REQUIRES_FILTER (Case B B-FE2).
    *
    * Note POST /api/filter-variants with `filters: {}` does not return this field at all, so
-   * the manual-clear path passes nothing and lets eligibility alone decide (B-FE3).
+   * the manual-clear path passes nothing and lets eligibility alone decide.
    */
   const refreshAfterFilterChange = useCallback(
     async (conversationId, { enrichmentWillRequeue } = {}) => {
@@ -636,7 +636,7 @@ export function useVariantPipeline({
   /**
    * Optimistic gate on the start of any pipeline mutation (ANNOVAR, ACMG, Exomiser,
    * manual apply/reset, remove). Flipping eligibility back to unknown disables chat and
-   * download immediately and holds until a real eligibility response lands (F3).
+   * download immediately and holds until a real eligibility response lands.
    */
   const beginPipelineWork = useCallback(() => {
     setChatEligibility((prev) => ({ ...prev, allowed: null, reason: null }));
@@ -686,7 +686,7 @@ export function useVariantPipeline({
   /**
    * Whether the *final* export is ready. Deliberately independent of chat gating:
    * CHAT_REQUIRES_FILTER still permits downloading the full annotated baseline on
-   * >1000 files (Case B B-FE1). Only in-flight work blocks download (F4).
+   * >1000 files. Only in-flight work blocks download.
    */
   const downloadGate = (() => {
     if (enrichmentState.active) {

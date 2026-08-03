@@ -7,11 +7,11 @@ import { getExportEligibility, exportVariants } from '@/services/backendApi';
  *
  * Readiness comes from two independent sources and both must agree:
  *  - `downloadGate` (from useVariantPipeline) — is any pipeline job still in flight?
- *    Enrichment counts as in-flight, so users never receive a half-enriched schema (F4).
+ *    Enrichment counts as in-flight, so users never receive a half-enriched schema.
  *  - `GET /api/export-variants-eligibility` — is there anything to export, and how many rows?
  *
  * `row_count` is then reconciled against the count the UI already promised the user; a
- * mismatch blocks the download rather than silently handing over a different file (F7/B-FE4).
+ * mismatch blocks the download rather than silently handing over a different file.
  */
 export default function ExportVariantsButton({
   conversationId,
@@ -81,7 +81,7 @@ export default function ExportVariantsButton({
 
   const canExport = eligibility?.can_export === true && !gateBlocked && !countMismatch;
 
-  // On >1000 files with no filter the export is the full annotated file, not the chat set (B-FE1).
+  // On >1000 files with no filter the export is the full annotated file, not the chat set.
   const annotatedOnly =
     canExport && (downloadGate?.annotatedOnly === true || eligibility?.source === 's3_annotated');
 

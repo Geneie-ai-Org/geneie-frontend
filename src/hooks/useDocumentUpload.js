@@ -277,7 +277,7 @@ export function useDocumentUpload({
         }
         // No legacy POST /api/validate-document here: the modern S3 upload already lands
         // variant_metadata + column_interpretation with the conversation, and the old call's
-        // response was never used for anything but a console.log (Case A F9).
+        // response was never used for anything but a console.log.
       }
     } catch (error) {
       console.error('[App] Error updating conversation document:', error);

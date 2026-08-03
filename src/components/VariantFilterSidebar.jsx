@@ -504,7 +504,7 @@ const VariantFilterSidebar = ({
   onRequestedTabConsumed = null,
   acmgFilterCanApply = false,
   // Pipeline state owned by useVariantPipeline. The sidebar and the pipeline stepper must
-  // share one busy flag so dual applies cannot race (Case A F6).
+  // share one busy flag so dual applies cannot race.
   isRunningAnnovar = false,
   runAnnovar = null,
   isApplyingProprietaryFilter = false,
@@ -569,7 +569,7 @@ const VariantFilterSidebar = ({
   const isGuest = userTier === 'guest';
   // Manual filters can narrow the ACMG (or other) Postgres working set; proprietary apply still
   // requires manual filters to be reset first (see handleApplyProprietaryFilter).
-  // Locked while any pipeline job is in flight, from either the stepper or this sidebar (F3/F6).
+  // Locked while any pipeline job is in flight, from either the stepper or this sidebar.
   const isManualFiltersDisabled = pipelineBusy;
   const selectedGardenEntry = useMemo(
     () => savedFilterPresets.find((p) => p.id === selectedPresetId) || null,
@@ -1012,7 +1012,7 @@ const VariantFilterSidebar = ({
       return false;
     } finally {
       setIsApplying(false);
-      // A manual filter that lands ≤1000 queues enrichment just like ACMG/Exomiser (B-FE3);
+      // A manual filter that lands ≤1000 queues enrichment just like ACMG/Exomiser;
       // one that stays >1000 comes back as CHAT_TOO_MANY_VARIANTS. Runs on failure too so
       // beginPipelineWork()'s "unknown" state is always resolved.
       await refreshAfterFilterChange?.(conversationId);
@@ -1366,7 +1366,7 @@ const VariantFilterSidebar = ({
   };
 
   // Delegate to the pipeline hook rather than POSTing /api/run-annovar directly, so this
-  // shares the stepper's busy flag, job polling and eligibility refresh (F3/F6/F8).
+  // shares the stepper's busy flag, job polling and eligibility refresh.
   const handleRunAnnovarFromGarden = async () => {
     if (!conversationId || !userId || isGuest || pipelineBusy) return;
     await runAnnovar?.();
@@ -1510,7 +1510,7 @@ const VariantFilterSidebar = ({
     setIsApplyingProprietaryFilter(true);
     // ≤1000 restores re-queue enrichment (wait for it before the "final" download);
     // >1000 returns false, so we must not wait — eligibility goes back to
-    // CHAT_REQUIRES_FILTER and the annotated baseline is the final schema. B-FE2 / F5.
+    // CHAT_REQUIRES_FILTER and the annotated baseline is the final schema.
     let enrichmentWillRequeue = false;
     try {
       const auth = getAuth();

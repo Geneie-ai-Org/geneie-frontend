@@ -274,39 +274,10 @@ export function useDocumentUpload({
 
             setTimeout(fetchInterpretationResults, retryInterval);
           }
-        } else if (documentData.type && ['tsv', 'csv'].includes(documentData.type.toLowerCase())) {
-          try {
-            console.log('[App] Calling validation endpoint for variant extraction...');
-            const auth = getAuth();
-            const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-
-            const validationResponse = await fetch(apiUrl('/api/validate-document'), {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(token && { Authorization: `Bearer ${token}` }),
-              },
-              body: JSON.stringify({
-                document_url: documentData.url,
-                document_type: documentData.type,
-                conversation_id: activeConversationId,
-              }),
-            });
-
-            if (validationResponse.ok) {
-              const validationData = await validationResponse.json();
-              console.log('[App] Validation response:', validationData);
-
-              if (validationData.is_variant_file && validationData.variant_data) {
-                console.log('[App] Variant file detected, variant data stored in MongoDB');
-              }
-            } else {
-              console.warn('[App] Validation endpoint returned error:', validationResponse.status);
-            }
-          } catch (validationError) {
-            console.error('[App] Error calling validation endpoint:', validationError);
-          }
         }
+        // No legacy POST /api/validate-document here: the modern S3 upload already lands
+        // variant_metadata + column_interpretation with the conversation, and the old call's
+        // response was never used for anything but a console.log (Case A F9).
       }
     } catch (error) {
       console.error('[App] Error updating conversation document:', error);

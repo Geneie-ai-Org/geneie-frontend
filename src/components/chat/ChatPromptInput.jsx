@@ -81,6 +81,7 @@ const ChatPromptInput = ({
   onToggleVariantSidebar,
   hasDocument = false,
   pipelineGatedMessage,
+  gatedAction,
   analysisPipelineBlock,
 }) => {
   const isEmpty = mode === 'empty';
@@ -145,17 +146,27 @@ const ChatPromptInput = ({
     <TooltipProvider>
       <div className="w-full">
         {analysisPipelineBlock}
-        {!isEmpty && pipelineGatedMessage && (
+        {pipelineGatedMessage && (
           <div
             role="alert"
-            className="mb-3 px-4 py-3 rounded-xl border text-sm leading-relaxed"
+            className="mb-3 px-4 py-3 rounded-xl border text-sm leading-relaxed flex items-start gap-3"
             style={{
               backgroundColor: 'rgba(245, 158, 11, 0.1)',
               borderColor: 'rgba(245, 158, 11, 0.35)',
               color: 'var(--text-primary)',
             }}
           >
-            {pipelineGatedMessage}
+            <span className="min-w-0 flex-1">{pipelineGatedMessage}</span>
+            {gatedAction && (
+              <button
+                type="button"
+                onClick={gatedAction.onClick}
+                className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors hover:opacity-90"
+                style={{ borderColor: 'var(--accent-teal)', color: 'var(--accent-teal)' }}
+              >
+                {gatedAction.label}
+              </button>
+            )}
           </div>
         )}
         <div
@@ -176,7 +187,7 @@ const ChatPromptInput = ({
                 onKeyDown={handleKeyDown}
                 disabled={isInputDisabled}
                 rows={1}
-                placeholder="Ask your genomic assistant..."
+                placeholder={placeholder || 'Ask your genomic assistant...'}
                 className={`${TEXTAREA_BASE} text-sm min-h-[44px] max-h-[160px] py-1.5`}
                 style={{ color: 'var(--text-primary)' }}
               />

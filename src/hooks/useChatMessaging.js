@@ -219,11 +219,14 @@ export function useChatMessaging({
               code === 'S3_LINE_COUNT_PENDING' ||
               code === 'CHAT_NOT_ALLOWED'
             ) {
-              setChatEligibility({
+              // Merge, don't replace: a bare object would drop variants_under_consideration
+              // and every enrichment_* field, silently breaking the enrichment UI.
+              setChatEligibility((prev) => ({
+                ...prev,
                 allowed: false,
                 message: normalizeChatEligibilityMessage(message),
                 reason: code,
-              });
+              }));
               return { data: null, lastError: new Error(message || code), aborted: false };
             }
 

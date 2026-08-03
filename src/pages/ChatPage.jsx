@@ -148,6 +148,11 @@ const ChatPage = () => {
     setPipelineToast,
     isRunningAnnovar,
     isApplyingProprietaryFilter,
+    setIsApplyingProprietaryFilter,
+    pipelineBusy,
+    downloadGate,
+    beginPipelineWork,
+    refreshAfterFilterChange,
     uploadSessionConversationId,
     handleVariantUploadingChange,
     handleUploadProgressChange,
@@ -168,7 +173,6 @@ const ChatPage = () => {
     runExomiser,
     syncPipelineFromConversation,
     resetConversationPipeline,
-    refreshConversationAfterAnnovar,
     normalizeChatEligibilityMessage,
     remapProprietaryFiltersForConversation,
     convertTabularToVcfForConversation,
@@ -177,8 +181,6 @@ const ChatPage = () => {
 
   const syncPipelineFromConversationRef = useRef(syncPipelineFromConversation);
   syncPipelineFromConversationRef.current = syncPipelineFromConversation;
-  const refreshConversationAfterAnnovarRef = useRef(refreshConversationAfterAnnovar);
-  refreshConversationAfterAnnovarRef.current = refreshConversationAfterAnnovar;
 
   // Keep the local conversation list (drives sidebar + chat header) in sync with the
   // backend `title` field — whether it changed via our own generation or server-side.
@@ -1048,8 +1050,14 @@ const ChatPage = () => {
     );
   }
 
+  // Eligibility is a hard gate, not just advisory copy.
   const isInputDisabled =
-    !isAuthReady || isCurrentlyActive || isChatLimitReached || variantUploadInProgress || isRunningAnnovar;
+    !isAuthReady ||
+    isCurrentlyActive ||
+    isChatLimitReached ||
+    variantUploadInProgress ||
+    isRunningAnnovar ||
+    isChatPipelineGated;
 
   let inputPlaceholder = "Ask anything about bioinformatics...";
   if (isRunningAnnovar) {
@@ -1059,12 +1067,35 @@ const ChatPage = () => {
   } else if (isCurrentlyActive) {
     inputPlaceholder = "Geneie is thinking...";
   } else if (isChatPipelineGated) {
-    inputPlaceholder = 'Chat disabled, see above message';
+    if (enrichmentState.active) {
+      const pct = enrichmentState.progress != null ? ` (${Math.round(enrichmentState.progress)}%)` : '';
+      inputPlaceholder = `Enriching variants for chat${pct}…`;
+    } else if (indexingState.active) {
+      inputPlaceholder = 'Indexing variants for chat…';
+    } else if (chatEligibility.reason === 'FILTER_JOB_RUNNING') {
+      inputPlaceholder = isRunningExomiser ? 'Running Exomiser…' : 'Applying filter…';
+    } else if (chatEligibility.reason === 'CHAT_REQUIRES_FILTER') {
+      inputPlaceholder = 'Apply a filter to enable chat';
+    } else if (chatEligibility.allowed === null) {
+      inputPlaceholder = 'Checking your variant set…';
+    } else {
+      inputPlaceholder = 'Chat disabled, see above message';
+    }
   } else if (isChatLimitReached) {
     inputPlaceholder = userTier === 'guest'
       ? `Limit reached (${DEFAULT_GUEST_CHAT_LIMIT} exchanges). Please Sign Up or Log In.`
       : `Limit reached (${tierChatLimit} exchanges). Please upgrade to Pro.`;
   }
+
+  // Shown above the input in both empty and conversation modes.
+  const pipelineGatedMessage = isChatPipelineGated
+    ? chatEligibility.message || inputPlaceholder
+    : null;
+  // >1000 files need a filter before chat — give the user a way there.
+  const gatedAction =
+    isChatPipelineGated && chatEligibility.reason === 'CHAT_REQUIRES_FILTER'
+      ? { label: 'Apply a filter', onClick: () => setIsVariantSidebarOpen(true) }
+      : null;
 
   const shellLeftState =
     userTier === 'guest' ? 'hidden' : isSidebarOpen ? 'open' : 'collapsed';
@@ -1283,6 +1314,9 @@ const ChatPage = () => {
                   onStop={cancelGeneration}
                   isCurrentlyActive={isCurrentlyActive}
                   isInputDisabled={isInputDisabled}
+                  placeholder={inputPlaceholder}
+                  pipelineGatedMessage={pipelineGatedMessage}
+                  gatedAction={gatedAction}
                   showUpload={userTier === 'guest' || !!userId}
                   dropdownSource="new-chat"
                   showFileTypeDropdown={showFileTypeDropdown}
@@ -1426,7 +1460,8 @@ const ChatPage = () => {
                   isVariantSidebarOpen={isVariantSidebarOpen}
                   onToggleVariantSidebar={() => setIsVariantSidebarOpen(!isVariantSidebarOpen)}
                   hasDocument={!!currentDocument}
-                  pipelineGatedMessage={isChatPipelineGated ? chatEligibility.message : null}
+                  pipelineGatedMessage={pipelineGatedMessage}
+                  gatedAction={gatedAction}
                   analysisPipelineBlock={analysisPipelineBlock}
                 />
               </div>
@@ -1458,7 +1493,8 @@ const ChatPage = () => {
                     : prev
                 );
               }
-              refreshConversationAfterAnnovarRef.current(activeConversationId);
+              // The conversation/eligibility refetch is driven by the sidebar's
+              // refreshAfterFilterChange(), which also honours enrichment_will_requeue.
               setConversationFilterState((prev) => {
                 const empty = !filters || Object.keys(filters).length === 0;
                 if (empty) {
@@ -1505,6 +1541,14 @@ const ChatPage = () => {
             requestedTab={sidebarRequestedTab}
             onRequestedTabConsumed={() => setSidebarRequestedTab(null)}
             acmgFilterCanApply={acmgFilterCanApply}
+            isRunningAnnovar={isRunningAnnovar}
+            runAnnovar={runAnnovarForCurrentConversation}
+            isApplyingProprietaryFilter={isApplyingProprietaryFilter}
+            setIsApplyingProprietaryFilter={setIsApplyingProprietaryFilter}
+            pipelineBusy={pipelineBusy}
+            beginPipelineWork={beginPipelineWork}
+            refreshAfterFilterChange={refreshAfterFilterChange}
+            downloadGate={downloadGate}
           />
       </aside>
 

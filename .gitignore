@@ -48,6 +48,7 @@ serviceAccountKey.json
 *.pem
 *.key
 .vercel
+*.http
 
 # ==================== ENV (secrets) ====================
 .env

@@ -36,8 +36,10 @@ export function useVariantPipeline({
   setJustSignedUp,
   getDeviceId,
 }) {
+  // `allowed: null` means "not confirmed yet" — never assume chat is open before
+  // /api/chat-eligibility has answered.
   const [chatEligibility, setChatEligibility] = useState({
-    allowed: true,
+    allowed: null,
     message: null,
     reason: null,
     requires_annovar: false,
@@ -59,9 +61,13 @@ export function useVariantPipeline({
   const [pipelineToast, setPipelineToast] = useState(null);
   const [isRunningAnnovar, setIsRunningAnnovar] = useState(false);
   const [isApplyingProprietaryFilter, setIsApplyingProprietaryFilter] = useState(false);
+  // Exomiser eligibility is decided by GET /api/exomiser-eligibility — components fetch it directly.
+  const [isRunningExomiser, setIsRunningExomiser] = useState(false);
+  const [exomiserStatus, setExomiserStatus] = useState(null); // { status, phase, message, progress_percent, matched_count }
   const [uploadSessionConversationId, setUploadSessionConversationId] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(null);
 
+  const exomiserPollAbortRef = useRef(null);
   const prevAnnovarJobStatusRef = useRef(null);
   const prevFilterJobStatusRef = useRef(null);
   const prevChatAllowedRef = useRef(null);
@@ -90,7 +96,7 @@ export function useVariantPipeline({
 
   const defaultChatEligibility = useCallback(
     () => ({
-      allowed: true,
+      allowed: null,
       message: null,
       reason: null,
       requires_annovar: false,
@@ -203,7 +209,17 @@ export function useVariantPipeline({
         return data;
       } catch (error) {
         console.warn('[useVariantPipeline] chat-eligibility fetch failed:', error);
-        if (convFallback) applyChatEligibilityFromConversation(convFallback, { announceReady });
+        if (convFallback) {
+          applyChatEligibilityFromConversation(convFallback, { announceReady });
+        } else {
+          // Don't keep a stale `allowed: true` on a failed refresh — fall back to unknown.
+          setChatEligibility((prev) => ({
+            ...prev,
+            allowed: null,
+            message: "Couldn't confirm whether your variant set is ready for chat. Retrying…",
+          }));
+          prevChatAllowedRef.current = null;
+        }
         return null;
       }
     },
@@ -254,6 +270,34 @@ export function useVariantPipeline({
     applyChatEligibilityFromConversation,
     refreshChatEligibilityFromApi,
   ]);
+
+  /**
+   * Post-filter-change resync (apply / remove / clear). Refreshes the conversation and
+   * eligibility, and honours `enrichment_will_requeue` from POST /api/remove-proprietary-filter.
+   *
+   * When true (≤1000 restores), seed ENRICHMENT_PENDING so the "Enriching…" UI and the 4s
+   * eligibility poll start immediately instead of one tick late. When false (>1000), the
+   * backend will not re-queue enrichment, so we must NOT wait for it — eligibility should
+   * land back on CHAT_REQUIRES_FILTER (Case B B-FE2).
+   *
+   * Note POST /api/filter-variants with `filters: {}` does not return this field at all, so
+   * the manual-clear path passes nothing and lets eligibility alone decide.
+   */
+  const refreshAfterFilterChange = useCallback(
+    async (conversationId, { enrichmentWillRequeue } = {}) => {
+      if (!conversationId) return null;
+      if (enrichmentWillRequeue) {
+        setChatEligibility((prev) => ({
+          ...prev,
+          allowed: null,
+          reason: 'ENRICHMENT_PENDING',
+          enrichment_status: 'pending',
+        }));
+      }
+      return refreshConversationAfterAnnovar(conversationId);
+    },
+    [refreshConversationAfterAnnovar]
+  );
 
   const presentFileAnalysisModal = useCallback(
     (convData) => {
@@ -581,11 +625,22 @@ export function useVariantPipeline({
   const variantUploadInProgress =
     Boolean(uploadSessionConversationId) && uploadSessionConversationId === activeConversationId;
 
+  // Unknown (`null`) gates just like an explicit `false`: only a real `allowed: true`
+  // from /api/chat-eligibility opens chat (F2/F8).
   const isChatPipelineGated =
     userTier !== 'guest' &&
     !!currentDocument &&
     !!activeConversationId &&
-    !chatEligibility.allowed;
+    chatEligibility.allowed !== true;
+
+  /**
+   * Optimistic gate on the start of any pipeline mutation (ANNOVAR, ACMG, Exomiser,
+   * manual apply/reset, remove). Flipping eligibility back to unknown disables chat and
+   * download immediately and holds until a real eligibility response lands.
+   */
+  const beginPipelineWork = useCallback(() => {
+    setChatEligibility((prev) => ({ ...prev, allowed: null, reason: null }));
+  }, []);
 
   // Derived view of the (fully automatic, backend-driven) variant enrichment gate.
   // Enrichment has no dedicated endpoint — its state is surfaced only via /api/chat-eligibility.
@@ -621,6 +676,40 @@ export function useVariantPipeline({
       failed,
       status: acs || null,
       message: isIndexing ? (chatEligibility.message || 'Indexing variants for chat…') : null,
+    };
+  })();
+
+  /** Single busy flag shared by the pipeline stepper and the sidebar so dual applies can't race (F6). */
+  const pipelineBusy =
+    isRunningAnnovar || isApplyingProprietaryFilter || isRunningExomiser || pipelineJobActive;
+
+  /**
+   * Whether the *final* export is ready. Deliberately independent of chat gating:
+   * CHAT_REQUIRES_FILTER still permits downloading the full annotated baseline on
+   * >1000 files. Only in-flight work blocks download.
+   */
+  const downloadGate = (() => {
+    if (enrichmentState.active) {
+      return {
+        blocked: true,
+        kind: 'enriching',
+        message: enrichmentState.message || 'Enriching variants for chat…',
+        progress: enrichmentState.progress,
+      };
+    }
+    if (indexingState.active) {
+      return { blocked: true, kind: 'busy', message: indexingState.message };
+    }
+    if (chatEligibility.reason === 'FILTER_JOB_RUNNING' || pipelineBusy) {
+      return { blocked: true, kind: 'busy', message: chatEligibility.message };
+    }
+    if (chatEligibility.allowed === null) {
+      return { blocked: true, kind: 'unknown', message: chatEligibility.message };
+    }
+    return {
+      blocked: false,
+      annotatedOnly: chatEligibility.reason === 'CHAT_REQUIRES_FILTER',
+      message: chatEligibility.message,
     };
   })();
 
@@ -761,6 +850,7 @@ export function useVariantPipeline({
         return;
       }
 
+      beginPipelineWork();
       setIsRunningAnnovar(true);
       prevAnnovarJobStatusRef.current = 'running';
       interpretationDismissedRef.current = true;
@@ -828,6 +918,9 @@ export function useVariantPipeline({
         message: humanizeError(error.message) || 'Annotation failed. Please try again.',
         variant: 'error',
       });
+      // beginPipelineWork() parked eligibility at "unknown"; resolve it so a failed start
+      // doesn't leave chat gated forever.
+      await refreshChatEligibilityFromApi(activeConversationId);
     } finally {
       if (!annovarStartedAsync) {
         setIsRunningAnnovar(false);
@@ -838,6 +931,8 @@ export function useVariantPipeline({
     currentDocument,
     isRunningAnnovar,
     userTier,
+    beginPipelineWork,
+    refreshChatEligibilityFromApi,
     refreshConversationAfterAnnovar,
     presentFileAnalysisModal,
     interpretationDismissedRef,
@@ -894,6 +989,7 @@ export function useVariantPipeline({
       }
     }
     let filterStartedAsync = false;
+    beginPipelineWork();
     setIsApplyingProprietaryFilter(true);
     prevFilterJobStatusRef.current = 'running';
     // NOTE: Do NOT dismiss the File Analysis (interpretation) modal here.
@@ -959,6 +1055,8 @@ export function useVariantPipeline({
           `Failed to apply ${displayName}. Run ANNOVAR first if your file is not annotated yet.`,
         variant: 'error',
       });
+      // Resolve the optimistic "unknown" state set by beginPipelineWork().
+      await refreshChatEligibilityFromApi(activeConversationId);
     } finally {
       if (!filterStartedAsync) {
         setIsApplyingProprietaryFilter(false);
@@ -971,6 +1069,8 @@ export function useVariantPipeline({
     userTier,
     columnInterpretationResult,
     chatEligibility.requires_annovar,
+    beginPipelineWork,
+    refreshChatEligibilityFromApi,
     refreshConversationAfterAnnovar,
     interpretationDismissedRef,
     setShowInterpretationModal,
@@ -984,11 +1084,6 @@ export function useVariantPipeline({
   const step2ReqGate = columnInterpretationResult?.step2?.required_columns || {};
   const step2AcmgReady = Boolean(step2ReqGate.CLNSIG?.found || step2ReqGate.InterVar_automated?.found);
   const acmgFilterCanApply = !!step2AcmgReady && !chatEligibility.requires_annovar;
-
-  // Exomiser eligibility is decided by GET /api/exomiser-eligibility — components fetch it directly.
-  const [isRunningExomiser, setIsRunningExomiser] = useState(false);
-  const [exomiserStatus, setExomiserStatus] = useState(null); // { status, phase, message, progress_percent, matched_count }
-  const exomiserPollAbortRef = useRef(null);
 
   const fetchExomiserEligibility = useCallback(async () => {
     if (!activeConversationId || userTier === 'guest') return null;
@@ -1064,6 +1159,9 @@ export function useVariantPipeline({
             message: friendly,
             variant: 'error',
           });
+          // Re-resolve eligibility so a failed run doesn't leave chat/download parked
+          // on the optimistic "unknown" state.
+          await refreshChatEligibilityFromApiRef.current?.(conversationId);
         } else {
           await refreshConversationAfterAnnovar(conversationId);
         }
@@ -1077,6 +1175,7 @@ export function useVariantPipeline({
     if (!activeConversationId || userTier === 'guest') return;
     if (isRunningExomiser) return;
 
+    beginPipelineWork();
     setIsRunningExomiser(true);
     setExomiserStatus({ status: 'running', phase: 'queued', message: 'Starting Exomiser…', progress_percent: 0 });
 
@@ -1109,11 +1208,15 @@ export function useVariantPipeline({
         variant: 'error',
       });
       setIsRunningExomiser(false);
+      // Resolve the optimistic "unknown" state set by beginPipelineWork().
+      await refreshChatEligibilityFromApi(activeConversationId);
     }
   }, [
     activeConversationId,
     userTier,
     isRunningExomiser,
+    beginPipelineWork,
+    refreshChatEligibilityFromApi,
     getDeviceId,
     pollExomiserUntilDone,
     setAnnovarMessageModal,
@@ -1214,6 +1317,11 @@ export function useVariantPipeline({
     setPipelineToast,
     isRunningAnnovar,
     isApplyingProprietaryFilter,
+    setIsApplyingProprietaryFilter,
+    pipelineBusy,
+    downloadGate,
+    beginPipelineWork,
+    refreshAfterFilterChange,
     uploadSessionConversationId,
     handleVariantUploadingChange,
     handleUploadProgressChange,

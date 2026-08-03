@@ -503,6 +503,16 @@ const VariantFilterSidebar = ({
   requestedTab = null,
   onRequestedTabConsumed = null,
   acmgFilterCanApply = false,
+  // Pipeline state owned by useVariantPipeline. The sidebar and the pipeline stepper must
+  // share one busy flag so dual applies cannot race.
+  isRunningAnnovar = false,
+  runAnnovar = null,
+  isApplyingProprietaryFilter = false,
+  setIsApplyingProprietaryFilter = () => {},
+  pipelineBusy = false,
+  beginPipelineWork = () => {},
+  refreshAfterFilterChange = null,
+  downloadGate = null,
 }) => {
   const [filters, setFilters] = useState({});
   const [categoricalFilters, setCategoricalFilters] = useState({});
@@ -512,7 +522,6 @@ const VariantFilterSidebar = ({
   const [appliedFilters, setAppliedFilters] = useState(null);
   const [proprietaryFilterPreviews, setProprietaryFilterPreviews] = useState(null);
   const [activeProprietaryFilter, setActiveProprietaryFilter] = useState(null);
-  const [isApplyingProprietaryFilter, setIsApplyingProprietaryFilter] = useState(false);
   const [filterMode, setFilterMode] = useState('manual');
   const [pendingTabSwitch, setPendingTabSwitch] = useState(null);
   const [removeFileDialogOpen, setRemoveFileDialogOpen] = useState(false);
@@ -542,7 +551,6 @@ const VariantFilterSidebar = ({
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isApplyingPreset, setIsApplyingPreset] = useState(false);
   // useProcessingToast(isApplying ? 'Processing filters...' : null, isApplying);
-  const [isRunningAnnovar, setIsRunningAnnovar] = useState(false);
   const [gardenNameInput, setGardenNameInput] = useState('');
   const [gardenNotesInput, setGardenNotesInput] = useState('');
   const [isEditingGardenEntry, setIsEditingGardenEntry] = useState(false);
@@ -561,7 +569,8 @@ const VariantFilterSidebar = ({
   const isGuest = userTier === 'guest';
   // Manual filters can narrow the ACMG (or other) Postgres working set; proprietary apply still
   // requires manual filters to be reset first (see handleApplyProprietaryFilter).
-  const isManualFiltersDisabled = false;
+  // Locked while any pipeline job is in flight, from either the stepper or this sidebar.
+  const isManualFiltersDisabled = pipelineBusy;
   const selectedGardenEntry = useMemo(
     () => savedFilterPresets.find((p) => p.id === selectedPresetId) || null,
     [savedFilterPresets, selectedPresetId]
@@ -881,6 +890,7 @@ const VariantFilterSidebar = ({
 
   const applyFilters = async () => {
     if (!conversationId || !userId) return false;
+    if (pipelineBusy) return false;
 
     // Don't apply filters if there's no variant data
     if (!variantData || !variantData.total_variants || variantData.total_variants === 0) {
@@ -891,6 +901,7 @@ const VariantFilterSidebar = ({
       return false;
     }
 
+    beginPipelineWork();
     setIsApplying(true);
     try {
       const auth = getAuth();
@@ -1001,11 +1012,17 @@ const VariantFilterSidebar = ({
       return false;
     } finally {
       setIsApplying(false);
+      // A manual filter that lands ≤1000 queues enrichment just like ACMG/Exomiser;
+      // one that stays >1000 comes back as CHAT_TOO_MANY_VARIANTS. Runs on failure too so
+      // beginPipelineWork()'s "unknown" state is always resolved.
+      await refreshAfterFilterChange?.(conversationId);
     }
   };
 
   const resetFilters = async () => {
     if (!conversationId || !userId) return;
+    if (pipelineBusy) return;
+    beginPipelineWork();
 
     // Reset local state first
     const resetFiltersState = {};
@@ -1104,6 +1121,10 @@ const VariantFilterSidebar = ({
       });
     } finally {
       setIsApplying(false);
+      // POST /api/filter-variants with `filters: {}` carries no `enrichment_will_requeue`
+      // (unlike remove-proprietary-filter), so let eligibility alone decide whether we
+      // wait for enrichment (≤1000) or land back on CHAT_REQUIRES_FILTER (>1000). B-FE3.
+      await refreshAfterFilterChange?.(conversationId);
     }
   };
 
@@ -1242,6 +1263,7 @@ const VariantFilterSidebar = ({
     const presetId = overrideId || selectedPresetId;
     if (!conversationId || !userId || !presetId || isGuest || isManualFiltersDisabled) return;
     setSelectedPresetId(presetId);
+    beginPipelineWork();
     setIsApplyingPreset(true);
     try {
       const auth = getAuth();
@@ -1279,6 +1301,9 @@ const VariantFilterSidebar = ({
       notify({ message: error.message || 'Failed to apply Filter Garden entry.', type: 'error' });
     } finally {
       setIsApplyingPreset(false);
+      // Always resolve eligibility again — beginPipelineWork() parked it at "unknown",
+      // and an early return or a failure must not leave chat gated forever.
+      await refreshAfterFilterChange?.(conversationId);
     }
   };
 
@@ -1340,43 +1365,11 @@ const VariantFilterSidebar = ({
     }
   };
 
+  // Delegate to the pipeline hook rather than POSTing /api/run-annovar directly, so this
+  // shares the stepper's busy flag, job polling and eligibility refresh.
   const handleRunAnnovarFromGarden = async () => {
-    if (!conversationId || !userId || isGuest || isRunningAnnovar) return;
-    setIsRunningAnnovar(true);
-    try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      const base = getApiOrigin();
-      const response = await fetch(`${base}/api/run-annovar`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-          'X-Device-Id': getOrCreateDeviceId(),
-        },
-        body: JSON.stringify({ conversation_id: conversationId })
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail || 'Failed to run ANNOVAR');
-      notify({ message: data.message || 'ANNOVAR finished. Retry apply.', type: 'success' });
-      if (typeof onUploadSuccess === 'function') {
-        const refreshDoc = currentDocument
-          ? {
-            ...currentDocument,
-            storageType: currentDocument.storageType || 's3',
-            is_variant_file: true
-          }
-          : {
-            storageType: 's3',
-            is_variant_file: true
-          };
-        await onUploadSuccess(refreshDoc);
-      }
-    } catch (error) {
-      notify({ message: error.message || 'Failed to try ANNOVAR.', type: 'error' });
-    } finally {
-      setIsRunningAnnovar(false);
-    }
+    if (!conversationId || !userId || isGuest || pipelineBusy) return;
+    await runAnnovar?.();
   };
 
   // Load proprietary filter previews
@@ -1416,6 +1409,7 @@ const VariantFilterSidebar = ({
   // Apply proprietary filter (toggle: if already active, remove it)
   const handleApplyProprietaryFilter = async (filterType) => {
     if (!conversationId || !userId) return;
+    if (pipelineBusy) return;
     if (hasAppliedManualFilters && activeProprietaryFilter !== filterType) {
       notify({
         message: 'Manual filters are active. Reset manual filters before applying an annotation-stage filter.',
@@ -1430,6 +1424,7 @@ const VariantFilterSidebar = ({
       return;
     }
 
+    beginPipelineWork();
     setIsApplyingProprietaryFilter(true);
     try {
       const auth = getAuth();
@@ -1503,6 +1498,7 @@ const VariantFilterSidebar = ({
       });
     } finally {
       setIsApplyingProprietaryFilter(false);
+      await refreshAfterFilterChange?.(conversationId);
     }
   };
 
@@ -1510,7 +1506,12 @@ const VariantFilterSidebar = ({
   const handleRemoveProprietaryFilter = async () => {
     if (!conversationId || !userId) return;
 
+    beginPipelineWork();
     setIsApplyingProprietaryFilter(true);
+    // ≤1000 restores re-queue enrichment (wait for it before the "final" download);
+    // >1000 returns false, so we must not wait — eligibility goes back to
+    // CHAT_REQUIRES_FILTER and the annotated baseline is the final schema.
+    let enrichmentWillRequeue = false;
     try {
       const auth = getAuth();
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
@@ -1548,6 +1549,8 @@ const VariantFilterSidebar = ({
         if (onFiltersChange) {
           onFiltersChange({ proprietary: null }, data.total_count, data.total_count);
         }
+
+        enrichmentWillRequeue = Boolean(data.enrichment_will_requeue);
       } else {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(apiErrorDetailToMessage(errorData.detail) || 'Failed to remove filter');
@@ -1560,6 +1563,7 @@ const VariantFilterSidebar = ({
       });
     } finally {
       setIsApplyingProprietaryFilter(false);
+      await refreshAfterFilterChange?.(conversationId, { enrichmentWillRequeue });
     }
   };
 
@@ -2710,6 +2714,8 @@ const VariantFilterSidebar = ({
               variantData={variantData}
               filteredCount={filteredCount}
               isGuest={isGuest}
+              downloadGate={downloadGate}
+              uiCount={underConsiderationCount}
             />
           </div>
         )}

@@ -91,6 +91,7 @@ export default function ExportVariantsButton({
       return `Enriching variants…${pct}`;
     }
     if (downloadGate?.kind === 'busy') return 'Applying filter…';
+    if (downloadGate?.kind === 'syncing') return 'Syncing latest state…';
     return 'Checking export…';
   };
 
@@ -112,6 +113,8 @@ export default function ExportVariantsButton({
 
   const subLine = countMismatch
     ? `Export has ${Number(rowCount).toLocaleString()} rows but this view shows ${Number(uiCount).toLocaleString()}.`
+    : gateBlocked && downloadGate?.kind === 'syncing'
+      ? downloadGate.message || 'State syncing after filter change — download unlocks automatically.'
     : gateBlocked && downloadGate?.kind === 'enriching'
       ? downloadGate.message || 'Download unlocks when enrichment finishes.'
       : annotatedOnly

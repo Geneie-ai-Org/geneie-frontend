@@ -66,6 +66,8 @@ export function useVariantPipeline({
   const [exomiserStatus, setExomiserStatus] = useState(null); // { status, phase, message, progress_percent, matched_count }
   const [uploadSessionConversationId, setUploadSessionConversationId] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(null);
+  const [downloadValidationGeneration, setDownloadValidationGeneration] = useState(0);
+  const [downloadValidatedGeneration, setDownloadValidatedGeneration] = useState(0);
 
   const exomiserPollAbortRef = useRef(null);
   const prevAnnovarJobStatusRef = useRef(null);
@@ -93,6 +95,8 @@ export function useVariantPipeline({
   setVariantDataRef.current = setVariantData;
   const setAnnovarMessageModalRef = useRef(setAnnovarMessageModal);
   setAnnovarMessageModalRef.current = setAnnovarMessageModal;
+  const downloadValidationGenerationRef = useRef(downloadValidationGeneration);
+  downloadValidationGenerationRef.current = downloadValidationGeneration;
 
   const defaultChatEligibility = useCallback(
     () => ({
@@ -206,6 +210,7 @@ export function useVariantPipeline({
           literature_status: data.literature_status || null,
           advanced_chat_status: data.advanced_chat_status || null,
         });
+        setDownloadValidatedGeneration(downloadValidationGenerationRef.current);
         return data;
       } catch (error) {
         console.warn('[useVariantPipeline] chat-eligibility fetch failed:', error);
@@ -640,6 +645,7 @@ export function useVariantPipeline({
    */
   const beginPipelineWork = useCallback(() => {
     setChatEligibility((prev) => ({ ...prev, allowed: null, reason: null }));
+    setDownloadValidationGeneration((prev) => prev + 1);
   }, []);
 
   // Derived view of the (fully automatic, backend-driven) variant enrichment gate.
@@ -705,6 +711,13 @@ export function useVariantPipeline({
     }
     if (chatEligibility.allowed === null) {
       return { blocked: true, kind: 'unknown', message: chatEligibility.message };
+    }
+    if (downloadValidatedGeneration < downloadValidationGeneration) {
+      return {
+        blocked: true,
+        kind: 'syncing',
+        message: 'Syncing latest filter state before enabling download…',
+      };
     }
     return {
       blocked: false,
@@ -1235,6 +1248,8 @@ export function useVariantPipeline({
     setIsApplyingProprietaryFilter(false);
     setIsRunningExomiser(false);
     setExomiserStatus(null);
+    setDownloadValidationGeneration(0);
+    setDownloadValidatedGeneration(0);
     if (exomiserPollAbortRef.current) exomiserPollAbortRef.current.aborted = true;
     prevAnnovarJobStatusRef.current = null;
     prevFilterJobStatusRef.current = null;

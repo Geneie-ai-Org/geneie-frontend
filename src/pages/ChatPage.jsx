@@ -662,99 +662,6 @@ const ChatPage = () => {
     return () => {
       cancelled = true;
     };
-    /*
-    if (!activeConversationId || !userId || userTier === 'guest') {
-      setMessages([]); 
-      setCurrentDocument(null);
-      setVariantData(null);
-      return;
-    }
-
-    // TEMP: Polling disabled during development
-    // TODO: Re-enable polling or implement WebSockets for production
-    // Poll messages
-    const unsubscribeMessages = mongodbApi.pollMessages(activeConversationId, (loadedMessages) => {
-      // Map MongoDB format to frontend format
-      const mappedMessages = loadedMessages.map(msg => ({
-        id: msg.message_id,
-        message_id: msg.message_id,
-        role: msg.role,
-        text: msg.text,
-        sources: msg.sources || [],
-        createdAt: msg.created_at
-      }));
-      
-      setMessages(mappedMessages);
-    }, 5000);
-    
-    // Poll conversation document for variant data and document info
-    const unsubscribeConv = mongodbApi.pollConversationDoc(activeConversationId, (convData) => {
-      if (convData) {
-        // Load document data
-        if (convData.document?.s3_url && convData.document?.file_name) {
-          const documentObj = {
-            url: convData.document.s3_url,
-            name: convData.document.file_name,
-            type: convData.document.file_type || 'unknown',
-            size: convData.document.file_size || 0,
-            sample_metadata: convData.sample_metadata || null,
-          };
-          console.log('[App] Setting currentDocument from MongoDB:', documentObj);
-          setCurrentDocument(documentObj);
-        } else {
-          console.log('[App] No document in conversation, clearing currentDocument');
-          setCurrentDocument(null);
-        }
-        
-        // Load column interpretation results (3-step interpretation)
-        // Only show interpretation results if there's actually a document
-        if (convData.column_interpretation && convData.document?.s3_url && convData.document?.file_name) {
-          console.log('[App] Setting column interpretation results from MongoDB:', convData.column_interpretation);
-          setColumnInterpretationResult((prevResult) => {
-            // Auto-show modal if this is a new interpretation result (was null before)
-            if (!prevResult && convData.column_interpretation) {
-              // Check if we've already shown this result
-              const resultId = JSON.stringify(convData.column_interpretation);
-              if (!interpretationShownRef.current || interpretationShownRef.current !== resultId) {
-                // console.log('[App] Auto-showing interpretation results modal (via conversation load)', { variantUploadInProgress });
-                interpretationShownRef.current = resultId;
-                if (!variantUploadInProgress) {
-                  setTimeout(() => setShowInterpretationModal(true), 100);
-                } else {
-                  // console.log('[App] Upload in progress, skipping auto-show of interpretation modal');
-                }
-              }
-            }
-            return convData.column_interpretation;
-          });
-        } else {
-          // No interpretation results OR no document - clear everything
-          console.log('[App] No column interpretation results or no document in conversation');
-          setColumnInterpretationResult(null);
-          setShowInterpretationModal(false);
-          interpretationShownRef.current = false; // Reset when no results or no document
-        }
-        
-        // variant_metadata removed - column interpretation will be done in 3-step process later
-        // Clear variant data for now
-        console.log('[App] variant_metadata removed - column interpretation will be done in 3-step process later');
-        setVariantData(null);
-      } else {
-        // Conversation doesn't exist, clear all state
-        console.log('[App] Conversation does not exist, clearing document and variant data');
-        setCurrentDocument(null);
-        setVariantData(null);
-      }
-    }, 5000);
-    
-    return () => {
-      unsubscribeMessages();
-      unsubscribeConv();
-    };
-    */
-    // Only re-load when the active conversation identity changes — not when pipeline
-    // callbacks are recreated (which previously re-triggered clear + fetch in a loop).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConversationId, userId, userTier]);
 
   useEffect(() => {
@@ -1090,10 +997,8 @@ const ChatPage = () => {
       : `Limit reached (${tierChatLimit} exchanges). Please upgrade to Pro.`;
   }
 
-  // Shown above the input in both empty and conversation modes. While ANNOVAR runs the
-  // eligibility copy is stale advice ("apply a filter") — suppress it until annotation ends.
-  const pipelineGatedMessage =
-    isChatPipelineGated && !annovarRunning
+  const pipelineOwnsMessage = enrichmentState.active || enrichmentState.failed || indexingState.active || indexingState.failed;
+  const pipelineGatedMessage = isChatPipelineGated && !annovarRunning && !pipelineOwnsMessage
       ? chatEligibility.message || inputPlaceholder
       : null;
   // >1000 files need a filter before chat — give the user a way there.
@@ -1225,59 +1130,10 @@ const ChatPage = () => {
         </div>
       )}
 
-      {/* Variant Filter Sidebar Toggle Button - Right Side */}
-      {/* {!isVariantSidebarOpen && (
-        <button
-          onClick={() => setIsVariantSidebarOpen(true)}
-          className="fixed right-0 top-1/2 -translate-y-1/2 p-2.5 rounded-l-xl transition-colors z-40 hover:brightness-125"
-          style={{
-            backgroundColor: 'var(--bg-surface)',
-            color: 'var(--text-secondary)',
-            border: '1px solid var(--border-default)',
-            borderRight: 'none'
-          }}
-          title="Open Variant Filters"
-        >
-          <FileText className="w-5 h-5" />
-        </button>
-      )} */}
-
-        {/* {pipelineToast && userTier !== 'guest' && currentDocument && (
-          <div
-            className="px-4 py-2 flex items-start justify-between gap-3 border-b shrink-0"
-            style={{
-              backgroundColor: pipelineToast.variant === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(47,127,122,0.12)',
-              borderColor: pipelineToast.variant === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(47,127,122,0.25)',
-            }}
-            role="status"
-          >
-            <div className="flex items-start gap-2 min-w-0">
-              {pipelineToast.variant === 'error' ? (
-                <AlertCircle className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--error)' }} />
-              ) : (
-                <CheckCircle2 className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--accent-teal)' }} />
-              )}
-              <div className="min-w-0">
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{pipelineToast.title}</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>{pipelineToast.message}</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setPipelineToast(null)}
-              className="p-1 flex-shrink-0 hover:opacity-80"
-              style={{ color: 'var(--text-tertiary)' }}
-              aria-label="Dismiss notification"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )} */}
-
         {/* Chat + Input column */}
         <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
 
-          {/* ===== NEW CHAT — centered layout (DeepSeek style) ===== */}
+          {/* ===== NEW CHAT — centered layout ===== */}
           {!isConversationStarted && !isCurrentlyActive ? (
             <div className={`flex-1 flex flex-col items-center w-full min-w-0 chat-column-inner ${isMobile ? 'justify-end pb-4' : 'justify-center'}`}>
               {/* Branding */}

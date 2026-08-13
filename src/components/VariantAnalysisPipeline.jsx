@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Check, Circle, Loader2, Minus, AlertCircle, ChevronDown, ChevronUp, FileText, X, Pencil, Trash2 } from 'lucide-react';
+import { Check, Loader2, AlertCircle, ChevronDown, ChevronUp, FileText, Pencil, Trash2 } from 'lucide-react';
 import {
   PIPELINE_STEP_DEFS,
   computePipelineSteps,
@@ -22,16 +22,23 @@ function StepIcon({ status, size = 'w-3.5 h-3.5' }) {
   if (status === 'running') {
     return <Loader2 className={`${size} animate-spin`} style={{ color: 'var(--accent-teal)' }} aria-hidden />;
   }
-  if (status === 'done') {
-    return <Check className={size} style={{ color: 'var(--accent-teal)' }} aria-hidden />;
-  }
   if (status === 'failed') {
     return <AlertCircle className={size} style={{ color: 'var(--error)' }} aria-hidden />;
   }
-  if (status === 'skipped') {
-    return <Minus className={size} style={{ color: 'var(--text-disabled)' }} aria-hidden />;
+  return null;
+}
+
+function stepTextStyle(status) {
+  if (status === 'done') {
+    return { color: 'var(--text-primary)', fontWeight: 600 };
   }
-  return <Circle className={size} style={{ color: 'var(--text-disabled)' }} aria-hidden />;
+  if (status === 'running') {
+    return { color: 'var(--accent-teal)', fontWeight: 600 };
+  }
+  if (status === 'failed') {
+    return { color: 'var(--error)', fontWeight: 600 };
+  }
+  return { color: 'var(--text-tertiary)', fontWeight: 400 };
 }
 
 /**
@@ -101,6 +108,9 @@ const VariantAnalysisPipeline = ({
   const variantCount = variantsUnderConsideration ?? filteredVariantCount;
 
   const displayName = fileName || 'Variant file';
+  const stripOwnsStatus = Boolean(
+    enrichmentState?.active || enrichmentState?.failed || indexingState?.active || indexingState?.failed
+  );
   const showReadyMinimal = compactReadyOnly || (dismissed && chatReady && !expanded);
 
   // While ANNOVAR runs, the component's border doubles as a progress ring.
@@ -389,15 +399,7 @@ const VariantAnalysisPipeline = ({
                     className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-2xs sm:text-xs transition-colors ${
                       clickable && !guestLocked ? 'hover:bg-white/5 cursor-pointer' : 'cursor-default opacity-60'
                     }`}
-                    style={{
-                      color:
-                        status === 'done' || status === 'skipped'
-                          ? 'var(--accent-teal)'
-                          : status === 'failed'
-                            ? 'var(--error)'
-                            : 'var(--text-secondary)',
-                      fontWeight: status === 'running' ? 600 : 400,
-                    }}
+                    style={stepTextStyle(status)}
                     title={
                       guestLocked
                         ? 'Sign in for full analysis'
@@ -417,19 +419,21 @@ const VariantAnalysisPipeline = ({
             })}
           </ol>
 
-          <p
-            className="text-2xs leading-relaxed px-0.5"
-            style={{
-              color: chatReady ? 'var(--accent-teal)' : 'var(--text-secondary)',
-            }}
-          >
-            {backgroundActive && (
-              <span className="font-medium" style={{ color: 'var(--accent-teal)' }}>
-                Background processing —{' '}
-              </span>
-            )}
-            {statusLine}
-          </p>
+          {!stripOwnsStatus && (
+            <p
+              className="text-2xs leading-relaxed px-0.5"
+              style={{
+                color: chatReady ? 'var(--accent-teal)' : 'var(--text-secondary)',
+              }}
+            >
+              {backgroundActive && (
+                <span className="font-medium" style={{ color: 'var(--accent-teal)' }}>
+                  Background processing —{' '}
+                </span>
+              )}
+              {statusLine}
+            </p>
+          )}
 
           {isGuest && (
             <p className="text-2xs mt-1.5 px-0.5" style={{ color: 'var(--warning)' }}>

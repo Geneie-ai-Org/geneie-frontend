@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import AuthForm from '@/components/AuthForm';
 import PixelBlast from '@/components/PixelBlast';
 import ClickSpark from '@/components/ClickSpark';
+import { useForcedTheme } from '@/hooks/useTheme';
 
 const DNA_FRAMES = (() => {
   const frames = [];
@@ -88,6 +89,7 @@ const DnaHelix = () => {
 };
 
 const AuthPage = () => {
+  useForcedTheme('dark');
 
   return (
     <ClickSpark sparkColor="#2F7F7A" sparkSize={12} sparkRadius={20} sparkCount={8} duration={400}>

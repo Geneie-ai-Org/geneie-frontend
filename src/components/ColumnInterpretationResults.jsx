@@ -27,6 +27,7 @@ const C = {
   info: 'var(--info)',
   infoSoft: 'var(--info-soft)',
   teal: 'var(--accent-teal)',
+  onAccent: '#0F0F0F',
   tealSoft: 'var(--accent-teal-soft)',
   tealHover: 'var(--accent-teal-hover)',
   error: 'var(--error)',
@@ -215,12 +216,6 @@ const ColumnInterpretationResults = ({
     if (status === 'pending') return 'Pending';
     if (status === 'partial') return 'Partially met';
     return 'Needs columns';
-  };
-
-  const getStepColor = (status) => {
-    if (status === 'passed') return C.success;
-    if (status === 'pending') return C.info;
-    return C.warning;
   };
 
   const getStepBadgeStyle = (status) => {
@@ -774,36 +769,36 @@ const ColumnInterpretationResults = ({
             {stepperSteps.map((s, i) => {
               const isSel = s.n === selectedStep;
               const passed = s.status === 'passed';
-              const attention = s.status === 'failed' || s.status === 'partial';
-              const color = getStepColor(s.status);
               const prevDone = i > 0 && stepperSteps[i - 1].status === 'passed';
               const StepIcon = s.icon;
 
+              const failed = s.status === 'failed';
               let nodeStyle;
               let iconColor;
               let NodeGlyph = StepIcon;
               if (passed) {
-                nodeStyle = { backgroundColor: C.success, border: 'none' };
-                iconColor = '#0F0F0F';
+                nodeStyle = { backgroundColor: C.teal, border: 'none' };
+                iconColor = C.onAccent;
                 NodeGlyph = Check;
               } else if (isSel) {
-                nodeStyle = { backgroundColor: attention ? C.warning : C.teal, border: 'none' };
-                iconColor = '#0F0F0F';
-              } else if (attention) {
-                nodeStyle = { backgroundColor: 'transparent', border: `1.5px solid ${color}` };
-                iconColor = color;
+                nodeStyle = { backgroundColor: C.teal, border: 'none' };
+                iconColor = C.onAccent;
+              } else if (failed) {
+                nodeStyle = { backgroundColor: 'transparent', border: `1.5px solid ${C.error}` };
+                iconColor = C.error;
               } else {
                 nodeStyle = { backgroundColor: C.surfaceCard, border: `1.5px solid ${C.border}` };
                 iconColor = C.textDim;
               }
-              const ringColor = passed ? C.successSoft : (attention ? C.warningSoft : C.tealSoft);
+
+              const selectedRing = `0 0 0 3px ${C.surface}, 0 0 0 5px ${failed ? C.error : C.teal}`;
 
               return (
                 <React.Fragment key={s.n}>
                   {i > 0 && (
                     <div
                       className="flex-1 h-px mt-5 -mx-4 rounded-full transition-colors"
-                      style={{ backgroundColor: prevDone ? C.success : C.border }}
+                      style={{ backgroundColor: prevDone ? C.teal : C.border }}
                     />
                   )}
                   <button
@@ -813,20 +808,20 @@ const ColumnInterpretationResults = ({
                   >
                     <div
                       className="w-8 h-8 rounded-full flex items-center justify-center transition-all"
-                      style={{ ...nodeStyle, boxShadow: isSel ? `0 0 0 8px ${ringColor}` : 'none' }}
+                      style={{ ...nodeStyle, boxShadow: isSel ? selectedRing : 'none' }}
                     >
                       <NodeGlyph className="w-[16px] h-[16px]" style={{ color: iconColor }} strokeWidth={2} />
                     </div>
                     <div className="text-center">
                       <div
                         className="text-xs font-semibold leading-tight"
-                        style={{ color: isSel || passed ? C.text : C.textMuted }}
+                        style={{ color: isSel ? C.text : C.textMuted }}
                       >
                         {s.name}
                       </div>
                       <div
                         className="text-2xs leading-tight mt-1"
-                        style={{ color: passed ? C.success : (attention && isSel ? C.warning : C.textDim) }}
+                        style={{ color: failed ? C.error : isSel ? C.teal : C.textDim }}
                       >
                         {getStepSubtitle(s.status)}
                       </div>

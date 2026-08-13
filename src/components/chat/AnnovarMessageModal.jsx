@@ -51,7 +51,7 @@ const AnnovarMessageModal = ({ modal, onClose }) => {
                 <AlertCircle className="w-8 h-8 flex-shrink-0" style={{ color: 'var(--error)' }} />
               )}
               {modal.variant === 'info' && (
-                <AlertCircle className="w-8 h-8 flex-shrink-0" style={{ color: 'var(--accent-blue)' }} />
+                <AlertCircle className="w-8 h-8 flex-shrink-0" style={{ color: 'var(--info)' }} />
               )}
               <DialogDescription className="text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>
                 {modal.message}

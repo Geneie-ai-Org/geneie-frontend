@@ -68,7 +68,8 @@ export default {
         brand: ['"DM Sans"', 'Inter', 'sans-serif'],
       },
       fontSize: {
-        'xs': ['0.75rem', { lineHeight: '1rem' }],
+        '2xs': ['11px', { lineHeight: '16px' }],
+        'xs': ['13px', { lineHeight: '18px' }],
         'sm': ['0.875rem', { lineHeight: '1.25rem' }],
         'base': ['1rem', { lineHeight: '1.5rem' }],
         'lg': ['1.125rem', { lineHeight: '1.75rem' }],

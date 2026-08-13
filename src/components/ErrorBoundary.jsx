@@ -60,7 +60,7 @@ export default class ErrorBoundary extends React.Component {
               maxWidth: '48rem',
               overflowX: 'auto',
               textAlign: 'left',
-              fontSize: '0.75rem',
+              fontSize: '13px',
               color: 'var(--error)',
             }}
           >

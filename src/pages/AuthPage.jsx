@@ -78,7 +78,7 @@ const DnaHelix = () => {
 
   return (
     <pre
-      className="font-mono text-[11px] leading-[1.15] text-[#2F7F7A]/80 select-none"
+      className="font-mono text-2xs leading-[1.15] text-[#2F7F7A]/80 select-none"
       aria-hidden="true"
       style={{ transform: 'rotate(45deg) scale(0.6)', transformOrigin: 'center center' }}
     >

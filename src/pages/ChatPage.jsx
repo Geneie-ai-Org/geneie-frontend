@@ -1050,17 +1050,20 @@ const ChatPage = () => {
     );
   }
 
+  // ANNOVAR annotation in flight (locally kicked off or reported by the polled job).
+  const annovarRunning = isRunningAnnovar || pipelineSnapshot.annovarJob?.status === 'running';
+
   // Eligibility is a hard gate, not just advisory copy.
   const isInputDisabled =
     !isAuthReady ||
     isCurrentlyActive ||
     isChatLimitReached ||
     variantUploadInProgress ||
-    isRunningAnnovar ||
+    annovarRunning ||
     isChatPipelineGated;
 
   let inputPlaceholder = "Ask anything about bioinformatics...";
-  if (isRunningAnnovar) {
+  if (annovarRunning) {
     inputPlaceholder = 'ANNOVAR is running — chat will resume when annotation is complete…';
   } else if (variantUploadInProgress) {
     inputPlaceholder = 'Upload in progress — chat will resume when your file is ready…';
@@ -1087,13 +1090,15 @@ const ChatPage = () => {
       : `Limit reached (${tierChatLimit} exchanges). Please upgrade to Pro.`;
   }
 
-  // Shown above the input in both empty and conversation modes.
-  const pipelineGatedMessage = isChatPipelineGated
-    ? chatEligibility.message || inputPlaceholder
-    : null;
+  // Shown above the input in both empty and conversation modes. While ANNOVAR runs the
+  // eligibility copy is stale advice ("apply a filter") — suppress it until annotation ends.
+  const pipelineGatedMessage =
+    isChatPipelineGated && !annovarRunning
+      ? chatEligibility.message || inputPlaceholder
+      : null;
   // >1000 files need a filter before chat — give the user a way there.
   const gatedAction =
-    isChatPipelineGated && chatEligibility.reason === 'CHAT_REQUIRES_FILTER'
+    isChatPipelineGated && !annovarRunning && chatEligibility.reason === 'CHAT_REQUIRES_FILTER'
       ? { label: 'Apply a filter', onClick: () => setIsVariantSidebarOpen(true) }
       : null;
 

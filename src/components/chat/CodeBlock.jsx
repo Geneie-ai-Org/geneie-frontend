@@ -58,7 +58,7 @@ export function CodeBlock({ code, language = 'plaintext', theme = 'github-dark',
       style={{ backgroundColor: 'var(--bg-surface)' }}
     >
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--border-default)]">
-        <Badge variant="secondary" className="font-mono text-[11px] normal-case">
+        <Badge variant="secondary" className="font-mono text-2xs normal-case">
           {language}
         </Badge>
         <TooltipProvider>
@@ -84,11 +84,11 @@ export function CodeBlock({ code, language = 'plaintext', theme = 'github-dark',
 
       {highlightedHtml ? (
         <div
-          className="w-full overflow-x-auto text-[13px] [&>pre]:px-4 [&>pre]:py-4"
+          className="w-full overflow-x-auto text-xs [&>pre]:px-4 [&>pre]:py-4"
           dangerouslySetInnerHTML={{ __html: highlightedHtml }}
         />
       ) : (
-        <div className="w-full overflow-x-auto text-[13px]">
+        <div className="w-full overflow-x-auto text-xs">
           <pre className="px-4 py-4">
             <code>{codeText}</code>
           </pre>

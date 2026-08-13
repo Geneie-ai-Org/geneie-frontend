@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { Upload, FileText, PanelRight, ArrowUp, Plus, Square, Link2, FolderOpen } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -92,6 +92,16 @@ const ChatPromptInput = ({
   const textareaRef = useRef(null);
   useAutosizeTextarea(textareaRef, input);
 
+  const wasDisabledRef = useRef(isInputDisabled);
+  useEffect(() => {
+    const reopened = wasDisabledRef.current && !isInputDisabled;
+    wasDisabledRef.current = isInputDisabled;
+    if (!reopened) return;
+
+    if (window.matchMedia?.('(pointer: coarse)').matches) return;
+    textareaRef.current?.focus();
+  }, [isInputDisabled]);
+
   const handleContainerClick = () => {
     if (!isInputDisabled) textareaRef.current?.focus();
   };
@@ -109,8 +119,8 @@ const ChatPromptInput = ({
   };
 
   const disclaimerClass = isEmpty
-    ? 'text-center text-[11px] mt-2 leading-tight'
-    : 'text-center text-[11px] mt-1.5 leading-tight';
+    ? 'text-center text-2xs mt-2 leading-tight'
+    : 'text-center text-2xs mt-1.5 leading-tight';
 
   const uploadButton = showUpload && (
     <div className="relative shrink-0" ref={showFileTypeDropdown === dropdownSource ? fileTypeDropdownRef : undefined}>

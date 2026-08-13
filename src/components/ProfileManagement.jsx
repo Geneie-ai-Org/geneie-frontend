@@ -121,7 +121,7 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, db, conversation
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{userEmail}</p>
                 <span
-                  className="text-[11px] font-semibold px-1.5 py-px rounded mt-0.5 inline-block"
+                  className="text-2xs font-semibold px-1.5 py-px rounded mt-0.5 inline-block"
                   style={{
                     backgroundColor: isPro ? 'var(--accent-teal-soft)' : 'var(--bg-surface-hover)',
                     color: isPro ? 'var(--accent-teal)' : 'var(--text-tertiary)',

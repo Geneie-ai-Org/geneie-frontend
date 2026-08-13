@@ -128,7 +128,7 @@ const ConversationSidebar = ({
                                 className="w-6 h-6 shrink-0"
                             />
                             {isOpen && (
-                                <span className="text-sm font-semibold font-brand whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>
+                                <span className="-ml-1 text-xl font-semibold font-brand tracking-tight whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>
                                     eneie
                                 </span>
                             )}
@@ -164,7 +164,7 @@ const ConversationSidebar = ({
                     )}
                     {isOpen && conversations.length > 0 && grouped.map((group) => (
                             <div key={group.label} className="mb-3">
-                                <p className="px-3 pt-3 pb-1.5 text-[11px] font-medium uppercase tracking-wider whitespace-nowrap overflow-hidden text-[var(--text-tertiary)]">
+                                <p className="px-3 pt-3 pb-1.5 text-2xs font-medium uppercase tracking-wider whitespace-nowrap overflow-hidden text-[var(--text-tertiary)]">
                                     {group.label}
                                 </p>
                                 {group.items.map((conv) => {
@@ -210,8 +210,8 @@ const ConversationSidebar = ({
                                     <DropdownMenuTrigger
                                         className="flex-1 min-w-0 h-10 px-2.5 flex items-center gap-2.5 cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)]"
                                     >
-                                        <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-[var(--accent-blue-soft)]">
-                                            <span className="text-[11px] font-semibold text-[var(--accent-blue)]">
+                                        <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-[var(--accent-teal-soft)]">
+                                            <span className="text-2xs font-semibold text-[var(--accent-teal)]">
                                                 {displayName.charAt(0).toUpperCase()}
                                             </span>
                                         </div>
@@ -249,8 +249,8 @@ const ConversationSidebar = ({
                                     className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
                                     title="Profile & Settings"
                                 >
-                                    <div className="w-6 h-6 rounded-full flex items-center justify-center bg-[var(--accent-blue-soft)]">
-                                        <span className="text-[11px] font-semibold text-[var(--accent-blue)]">
+                                    <div className="w-6 h-6 rounded-full flex items-center justify-center bg-[var(--accent-teal-soft)]">
+                                        <span className="text-2xs font-semibold text-[var(--accent-teal)]">
                                             {displayName.charAt(0).toUpperCase()}
                                         </span>
                                     </div>

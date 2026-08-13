@@ -17,7 +17,7 @@
   --border-subtle: rgba(255,255,255,0.06);
   --border-default: rgba(255,255,255,0.10);
   --border-strong: rgba(255,255,255,0.16);
-  --border-focus: rgba(138,180,248,0.4);
+  --border-focus: rgba(77,182,172,0.4);
 
   /* Text hierarchy */
   --text-primary: #E8EAED;
@@ -25,15 +25,17 @@
   --text-tertiary: #6B7280;
   --text-disabled: #4A4A4A;
 
-  /* Accents */
-  --accent-blue: #8AB4F8;
-  --accent-blue-soft: rgba(138,180,248,0.10);
-  --accent-blue-hover: #AECBFA;
+  /* Accent — teal is the single brand accent */
   --accent-teal: #4DB6AC;
   --accent-teal-soft: rgba(77,182,172,0.10);
   --accent-teal-hover: #80CBC4;
 
+  /* Inline code in chat markdown — blue by intent, not brand */
+  --code-inline: #8AB4F8;
+
   /* Semantic */
+  --info: #8AB4F8;
+  --info-soft: rgba(138,180,248,0.10);
   --success: #81C995;
   --success-soft: rgba(129,201,149,0.12);
   --error: #F28B82;

@@ -420,7 +420,7 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
           }}
         />
       </div>
-      <div className="flex items-center justify-between text-[10px] text-[var(--text-tertiary)] tabular-nums px-0.5 -mt-1">
+      <div className="flex items-center justify-between text-2xs text-[var(--text-tertiary)] tabular-nums px-0.5 -mt-1">
         <span>{fmt(rangeMin)}</span>
         <span>{fmt(rangeMax)}</span>
       </div>
@@ -1826,7 +1826,7 @@ const VariantFilterSidebar = ({
             <div className="sidebar-card">
               <div className="flex items-baseline justify-between mb-2 gap-2">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-[13px] font-medium text-[var(--text-primary)]">Under consideration</span>
+                  <span className="text-xs font-medium text-[var(--text-primary)]">Under consideration</span>
                   {variantData?.sample_only_ingest && (
                     <Popover>
                       <PopoverTrigger
@@ -1839,7 +1839,7 @@ const VariantFilterSidebar = ({
                         side="bottom"
                         align="start"
                         sideOffset={6}
-                        className="w-72 p-3 text-[12px] leading-relaxed text-[var(--text-secondary)] bg-[var(--bg-surface-raised)] border border-[var(--border-default)] rounded-lg shadow-xl"
+                        className="w-72 p-3 text-xs leading-relaxed text-[var(--text-secondary)] bg-[var(--bg-surface-raised)] border border-[var(--border-default)] rounded-lg shadow-xl"
                       >
                         {variantData.s3_line_count_status === 'pending' || variantData.s3_line_count_status === 'running' ? (
                           <>
@@ -1865,7 +1865,7 @@ const VariantFilterSidebar = ({
                     </Popover>
                   )}
                 </div>
-                <span className="text-[13px] font-semibold tabular-nums text-[var(--accent-teal)]">
+                <span className="text-xs font-semibold tabular-nums text-[var(--accent-teal)]">
                   {underConsiderationCount.toLocaleString()}
                   <span className="text-[var(--text-tertiary)] font-normal">
                     {` / ${displayTotalVariants.toLocaleString()}`}
@@ -1953,19 +1953,19 @@ const VariantFilterSidebar = ({
               >
                 <div className="flex items-center gap-1.5 min-w-0">
                   <Sprout className="w-3.5 h-3.5 text-[var(--accent-teal)] shrink-0" />
-                  <span className="text-[13px] font-medium text-[var(--text-primary)]">Filter Garden</span>
+                  <span className="text-xs font-medium text-[var(--text-primary)]">Filter Garden</span>
                   {appliedPresetId && savedFilterPresets.find(p => p.id === appliedPresetId) ? (
-                    <span className="px-1.5 h-[18px] inline-flex items-center gap-1 rounded-full text-[10px] font-semibold bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]">
+                    <span className="px-1.5 h-[18px] inline-flex items-center gap-1 rounded-full text-2xs font-semibold bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]">
                       <CheckCircle className="w-2.5 h-2.5" />
                       Active
                     </span>
                   ) : savedFilterPresets.length > 0 ? (
-                    <span className="text-[11px] tabular-nums text-[var(--text-tertiary)]">
+                    <span className="text-2xs tabular-nums text-[var(--text-tertiary)]">
                       {savedFilterPresets.length} saved
                     </span>
                   ) : null}
                 </div>
-                <span className="text-[11px] text-[var(--text-tertiary)]">Open</span>
+                <span className="text-2xs text-[var(--text-tertiary)]">Open</span>
               </button>
             )}
 
@@ -2023,12 +2023,12 @@ const VariantFilterSidebar = ({
                     }`}
                   >
                     <span
-                      className={`text-[13px] truncate flex-1 ${isOpen ? 'font-medium text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'} ${isColumnUnusable ? 'text-[var(--text-tertiary)]' : ''}`}
+                      className={`text-xs truncate flex-1 ${isOpen ? 'font-medium text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'} ${isColumnUnusable ? 'text-[var(--text-tertiary)]' : ''}`}
                     >
                       {colName}
                     </span>
                     {count > 0 && (
-                      <span className="px-1.5 h-[18px] inline-flex items-center rounded-full text-[10px] font-semibold tabular-nums bg-[var(--accent-teal-soft)] text-[var(--accent-teal)] flex-shrink-0">
+                      <span className="px-1.5 h-[18px] inline-flex items-center rounded-full text-2xs font-semibold tabular-nums bg-[var(--accent-teal-soft)] text-[var(--accent-teal)] flex-shrink-0">
                         {count}
                       </span>
                     )}
@@ -2057,7 +2057,7 @@ const VariantFilterSidebar = ({
                       value={columnSearchQuery}
                       onChange={(e) => setColumnSearchQuery(e.target.value)}
                       placeholder="Search columns…"
-                      className="w-full h-8 pl-8 pr-8 text-[12px] rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-teal)] transition-colors"
+                      className="w-full h-8 pl-8 pr-8 text-xs rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-teal)] transition-colors"
                     />
                     {columnSearchQuery && (
                       <button
@@ -2075,7 +2075,7 @@ const VariantFilterSidebar = ({
                   <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-[var(--border-subtle)]">
                     {searchMatches ? (
                       searchMatches.length === 0 ? (
-                        <p className="p-4 text-[11px] text-[var(--text-tertiary)] italic text-center">
+                        <p className="p-4 text-2xs text-[var(--text-tertiary)] italic text-center">
                           No columns match &ldquo;{columnSearchQuery}&rdquo;
                         </p>
                       ) : (
@@ -2095,10 +2095,10 @@ const VariantFilterSidebar = ({
                               className="w-full flex items-center justify-between gap-2 px-3 py-2.5 hover:bg-[var(--bg-surface-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)]"
                             >
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-[13px] font-medium text-[var(--text-primary)] truncate">
+                                <span className="text-xs font-medium text-[var(--text-primary)] truncate">
                                   {groupName}
                                 </span>
-                                <span className="text-[11px] text-[var(--text-tertiary)] tabular-nums">
+                                <span className="text-2xs text-[var(--text-tertiary)] tabular-nums">
                                   {cols.length}
                                 </span>
                                 {activeCount > 0 && (
@@ -2127,7 +2127,7 @@ const VariantFilterSidebar = ({
                       <DialogTitle className="text-base font-semibold text-[var(--text-primary)]">
                         {openColumnGroup}
                       </DialogTitle>
-                      <DialogDescription className="text-[12px] text-[var(--text-tertiary)] mt-1">
+                      <DialogDescription className="text-xs text-[var(--text-tertiary)] mt-1">
                         {openGroupCols.length} column{openGroupCols.length === 1 ? '' : 's'} · click a column to configure its filter
                       </DialogDescription>
                     </div>
@@ -2232,7 +2232,7 @@ const VariantFilterSidebar = ({
                     <div className="mb-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-3.5 h-3.5 border-2 border-[var(--accent-teal)] border-t-transparent rounded-full animate-spin" />
-                        <span className="text-[12px] font-medium text-[var(--text-primary)]">
+                        <span className="text-xs font-medium text-[var(--text-primary)]">
                           {exomiserStatus?.message || 'Starting Exomiser…'}
                         </span>
                       </div>
@@ -2244,7 +2244,7 @@ const VariantFilterSidebar = ({
                           />
                         </div>
                       )}
-                      <p className="text-[11px] text-[var(--text-tertiary)] mt-1.5">
+                      <p className="text-2xs text-[var(--text-tertiary)] mt-1.5">
                         This can take several minutes. You can leave this tab open or come back later.
                       </p>
                     </div>
@@ -2252,7 +2252,7 @@ const VariantFilterSidebar = ({
 
                   {/* Failure banner */}
                   {failed && failureDetail && (
-                    <div className="mb-3 p-3 rounded-lg border text-[12px]" style={{ borderColor: 'var(--error)', backgroundColor: 'var(--error-soft)', color: 'var(--error)' }}>
+                    <div className="mb-3 p-3 rounded-lg border text-xs" style={{ borderColor: 'var(--error)', backgroundColor: 'var(--error-soft)', color: 'var(--error)' }}>
                       <div className="font-medium mb-0.5">Exomiser failed</div>
                       <div className="leading-relaxed">{failureDetail}</div>
                     </div>
@@ -2260,7 +2260,7 @@ const VariantFilterSidebar = ({
 
                   {/* Eligibility issues (only if not running and not active) */}
                   {!running && !failed && !isActive && !canRun && reasons.length > 0 && (
-                    <div className="mb-3 p-3 rounded-lg sidebar-warning-banner border text-[12px] space-y-1">
+                    <div className="mb-3 p-3 rounded-lg sidebar-warning-banner border text-xs space-y-1">
                       <div className="font-medium mb-1">Cannot run Exomiser yet:</div>
                       <ul className="list-disc pl-4 space-y-0.5">
                         {reasons.map((r) => (
@@ -2414,7 +2414,7 @@ const VariantFilterSidebar = ({
                       <div className="space-y-3">
                         {presets.length > 0 && (
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[11px] text-[var(--text-tertiary)] mr-1">Quick:</span>
+                            <span className="text-2xs text-[var(--text-tertiary)] mr-1">Quick:</span>
                             {presets.map((p) => (
                               <button
                                 key={p.label}
@@ -2424,7 +2424,7 @@ const VariantFilterSidebar = ({
                                   handleFilterChange(colName, 'Max', p.max);
                                 }}
                                 disabled={isManualFiltersDisabled}
-                                className="h-6 px-2 rounded-md text-[11px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--accent-teal)] hover:text-[var(--accent-teal)] hover:bg-[var(--accent-teal-soft)] transition-colors disabled:opacity-50"
+                                className="h-6 px-2 rounded-md text-2xs font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--accent-teal)] hover:text-[var(--accent-teal)] hover:bg-[var(--accent-teal-soft)] transition-colors disabled:opacity-50"
                               >
                                 {p.label}
                               </button>
@@ -2670,7 +2670,7 @@ const VariantFilterSidebar = ({
                         ? 'No changes to apply — adjust filters first'
                         : 'Apply all current filter settings'
                 }
-                className={`flex-1 h-9 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-medium whitespace-nowrap text-[var(--bg-app)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges
+                className={`flex-1 h-9 px-3 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium whitespace-nowrap text-[var(--bg-app)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges
                     ? 'opacity-50 cursor-not-allowed bg-[var(--text-tertiary)]'
                     : 'bg-[var(--accent-teal)] hover:brightness-110'
                   }`}
@@ -2697,7 +2697,7 @@ const VariantFilterSidebar = ({
                   ? 'Clear all filters and restore all preview variants for chat'
                   : 'Clear all active filters (manual and proprietary) and restore all variants'
               }
-              className={`flex-1 h-9 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-medium whitespace-nowrap border border-[var(--border-subtle)] bg-transparent text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${isApplying ? 'opacity-50 cursor-not-allowed' : ''
+              className={`flex-1 h-9 px-3 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium whitespace-nowrap border border-[var(--border-subtle)] bg-transparent text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${isApplying ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -2739,7 +2739,7 @@ const VariantFilterSidebar = ({
               <Sprout className="w-4 h-4 text-[var(--accent-teal)]" />
               Filter Garden
             </DialogTitle>
-            <DialogDescription className="text-[12px] text-[var(--text-tertiary)] mt-1">
+            <DialogDescription className="text-xs text-[var(--text-tertiary)] mt-1">
               Save your manual filters as presets and apply them across variant files.
             </DialogDescription>
           </div>
@@ -2751,8 +2751,8 @@ const VariantFilterSidebar = ({
             {savedFilterPresets.length === 0 ? (
               <div className="text-center py-10">
                 <Sprout className="w-8 h-8 text-[var(--text-tertiary)] mx-auto mb-3 opacity-40" />
-                <p className="text-[13px] text-[var(--text-secondary)]">No saved presets yet.</p>
-                <p className="text-[11px] text-[var(--text-disabled)] mt-1">Save your current filters to see them here.</p>
+                <p className="text-xs text-[var(--text-secondary)]">No saved presets yet.</p>
+                <p className="text-2xs text-[var(--text-disabled)] mt-1">Save your current filters to see them here.</p>
               </div>
             ) : (
               <div className="space-y-1.5">
@@ -2777,7 +2777,7 @@ const VariantFilterSidebar = ({
                             onChange={(e) => setGardenNameInput(e.target.value)}
                             autoFocus
                             maxLength={80}
-                            className="w-full px-2.5 py-1.5 text-[13px] border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)]"
+                            className="w-full px-2.5 py-1.5 text-xs border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)]"
                           />
                           <textarea
                             value={gardenNotesInput}
@@ -2785,20 +2785,20 @@ const VariantFilterSidebar = ({
                             rows={2}
                             maxLength={500}
                             placeholder="Notes"
-                            className="w-full px-2.5 py-1.5 text-[12px] border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)] resize-none"
+                            className="w-full px-2.5 py-1.5 text-xs border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)] resize-none"
                           />
                           <div className="flex gap-1.5">
                             <button
                               type="button"
                               onClick={handleUpdateSelectedGarden}
-                              className="h-7 px-3 rounded-md text-[11px] font-medium bg-[var(--accent-teal)] text-[var(--bg-app)] hover:brightness-110"
+                              className="h-7 px-3 rounded-md text-2xs font-medium bg-[var(--accent-teal)] text-[var(--bg-app)] hover:brightness-110"
                             >
                               Save
                             </button>
                             <button
                               type="button"
                               onClick={() => setIsEditingGardenEntry(false)}
-                              className="h-7 px-3 rounded-md text-[11px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
+                              className="h-7 px-3 rounded-md text-2xs font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
                             >
                               Cancel
                             </button>
@@ -2809,14 +2809,14 @@ const VariantFilterSidebar = ({
                           {/* Content */}
                           <div className="min-w-0 flex-1">
                             <div className="min-w-0">
-                              <span className="text-[13px] font-semibold text-[var(--text-primary)] truncate block">
+                              <span className="text-xs font-semibold text-[var(--text-primary)] truncate block">
                                 {preset.name}
                               </span>
                             </div>
                             {preset.notes && (
-                              <div className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5">{preset.notes}</div>
+                              <div className="text-2xs text-[var(--text-secondary)] truncate mt-0.5">{preset.notes}</div>
                             )}
-                            <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5 flex items-center gap-1.5">
+                            <div className="text-2xs text-[var(--text-tertiary)] mt-0.5 flex items-center gap-1.5">
                               <span>{(preset.required_columns || []).length} col{(preset.required_columns || []).length === 1 ? '' : 's'}</span>
                               {preset.metadata?.genome_build && (
                                 <>
@@ -2835,7 +2835,7 @@ const VariantFilterSidebar = ({
                                 title="Deactivate this preset and clear its filters"
                                 onClick={resetFilters}
                                 disabled={isApplying}
-                                className="h-7 px-2.5 rounded-md text-[11px] font-medium inline-flex items-center gap-1 text-[var(--accent-teal)] hover:bg-[var(--accent-teal)]/15 transition-colors disabled:opacity-50"
+                                className="h-7 px-2.5 rounded-md text-2xs font-medium inline-flex items-center gap-1 text-[var(--accent-teal)] hover:bg-[var(--accent-teal)]/15 transition-colors disabled:opacity-50"
                               >
                                 <X className="w-3 h-3" />
                                 Deactivate
@@ -2846,7 +2846,7 @@ const VariantFilterSidebar = ({
                                 title="Apply preset"
                                 onClick={() => handleApplySelectedGarden(preset.id)}
                                 disabled={isApplyingPreset}
-                                className="h-7 px-2.5 rounded-md text-[11px] font-medium inline-flex items-center gap-1 border border-[var(--accent-teal)]/60 text-[var(--accent-teal)] hover:bg-[var(--accent-teal-soft)] hover:border-[var(--accent-teal)] transition-colors disabled:opacity-50"
+                                className="h-7 px-2.5 rounded-md text-2xs font-medium inline-flex items-center gap-1 border border-[var(--accent-teal)]/60 text-[var(--accent-teal)] hover:bg-[var(--accent-teal-soft)] hover:border-[var(--accent-teal)] transition-colors disabled:opacity-50"
                               >
                                 Apply
                               </button>
@@ -2878,13 +2878,13 @@ const VariantFilterSidebar = ({
                       )}
 
                       {selectedPresetId === preset.id && gardenApplyMissingColumns.length > 0 && (
-                        <div className="mx-3 mb-3 p-2 rounded-md text-[11px] sidebar-warning-banner border">
+                        <div className="mx-3 mb-3 p-2 rounded-md text-2xs sidebar-warning-banner border">
                           <div className="font-medium mb-1">Missing columns: {gardenApplyMissingColumns.join(', ')}</div>
                           <button
                             type="button"
                             onClick={handleRunAnnovarFromGarden}
                             disabled={isRunningAnnovar}
-                            className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium underline"
+                            className="mt-1 inline-flex items-center gap-1 text-2xs font-medium underline"
                           >
                             <img src={qiagenLogo} alt="" className="w-3 h-3 object-contain" />
                             {isRunningAnnovar ? 'Running ANNOVAR...' : 'Try ANNOVAR'}
@@ -2912,7 +2912,7 @@ const VariantFilterSidebar = ({
                     ? 'Save current manual filters as a preset'
                     : 'Set at least one manual filter first'
                 }
-                className={`w-full h-10 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-medium border border-dashed transition-colors ${
+                className={`w-full h-10 px-3 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium border border-dashed transition-colors ${
                   hasAppliedManualFilters || Object.keys(pendingFilterPayload).length > 0
                     ? 'border-[var(--accent-teal)] text-[var(--accent-teal)] hover:bg-[var(--accent-teal-soft)] cursor-pointer'
                     : 'border-[var(--border-subtle)] text-[var(--text-tertiary)] cursor-not-allowed opacity-50'
@@ -2929,7 +2929,7 @@ const VariantFilterSidebar = ({
                   placeholder="Preset name"
                   autoFocus
                   maxLength={80}
-                  className="w-full px-3 py-2 text-[13px] border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)]"
+                  className="w-full px-3 py-2 text-xs border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)]"
                 />
                 <textarea
                   value={gardenNotesInput}
@@ -2937,7 +2937,7 @@ const VariantFilterSidebar = ({
                   rows={2}
                   placeholder="Notes (optional)"
                   maxLength={500}
-                  className="w-full px-3 py-2 text-[13px] border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)] resize-none"
+                  className="w-full px-3 py-2 text-xs border border-[var(--border-default)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-teal)] resize-none"
                 />
                 <div className="flex gap-2">
                   <button
@@ -2947,7 +2947,7 @@ const VariantFilterSidebar = ({
                       setIsGardenSaveFormOpen(false);
                     }}
                     disabled={isSavingPreset || !gardenNameInput.trim()}
-                    className={`flex-1 h-8 rounded-md text-[12px] font-medium ${
+                    className={`flex-1 h-8 rounded-md text-xs font-medium ${
                       isSavingPreset || !gardenNameInput.trim()
                         ? 'opacity-50 cursor-not-allowed bg-[var(--text-tertiary)] text-[var(--bg-app)]'
                         : 'bg-[var(--accent-teal)] text-[var(--bg-app)] hover:brightness-110'
@@ -2958,7 +2958,7 @@ const VariantFilterSidebar = ({
                   <button
                     type="button"
                     onClick={() => setIsGardenSaveFormOpen(false)}
-                    className="h-8 px-3 rounded-md text-[12px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
+                    className="h-8 px-3 rounded-md text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
                   >
                     Cancel
                   </button>

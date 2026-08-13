@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: ['class'],
   content: [
     "./index.html",
     "./src/**/*.{js,jsx,ts,tsx}",
@@ -22,6 +23,7 @@ export default {
         },
         destructive: {
           DEFAULT: 'hsl(var(--destructive) / <alpha-value>)',
+          foreground: 'hsl(var(--destructive-foreground) / <alpha-value>)',
         },
         muted: {
           DEFAULT: 'hsl(var(--muted) / <alpha-value>)',
@@ -58,9 +60,20 @@ export default {
         },
       },
       borderRadius: {
+        xl: 'calc(var(--radius) + 4px)',
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+      },
+      boxShadow: {
+        '2xs': 'var(--elevation-2xs)',
+        xs: 'var(--elevation-xs)',
+        sm: 'var(--elevation-sm)',
+        DEFAULT: 'var(--elevation-DEFAULT)',
+        md: 'var(--elevation-md)',
+        lg: 'var(--elevation-lg)',
+        xl: 'var(--elevation-xl)',
+        '2xl': 'var(--elevation-2xl)',
       },
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],

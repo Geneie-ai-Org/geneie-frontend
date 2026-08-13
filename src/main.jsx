@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
 import { AuthProvider } from './hooks/useAuth';
+import { ThemeProvider, useTheme } from './hooks/useTheme';
 import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import ChatPage from './pages/ChatPage';
@@ -15,11 +16,28 @@ import './App.css';
 
 initAnalytics();
 
+function ThemedToaster() {
+  const { theme } = useTheme();
+  return (
+    <Toaster
+      theme={theme}
+      position="bottom-center"
+      richColors
+      toastOptions={{
+        classNames: {
+          toast: 'font-sans shadow-lg',
+        },
+      }}
+    />
+  );
+}
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
+    <ThemeProvider>
     <MotionConfig reducedMotion="user">
     <BrowserRouter>
       <AuthProvider>
@@ -51,19 +69,11 @@ root.render(
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-        <Toaster
-          theme="dark"
-          position="top-right"
-          richColors
-          toastOptions={{
-            classNames: {
-              toast: 'font-sans shadow-lg',
-            },
-          }}
-        />
+        <ThemedToaster />
       </AuthProvider>
     </BrowserRouter>
     </MotionConfig>
+    </ThemeProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

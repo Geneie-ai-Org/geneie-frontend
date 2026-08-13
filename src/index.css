@@ -149,6 +149,52 @@ body {
 
 @layer base {
   :root {
+    --background: 0 0% 100%;
+    --foreground: 220.9 39.3% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 220.9 39.3% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220.9 39.3% 11%;
+    --primary: 21.7 65.6% 55.5%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 180 17.6% 39%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 220 14.4% 95.9%;
+    --muted-foreground: 220 9% 46.1%;
+    --accent: 0 0% 93.3%;
+    --accent-foreground: 220.9 39.3% 11%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 21.7 65.6% 55.5%;
+    --chart-1: 180 17.4% 45.1%;
+    --chart-2: 22.3 75.5% 61.6%;
+    --chart-3: 31.2 92.6% 78.8%;
+    --chart-4: 0 0% 53.3%;
+    --chart-5: 0 0% 60%;
+    --radius: 0.75rem;
+    --sidebar: 220 14.4% 95.9%;
+    --sidebar-foreground: 220.9 39.3% 11%;
+    --sidebar-primary: 21.7 65.6% 55.5%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 100%;
+    --sidebar-accent-foreground: 220.9 39.3% 11%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 21.7 65.6% 55.5%;
+
+    --elevation-2xs: 0px 1px 4px 0px hsl(0 0% 0% / 0.03);
+    --elevation-xs: 0px 1px 4px 0px hsl(0 0% 0% / 0.03);
+    --elevation-sm: 0px 1px 4px 0px hsl(0 0% 0% / 0.05), 0px 1px 2px -1px hsl(0 0% 0% / 0.05);
+    --elevation-DEFAULT: 0px 1px 4px 0px hsl(0 0% 0% / 0.05), 0px 1px 2px -1px hsl(0 0% 0% / 0.05);
+    --elevation-md: 0px 1px 4px 0px hsl(0 0% 0% / 0.05), 0px 2px 4px -1px hsl(0 0% 0% / 0.05);
+    --elevation-lg: 0px 1px 4px 0px hsl(0 0% 0% / 0.05), 0px 4px 6px -1px hsl(0 0% 0% / 0.05);
+    --elevation-xl: 0px 1px 4px 0px hsl(0 0% 0% / 0.05), 0px 8px 10px -1px hsl(0 0% 0% / 0.05);
+    --elevation-2xl: 0px 1px 4px 0px hsl(0 0% 0% / 0.13);
+  }
+
+  /* Unchanged from the pre-light-mode :root block — dark is still the shipped look. */
+  .dark {
     --background: 0 0% 6%;
     --foreground: 0 0% 91%;
     --card: 0 0% 11%;
@@ -164,6 +210,7 @@ body {
     --accent: 174 43% 55%;
     --accent-foreground: 0 0% 6%;
     --destructive: 6 74% 73%;
+    --destructive-foreground: 0 0% 6%;
     --border: 0 0% 15%;
     --input: 0 0% 11%;
     --ring: 174 42% 51%;
@@ -181,15 +228,30 @@ body {
     --sidebar-accent-foreground: 0 0% 91%;
     --sidebar-border: 0 0% 12%;
     --sidebar-ring: 174 42% 51%;
+
+    --elevation-2xs: 0px 1px 4px 0px hsl(0 0% 0% / 0.20);
+    --elevation-xs: 0px 1px 4px 0px hsl(0 0% 0% / 0.20);
+    --elevation-sm: 0px 1px 4px 0px hsl(0 0% 0% / 0.30), 0px 1px 2px -1px hsl(0 0% 0% / 0.30);
+    --elevation-DEFAULT: 0px 1px 4px 0px hsl(0 0% 0% / 0.30), 0px 1px 2px -1px hsl(0 0% 0% / 0.30);
+    --elevation-md: 0px 1px 4px 0px hsl(0 0% 0% / 0.30), 0px 2px 4px -1px hsl(0 0% 0% / 0.30);
+    --elevation-lg: 0px 1px 4px 0px hsl(0 0% 0% / 0.30), 0px 4px 6px -1px hsl(0 0% 0% / 0.30);
+    --elevation-xl: 0px 1px 4px 0px hsl(0 0% 0% / 0.30), 0px 8px 10px -1px hsl(0 0% 0% / 0.30);
+    --elevation-2xl: 0px 1px 4px 0px hsl(0 0% 0% / 0.45);
   }
 
+  /*
+   * Left as-is on purpose: `var(--border)` is a bare channel triplet, so this rule has
+   * always been invalid and dropped. Making it `hsl(var(--border))` would newly paint a
+   * border color on every element that sets a border width without a color — a dark-mode
+   * visual change. Revisit during the per-component migration.
+   */
   * {
     border-color: var(--border);
   }
 
   body {
-    background-color: var(--background);
-    color: var(--foreground);
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
   }
 }
 

@@ -1770,7 +1770,7 @@ const VariantFilterSidebar = ({
               };
               return (
                 <div
-                  className="flex shrink-0 rounded-lg overflow-hidden"
+                  className="flex w-full items-center gap-0.5 p-0.5 rounded-lg bg-[var(--segment-track)]"
                   role="tablist"
                   aria-label="Filter mode"
                   aria-orientation="horizontal"
@@ -1789,10 +1789,10 @@ const VariantFilterSidebar = ({
                         tabIndex={selected ? 0 : -1}
                         onClick={() => handleTabSwitch(t.key)}
                         data-state={selected ? 'active' : 'inactive'}
-                        className={`flex-1 px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)] ${
+                        className={`flex-1 px-3 py-1 text-sm rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${
                           selected
-                            ? 'bg-[var(--accent-teal)] text-[var(--bg-app)]'
-                            : 'bg-[var(--bg-surface-raised)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
+                            ? 'font-semibold text-[var(--text-primary)] bg-[var(--segment-thumb)] shadow-[var(--shadow-sm)]'
+                            : 'font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                         }`}
                       >
                         {t.label}

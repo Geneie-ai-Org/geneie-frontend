@@ -20,9 +20,11 @@ import {
   Lock, Database, Check, Activity
 } from 'lucide-react';
 import { HugeiconsIcon } from '@hugeicons/react'
+import { useForcedTheme } from '@/hooks/useTheme'
 import { BioEnergyIcon, MentoringIcon, SpeedTrain01Icon, ArcherIcon, AiSheetsIcon, FileTypeIcon, DashboardSpeed01Icon } from '@hugeicons/core-free-icons'
 
 const LandingPage = () => {
+  useForcedTheme('dark');
   const navigate = useNavigate();
   const [isNavSolid, setIsNavSolid] = useState(false);
   const [activeWord, setActiveWord] = useState(0);

@@ -1,53 +1,53 @@
 /* src/App.css */
 
-/* ============================================
-   DARK THEME — Google AI Studio inspired
-   ============================================ */
 :root {
   /* Surface hierarchy */
-  --bg-app: #0F0F0F;
-  --bg-sidebar: #161616;
-  --bg-surface: #1C1C1C;
-  --bg-surface-raised: #242424;
-  --bg-surface-hover: #2A2A2A;
-  --bg-input: #1C1C1C;
-  --bg-input-focus: #242424;
+  --bg-app: hsl(var(--background));
+  --bg-sidebar: hsl(var(--sidebar));
+  --bg-surface: hsl(var(--card));
+  --bg-surface-raised: hsl(var(--muted));
+  --bg-surface-hover: hsl(var(--accent));
+  --bg-input: hsl(var(--background));
+  --bg-input-focus: hsl(var(--background));
+
+  --segment-track: hsl(var(--muted));
+  --segment-thumb: hsl(var(--card));
 
   /* Borders */
-  --border-subtle: rgba(255,255,255,0.06);
-  --border-default: rgba(255,255,255,0.10);
-  --border-strong: rgba(255,255,255,0.16);
-  --border-focus: rgba(77,182,172,0.4);
+  --border-subtle: rgba(0,0,0,0.06);
+  --border-default: rgba(0,0,0,0.10);
+  --border-strong: rgba(0,0,0,0.16);
+  --border-focus: hsl(var(--ring) / 0.4);
 
   /* Text hierarchy */
-  --text-primary: #E8EAED;
-  --text-secondary: #9AA0A6;
+  --text-primary: hsl(var(--foreground));
+  --text-secondary: #4B5563;
   --text-tertiary: #6B7280;
-  --text-disabled: #4A4A4A;
+  --text-disabled: #C3C6CB;
 
-  /* Accent — teal is the single brand accent */
-  --accent-teal: #4DB6AC;
-  --accent-teal-soft: rgba(77,182,172,0.10);
-  --accent-teal-hover: #80CBC4;
+  /* Accent — the single brand accent. Teal in dark, primary (orange) in light. */
+  --accent-teal: hsl(var(--primary));
+  --accent-teal-soft: hsl(var(--primary) / 0.12);
+  --accent-teal-hover: color-mix(in srgb, hsl(var(--primary)) 85%, #000);
 
   /* Inline code in chat markdown — blue by intent, not brand */
-  --code-inline: #8AB4F8;
+  --code-inline: #1A73E8;
 
   /* Semantic */
-  --info: #8AB4F8;
-  --info-soft: rgba(138,180,248,0.10);
-  --success: #81C995;
-  --success-soft: rgba(129,201,149,0.12);
-  --error: #F28B82;
-  --error-soft: rgba(242,139,130,0.12);
-  --warning: #FDD663;
-  --warning-soft: rgba(253,214,99,0.12);
+  --info: #1A73E8;
+  --info-soft: rgba(26,115,232,0.10);
+  --success: #188038;
+  --success-soft: rgba(24,128,56,0.12);
+  --error: #D93025;
+  --error-soft: rgba(217,48,37,0.12);
+  --warning: #B06000;
+  --warning-soft: rgba(176,96,0,0.12);
 
   /* Elevation */
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
-  --shadow-md: 0 2px 8px rgba(0,0,0,0.4);
-  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
-  --shadow-xl: 0 16px 48px rgba(0,0,0,0.6);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.08);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.10);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+  --shadow-xl: 0 16px 48px rgba(0,0,0,0.16);
 
   /* Radius */
   --radius-sm: 8px;
@@ -73,7 +73,55 @@
   --shell-right-col: 0px;
 }
 
-/* Dark scrollbars — match the app background */
+/* Dark theme — the shipped look. Values are the pre-light-mode originals, unchanged. */
+.dark {
+  /* Surface hierarchy */
+  --bg-surface-raised: #242424;
+  --bg-surface-hover: #2A2A2A;
+  --bg-input: #1C1C1C;
+  --bg-input-focus: #242424;
+
+  /* Segmented control */
+  --segment-track: #1C1C1C;
+  --segment-thumb: #2E2E2E;
+
+  /* Borders */
+  --border-subtle: rgba(255,255,255,0.06);
+  --border-default: rgba(255,255,255,0.10);
+  --border-strong: rgba(255,255,255,0.16);
+  --border-focus: rgba(77,182,172,0.4);
+
+  /* Text hierarchy */
+  --text-secondary: #9AA0A6;
+  --text-tertiary: #6B7280;
+  --text-disabled: #4A4A4A;
+
+  /* Accent */
+  --accent-teal: #4DB6AC;
+  --accent-teal-soft: rgba(77,182,172,0.10);
+  --accent-teal-hover: #80CBC4;
+
+  /* Inline code in chat markdown */
+  --code-inline: #8AB4F8;
+
+  /* Semantic */
+  --info: #8AB4F8;
+  --info-soft: rgba(138,180,248,0.10);
+  --success: #81C995;
+  --success-soft: rgba(129,201,149,0.12);
+  --error: #F28B82;
+  --error-soft: rgba(242,139,130,0.12);
+  --warning: #FDD663;
+  --warning-soft: rgba(253,214,99,0.12);
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+  --shadow-xl: 0 16px 48px rgba(0,0,0,0.6);
+}
+
+/* Scrollbars — match the app background */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--bg-surface-hover) transparent;
@@ -137,6 +185,10 @@
   height: 100%;
   overflow: visible;
   border-right: 1px solid var(--border-subtle);
+}
+
+:root:not(.dark) .chat-shell-left {
+  background-color: var(--bg-sidebar);
 }
 
 @media (max-width: 767px) {

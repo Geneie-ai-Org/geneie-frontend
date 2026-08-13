@@ -14,7 +14,7 @@ function useAutosizeTextarea(ref, value, maxHeight = 240) {
 }
 
 const TEXTAREA_BASE =
-  'w-full resize-none border-none bg-transparent dark:bg-transparent shadow-none rounded-none px-0 outline-none focus-visible:ring-0 focus-visible:border-transparent';
+  'w-full resize-none border-none bg-transparent dark:bg-transparent disabled:bg-transparent dark:disabled:bg-transparent shadow-none rounded-none px-0 outline-none focus-visible:ring-0 focus-visible:border-transparent';
 
 const FileTypeDropdown = ({
   dropdownSource,

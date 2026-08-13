@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, Plus, Trash2, ChevronLeft, ChevronRight, Settings, LogOut } from 'lucide-react';
+import { MessageSquare, Plus, Trash2, ChevronLeft, ChevronRight, Settings, LogOut, Sun, Moon } from 'lucide-react';
 import { getAuth, signOut } from 'firebase/auth';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { useTheme } from '@/hooks/useTheme';
 import NotificationBell from './NotificationBell';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
@@ -42,6 +43,8 @@ const ConversationSidebar = ({
 }) => {
     const isMobile = useIsMobile();
     const navigate = useNavigate();
+    const { isDark, toggleTheme } = useTheme();
+    const themeLabel = isDark ? 'Switch to light mode' : 'Switch to dark mode';
     const freeChatLimit = userTier === 'free' ? chatLimit : Infinity;
     const [pendingDeleteId, setPendingDeleteId] = useState(null);
 
@@ -240,6 +243,19 @@ const ConversationSidebar = ({
                                     onNavigateToConversation={(convId) => onSelectConversation(convId)}
                                     triggerClassName="h-10 w-10 shrink-0 flex items-center justify-center text-[var(--text-secondary)] cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)]"
                                 />
+
+                                <div className="w-px bg-[var(--border-subtle)]" aria-hidden />
+
+                                <button
+                                    type="button"
+                                    onClick={toggleTheme}
+                                    title={themeLabel}
+                                    aria-label={themeLabel}
+                                    aria-pressed={!isDark}
+                                    className="h-10 w-10 shrink-0 flex items-center justify-center text-[var(--text-secondary)] cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)]"
+                                >
+                                    {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                                </button>
                             </div>
                         </div>
                     ) : (
@@ -274,6 +290,17 @@ const ConversationSidebar = ({
                                 onNavigateToConversation={(convId) => onSelectConversation(convId)}
                                 triggerClassName="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--text-secondary)] cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
                             />
+
+                            <button
+                                type="button"
+                                onClick={toggleTheme}
+                                title={themeLabel}
+                                aria-label={themeLabel}
+                                aria-pressed={!isDark}
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--text-secondary)] cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                            >
+                                {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                            </button>
                         </div>
                     )}
                     {/* Usage indicator */}

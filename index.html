@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 
 <head>
   <meta charset="utf-8" />
@@ -16,6 +16,14 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;700&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap"
     rel="stylesheet">
   <title>Geneie.ai - Genomic Analysis</title>
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem('geneie-theme');
+        document.documentElement.classList.toggle('dark', stored !== 'light');
+      } catch (e) { /* storage blocked — keep the dark class from the markup */ }
+    })();
+  </script>
 </head>
 
 <body>

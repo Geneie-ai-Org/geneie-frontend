@@ -237,7 +237,7 @@ const VariantAnalysisPipeline = ({
             </p>
             {(hasAnnotatedFile || vcfAnnotated) && (
               <span
-                className="shrink-0 inline-flex items-center gap-0.5 px-1.5 h-[16px] rounded-full text-[9px] font-medium uppercase tracking-wide"
+                className="shrink-0 inline-flex items-center gap-0.5 px-1.5 h-[18px] rounded-full text-2xs font-medium uppercase tracking-wide"
                 style={{ backgroundColor: 'var(--accent-teal-soft)', color: 'var(--accent-teal)' }}
                 title={hasAnnotatedFile ? 'ANNOVAR annotations added by Geneie' : 'This VCF already contains ANNOVAR annotations'}
               >
@@ -246,7 +246,7 @@ const VariantAnalysisPipeline = ({
             )}
           </div>
           <p
-            className="text-[11px] truncate leading-tight mt-0.5"
+            className="text-2xs truncate leading-tight mt-0.5"
             style={{
               color: enrichmentState?.active || indexingState?.active
                 ? 'var(--accent-teal)'
@@ -322,7 +322,7 @@ const VariantAnalysisPipeline = ({
         <div className="px-3 pb-2.5 pt-0">
           <div className="flex items-center gap-1.5 mb-1">
             <div className="w-3 h-3 border-2 rounded-full animate-spin shrink-0" style={{ borderColor: 'var(--accent-teal)', borderTopColor: 'transparent' }} />
-            <span className="text-[11px] truncate" style={{ color: 'var(--text-secondary)' }}>
+            <span className="text-2xs truncate" style={{ color: 'var(--text-secondary)' }}>
               {enrichmentState.message || 'Enriching your variants…'}
             </span>
           </div>
@@ -339,7 +339,7 @@ const VariantAnalysisPipeline = ({
       )}
       {enrichmentState?.failed && (
         <div className="px-3 pb-2.5 pt-0">
-          <div className="p-2 rounded-lg border text-[11px] leading-relaxed" style={{ borderColor: 'var(--error)', backgroundColor: 'var(--error-soft)', color: 'var(--error)' }}>
+          <div className="p-2 rounded-lg border text-2xs leading-relaxed" style={{ borderColor: 'var(--error)', backgroundColor: 'var(--error-soft)', color: 'var(--error)' }}>
             <span className="font-medium">Enrichment failed. </span>
             {enrichmentState.message || 'Reset your filters and apply them again to retry.'}
           </div>
@@ -350,7 +350,7 @@ const VariantAnalysisPipeline = ({
         <div className="px-3 pb-2.5 pt-0">
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 border-2 rounded-full animate-spin shrink-0" style={{ borderColor: 'var(--accent-teal)', borderTopColor: 'transparent' }} />
-            <span className="text-[11px] truncate" style={{ color: 'var(--text-secondary)' }}>
+            <span className="text-2xs truncate" style={{ color: 'var(--text-secondary)' }}>
               {indexingState.message || 'Indexing variants for chat…'}
             </span>
           </div>
@@ -358,7 +358,7 @@ const VariantAnalysisPipeline = ({
       )}
       {indexingState?.failed && (
         <div className="px-3 pb-2.5 pt-0">
-          <div className="p-2 rounded-lg border text-[11px] leading-relaxed" style={{ borderColor: 'var(--error)', backgroundColor: 'var(--error-soft)', color: 'var(--error)' }}>
+          <div className="p-2 rounded-lg border text-2xs leading-relaxed" style={{ borderColor: 'var(--error)', backgroundColor: 'var(--error-soft)', color: 'var(--error)' }}>
             <span className="font-medium">Indexing failed. </span>
             {indexingState.message || 'Try applying filters again to retry.'}
           </div>
@@ -386,7 +386,7 @@ const VariantAnalysisPipeline = ({
                     type="button"
                     disabled={guestLocked}
                     onClick={() => handleStepClick(def.id)}
-                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] sm:text-xs transition-colors ${
+                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-2xs sm:text-xs transition-colors ${
                       clickable && !guestLocked ? 'hover:bg-white/5 cursor-pointer' : 'cursor-default opacity-60'
                     }`}
                     style={{
@@ -408,7 +408,7 @@ const VariantAnalysisPipeline = ({
                     <span>{def.shortLabel || def.label}</span>
                   </button>
                   {!isLast && (
-                    <span className="text-[10px] px-0.5" style={{ color: 'var(--text-disabled)' }} aria-hidden>
+                    <span className="text-2xs px-0.5" style={{ color: 'var(--text-disabled)' }} aria-hidden>
                       →
                     </span>
                   )}
@@ -418,7 +418,7 @@ const VariantAnalysisPipeline = ({
           </ol>
 
           <p
-            className="text-[11px] leading-relaxed px-0.5"
+            className="text-2xs leading-relaxed px-0.5"
             style={{
               color: chatReady ? 'var(--accent-teal)' : 'var(--text-secondary)',
             }}
@@ -432,7 +432,7 @@ const VariantAnalysisPipeline = ({
           </p>
 
           {isGuest && (
-            <p className="text-[10px] mt-1.5 px-0.5" style={{ color: 'var(--warning)' }}>
+            <p className="text-2xs mt-1.5 px-0.5" style={{ color: 'var(--warning)' }}>
               Sign in to run ANNOVAR, apply filters, and chat with your full variant set.
             </p>
           )}

@@ -786,6 +786,18 @@ export function useVariantPipeline({
       });
       return true;
     }
+    // While ANNOVAR runs the eligibility copy is stale advice ("apply a filter") — say what
+    // is actually happening instead.
+    if (isRunningAnnovar || pipelineSnapshot.annovarJob?.status === 'running') {
+      setAnnovarMessageModal({
+        title: 'Annotation is running',
+        message:
+          pipelineSnapshot.annovarJob?.message ||
+          'ANNOVAR is annotating your variants. Chat will unlock automatically when it finishes.',
+        variant: 'info',
+      });
+      return true;
+    }
     setAnnovarMessageModal({
       title: 'Chat not available',
       message:
@@ -794,7 +806,7 @@ export function useVariantPipeline({
       variant: 'warning',
     });
     return true;
-  }, [isChatPipelineGated, enrichmentState.failed, enrichmentState.active, enrichmentState.message, indexingState.failed, indexingState.active, indexingState.message, chatEligibility.message, setAnnovarMessageModal]);
+  }, [isChatPipelineGated, enrichmentState.failed, enrichmentState.active, enrichmentState.message, indexingState.failed, indexingState.active, indexingState.message, isRunningAnnovar, pipelineSnapshot.annovarJob, chatEligibility.message, setAnnovarMessageModal]);
 
   const runAnnovarForCurrentConversation = useCallback(async () => {
     if (userTier === 'guest') {

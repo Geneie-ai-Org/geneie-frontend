@@ -989,7 +989,7 @@ const DocumentUpload = ({
           >
             {isUploading ? (
               <>
-                <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--accent-blue)' }} />
+                <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--accent-teal)' }} />
                 <span className="truncate max-w-[120px]">
                   {uploadProgress > 0 && uploadProgress < 100
                     ? `${Math.round(uploadProgress)}%`
@@ -1030,7 +1030,7 @@ const DocumentUpload = ({
           {/* Import from a link — public URL / Drive / Dropbox */}
           {importMode === 'url' && !compact && (
             <div>
-              <p className="text-[13px] font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
+              <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
                 Import from a link
               </p>
               {/* Optional filename — progressive disclosure */}
@@ -1041,7 +1041,7 @@ const DocumentUpload = ({
                   onChange={(e) => setUrlFilenameOverride(e.target.value)}
                   placeholder="Filename"
                   autoFocus={showUrlFilename && !urlFilenameOverride}
-                  className="w-full h-9 px-3 mb-2 text-[13px] rounded-lg border transition-all focus:outline-none placeholder:text-[var(--text-tertiary)]"
+                  className="w-full h-9 px-3 mb-2 text-xs rounded-lg border transition-all focus:outline-none placeholder:text-[var(--text-tertiary)]"
                   style={{ borderColor: 'var(--border-default)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                   onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--accent-teal)')}
                   onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border-default)')}
@@ -1095,11 +1095,11 @@ const DocumentUpload = ({
               {error ? (
                 <div className="flex items-start gap-2 mt-3 ml-3">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: 'var(--error)' }} />
-                  <p className="text-[11px] leading-relaxed" style={{ color: 'var(--error)' }}>{error}</p>
+                  <p className="text-2xs leading-relaxed" style={{ color: 'var(--error)' }}>{error}</p>
                 </div>
               ) : (
                 <div className="flex items-start gap-2 mt-3 ml-3">
-                  <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-tertiary)' }}>
+                  <p className="text-2xs leading-relaxed" style={{ color: 'var(--text-tertiary)' }}>
                     Links must be shared as{' '}
                     <span style={{ color: 'var(--text-secondary)' }}>&ldquo;Anyone with the link.&rdquo;</span>
                   </p>
@@ -1112,7 +1112,7 @@ const DocumentUpload = ({
                   type="button"
                   onClick={handleUrlContinue}
                   disabled={isPreflighting || !fileUrl.trim()}
-                  className="h-9 px-5 rounded-lg text-[13px] font-medium inline-flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="h-9 px-5 rounded-lg text-xs font-medium inline-flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
                   onMouseEnter={(e) => { if (!isPreflighting && fileUrl.trim()) e.currentTarget.style.backgroundColor = 'var(--accent-teal-hover)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal)'; }}
@@ -1227,7 +1227,7 @@ const DocumentUpload = ({
             <h3 id="sample-metadata-title" className="text-base font-semibold mb-1 pr-8" style={{ color: 'var(--text-primary)' }}>
               {editMode ? 'Edit Sample Information' : 'Sample Metadata'}
             </h3>
-            <p className="text-[13px] mb-0" style={{ color: 'var(--text-tertiary)' }}>
+            <p className="text-xs mb-0" style={{ color: 'var(--text-tertiary)' }}>
               {editMode ? 'Update metadata for this variant file. Changes may require re-running analysis steps.' : 'Provide details about your variant file for better analysis.'}
             </p>
             {!editMode && (selectedFile || importUrlMeta) && (
@@ -1251,7 +1251,7 @@ const DocumentUpload = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
                 {/* Name - Editable */}
                 <div>
-                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Name
                   </label>
                   <input
@@ -1265,7 +1265,7 @@ const DocumentUpload = ({
                       color: 'var(--text-primary)',
                       height: '40px'
                     }}
-                    onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent-blue)'}
+                    onFocus={(e) => e.currentTarget.style.borderColor = 'var(--border-focus)'}
                     onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-default)'}
                     placeholder="Enter sample name..."
                   />
@@ -1273,7 +1273,7 @@ const DocumentUpload = ({
 
                 {/* Genome - Mandatory Field (auto-detected when possible) */}
                 <div>
-                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Genome <span style={{ color: 'var(--error)' }}>*</span>
                   </label>
                   <CustomSelect
@@ -1294,7 +1294,7 @@ const DocumentUpload = ({
                   {!editMode && isDetectingGenome && (
                     <div className="flex items-center gap-1.5 mt-1">
                       <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--accent-teal)' }} />
-                      <span className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>Detecting genome build…</span>
+                      <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>Detecting genome build…</span>
                     </div>
                   )}
                   {!editMode && genomeDetection?.detected_build && !isDetectingGenome && !genomeDetection._userOverride && (
@@ -1302,7 +1302,7 @@ const DocumentUpload = ({
                       className="flex items-center gap-1.5 mt-1 min-w-0"
                       title={genomeDetection.source ? `Source: ${genomeDetection.source.replace(/_/g, ' ')}` : undefined}
                     >
-                      <span className="text-[11px] truncate text-[var(--text-tertiary)]">
+                      <span className="text-2xs truncate text-[var(--text-tertiary)]">
                         Auto-detected {genomeDetection.detected_build.toUpperCase()}
                         {genomeDetection.confidence !== 'high' && ' — verify'}
                       </span>
@@ -1312,7 +1312,7 @@ const DocumentUpload = ({
 
                 {/* Sequencing Type - Mandatory Field */}
                 <div>
-                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Sequencing Type <span style={{ color: 'var(--error)' }}>*</span>
                   </label>
                   <CustomSelect
@@ -1330,8 +1330,8 @@ const DocumentUpload = ({
 
                 {/* Sample File Type - Auto-detected */}
                 <div>
-                  <label className="flex items-baseline gap-1.5 text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                    Sample File Type <span className="text-[11px] font-normal items-baseline" style={{ color: 'var(--text-tertiary)' }}>(auto-detected)</span>
+                  <label className="flex items-baseline gap-1.5 text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                    Sample File Type <span className="text-2xs font-normal items-baseline" style={{ color: 'var(--text-tertiary)' }}>(auto-detected)</span>
                   </label>
                   <input
                     type="text"
@@ -1348,7 +1348,7 @@ const DocumentUpload = ({
 
                 {/* Sample Sex - Optional */}
                 <div>
-                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Sample Sex
                   </label>
                   <CustomSelect
@@ -1365,7 +1365,7 @@ const DocumentUpload = ({
 
                 {/* Analysis Type - Mandatory Field */}
                 <div>
-                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Analysis Type <span style={{ color: 'var(--error)' }}>*</span>
                   </label>
                   <CustomSelect
@@ -1387,7 +1387,7 @@ const DocumentUpload = ({
 
                 {/* Sample Source - Optional */}
                 <div>
-                  <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Sample Source
                   </label>
                   <CustomSelect
@@ -1430,7 +1430,7 @@ const DocumentUpload = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                     {/* Sample Role */}
                     <div>
-                      <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Sample Role
                       </label>
                       <CustomSelect
@@ -1449,7 +1449,7 @@ const DocumentUpload = ({
 
                     {/* Affected Status */}
                     <div>
-                      <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Affected Status
                       </label>
                       <CustomSelect
@@ -1465,7 +1465,7 @@ const DocumentUpload = ({
 
                     {/* Inheritance Model */}
                     <div>
-                      <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Inheritance Model
                       </label>
                       <CustomSelect
@@ -1489,7 +1489,7 @@ const DocumentUpload = ({
                     const phenotypeInvalid = validationAttempted && !sampleMetadata.phenotype?.trim();
                     return (
                       <div>
-                        <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
                           Phenotype <span style={{ color: 'var(--error)' }}>*</span>
                         </label>
                         <textarea
@@ -1507,7 +1507,7 @@ const DocumentUpload = ({
                           }}
                         />
                         {phenotypeInvalid && (
-                          <p className="mt-1 text-[12px]" style={{ color: 'var(--error)' }}>
+                          <p className="mt-1 text-xs" style={{ color: 'var(--error)' }}>
                             Required for Germline analysis — used for Exomiser phenotype prioritization.
                           </p>
                         )}
@@ -1531,7 +1531,7 @@ const DocumentUpload = ({
                       Tumor Analysis Fields
                     </h4>
                     <div>
-                      <label className="block text-[13px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Tumor Type
                       </label>
                       <input

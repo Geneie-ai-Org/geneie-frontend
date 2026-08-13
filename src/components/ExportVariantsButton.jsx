@@ -136,7 +136,7 @@ export default function ExportVariantsButton({
         onClick={countMismatch ? checkEligibility : handleExport}
         disabled={(!canExport && !countMismatch) || isExporting}
         title={title}
-        className={`w-full h-10 rounded-lg flex items-center justify-center gap-2 text-[13px] font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${
+        className={`w-full h-10 rounded-lg flex items-center justify-center gap-2 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${
           canExport && !isExporting
             ? 'bg-[var(--accent-teal)] text-[var(--bg-app)] hover:brightness-110'
             : countMismatch
@@ -155,14 +155,14 @@ export default function ExportVariantsButton({
       </button>
       {subLine && (
         <p
-          className="text-[11px] leading-snug"
+          className="text-2xs leading-snug"
           style={{ color: countMismatch ? 'var(--error)' : 'var(--text-tertiary)' }}
         >
           {subLine}
         </p>
       )}
       {error && (
-        <p className="text-[11px] text-[var(--error)] truncate" title={error}>
+        <p className="text-2xs text-[var(--error)] truncate" title={error}>
           {error}
         </p>
       )}

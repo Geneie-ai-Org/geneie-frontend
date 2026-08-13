@@ -72,10 +72,10 @@ export default function NotificationBell({ onNavigateToConversation, triggerClas
         aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
       >
         <span className="relative inline-flex">
-          <Bell className="w-4 h-4" />
+          <Bell className="w-5 h-5" />
           {unreadCount > 0 && (
             <span
-              className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 rounded-full inline-flex items-center justify-center text-[10px] font-semibold leading-none px-1 tabular-nums bg-[var(--accent-teal)] text-[var(--bg-app)]"
+              className="absolute -top-2 -right-2 h-4 min-w-4 px-1 rounded-full inline-flex items-center justify-center text-2xs font-semibold leading-none tabular-nums bg-[var(--accent-teal)] text-[var(--bg-app)]"
             >
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
@@ -90,12 +90,12 @@ export default function NotificationBell({ onNavigateToConversation, triggerClas
         className="w-[336px] p-0 rounded-xl overflow-hidden shadow-2xl bg-[var(--bg-surface-raised)] border border-[var(--border-default)]"
       >
         <div className="px-3.5 h-10 flex items-center justify-between border-b border-[var(--border-subtle)]">
-          <span className="text-[13px] font-semibold tracking-tight text-[var(--text-primary)]">
+          <span className="text-xs font-semibold tracking-tight text-[var(--text-primary)]">
             Notifications
           </span>
           {unreadCount > 0 && (
             <span
-              className="text-[10px] px-1.5 h-[18px] inline-flex items-center rounded-full font-semibold tabular-nums bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]"
+              className="text-2xs px-1.5 h-[18px] inline-flex items-center rounded-full font-semibold tabular-nums bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]"
             >
               {unreadCount} new
             </span>
@@ -119,10 +119,10 @@ export default function NotificationBell({ onNavigateToConversation, triggerClas
             </div>
           ) : notifications.length === 0 ? (
             <div className="py-10 px-6 text-center">
-              <p className="text-[13px] text-[var(--text-secondary)]">
+              <p className="text-xs text-[var(--text-secondary)]">
                 You're all caught up.
               </p>
-              <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
+              <p className="mt-1 text-2xs text-[var(--text-tertiary)]">
                 We'll ping you here when a pipeline finishes.
               </p>
             </div>
@@ -141,7 +141,7 @@ export default function NotificationBell({ onNavigateToConversation, triggerClas
                   >
                     <div className="flex items-center gap-2">
                       <span
-                        className="text-[10px] font-semibold uppercase shrink-0"
+                        className="text-2xs font-semibold uppercase shrink-0"
                         style={{ color, letterSpacing: '0.08em' }}
                       >
                         {label}
@@ -150,7 +150,7 @@ export default function NotificationBell({ onNavigateToConversation, triggerClas
                         className="w-0.5 h-0.5 rounded-full shrink-0 bg-[var(--text-tertiary)]"
                         aria-hidden
                       />
-                      <span className="text-[10px] shrink-0 tabular-nums text-[var(--text-tertiary)]">
+                      <span className="text-2xs shrink-0 tabular-nums text-[var(--text-tertiary)]">
                         {timeAgo(n.created_at)}
                       </span>
                       {!n.read && (
@@ -161,14 +161,14 @@ export default function NotificationBell({ onNavigateToConversation, triggerClas
                         />
                       )}
                     </div>
-                    <p className="text-[13px] font-medium leading-snug truncate text-[var(--text-primary)]">
+                    <p className="text-xs font-medium leading-snug truncate text-[var(--text-primary)]">
                       {n.title}
                     </p>
-                    <p className="text-[12px] leading-snug truncate text-[var(--text-secondary)]">
+                    <p className="text-xs leading-snug truncate text-[var(--text-secondary)]">
                       {n.message}
                     </p>
                     {n.conversation_title && (
-                      <p className="text-[11px] truncate text-[var(--text-tertiary)]">
+                      <p className="text-2xs truncate text-[var(--text-tertiary)]">
                         in {n.conversation_title}
                       </p>
                     )}

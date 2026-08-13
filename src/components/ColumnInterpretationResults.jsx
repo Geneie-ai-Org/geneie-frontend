@@ -24,8 +24,8 @@ const C = {
   warning: 'var(--accent-teal)',
   warningSoft: 'var(--accent-teal-soft)',
   warningText: 'var(--accent-teal)',
-  info: 'var(--accent-blue)',
-  infoSoft: 'var(--accent-blue-soft)',
+  info: 'var(--info)',
+  infoSoft: 'var(--info-soft)',
   teal: 'var(--accent-teal)',
   tealSoft: 'var(--accent-teal-soft)',
   tealHover: 'var(--accent-teal-hover)',
@@ -232,7 +232,7 @@ const ColumnInterpretationResults = ({
   const tooltipStyle = {
     backgroundColor: C.tooltip,
     color: C.text,
-    fontSize: '12px',
+    fontSize: '13px',
     fontWeight: '500',
     border: `1px solid ${C.border}`,
     boxShadow: C.shadow,
@@ -280,7 +280,7 @@ const ColumnInterpretationResults = ({
                     <span
                       key={colName}
                       title={roleDiffers ? `Role: ${colName}` : label}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
                       style={{
                         backgroundColor: C.successSoft || `${C.success}18`,
                         borderColor: `${C.success}40`,
@@ -312,7 +312,7 @@ const ColumnInterpretationResults = ({
           {issues.map(([colName]) => (
             <span
               key={colName}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
               style={{
                 backgroundColor: `${missingColor}14`,
                 borderColor: `${missingColor}40`,
@@ -328,7 +328,7 @@ const ColumnInterpretationResults = ({
               <span
                 key={colName}
                 title={colInfo.matched_column && colInfo.matched_column !== colName ? `Role: ${colName}` : pillLabel}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
                 style={{
                   backgroundColor: C.successSoft || `${C.success}18`,
                   borderColor: `${C.success}40`,
@@ -380,7 +380,7 @@ const ColumnInterpretationResults = ({
                     <span
                       key={colName}
                       title={tip}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
                       style={{
                         backgroundColor: C.successSoft || `${C.success}18`,
                         borderColor: `${C.success}40`,
@@ -412,7 +412,7 @@ const ColumnInterpretationResults = ({
           {issues.map(([colName, colInfo]) => (
             <span
               key={colName}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
               style={{
                 backgroundColor: colInfo.required ? (C.warningSoft || `${C.warning}18`) : 'transparent',
                 borderColor: colInfo.required ? `${C.warning}40` : C.border,
@@ -428,7 +428,7 @@ const ColumnInterpretationResults = ({
               <span
                 key={colName}
                 title={colInfo.required ? `${pillLabel} (Required)` : pillLabel}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
                 style={{
                   backgroundColor: C.successSoft || `${C.success}18`,
                   borderColor: `${C.success}40`,
@@ -819,13 +819,13 @@ const ColumnInterpretationResults = ({
                     </div>
                     <div className="text-center">
                       <div
-                        className="text-[13px] font-semibold leading-tight"
+                        className="text-xs font-semibold leading-tight"
                         style={{ color: isSel || passed ? C.text : C.textMuted }}
                       >
                         {s.name}
                       </div>
                       <div
-                        className="text-[11px] leading-tight mt-1"
+                        className="text-2xs leading-tight mt-1"
                         style={{ color: passed ? C.success : (attention && isSel ? C.warning : C.textDim) }}
                       >
                         {getStepSubtitle(s.status)}
@@ -839,7 +839,7 @@ const ColumnInterpretationResults = ({
 
           {/* Selected step detail panel */}
           {selectedStepData && (
-            <Card className="bg-transparent ring-0 border rounded-lg py-0 gap-0" style={{ borderColor: C.border }}>
+            <Card className="border-green-900 ring-0 border rounded-lg py-0 gap-0" style={{ borderColor: C.border }}>
               <CardContent className="p-4">
                 {renderStepDetails(selectedStepData.n, selectedStepData.data) || (
                   <p className="mt-3 text-sm" style={{ color: C.textMuted }}>
@@ -861,7 +861,7 @@ const ColumnInterpretationResults = ({
 
           {/* Tools — per-step actions */}
           <div className="pt-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: C.textDim }}>
+            <p className="text-2xs font-semibold uppercase tracking-wide mb-2" style={{ color: C.textDim }}>
               {selectedStep === 1 ? 'Review' : selectedStep === 2 ? 'Annotate' : 'Apply filters'}
             </p>
             <div className="flex flex-wrap items-center gap-2">

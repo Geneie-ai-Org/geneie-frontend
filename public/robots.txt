@@ -1,3 +1,14 @@
 # https://www.robotstxt.org/robotstxt.html
+
 User-agent: *
-Disallow:
+Allow: /
+
+# Authenticated surfaces — no public content, and every URL under /app is a
+# private conversation. Keeping them out of the index also avoids crawl budget
+# being spent on pages that render nothing without a session.
+Disallow: /app
+Disallow: /auth
+Disallow: /subscription-success
+Disallow: /subscription-canceled
+
+Sitemap: https://geneie.chat/sitemap.xml

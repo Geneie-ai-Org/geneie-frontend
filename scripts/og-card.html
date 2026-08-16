@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<!--
+  Source for public/og-image.png (the social card shown when the site is linked).
+  Regenerate after changing the headline or branding: open this file in a browser
+  at exactly 1200x630 and save a full-viewport screenshot over public/og-image.png.
+  index.html declares og:image:width=1200 and og:image:height=630, so keep that size.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background: #000;
+    font-family: 'Outfit', system-ui, sans-serif;
+    position: relative;
+  }
+  .bg {
+    position: absolute; inset: 0;
+    background-image: url('../public/black-bg-helix.png');
+    background-size: cover;
+    background-position: right center;
+  }
+  .scrim {
+    position: absolute; inset: 0;
+    background: linear-gradient(to right, #000 0%, rgba(0,0,0,0.92) 42%, rgba(0,0,0,0.35) 100%);
+  }
+  .content {
+    position: absolute;
+    left: 72px; top: 92px;
+    width: 660px;
+    display: flex; flex-direction: column;
+    gap: 24px;
+  }
+  .logo { width: 236px; height: auto; display: block; margin-bottom: 4px; }
+  h1 {
+    font-size: 58px; line-height: 1.06; font-weight: 700;
+    letter-spacing: -1.8px; color: #fff;
+  }
+  p {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 22px; line-height: 1.5; color: #b6bcc2; max-width: 560px;
+  }
+  .pills { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
+  .pill {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 16px; font-weight: 500; color: #d6dade;
+    border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 999px; padding: 8px 16px;
+  }
+  .powered {
+    position: absolute; left: 72px; bottom: 44px;
+    display: flex; align-items: center; gap: 9px;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 17px; font-weight: 500; color: #8b9298;
+  }
+  .powered img { height: 26px; width: auto; display: block; }
+  .powered .name { color: #c3c9ce; }
+</style>
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="scrim"></div>
+  <div class="content">
+    <img class="logo" src="../public/logo/Final gene dark.svg" alt="Geneie">
+    <h1>Chat with your<br>Genomic Data</h1>
+    <p>Explore your variants, ask complex questions, and receive instant insights backed by peer-reviewed research.</p>
+    <div class="pills">
+      <span class="pill">ANNOVAR</span>
+      <span class="pill">ACMG</span>
+      <span class="pill">Exomiser</span>
+      <span class="pill">WGS &amp; WES</span>
+    </div>
+  </div>
+  <div class="powered">
+    powered by
+    <img src="../public/omixer-small-logo.png" alt="Omixir">
+    <span class="name">Omixir</span>
+  </div>
+</body>
+</html>

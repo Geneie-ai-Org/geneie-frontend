@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useForcedTheme } from '@/hooks/useTheme'
+import { useSeo } from '@/hooks/useSeo'
 import BioEnergyIcon from '@hugeicons/core-free-icons/BioEnergyIcon'
 import MentoringIcon from '@hugeicons/core-free-icons/MentoringIcon'
 import SpeedTrain01Icon from '@hugeicons/core-free-icons/SpeedTrain01Icon'
@@ -31,6 +32,12 @@ import DashboardSpeed01Icon from '@hugeicons/core-free-icons/DashboardSpeed01Ico
 
 const LandingPage = () => {
   useForcedTheme('dark');
+  useSeo({
+    title: 'Geneie — Chat with Your Genomic Data | AI Variant Analysis',
+    description:
+      'Upload a VCF and explore your variants in plain language. Geneie pairs ANNOVAR annotation, ACMG classification and Exomiser phenotype prioritization with AI chat.',
+    path: '/',
+  });
   const navigate = useNavigate();
   const [isNavSolid, setIsNavSolid] = useState(false);
   const [activeWord, setActiveWord] = useState(0);
@@ -165,8 +172,22 @@ const LandingPage = () => {
     }
   ];
 
+  // Both accordions are collapsed on load, so their answers are easy for a crawler
+  // to miss. FAQPage schema states them outright and makes the page eligible for
+  // FAQ rich results.
+  const faqSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: [...askAnythingFaqs, ...faqItems].map((item) => ({
+      '@type': 'Question',
+      name: item.q,
+      acceptedAnswer: { '@type': 'Answer', text: item.a },
+    })),
+  };
+
   return (
     <ClickSpark sparkColor="#2F7F7A" sparkSize={12} sparkRadius={20} sparkCount={8} duration={400}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
       <div className="min-h-screen bg-white text-zinc-900 font-sans selection:bg-[#2F7F7A]/30">
 
         {/* Main content wrapper - sits on top of fixed footer */}
@@ -181,20 +202,26 @@ const LandingPage = () => {
               <div className="flex items-center gap-2">
                 <img
                   src="/logo/Final gene dark.svg"
-                  alt="geneie logo"
+                  alt="Geneie"
+                  width="96"
+                  height="96"
                   className="h-20 w-20 sm:h-24 sm:w-24 object-contain"
                 />
                 {/* <span className="text-xl font-bold font-brand tracking-tight text-white">geneie</span> */}
               </div>
               <div className="flex items-center gap-1 sm:gap-3">
+                {/* Real anchors, not buttons: crawlers follow them as internal links to
+                    the named sections, and they still smooth-scroll on click. */}
                 {[
                   { label: 'Pricing', target: 'pricing' },
                   { label: 'FAQ', target: 'faq' },
                   { label: 'Contact', target: 'contact' },
                 ].map((item) => (
-                  <button
+                  <a
                     key={item.target}
-                    onClick={() => {
+                    href={`#${item.target}`}
+                    onClick={(e) => {
+                      e.preventDefault();
                       if (item.target === 'contact') {
                         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
                       } else {
@@ -204,7 +231,7 @@ const LandingPage = () => {
                     className="text-xs sm:text-sm font-medium text-zinc-400 hover:text-white transition-colors px-2 sm:px-3 py-1.5"
                   >
                     {item.label}
-                  </button>
+                  </a>
                 ))}
                 <Button
                   variant="ghost"
@@ -230,11 +257,15 @@ const LandingPage = () => {
                 noiseIntensity={3}
                 rotation={0}
               /> */}
+              {/* Decorative. The poster paints immediately so LCP doesn't wait on the
+                  video, which is the single heaviest asset on the page. */}
               <video
                 autoPlay
                 loop
                 muted
                 playsInline
+                aria-hidden="true"
+                poster="/black-bg-helix.png"
                 className=" md:block absolute w-auto pointer-events-none select-none"
                 src="/helix_2_ascii.mp4"
               />
@@ -302,9 +333,13 @@ const LandingPage = () => {
           <section className="py-24 bg-white relative min-h-[100dvh] flex flex-col justify-center">
             <div className="container px-4 md:px-6 max-w-5xl mx-auto text-center">
               <div>
-                <div className="relative h-16 md:h-20 mb-6 flex items-center justify-center overflow-hidden">
+                {/* One real heading for the section. The rotating words are the same
+                    copy animated, so they stay presentational rather than shipping
+                    five competing <h2>s. */}
+                <h2 className="sr-only">Upload. Annotate. Filter. Ask. Discover.</h2>
+                <div className="relative h-16 md:h-20 mb-6 flex items-center justify-center overflow-hidden" aria-hidden="true">
                   {workflowWords.map((word, i) => (
-                    <h2
+                    <span
                       key={word}
                       className={`absolute text-3xl md:text-5xl font-semibold font-heading tracking-tight transition-all duration-700 ease-in-out ${i === activeWord
                         ? 'opacity-100 translate-y-0 scale-100'
@@ -315,7 +350,7 @@ const LandingPage = () => {
                       style={{ color: '#18181b' }}
                     >
                       {word}
-                    </h2>
+                    </span>
                   ))}
                 </div>
                 <div className="flex justify-center gap-2 mb-16">
@@ -369,8 +404,8 @@ const LandingPage = () => {
                                 <div className="absolute inset-0 bg-[#2F7F7A]/10 backdrop-blur-3xl rounded-full" />
                                 <div className="w-10 h-10 bg-white/60 rounded-full shadow-inner blur-sm" />
                               </div>
-                              <h3 className="text-[#2F7F7A] text-xs font-medium mb-0.5">Hello, John</h3>
-                              <h4 className="text-base font-semibold font-heading text-zinc-800 tracking-tight">How can I assist you today?</h4>
+                              <p className="text-[#2F7F7A] text-xs font-medium mb-0.5">Hello, John</p>
+                              <p className="text-base font-semibold font-heading text-zinc-800 tracking-tight">How can I assist you today?</p>
                             </motion.div>
                           ) : (
                             <motion.div
@@ -454,8 +489,8 @@ const LandingPage = () => {
                             <div className="absolute inset-0 bg-[#2F7F7A]/10 backdrop-blur-3xl rounded-full" />
                             <div className="w-16 h-16 bg-white/60 rounded-full shadow-inner blur-sm" />
                           </div>
-                          <h3 className="text-[#2F7F7A] text-base font-medium mb-1">Hello, John</h3>
-                          <h4 className="text-3xl font-semibold font-heading text-zinc-800 tracking-tight mb-2">How can I assist you today?</h4>
+                          <p className="text-[#2F7F7A] text-base font-medium mb-1">Hello, John</p>
+                          <p className="text-3xl font-semibold font-heading text-zinc-800 tracking-tight mb-2">How can I assist you today?</p>
                         </motion.div>
                       ) : (
                         <motion.div
@@ -744,7 +779,7 @@ const LandingPage = () => {
                         <HugeiconsIcon icon={SpeedTrain01Icon} className="w-6 h-6 text-zinc-300" />
                       </div>
                       <div>
-                        <h4 className="text-white font-semibold font-heading text-lg tracking-tight">Fast Processing</h4>
+                        <h3 className="text-white font-semibold font-heading text-lg tracking-tight">Fast Processing</h3>
                         <p className="text-zinc-500 text-sm">Lightning quick variant analysis.</p>
                       </div>
                     </div>
@@ -754,7 +789,7 @@ const LandingPage = () => {
                         <HugeiconsIcon icon={ArcherIcon} className="w-6 h-6 text-zinc-300" />
                       </div>
                       <div>
-                        <h4 className="text-white font-semibold font-heading text-lg tracking-tight">Accurate Results</h4>
+                        <h3 className="text-white font-semibold font-heading text-lg tracking-tight">Accurate Results</h3>
                         <p className="text-zinc-500 text-sm">Cross-referenced with ClinVar.</p>
                       </div>
                     </div>
@@ -764,7 +799,7 @@ const LandingPage = () => {
                         <Lock className="w-6 h-6 text-zinc-300" />
                       </div>
                       <div>
-                        <h4 className="text-white font-semibold font-heading text-lg tracking-tight">Strict Security</h4>
+                        <h3 className="text-white font-semibold font-heading text-lg tracking-tight">Strict Security</h3>
                         <p className="text-zinc-500 text-sm">HIPAA & GDPR compliant storage.</p>
                       </div>
                     </div>
@@ -774,7 +809,7 @@ const LandingPage = () => {
                         <Database className="w-6 h-6 text-zinc-300" />
                       </div>
                       <div>
-                        <h4 className="text-white font-semibold font-heading text-lg tracking-tight">Trusted Data</h4>
+                        <h3 className="text-white font-semibold font-heading text-lg tracking-tight">Trusted Data</h3>
                         <p className="text-zinc-500 text-sm">Peer-reviewed research sources.</p>
                       </div>
                     </div>

@@ -3,19 +3,100 @@
 
 <head>
   <meta charset="utf-8" />
-  <link rel="icon" type="image/svg+xml" href="/geneie-g.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#000000" />
+
+  <title>Geneie — Chat with Your Genomic Data | AI Variant Analysis</title>
   <meta name="description"
-    content="geneie.ai - Upload and analyze variant calling result files with intelligent AI-powered analysis" />
+    content="Upload a VCF and explore your variants in plain language. Geneie pairs ANNOVAR annotation, ACMG classification and Exomiser phenotype prioritization with AI chat." />
+  <link rel="canonical" href="https://geneie.chat/" />
+
+  <!-- Crawling: allow full snippets and large image previews on search results -->
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+
+  <!-- Social cards. These must live in the static HTML: Slack, LinkedIn, X and
+       WhatsApp do not execute JavaScript, so anything React sets is invisible to them. -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Geneie" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:url" content="https://geneie.chat/" />
+  <meta property="og:title" content="Geneie — Chat with Your Genomic Data" />
+  <meta property="og:description"
+    content="Upload a VCF and explore your variants in plain language. ANNOVAR annotation, ACMG classification and Exomiser phenotype prioritization, backed by peer-reviewed research." />
+  <meta property="og:image" content="https://geneie.chat/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Geneie — chat with your genomic data" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Geneie — Chat with Your Genomic Data" />
+  <meta name="twitter:description"
+    content="Upload a VCF and explore your variants in plain language. ANNOVAR, ACMG and Exomiser, backed by peer-reviewed research." />
+  <meta name="twitter:image" content="https://geneie.chat/og-image.png" />
+
+  <link rel="icon" type="image/svg+xml" href="/geneie-g.svg" />
   <link rel="apple-touch-icon" href="/geneie-g.svg" />
   <link rel="manifest" href="/manifest.json" />
+  <meta name="apple-mobile-web-app-title" content="Geneie" />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0F0F0F" media="(prefers-color-scheme: dark)" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;700&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap"
     rel="stylesheet">
-  <title>Geneie.ai - Genomic Analysis</title>
+
+  <!-- Structured data. Static so non-rendering crawlers see it; the FAQ schema is
+       emitted by the landing page itself, next to the copy it describes. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://geneie.chat/#organization",
+        "name": "Geneie",
+        "url": "https://geneie.chat/",
+        "logo": "https://geneie.chat/geneie-g.svg",
+        "description": "AI-powered genomic variant analysis for researchers and clinicians.",
+        "email": "support@geneie.chat"
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://geneie.chat/#website",
+        "url": "https://geneie.chat/",
+        "name": "Geneie",
+        "publisher": { "@id": "https://geneie.chat/#organization" },
+        "inLanguage": "en"
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://geneie.chat/#app",
+        "name": "Geneie",
+        "url": "https://geneie.chat/",
+        "applicationCategory": "HealthApplication",
+        "operatingSystem": "Web",
+        "description": "Upload whole genome or whole exome variant files and explore them in natural language. Geneie runs ANNOVAR annotation, ACMG classification and Exomiser phenotype-driven prioritization, then answers questions about the resulting variant set.",
+        "featureList": [
+          "VCF and tabular variant file upload",
+          "ANNOVAR annotation",
+          "ACMG variant classification",
+          "Exomiser phenotype-driven prioritization",
+          "Natural language variant queries",
+          "Export filtered variant tables"
+        ],
+        "publisher": { "@id": "https://geneie.chat/#organization" },
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD",
+          "description": "Free queries included."
+        }
+      }
+    ]
+  }
+  </script>
+
   <script>
     (function () {
       try {
@@ -27,10 +108,18 @@
 </head>
 
 <body>
-  <noscript>
-    You need to enable JavaScript to run this app.
-  </noscript>
   <div id="root"></div>
+  <noscript>
+    <h1>Geneie — chat with your genomic data</h1>
+    <p>
+      Geneie is an AI-powered genomic analysis platform for clinicians, researchers, genetic
+      counselors and bioinformaticians. Upload whole genome or whole exome variant files, run
+      ANNOVAR annotation, apply ACMG classification or Exomiser phenotype-driven prioritization,
+      and ask questions about the resulting variants in plain language.
+    </p>
+    <p>JavaScript is required to use the application. Contact
+      <a href="mailto:support@geneie.chat">support@geneie.chat</a>.</p>
+  </noscript>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 

@@ -8,7 +8,6 @@ import {
   OAuthProvider
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
 
 import { env, isFirebaseConfigured } from '../config/env.js';
 
@@ -31,7 +30,6 @@ const firebaseConfig = getFirebaseConfig();
 let app = null;
 let auth = null;
 let db = null;
-let storage = null;
 
 if (isFirebaseConfigured()) {
   if (!getApps().length) {
@@ -42,7 +40,6 @@ if (isFirebaseConfigured()) {
   }
   auth = getAuth(app);
   db = getFirestore(app);
-  storage = getStorage(app);
 } else {
   console.error(
     'Missing config. Set VITE_FIREBASE_* in geneie-frontend/.env (see .env.example).'
@@ -55,4 +52,4 @@ if (auth) {
     .catch(() => setPersistence(auth, inMemoryPersistence));
 }
 
-export { app, auth, db, storage, GoogleAuthProvider, OAuthProvider };
+export { app, auth, db, GoogleAuthProvider, OAuthProvider };

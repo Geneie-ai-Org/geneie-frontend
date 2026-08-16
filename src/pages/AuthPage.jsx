@@ -4,6 +4,7 @@ import AuthForm from '@/components/AuthForm';
 import PixelBlast from '@/components/PixelBlast';
 import ClickSpark from '@/components/ClickSpark';
 import { useForcedTheme } from '@/hooks/useTheme';
+import { useSeo } from '@/hooks/useSeo';
 
 const DNA_FRAMES = (() => {
   const frames = [];
@@ -90,6 +91,12 @@ const DnaHelix = () => {
 
 const AuthPage = () => {
   useForcedTheme('dark');
+  useSeo({
+    title: 'Sign in — Geneie',
+    description: 'Sign in to Geneie to upload variant files and analyze your genomic data.',
+    path: '/auth',
+    noindex: true,
+  });
 
   return (
     <ClickSpark sparkColor="#2F7F7A" sparkSize={12} sparkRadius={20} sparkCount={8} duration={400}>

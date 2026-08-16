@@ -1,0 +1,10 @@
+# Code owners for this repository.
+#
+# Every file is owned by @abhinav0git, so any pull request targeting a protected
+# branch (dev, main) requires his review before it can be merged. Branch
+# protection on those branches has "Require review from Code Owners" enabled —
+# without that setting this file only assigns reviewers, it does not block merges.
+#
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+* @abhinav0git

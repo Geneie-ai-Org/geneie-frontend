@@ -257,16 +257,14 @@ const LandingPage = () => {
                 noiseIntensity={3}
                 rotation={0}
               /> */}
-              {/* Decorative. The poster paints immediately so LCP doesn't wait on the
-                  video, which is the single heaviest asset on the page. */}
               <video
                 autoPlay
                 loop
                 muted
                 playsInline
                 aria-hidden="true"
-                poster="/black-bg-helix.png"
-                className=" md:block absolute w-auto pointer-events-none select-none"
+                poster="/hero-helix.webp"
+                className="absolute inset-0 h-full w-full object-cover object-center pointer-events-none select-none"
                 src="/helix_2_ascii.mp4"
               />
             </div>
@@ -580,10 +578,14 @@ const LandingPage = () => {
   {/* Background Image with Left-to-Right Gradient Overlay */}
   <div className="absolute inset-0 z-0 pointer-events-none select-none">
     <img
-      src="/black-bg-helix.png"
+      src="/hero-helix.webp"
       alt=""
       aria-hidden="true"
-      className="h-full object-cover object-right"
+      width="1280"
+      height="711"
+      loading="lazy"
+      decoding="async"
+      className="absolute inset-0 h-full w-full object-cover object-right lg:translate-x-[28%]"
     />
     {/* Gradient: Dark on left for text readability, clearer on right */}
     <div className="absolute inset-0 bg-gradient-to-r from-black via-black/85 to-black/20" />

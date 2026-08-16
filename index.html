@@ -40,6 +40,11 @@
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#0F0F0F" media="(prefers-color-scheme: dark)" />
 
+  <!-- The hero poster is the landing page's LCP element, but it lives inside a lazily
+       loaded route chunk, so the browser doesn't discover it until React has rendered.
+       Preloading starts the fetch alongside the entry bundle instead of after it. -->
+  <link rel="preload" as="image" href="/hero-helix.webp" fetchpriority="high">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link

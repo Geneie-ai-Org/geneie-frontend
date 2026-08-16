@@ -1,0 +1,38 @@
+# Geneie
+
+> Geneie is an AI-powered genomic variant analysis platform for clinicians, researchers, genetic counselors and bioinformaticians. Users upload whole genome (WGS) or whole exome (WES) variant files, run ANNOVAR annotation, apply ACMG classification or Exomiser phenotype-driven prioritization, and then ask questions about the resulting variant set in natural language.
+
+## What Geneie does
+
+- **Variant file upload**: accepts VCF files and tabular variant exports. Non-VCF files can be converted to VCF in-app.
+- **Column interpretation**: checks an uploaded file for the columns each downstream step needs, and reports what is missing.
+- **ANNOVAR annotation**: adds functional, population-frequency and clinical-significance annotations to files that arrive unannotated.
+- **ACMG classification**: filters variants using ClinVar or InterVar classifications together with gnomAD frequency. Requires an annotated file.
+- **Exomiser prioritization**: phenotype-driven ranking for germline cases, using HPO terms derived from a free-text clinical phenotype. Requires an annotated file and a phenotype description.
+- **Natural language queries**: ask questions about the filtered variant set and get answers grounded in the underlying data.
+- **Export**: copy insights or export filtered variant tables for clinical reports and publications.
+
+## How the AI is scoped
+
+Geneie's language model translates natural language queries into filter and lookup operations. Variant scoring, classification and filtering are executed by deterministic bioinformatics pipelines (ANNOVAR, ACMG criteria, Exomiser), not by the model. The model does not invent variant classifications.
+
+## Intended use
+
+Designed to support both research and clinical workflows. Results are intended to be interpreted by qualified professionals within the appropriate clinical or scientific context. Geneie is not a diagnostic device.
+
+## Data handling
+
+Data is encrypted and handled in line with HIPAA and GDPR requirements.
+
+## Links
+
+- [Geneie](https://geneie.chat/): product overview, pricing, FAQ
+- [Contact](mailto:support@geneie.chat): support and enquiries
+
+## Terminology used on this site
+
+- **VCF**: Variant Call Format, the standard file produced by variant calling.
+- **Annotated VCF**: a VCF that already carries annotation columns; unannotated files must go through ANNOVAR before ACMG or Exomiser filtering can run.
+- **WGS / WES**: whole genome sequencing / whole exome sequencing.
+- **ACMG**: the American College of Medical Genetics and Genomics variant classification guidelines.
+- **HPO**: Human Phenotype Ontology, the vocabulary Exomiser uses to match variants to a patient's clinical presentation.

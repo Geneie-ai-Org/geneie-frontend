@@ -21,7 +21,13 @@ import {
 } from 'lucide-react';
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useForcedTheme } from '@/hooks/useTheme'
-import { BioEnergyIcon, MentoringIcon, SpeedTrain01Icon, ArcherIcon, AiSheetsIcon, FileTypeIcon, DashboardSpeed01Icon } from '@hugeicons/core-free-icons'
+import BioEnergyIcon from '@hugeicons/core-free-icons/BioEnergyIcon'
+import MentoringIcon from '@hugeicons/core-free-icons/MentoringIcon'
+import SpeedTrain01Icon from '@hugeicons/core-free-icons/SpeedTrain01Icon'
+import ArcherIcon from '@hugeicons/core-free-icons/ArcherIcon'
+import AiSheetsIcon from '@hugeicons/core-free-icons/AiSheetsIcon'
+import FileTypeIcon from '@hugeicons/core-free-icons/FileTypeIcon'
+import DashboardSpeed01Icon from '@hugeicons/core-free-icons/DashboardSpeed01Icon'
 
 const LandingPage = () => {
   useForcedTheme('dark');

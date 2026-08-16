@@ -1582,12 +1582,15 @@ const ChatPage = () => {
             }
             setIsVariantSidebarOpen(true);
             setSidebarRequestedTab('exomiser');
+            const eligibility = await fetchExomiserEligibility();
+            if (eligibility?.can_run === true) runExomiser();
           }}
           isApplyingProprietaryFilter={isApplyingProprietaryFilter}
           isRunningAnnovar={isRunningAnnovar}
           hasAnnotatedFile={pipelineSnapshot.hasAnnotatedFile}
           acmgFilterActive={conversationFilterState.activeProprietaryFilter === 'filter_1'}
           acmgFilterCanApply={acmgFilterCanApply}
+          exomiserCanApply={pipelineSnapshot.hasAnnotatedFile || !chatEligibility.requires_annovar}
           showVcfTabHighlight={columnInterpretationResult?.step1?.passed === false}
           onDeleteDocument={() => handleDocumentUpload(null)}
         />

@@ -4,17 +4,19 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
 import { AuthProvider } from './hooks/useAuth';
 import { ThemeProvider, useTheme } from './hooks/useTheme';
-import LandingPage from './pages/LandingPage';
-import AuthPage from './pages/AuthPage';
-import ChatPage from './pages/ChatPage';
 import PublicRoute from './components/PublicRoute';
 import ErrorBoundary from './components/ErrorBoundary';
+import SessionLoadingScreen from './components/SessionLoadingScreen';
 import { initAnalytics } from './lib/analytics';
 import { Toaster } from '@/components/ui/sonner';
 import './index.css';
 import './App.css';
 
 initAnalytics();
+
+const LandingPage = React.lazy(() => import('./pages/LandingPage'));
+const AuthPage = React.lazy(() => import('./pages/AuthPage'));
+const ChatPage = React.lazy(() => import('./pages/ChatPage'));
 
 function ThemedToaster() {
   const { theme } = useTheme();
@@ -41,6 +43,7 @@ root.render(
     <MotionConfig reducedMotion="user">
     <BrowserRouter>
       <AuthProvider>
+        <React.Suspense fallback={<SessionLoadingScreen message="Loading..." />}>
         <Routes>
           <Route
             path="/"
@@ -69,6 +72,7 @@ root.render(
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </React.Suspense>
         <ThemedToaster />
       </AuthProvider>
     </BrowserRouter>

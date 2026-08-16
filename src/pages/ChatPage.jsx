@@ -38,8 +38,15 @@ import { getDeviceId } from '@/lib/deviceId';
 import { useVariantPipeline } from '@/hooks/useVariantPipeline';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { getTierChatLimit, DEFAULT_GUEST_CHAT_LIMIT } from '@/services/backendApi';
+import { useSeo } from '@/hooks/useSeo';
 
 const ChatPage = () => {
+  useSeo({
+    title: 'Geneie',
+    description: 'Analyze your genomic variants with Geneie.',
+    path: '/app',
+    noindex: true,
+  });
   const navigate = useNavigate();
   const { conversationId: urlConversationId } = useParams();
   const isMobile = useIsMobile();

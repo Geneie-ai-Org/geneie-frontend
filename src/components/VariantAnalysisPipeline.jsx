@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Check, Loader2, AlertCircle, ChevronDown, ChevronUp, FileText, Pencil, Trash2 } from 'lucide-react';
 import {
   PIPELINE_STEP_DEFS,
@@ -99,7 +99,7 @@ const VariantAnalysisPipeline = ({
     exomiserStatus,
   };
 
-  const steps = useMemo(() => computePipelineSteps(pipelineProps), [pipelineProps]);
+  const steps = computePipelineSteps(pipelineProps);
 
   const backgroundActive = getPipelineBackgroundActive(pipelineProps);
   const statusLine = getPipelineStatusLine(pipelineProps, steps);

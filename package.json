@@ -50,6 +50,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "bundle-report": "vite build && node scripts/bundle-report.mjs",
     "doctor": "npx react-doctor@latest"
   },
   "browserslist": {

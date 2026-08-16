@@ -46,6 +46,7 @@ const ColumnInterpretationResults = ({
   isApplyingProprietaryFilter = false,
   acmgFilterActive = false,
   acmgFilterCanApply = false,
+  exomiserCanApply = false,
   showVcfTabHighlight,
   onDeleteDocument,
   onTryVcfUpload,
@@ -1029,23 +1030,39 @@ const ColumnInterpretationResults = ({
                 )}
               </div>
 
-              {/* Exomiser — routes to the sidebar tab which handles eligibility (phenotype, germline, ANNOVAR) */}
-              {onOpenExomiser && (
-                <button
-                  type="button"
-                  onClick={() => onOpenExomiser()}
-                  className="px-4 py-2 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 cursor-pointer"
-                  style={{
-                    backgroundColor: C.surfaceCard,
-                    border: `1px solid ${C.border}`,
-                    color: C.teal,
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = C.surfaceHover; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = C.surfaceCard; }}
-                >
-                  Prioritize with Exomiser
-                </button>
-              )}
+              {/* Exomiser — needs an annotated file; remaining eligibility (phenotype, germline) is checked in the sidebar tab */}
+              {onOpenExomiser && (() => {
+                const exomiserEnabled = exomiserCanApply && !genomeMismatch;
+                return (
+                  <div className="relative group">
+                    <button
+                      type="button"
+                      onClick={() => onOpenExomiser()}
+                      disabled={!exomiserEnabled}
+                      className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${
+                        exomiserEnabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+                      }`}
+                      style={{
+                        backgroundColor: exomiserEnabled ? C.surfaceCard : C.surfaceHover,
+                        border: `1px solid ${genomeMismatch ? C.error : C.border}`,
+                        color: exomiserEnabled ? C.teal : C.textDim,
+                      }}
+                      onMouseEnter={(e) => { if (exomiserEnabled) e.currentTarget.style.backgroundColor = C.surfaceHover; }}
+                      onMouseLeave={(e) => { if (exomiserEnabled) e.currentTarget.style.backgroundColor = C.surfaceCard; }}
+                    >
+                      Prioritize with Exomiser
+                    </button>
+                    {!exomiserEnabled && step1?.passed && (
+                      <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '280px', whiteSpace: 'normal', textAlign: 'left' }}>
+                        {genomeMismatch
+                          ? 'ANNOVAR and Exomiser require a matching genome build. Please fix the mismatch first.'
+                          : 'Run ANNOVAR first — Exomiser requires an annotated file.'}
+                        <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <p className="text-xs w-full mt-1" style={{ color: C.textDim }}>
                 You can also skip filters and chat directly.

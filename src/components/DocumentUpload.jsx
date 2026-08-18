@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2, Link2, Info, Plus } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import { apiUrl as buildApiUrl } from '@/config/api';
-import { getUploadDisplayMessage } from '@/lib/uploadProcessingPhases';
 import { useAuth } from '@/hooks/useAuth';
 import {
   completeVariantUpload,
@@ -224,7 +223,6 @@ const DocumentUpload = ({
     }
   }, [isUploading, onUploadingChange, onUploadProgressChange]);
 
-  const uploadStatusMessage = getUploadDisplayMessage({ uploadProgress });
   // Processing status is already shown by <VariantUploadLoadingModal /> — no extra toast needed.
 
   // Fetch existing projects when form opens (for authenticated users only)
@@ -1577,7 +1575,7 @@ const DocumentUpload = ({
                 {isUploading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    {editMode ? 'Saving…' : (uploadStatusMessage || 'Processing…')}
+                    {editMode ? 'Saving…' : 'Processing…'}
                   </>
                 ) : (
                   editMode ? 'Save Changes' : (importMode === 'url' ? 'Import File' : 'Upload File')

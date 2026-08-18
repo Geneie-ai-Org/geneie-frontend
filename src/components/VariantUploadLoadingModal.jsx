@@ -1,6 +1,5 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
-import { getUploadDisplayMessage } from '@/lib/uploadProcessingPhases';
 import {
   Dialog,
   DialogContent,
@@ -15,8 +14,8 @@ export default function VariantUploadLoadingModal({
   uploadProgress,
   fileName,
 }) {
-  const statusMessage = getUploadDisplayMessage({ uploadProgress }) || '';
   const bytesSending = uploadProgress != null && uploadProgress < 100;
+  const statusMessage = bytesSending ? 'Sending file to server…' : 'Processing on the server…';
   const progressPct = bytesSending ? Math.round(uploadProgress) : null;
   const displayFileName = fileName;
 

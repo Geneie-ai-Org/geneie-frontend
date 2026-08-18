@@ -151,8 +151,6 @@ const ChatPage = () => {
     chatEligibility,
     setChatEligibility,
     pipelineSnapshot,
-    pipelineToast,
-    setPipelineToast,
     isRunningAnnovar,
     isApplyingProprietaryFilter,
     setIsApplyingProprietaryFilter,
@@ -1445,11 +1443,9 @@ const ChatPage = () => {
                 setPreSelectedFile(null);
                 setUploadModalImportMode('file');
                 if (uploadSessionConversationId === activeConversationId) {
-                  setPipelineToast({
-                    title: 'Upload in progress',
-                    message:
+                  toast.info('Upload in progress', {
+                    description:
                       'Your file is still uploading. Please wait — chat will resume when processing finishes.',
-                    variant: 'info',
                   });
                 }
               }}

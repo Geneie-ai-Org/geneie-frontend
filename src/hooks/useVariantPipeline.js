@@ -58,7 +58,6 @@ export function useVariantPipeline({
     annovarJob: null,
     filterJob: null,
   });
-  const [pipelineToast, setPipelineToast] = useState(null);
   const [isRunningAnnovar, setIsRunningAnnovar] = useState(false);
   const [isApplyingProprietaryFilter, setIsApplyingProprietaryFilter] = useState(false);
   // Exomiser eligibility is decided by GET /api/exomiser-eligibility — components fetch it directly.
@@ -136,13 +135,6 @@ export function useVariantPipeline({
           !isRunningAnnovarRef.current &&
           !isApplyingProprietaryFilterRef.current
         ) {
-          setPipelineToast({
-            title: 'Chat ready',
-            message:
-              normalizeChatEligibilityMessage(ce.message) ||
-              'Your variant set is ready — you can start chatting.',
-            variant: 'success',
-          });
         }
         prevChatAllowedRef.current = allowed;
         setChatEligibility({
@@ -186,13 +178,6 @@ export function useVariantPipeline({
           !isRunningAnnovarRef.current &&
           !isApplyingProprietaryFilterRef.current
         ) {
-          setPipelineToast({
-            title: 'Chat ready',
-            message:
-              normalizeChatEligibilityMessage(data.message) ||
-              'Your variant set is ready — you can start chatting.',
-            variant: 'success',
-          });
         }
         prevChatAllowedRef.current = allowed;
         setChatEligibility({
@@ -513,12 +498,10 @@ export function useVariantPipeline({
 
         setAnnovarMessageModalRef.current((prev) => {
           if (!annActive || !prev || prev.variant !== 'info') return prev;
-          const pct = annJob.progress_percent;
           const msg = formatAnnovarProgressMessage(annJob.message || 'Annotating your variants…');
           return {
             ...prev,
             message: msg,
-            progressPercent: typeof pct === 'number' ? pct : prev.progressPercent,
           };
         });
 
@@ -528,37 +511,11 @@ export function useVariantPipeline({
         if (prevAnn === 'running' && annJob.status === 'completed') {
           const convAfterAnn = await refreshConversationAfterAnnovarRef.current(activeConversationId);
           if (convAfterAnn) presentFileAnalysisModalRef.current(convAfterAnn);
-          setPipelineToast({
-            title: 'ANNOVAR complete',
-            message:
-              formatAnnovarProgressMessage(annJob.message) ||
-              'Annotation finished. Review your file analysis, then reduce variants for chat.',
-            variant: 'success',
-          });
         } else if (prevAnn === 'running' && annJob.status === 'failed') {
-          setPipelineToast({
-            title: 'ANNOVAR failed',
-            message:
-              annJob.message || annJob.error || 'Annotation did not complete. Try again or contact support.',
-            variant: 'error',
-          });
         }
         if (prevFilt === 'running' && filtJob.status === 'completed') {
           await refreshConversationAfterAnnovarRef.current(activeConversationId);
-          setPipelineToast({
-            title: 'Variant prioritization complete',
-            message:
-              filtJob.message ||
-              `${(filtJob.filtered_count ?? filtJob.rows_kept ?? 0).toLocaleString()} variants prioritized for chat.`,
-            variant: 'success',
-          });
         } else if (prevFilt === 'running' && filtJob.status === 'failed') {
-          setPipelineToast({
-            title: 'Variant prioritization failed',
-            message:
-              filtJob.message || filtJob.error || 'Prioritization did not complete.',
-            variant: 'error',
-          });
         }
 
         prevAnnovarJobStatusRef.current = annJob.status || null;
@@ -918,12 +875,6 @@ export function useVariantPipeline({
         annovarStartedAsync = true;
         await runResponse.json().catch(() => ({}));
         setAnnovarMessageModal(null);
-        setPipelineToast({
-          title: 'ANNOVAR started',
-          message:
-            'Annotation is running in the background. Watch the pipeline bar at the top — you can keep using chat.',
-          variant: 'success',
-        });
       } else {
         const runResult = await runResponse.json();
         const successMessage =
@@ -1048,11 +999,6 @@ export function useVariantPipeline({
         interpretationDismissedRef.current = true;
         setShowInterpretationModal(false);
         setAnnovarMessageModal(null);
-        setPipelineToast({
-          title: `${displayName} started`,
-          message: 'Prioritization is running in the background. Watch the pipeline bar at the top.',
-          variant: 'success',
-        });
       } else {
         const data = await res.json();
         const filteredCount = data.filtered_count ?? 0;
@@ -1255,7 +1201,6 @@ export function useVariantPipeline({
       annovarJob: null,
       filterJob: null,
     });
-    setPipelineToast(null);
     setIsRunningAnnovar(false);
     setIsApplyingProprietaryFilter(false);
     setIsRunningExomiser(false);
@@ -1289,7 +1234,6 @@ export function useVariantPipeline({
     if (activeConversationId && convData.document) {
       refreshChatEligibilityFromApi(activeConversationId, { convFallback: convData });
     }
-    setPipelineToast(null);
 
     const exoStatus = (convData.exomiser_job?.status || '').toLowerCase();
     if (exoStatus === 'running' || exoStatus === 'queued') {
@@ -1340,8 +1284,6 @@ export function useVariantPipeline({
     chatEligibility,
     setChatEligibility,
     pipelineSnapshot,
-    pipelineToast,
-    setPipelineToast,
     isRunningAnnovar,
     isApplyingProprietaryFilter,
     setIsApplyingProprietaryFilter,

@@ -137,8 +137,6 @@ export function getPipelineBackgroundActive({
   );
 }
 
-import { getUploadDisplayMessage } from '@/lib/uploadProcessingPhases';
-
 export function getPipelineStatusLine(props, steps) {
   const {
     uploadInProgress,
@@ -161,9 +159,9 @@ export function getPipelineStatusLine(props, steps) {
     s3LineCountStatus === 'pending' || s3LineCountStatus === 'running';
 
   if (uploadInProgress) {
-    const uploadMsg = getUploadDisplayMessage({ uploadProgress });
-    if (uploadMsg) return uploadMsg;
-    return 'Processing your variant file on the server…';
+    return uploadProgress != null && uploadProgress < 100
+      ? 'Sending your variant file to the server…'
+      : 'Processing your variant file on the server…';
   }
   if (lineCountInProgress && !interpretationReady) {
     return 'Counting variant rows in your file on the server…';
@@ -209,15 +207,6 @@ export function getPipelineFocusStep(steps, hasUploadedFile) {
   const pending = order.find((id) => steps[id] === 'pending');
   if (pending) return pending;
   return 'chat';
-}
-
-export function getPipelineStepNumber(steps, focusId) {
-  const idx = PIPELINE_STEP_DEFS.findIndex((d) => d.id === focusId);
-  if (idx < 0) return null;
-  const doneCount = PIPELINE_STEP_DEFS.filter(
-    (d, i) => i <= idx && (steps[d.id] === 'done' || steps[d.id] === 'skipped')
-  ).length;
-  return Math.min(doneCount + (steps[focusId] === 'running' ? 0 : 1), PIPELINE_STEP_DEFS.length);
 }
 
 export function getPipelineChipSummary(steps, hasUploadedFile) {

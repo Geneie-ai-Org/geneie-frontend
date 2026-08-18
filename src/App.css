@@ -11,7 +11,9 @@
   --bg-input-focus: hsl(var(--background));
   --bg-surface-sunken: #ECEEF1;
 
-  --segment-track: hsl(var(--muted));
+  /* One step darker than --bg-sidebar. Not `hsl(var(--muted))`: in light mode --muted and
+   * --sidebar are the same value, so the track disappeared into the panel behind it. */
+  --segment-track: hsl(220 13% 91%);
   --segment-thumb: hsl(var(--card));
 
   /* Borders */
@@ -70,6 +72,7 @@
   --chat-gutter-x: clamp(1rem, 3vw, 2.5rem);
   --chat-gutter-x-tight: clamp(0.75rem, 1.5vw, 1.25rem);
   --chat-min-column: 20rem;
+  --chat-header-height: 47px;
   --shell-left-col: 0px;
   --shell-right-col: 0px;
   --drawer-tuck: 0.75rem;
@@ -188,7 +191,23 @@
   min-width: 0;
   height: 100%;
   overflow: visible;
-  border-right: 1px solid var(--border-subtle);
+}
+
+/* The seam starts below the conversation header. Across the header the sidebar and the
+ * header share one background, so a rule there would divide nothing. */
+.chat-shell-left::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 1px;
+  background-color: var(--border-subtle);
+  pointer-events: none;
+}
+
+.chat-app-shell[data-header='on'] > .chat-shell-left::after {
+  top: var(--chat-header-height);
 }
 
 :root:not(.dark) .chat-shell-left {
@@ -235,10 +254,28 @@
 }
 
 .chat-shell-right {
+  position: relative;
   min-width: 0;
   height: 100%;
   overflow: hidden;
-  border-left: 1px solid var(--border-subtle);
+}
+
+/* Same seam treatment as the left sidebar: skip the stretch alongside the conversation
+ * header, where both sides share one background. */
+.chat-shell-right::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background-color: var(--border-subtle);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.chat-app-shell[data-header='on'] > .chat-shell-right::before {
+  top: var(--chat-header-height);
 }
 
 .chat-column-inner {
@@ -319,11 +356,16 @@
 /* Conversation header */
 .chat-conversation-header {
   flex-shrink: 0;
-  height: 47px;
+  height: var(--chat-header-height);
   border-bottom: 1px solid var(--border-subtle);
   background-color: var(--bg-app);
 }
 
+/* Match the left sidebar exactly — including the fact that it is only tinted in light
+ * mode (see `:root:not(.dark) .chat-shell-left`), so the two never disagree. */
+:root:not(.dark) .chat-conversation-header {
+  background-color: var(--bg-sidebar);
+}
 
 /* Icon hit targets in chat chrome */
 .chat-chrome-btn {
@@ -468,6 +510,27 @@
   background: color-mix(in srgb, var(--bg-app) 65%, transparent);
   mask-image: linear-gradient(to bottom, transparent 0%, #000 45%);
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 45%);
+}
+
+/* A quarter turn on hover that never plays in reverse: the transition is declared only
+ * on the hovered state, so leaving snaps back with no animation. A plus is 4-fold
+ * symmetric, so that snap is invisible — you only ever see it spin forward. */
+.hover-quarter-turn {
+  transition: none;
+}
+
+.group:hover > .hover-quarter-turn,
+.group:focus-visible > .hover-quarter-turn {
+  transform: rotate(90deg);
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .group:hover > .hover-quarter-turn,
+  .group:focus-visible > .hover-quarter-turn {
+    transform: none;
+    transition: none;
+  }
 }
 
 /* Indeterminate perimeter progress: a short dash sweeping the same bottom-left → top →

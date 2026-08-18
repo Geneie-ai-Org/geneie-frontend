@@ -1071,6 +1071,8 @@ const ChatPage = () => {
       data-left={shellLeftState}
       data-right={isVariantSidebarOpen ? 'open' : 'closed'}
       data-both-open={shellBothOpen ? 'true' : undefined}
+      /* The sidebar seam starts below the conversation header when there is one. */
+      data-header={!isMobile && (isConversationStarted || isCurrentlyActive) ? 'on' : 'off'}
     >
       <aside className="chat-shell-left" aria-hidden={userTier === 'guest'}>
         {userTier !== 'guest' && (
@@ -1333,7 +1335,7 @@ const ChatPage = () => {
                     <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
                       {DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed} of {DEFAULT_GUEST_CHAT_LIMIT} free exchanges remaining
                     </span>
-                    <span className="text-xs" style={{ color: 'var(--border-default)' }}>|</span>
+                    <span className="text-xs" style={{ color: 'var(--text-disabled)' }} aria-hidden>·</span>
                     <button
                       type="button"
                       onClick={() => { setIsShowingAuthForm(true); setJustSignedUp(false); }}

@@ -9,6 +9,7 @@
   --bg-surface-hover: hsl(var(--accent));
   --bg-input: hsl(var(--background));
   --bg-input-focus: hsl(var(--background));
+  --bg-surface-sunken: #ECEEF1;
 
   --segment-track: hsl(var(--muted));
   --segment-thumb: hsl(var(--card));
@@ -71,11 +72,14 @@
   --chat-min-column: 20rem;
   --shell-left-col: 0px;
   --shell-right-col: 0px;
+  --drawer-tuck: 0.75rem;
+  --drawer-inset: clamp(0.75rem, 1%, 1.75rem);
 }
 
 /* Dark theme — the shipped look. Values are the pre-light-mode originals, unchanged. */
 .dark {
   /* Surface hierarchy */
+  --bg-surface-sunken: #131313;
   --bg-surface-raised: #242424;
   --bg-surface-hover: #2A2A2A;
   --bg-input: #1C1C1C;
@@ -320,6 +324,7 @@
   background-color: var(--bg-app);
 }
 
+
 /* Icon hit targets in chat chrome */
 .chat-chrome-btn {
   display: inline-flex;
@@ -384,10 +389,135 @@
   height: 1.25rem;
 }
 
-/* NOTE: do not set `overflow: hidden` on html/body/#root globally — that breaks
- * document scrolling on pages that rely on normal flow (LandingPage). ChatPage
- * contains its own scroll region via `.chat-app-shell { height: 100vh; overflow: hidden }`
- * so it doesn't need help here. */
+/* ── Pipeline drawer ──────────────────────────────────────────────────────────
+ * The drawer sits behind the composer in normal flow. Its extra bottom padding
+ * plus an equal negative bottom margin push its body under the composer, whose
+ * opaque background hides it. Nothing is absolutely positioned, so expanding the
+ * drawer never moves the composer.
+ */
+.pipeline-drawer {
+  position: relative;
+  z-index: 0;
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  background-color: var(--bg-surface-sunken);
+  padding-bottom: calc(var(--drawer-tuck) + 0.5rem);
+  margin-bottom: calc(var(--drawer-tuck) * -1);
+  margin-inline: var(--drawer-inset);
+}
+
+/* The composer must paint over the tucked-away part of the drawer. */
+.pipeline-composer {
+  position: relative;
+  z-index: 10;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* The dock holding the composer. It floats over the bottom of the message list rather
+ * than sitting below it, so the only things that occlude scrolled text are the composer
+ * and the pipeline drawer themselves — text stays visible in the corners beside the
+ * inset drawer. The list reserves room via --composer-dock-height (measured in ChatPage).
+ * Deliberately transparent: an opaque background here is what used to slice text along a
+ * rectangular edge that matched no visible component. */
+.chat-composer-dock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  /* The dock's gutters and the strips beside the inset drawer are see-through, so clicks
+   * and wheel events there must reach the message list underneath. */
+  pointer-events: none;
+}
+
+.chat-composer-dock > * {
+  pointer-events: auto;
+}
+
+/* Soften whatever scrolls past behind the dock. A real backdrop blur rather than a
+ * shadow, so the text stays legible-but-receding instead of being covered. The mask ramps
+ * the blur in from nothing at the top, which is what keeps it from reintroducing the hard
+ * rectangular edge this dock used to have. */
+.chat-composer-dock::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -2.5rem;
+  bottom: 0;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.45) 35%, #000 65%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.45) 35%, #000 65%);
+}
+
+/* Below the composer there is nothing left to read, so blur hard and tint toward the page
+ * background — the disclaimer needs to sit on something quiet. */
+.chat-composer-dock::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3.25rem;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  background: color-mix(in srgb, var(--bg-app) 65%, transparent);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 45%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 45%);
+}
+
+/* Indeterminate perimeter progress: a short dash sweeping the same bottom-left → top →
+ * bottom-right path a determinate stroke would grow along. */
+.perimeter-progress--indeterminate {
+  animation: perimeter-sweep 1.9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes perimeter-sweep {
+  from { stroke-dashoffset: 18; }
+  to   { stroke-dashoffset: -100; }
+}
+
+/* The running signal on the active step's label: a slow light sweep across the
+ * glyphs themselves, so no spinner is needed. */
+.pipeline-step-shimmer {
+  background-image: linear-gradient(
+    100deg,
+    var(--text-secondary) 20%,
+    var(--text-primary) 45%,
+    var(--text-secondary) 70%
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: pipeline-step-shimmer 2.4s ease-in-out infinite;
+}
+
+/* Tailwind's animate-* utilities do not honour this on their own. */
+@keyframes pipeline-step-shimmer {
+  from { background-position: 200% center; }
+  to   { background-position: -200% center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pipeline-step-shimmer {
+    animation: none;
+    background-image: none;
+    background-clip: border-box;
+    -webkit-background-clip: border-box;
+    color: var(--text-primary);
+  }
+  .perimeter-progress--indeterminate {
+    animation: none;
+    stroke-dasharray: 100 0;
+  }
+}
+
+
 body, html, #root {
     margin: 0;
     padding: 0;

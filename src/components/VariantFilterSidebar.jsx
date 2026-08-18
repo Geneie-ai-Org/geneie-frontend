@@ -4,6 +4,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import DocumentUpload from './DocumentUpload';
 import ExportVariantsButton from './ExportVariantsButton';
+import PerimeterProgress from '@/components/ui/PerimeterProgress';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -1725,7 +1726,7 @@ const VariantFilterSidebar = ({
               };
               return (
                 <div
-                  className="flex w-full items-center gap-0.5 p-0.5 rounded-lg bg-[var(--segment-track)]"
+                  className="flex w-full items-center gap-0.5 p-1 rounded-lg bg-[var(--segment-track)]"
                   role="tablist"
                   aria-label="Filter mode"
                   aria-orientation="horizontal"
@@ -2183,21 +2184,15 @@ const VariantFilterSidebar = ({
 
                   {/* Progress area while running */}
                   {running && (
-                    <div className="mb-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-3.5 h-3.5 border-2 border-[var(--accent-teal)] border-t-transparent rounded-full animate-spin" />
-                        <span className="text-xs font-medium text-[var(--text-primary)]">
-                          {exomiserStatus?.message || 'Starting Exomiser…'}
-                        </span>
-                      </div>
-                      {exomiserStatus?.progress_percent != null && (
-                        <div className="w-full h-1.5 rounded-full bg-[var(--bg-surface-hover)] overflow-hidden">
-                          <div
-                            className="h-full bg-[var(--accent-teal)] transition-all"
-                            style={{ width: `${Math.max(0, Math.min(100, Number(exomiserStatus.progress_percent)))}%` }}
-                          />
-                        </div>
-                      )}
+                    <div className="relative mb-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                      {/* Progress wraps the card, same travel as everywhere else. */}
+                      <PerimeterProgress
+                        progress={exomiserStatus?.progress_percent ?? null}
+                        radius={8}
+                      />
+                      <span className="text-xs font-medium text-[var(--text-primary)]">
+                        {exomiserStatus?.message || 'Starting Exomiser…'}
+                      </span>
                       <p className="text-2xs text-[var(--text-tertiary)] mt-1.5">
                         This can take several minutes. You can leave this tab open or come back later.
                       </p>

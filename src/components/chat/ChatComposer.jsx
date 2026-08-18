@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { Upload, FileText, PanelRight, ArrowUp, Plus, Square, Link2, FolderOpen } from 'lucide-react';
+import { Upload, PanelRight, ArrowUp, Plus, Square, Link2, FolderOpen } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -17,10 +17,7 @@ const TEXTAREA_BASE =
   'w-full resize-none border-none bg-transparent dark:bg-transparent disabled:bg-transparent dark:disabled:bg-transparent shadow-none rounded-none px-0 outline-none focus-visible:ring-0 focus-visible:border-transparent';
 
 const FileTypeDropdown = ({
-  dropdownSource,
   showFileTypeDropdown,
-  fileTypeDropdownRef,
-  onUploadButtonClick,
   onSelectLocalFile,
   onSelectFromUrl,
 }) => {
@@ -61,8 +58,23 @@ const FileTypeDropdown = ({
   );
 };
 
-const ChatPromptInput = ({
-  mode,
+/**
+ * The chat composer, and the primary object on the page.
+ *
+ * `layout` is the only difference between the two call sites: `stacked` puts the
+ * textarea above its own button row (the empty state has room to breathe), `inline`
+ * keeps everything on one line. Everything else is shared — there is deliberately no
+ * second copy of the textarea, send button or upload menu.
+ *
+ * `pipelineDrawer` renders *behind* this component and appears to slide out from
+ * underneath it. The layering is pure flow: the drawer pads its own bottom by
+ * `--drawer-tuck` and cancels it with an equal negative margin, and this component's
+ * opaque background paints over the overlap. Nothing is absolutely positioned, so
+ * expanding the drawer never nudges the composer — and no wrapper element is needed,
+ * so the drawer's box in the elements tree is the drawer and nothing else.
+ */
+const ChatComposer = ({
+  layout = 'inline',
   input,
   onInputChange,
   onSend,
@@ -80,13 +92,10 @@ const ChatPromptInput = ({
   isVariantSidebarOpen,
   onToggleVariantSidebar,
   hasDocument = false,
-  pipelineGatedMessage,
-  gatedAction,
-  analysisPipelineBlock,
+  pipelineDrawer = null,
 }) => {
-  const isEmpty = mode === 'empty';
-  const uploadIcon = isEmpty ? Upload : Plus;
-  const UploadIcon = uploadIcon;
+  const isStacked = layout === 'stacked';
+  const UploadIcon = isStacked ? Upload : Plus;
   const sendDisabled = isInputDisabled || !input.trim();
 
   const textareaRef = useRef(null);
@@ -118,12 +127,11 @@ const ChatPromptInput = ({
     color: sendDisabled ? 'var(--text-disabled)' : 'var(--bg-app)',
   };
 
-  const disclaimerClass = isEmpty
-    ? 'text-center text-2xs mt-2 leading-tight'
-    : 'text-center text-2xs mt-1.5 leading-tight';
-
   const uploadButton = showUpload && (
-    <div className="relative shrink-0" ref={showFileTypeDropdown === dropdownSource ? fileTypeDropdownRef : undefined}>
+    <div
+      className="relative shrink-0"
+      ref={showFileTypeDropdown === dropdownSource ? fileTypeDropdownRef : undefined}
+    >
       <Tooltip>
         <TooltipTrigger
           render={
@@ -142,139 +150,110 @@ const ChatPromptInput = ({
         <TooltipContent>Upload variant file</TooltipContent>
       </Tooltip>
       <FileTypeDropdown
-        dropdownSource={dropdownSource}
-        showFileTypeDropdown={showFileTypeDropdown === dropdownSource ? dropdownSource : null}
-        fileTypeDropdownRef={fileTypeDropdownRef}
-        onUploadButtonClick={onUploadButtonClick}
+        showFileTypeDropdown={showFileTypeDropdown === dropdownSource}
         onSelectLocalFile={onSelectLocalFile}
         onSelectFromUrl={onSelectFromUrl}
       />
     </div>
   );
 
-  return (
-    <TooltipProvider>
-      <div className="w-full">
-        {analysisPipelineBlock}
-        {pipelineGatedMessage && (
-          <div
-            role="alert"
-            className="mb-3 px-4 py-3 rounded-xl border text-sm leading-relaxed flex items-start gap-3"
-            style={{
-              backgroundColor: 'rgba(245, 158, 11, 0.1)',
-              borderColor: 'rgba(245, 158, 11, 0.35)',
-              color: 'var(--text-primary)',
-            }}
+  const textarea = (
+    <Textarea
+      ref={textareaRef}
+      value={input}
+      onChange={(e) => onInputChange(e.target.value)}
+      onKeyDown={handleKeyDown}
+      disabled={isInputDisabled}
+      rows={1}
+      placeholder={placeholder}
+      className={`${TEXTAREA_BASE} text-sm py-1.5 ${
+        isStacked ? 'min-h-[44px] max-h-[160px]' : 'min-h-[36px] max-h-[120px]'
+      }`}
+      style={{ color: 'var(--text-primary)' }}
+    />
+  );
+
+  const sidebarToggle = hasDocument && (
+    <VariantSidebarToggle
+      isVariantSidebarOpen={isVariantSidebarOpen}
+      onToggleVariantSidebar={onToggleVariantSidebar}
+    />
+  );
+
+  const stopButton = (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={onStop}
+            className="chat-send-btn size-9 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: 'var(--bg-surface-hover)', color: 'var(--text-secondary)' }}
+            aria-label="Stop generation"
           >
-            <span className="min-w-0 flex-1">{pipelineGatedMessage}</span>
-            {gatedAction && (
-              <button
-                type="button"
-                onClick={gatedAction.onClick}
-                className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors hover:opacity-90"
-                style={{ borderColor: 'var(--accent-teal)', color: 'var(--accent-teal)' }}
-              >
-                {gatedAction.label}
-              </button>
-            )}
-          </div>
-        )}
+            <Square className="size-5" />
+          </Button>
+        }
+      />
+      <TooltipContent>Stop generation</TooltipContent>
+    </Tooltip>
+  );
+
+  const sendOrStop = isCurrentlyActive ? (
+    stopButton
+  ) : (
+    <SendButton onClick={onSend} disabled={sendDisabled} style={sendButtonStyle} />
+  );
+
+  return (
+    /* A fragment, not a wrapping div: the three boxes below are block-level and the
+     * parent is already the full column width, so a container would add nothing but a
+     * phantom box in the elements tree. TooltipProvider is a context provider and
+     * renders no DOM of its own. */
+    <TooltipProvider>
+      <>
+        {/* Drawer and composer are siblings on purpose — no wrapper. Both are
+         * `position: relative` with their own z-index, so they stack inside this element
+         * without an extra box in the tree for the drawer to hide behind. */}
+        {pipelineDrawer}
         <div
           onClick={handleContainerClick}
-          className={
-            isEmpty
-              ? 'border border-[var(--border-default)] rounded-2xl flex flex-col px-3 py-2'
-              : 'border border-[var(--border-default)] rounded-2xl flex items-end gap-1 px-2 py-1.5'
-          }
-          style={{ backgroundColor: 'var(--bg-surface)' }}
+          className={`pipeline-composer ${
+            isStacked ? 'flex flex-col px-3 py-2' : 'flex items-end gap-1 px-2 py-1.5'
+          }`}
         >
-          {isEmpty ? (
+          {isStacked ? (
             <>
-              <Textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => onInputChange(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={isInputDisabled}
-                rows={1}
-                placeholder={placeholder || 'Ask your genomic assistant...'}
-                className={`${TEXTAREA_BASE} text-sm min-h-[44px] max-h-[160px] py-1.5`}
-                style={{ color: 'var(--text-primary)' }}
-              />
+              {textarea}
               <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center gap-1">{uploadButton}</div>
                 <div className="flex items-center gap-1">
-                  {uploadButton}
-                </div>
-                <div className="flex items-center gap-1">
-                  {hasDocument && (
-                    <VariantSidebarToggle
-                      isVariantSidebarOpen={isVariantSidebarOpen}
-                      onToggleVariantSidebar={onToggleVariantSidebar}
-                    />
-                  )}
-                  <SendButton
-                    onClick={onSend}
-                    disabled={sendDisabled}
-                    style={sendButtonStyle}
-                  />
+                  {sidebarToggle}
+                  <SendButton onClick={onSend} disabled={sendDisabled} style={sendButtonStyle} />
                 </div>
               </div>
             </>
           ) : (
             <>
               {uploadButton}
-              <Textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => onInputChange(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={isInputDisabled}
-                rows={1}
-                placeholder={placeholder}
-                className={`${TEXTAREA_BASE} text-sm min-h-[36px] max-h-[120px] py-1.5`}
-                style={{ color: 'var(--text-primary)' }}
-              />
+              {textarea}
               <div className="flex items-center gap-0.5 mb-0.5">
-                {hasDocument && (
-                  <VariantSidebarToggle
-                    isVariantSidebarOpen={isVariantSidebarOpen}
-                    onToggleVariantSidebar={onToggleVariantSidebar}
-                  />
-                )}
-                {isCurrentlyActive ? (
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={onStop}
-                          className="chat-send-btn size-9 rounded-full flex items-center justify-center"
-                          style={{ backgroundColor: 'var(--bg-surface-hover)', color: 'var(--text-secondary)' }}
-                          aria-label="Stop generation"
-                        >
-                          <Square className="size-5" />
-                        </Button>
-                      }
-                    />
-                    <TooltipContent>Stop generation</TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <SendButton
-                    onClick={onSend}
-                    disabled={sendDisabled}
-                    style={sendButtonStyle}
-                  />
-                )}
+                {sidebarToggle}
+                {sendOrStop}
               </div>
             </>
           )}
         </div>
-        <p className={disclaimerClass} style={{ color: 'var(--text-disabled)' }}>
+        <p
+          /* Positioned so the dock's blur layers paint behind it, not over it. */
+          className={`relative z-10 text-center text-2xs leading-tight ${isStacked ? 'mt-2' : 'mt-1.5'}`}
+          style={{ color: 'var(--text-disabled)' }}
+        >
           Geneie can make mistakes. Verify important information.
         </p>
-      </div>
+      </>
     </TooltipProvider>
   );
 };
@@ -323,4 +302,4 @@ const SendButton = ({ onClick, disabled, style }) => (
   </Tooltip>
 );
 
-export default ChatPromptInput;
+export default ChatComposer;

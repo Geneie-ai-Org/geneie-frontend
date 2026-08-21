@@ -50,6 +50,7 @@ const ColumnInterpretationResults = ({
   showVcfTabHighlight,
   onDeleteDocument,
   onTryVcfUpload,
+  onUploadRawSequencing,
   onConvertToVcf,
   isConvertingToVcf = false,
   isVcfFile = false,
@@ -191,10 +192,9 @@ const ColumnInterpretationResults = ({
   // Determine which button is recommended based on step status
   const getRecommendedButton = () => {
     if (!step1?.passed) {
-      // For TSV/CSV, recommend VCF upload. For VCF uploads, Step 1 failure
-      // means essential VCF columns are missing; we don't have a raw-data
-      // upload button yet, so we don't highlight any primary action here.
-      return isVcfFile ? null : 'vcf';
+      // For TSV/CSV, recommend VCF upload. For VCF uploads, Step 1 failure means
+      // essential VCF columns are missing — recommend raw sequencing (FASTQ) upload.
+      return isVcfFile ? 'fastq' : 'vcf';
     } else if (!step2?.passed) {
       return 'annovar';
     } else if (!step3?.passed) {
@@ -871,25 +871,27 @@ const ColumnInterpretationResults = ({
                       onClick={() => {
                         if (recommendedButton === 'vcf' && onTryVcfUpload) {
                           onTryVcfUpload();
+                        } else if (recommendedButton === 'fastq' && onUploadRawSequencing) {
+                          onUploadRawSequencing();
                         }
                       }}
                       className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all ${
-                        recommendedButton === 'vcf' ? 'animate-pulse ring-2 ring-offset-2' : ''
+                        recommendedButton === 'vcf' || recommendedButton === 'fastq' ? 'animate-pulse ring-2 ring-offset-2' : ''
                       }`}
                       style={{
-                        backgroundColor: recommendedButton === 'vcf' ? C.tealSoft : C.surfaceCard,
-                        color: recommendedButton === 'vcf' ? C.teal : C.textMuted,
-                        border: recommendedButton === 'vcf' ? `2px solid ${C.teal}` : `1px solid ${C.border}`,
+                        backgroundColor: recommendedButton === 'vcf' || recommendedButton === 'fastq' ? C.tealSoft : C.surfaceCard,
+                        color: recommendedButton === 'vcf' || recommendedButton === 'fastq' ? C.teal : C.textMuted,
+                        border: recommendedButton === 'vcf' || recommendedButton === 'fastq' ? `2px solid ${C.teal}` : `1px solid ${C.border}`,
                       }}
                       onMouseEnter={(e) => { e.target.style.backgroundColor = C.tealSoft; e.target.style.borderColor = C.teal; }}
                       onMouseLeave={(e) => {
-                        if (recommendedButton === 'vcf') { e.target.style.backgroundColor = C.tealSoft; e.target.style.borderColor = C.teal; }
+                        if (recommendedButton === 'vcf' || recommendedButton === 'fastq') { e.target.style.backgroundColor = C.tealSoft; e.target.style.borderColor = C.teal; }
                         else { e.target.style.backgroundColor = C.surfaceCard; e.target.style.borderColor = C.border; }
                       }}
                     >
-                      {isVcfFile ? 'Upload raw data for better results' : 'Try VCF upload for better results'}
+                      {isVcfFile ? 'Upload raw sequencing data' : 'Try VCF upload for better results'}
                     </button>
-                    {primaryRecommendation && recommendedButton === 'vcf' && (
+                    {primaryRecommendation && (recommendedButton === 'vcf' || recommendedButton === 'fastq') && (
                       <div
                         className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10"
                         style={{ ...tooltipStyle, maxWidth: '250px', whiteSpace: 'normal', textAlign: 'left' }}

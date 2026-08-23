@@ -20,11 +20,111 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-function stepTextStyle(status) {
+function stepTextStyle(status, locked) {
+  if (locked) return { color: 'var(--text-tertiary)', fontWeight: 400 };
   if (status === 'done') return { color: 'var(--text-primary)', fontWeight: 600 };
   if (status === 'failed') return { color: 'var(--error)', fontWeight: 600 };
   if (status === 'running') return { fontWeight: 600 };
+  // `skipped` is struck through rather than dimmed — a step that will never run must not
+  // read as one that hasn't run yet.
+  if (status === 'skipped') {
+    return { color: 'var(--text-tertiary)', fontWeight: 400, textDecoration: 'line-through' };
+  }
   return { color: 'var(--text-tertiary)', fontWeight: 400 };
+}
+
+/** A step is "behind you" once it can no longer become active. */
+function isStepPassed(status) {
+  return status === 'done' || status === 'skipped';
+}
+
+/**
+ * Status as a shape, not just a weight. Colour and font-weight alone put `done` and
+ * `pending` two hairs apart at 12px, which made the row unreadable at a glance; every
+ * status now owns a distinct mark in a fixed 14px slot so the labels stay in one lane.
+ */
+function StepGlyph({ status, locked }) {
+  const slot = 'w-3.5 h-3.5 shrink-0 flex items-center justify-center';
+
+  if (locked) {
+    return (
+      <span className={slot} aria-hidden>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2.5" strokeLinecap="round">
+          <rect x="4" y="11" width="16" height="10" rx="2" />
+          <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+        </svg>
+      </span>
+    );
+  }
+  if (status === 'failed') {
+    return (
+      <span className={slot} aria-hidden>
+        <AlertCircle className="w-3 h-3" style={{ color: 'var(--error)' }} />
+      </span>
+    );
+  }
+  if (status === 'done') {
+    return (
+      <span className={slot} aria-hidden>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="3" strokeLinecap="round">
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+      </span>
+    );
+  }
+  if (status === 'skipped') {
+    return (
+      <span className={slot} aria-hidden>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2.5" strokeLinecap="round">
+          <path d="M5 12h14" />
+        </svg>
+      </span>
+    );
+  }
+  if (status === 'running') {
+    return (
+      <span className={slot} aria-hidden>
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--accent-teal)' }} />
+      </span>
+    );
+  }
+  return (
+    <span className={slot} aria-hidden>
+      <span
+        className="w-[7px] h-[7px] rounded-full border"
+        style={{ borderColor: 'var(--text-disabled)' }}
+      />
+    </span>
+  );
+}
+
+/**
+ * Five segments on the collapsed line
+ * this carries position in the pipeline (of the input file) it in 102px without printing a percentage.
+ */
+function SegmentMeter({ steps }) {
+  return (
+    <span className="hidden sm:flex items-center gap-[3px] shrink-0" aria-hidden>
+      {PIPELINE_STEP_DEFS.map((def) => {
+        const status = steps[def.id];
+        const color =
+          status === 'failed'
+            ? 'var(--error)'
+            : status === 'running'
+              ? 'var(--accent-teal)'
+              : isStepPassed(status)
+                ? 'var(--text-primary)'
+                : 'var(--text-disabled)';
+        return (
+          <span
+            key={def.id}
+            className="w-[18px] h-[7px] rounded-[6px]"
+            style={{ backgroundColor: color }}
+          />
+        );
+      })}
+    </span>
+  );
 }
 
 /**
@@ -157,25 +257,31 @@ const PipelineDrawer = ({
   })();
 
   /* ── Collapsed line ──────────────────────────────────────────────────────────── */
-  const stateText = (() => {
-    if (enrichmentState?.active) return 'Enriching…';
-    if (enrichmentState?.failed) return 'Enrichment failed';
-    if (indexingState?.active) return 'Indexing…';
-    if (indexingState?.failed) return 'Indexing failed';
-    if (uploadInProgress) return 'Uploading…';
-    if (steps.annovar === 'failed') return 'Annotation failed';
-    if (steps.reduce === 'failed') return 'Prioritization failed';
-    if (isRunningAnnovar || annovarJob?.status === 'running') return 'Annotating…';
-    if (isRunningExomiser || exomiserStatus?.status === 'running') return 'Running Exomiser…';
-    if (isApplyingProprietaryFilter || filterJob?.status === 'running') return 'Applying filter…';
+  const { text: stateText, loading: stateLoading } = (() => {
+    const working = (text) => ({ text, loading: true });
+    const settled = (text) => ({ text, loading: false });
+
+    if (enrichmentState?.active) return working('Enriching…');
+    if (enrichmentState?.failed) return settled('Enrichment failed');
+    if (indexingState?.active) return working('Indexing…');
+    if (indexingState?.failed) return settled('Indexing failed');
+    if (uploadInProgress) return working('Uploading…');
+    if (steps.annovar === 'failed') return settled('Annotation failed');
+    if (steps.reduce === 'failed') return settled('Prioritization failed');
+    if (isRunningAnnovar || annovarJob?.status === 'running') return working('Annotating…');
+    if (isRunningExomiser || exomiserStatus?.status === 'running') return working('Running Exomiser…');
+    if (isApplyingProprietaryFilter || filterJob?.status === 'running') return working('Applying filter…');
     if (chatReady) {
-      return variantCount != null
-        ? `Ready · ${Number(variantCount).toLocaleString()} variants`
-        : 'Ready';
+      return settled(
+        variantCount != null
+          ? `Ready · ${Number(variantCount).toLocaleString()} variants`
+          : 'Ready'
+      );
     }
-    if (chatEligibility?.reason === 'CHAT_REQUIRES_FILTER') return 'Needs a filter';
-    if (chatEligibility?.allowed === null) return 'Checking…';
-    return summary.label;
+    if (chatEligibility?.reason === 'CHAT_REQUIRES_FILTER') return settled('Needs a filter');
+    // Eligibility still resolving server-side — a wait, so it shimmers too.
+    if (chatEligibility?.allowed === null) return working('Checking…');
+    return summary.status === 'running' ? working(summary.label) : settled(summary.label);
   })();
 
   const stateColor = failed
@@ -231,10 +337,11 @@ const PipelineDrawer = ({
         >
           {displayName}
         </span>
-        <span className="text-2xs shrink-0" style={{ color: 'var(--text-disabled)' }} aria-hidden>
-          |
-        </span>
-        <span className="text-2xs truncate shrink-0" style={{ color: stateColor }}>
+        <SegmentMeter steps={steps} />
+        <span
+          className={`text-2xs truncate shrink-0${stateLoading ? ' pipeline-status-shimmer' : ''}`}
+          style={stateLoading ? undefined : { color: stateColor }}
+        >
           {stateText}
         </span>
         <span className="ml-auto shrink-0 flex items-center" style={{ color: 'var(--text-tertiary)' }}>
@@ -253,42 +360,53 @@ const PipelineDrawer = ({
             className="overflow-hidden"
           >
             <div className="px-3.5 pt-0.5">
-              <ol className="flex flex-wrap items-center gap-x-0.5 gap-y-1.5 pb-1">
+              <ol className="flex flex-wrap items-center gap-x-0.5 gap-y-1.5 pb-1 w-full">
                 {PIPELINE_STEP_DEFS.map((def, index) => {
                   const status = steps[def.id];
                   const isLast = index === PIPELINE_STEP_DEFS.length - 1;
                   const annovarDone = def.id === 'annovar' && status === 'done';
                   const guestLocked = isGuest && (def.id === 'annovar' || def.id === 'reduce');
                   const clickable = !guestLocked && !annovarDone;
+                  const running = status === 'running' && !guestLocked;
 
                   return (
-                    <li key={def.id} className="flex items-center">
+                    <li
+                      key={def.id}
+                      className={`flex items-center${isLast ? '' : ' flex-1 min-w-0'}`}
+                    >
                       <button
                         type="button"
                         disabled={guestLocked}
                         onClick={() => handleStepClick(def.id)}
-                        className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-2xs sm:text-xs transition-colors ${
+                        className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded-[10px] text-2xs sm:text-xs shrink-0 transition-colors ${
                           clickable ? 'hover:bg-black/[0.04] dark:hover:bg-white/[0.05] cursor-pointer' : 'cursor-default opacity-60'
                         }`}
-                        style={stepTextStyle(status)}
+                        style={{
+                          ...stepTextStyle(status, guestLocked),
+                          // The active step keeps a standing tint so it stays findable
+                          // when the shimmer is off under prefers-reduced-motion.
+                          ...(running ? { backgroundColor: 'var(--accent-teal-soft)' } : null),
+                        }}
                         title={guestLocked ? 'Sign in for full analysis' : `View ${def.label}`}
                       >
-                        {status === 'failed' && (
-                          <AlertCircle className="w-3 h-3" style={{ color: 'var(--error)' }} aria-hidden />
-                        )}
-                        {/* The shimmer is the running signal — no spinner needed. */}
-                        <span className={status === 'running' ? 'pipeline-step-shimmer' : undefined}>
+                        <StepGlyph status={status} locked={guestLocked} />
+                        <span className={running ? 'pipeline-step-shimmer' : undefined}>
                           {def.shortLabel || def.label}
                         </span>
                       </button>
                       {!isLast && (
                         <span
-                          className="text-2xs px-0.5"
-                          style={{ color: 'var(--text-disabled)' }}
+                          // Grows to fill the drawer: the connectors absorb the spare
+                          // width, so the row spans it and the labels land on an even
+                          // pitch instead of huddling at the left edge.
+                          className="h-px flex-1 min-w-[0.875rem]"
+                          style={{
+                            backgroundColor: isStepPassed(status)
+                              ? 'var(--text-disabled)'
+                              : 'var(--border-default)',
+                          }}
                           aria-hidden
-                        >
-                          ·
-                        </span>
+                        />
                       )}
                     </li>
                   );

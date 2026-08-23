@@ -22,10 +22,22 @@ export function useDocumentUpload({
   setAnnovarMessageModal,
   setIsShowingAuthForm,
   syncPipelineFromConversationRef,
+  setConversationFilterState,
 }) {
   const handleDocumentUpload = useCallback(async (documentData) => {
     console.log('[App] handleDocumentUpload called with:', documentData);
     console.log('[App] userId:', userId, 'activeConversationId:', activeConversationId, 'userTier:', userTier);
+
+    /* Any change of document — add, replace or remove — invalidates the filters and the
+     * filtered count held for the previous file. Without this the pipeline reports the
+     * old file's Filter step as complete until the next conversation refetch overwrites
+     * it, which is how a freshly uploaded file could show a ticked Filter step. */
+    setConversationFilterState?.({
+      activeVariantFilters: null,
+      filteredVariantCount: null,
+      activeProprietaryFilter: null,
+      filterWorkingSetCount: null,
+    });
 
     const isGuest = userTier === 'guest';
 
@@ -301,6 +313,7 @@ export function useDocumentUpload({
     setAnnovarMessageModal,
     setIsShowingAuthForm,
     syncPipelineFromConversationRef,
+    setConversationFilterState,
   ]);
 
   return { handleDocumentUpload };

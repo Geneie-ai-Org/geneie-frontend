@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { Upload, PanelRight, ArrowUp, Plus, Square, Link2, FolderOpen, Dna } from 'lucide-react';
+import { PanelRight, ArrowUp, Plus, Square, Link2, FolderOpen, Dna } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -26,7 +26,7 @@ const FileTypeDropdown = ({
 
   return (
     <div
-      className="absolute bottom-full left-0 mb-2 rounded-lg border overflow-hidden shadow-xl min-w-[160px] z-50"
+      className="absolute bottom-full left-0 mb-2 rounded-lg border overflow-hidden shadow-xl min-w-[260px] z-50"
       style={{
         backgroundColor: 'var(--bg-surface-raised)',
         borderColor: 'var(--border-default)',
@@ -111,7 +111,6 @@ const ChatComposer = ({
   pipelineDrawer = null,
 }) => {
   const isStacked = layout === 'stacked';
-  const UploadIcon = isStacked ? Upload : Plus;
   const sendDisabled = isInputDisabled || !input.trim();
 
   const textareaRef = useRef(null);
@@ -159,7 +158,7 @@ const ChatComposer = ({
               className="chat-chrome-btn size-9 rounded-[0.5rem]"
               aria-label="Upload variant file"
             >
-              <UploadIcon className="size-5" />
+              <Plus className="size-5" />
             </Button>
           }
         />

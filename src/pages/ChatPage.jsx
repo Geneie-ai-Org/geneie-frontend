@@ -333,6 +333,7 @@ const ChatPage = () => {
     setAnnovarMessageModal,
     setIsShowingAuthForm,
     syncPipelineFromConversationRef,
+    setConversationFilterState,
   });
 
   const handleUploadStarted = useCallback((fileName) => {

@@ -76,7 +76,7 @@
   --shell-left-col: 0px;
   --shell-right-col: 0px;
   --drawer-tuck: 0.75rem;
-  --drawer-inset: clamp(0.75rem, 1%, 1.75rem);
+  --drawer-inset: clamp(0.75rem, 2.25%, 1.75rem);
 }
 
 /* Dark theme — the shipped look. Values are the pre-light-mode originals, unchanged. */
@@ -444,7 +444,7 @@
   border-top-right-radius: var(--radius-lg);
   background-color: var(--bg-surface-sunken);
   padding-bottom: calc(var(--drawer-tuck) + 0.5rem);
-  margin-bottom: calc(var(--drawer-tuck) * -1);
+  margin-bottom: calc(var(--drawer-tuck) * -1.75);
   margin-inline: var(--drawer-inset);
 }
 
@@ -544,35 +544,73 @@
   to   { stroke-dashoffset: -100; }
 }
 
-/* The running signal on the active step's label: a slow light sweep across the
- * glyphs themselves, so no spinner is needed. */
-.pipeline-step-shimmer {
-  background-image: linear-gradient(
-    100deg,
-    var(--text-secondary) 20%,
-    var(--text-primary) 45%,
-    var(--text-secondary) 70%
-  );
-  background-size: 200% auto;
+/* Shimmer text, standard recipe: flat base, one narrow bright band, and only
+ * background-position animated (compositing only — no layout, no paint).
+ *
+ * The band is deliberately tight — base out to 40%, highlight at 50%, base again from
+ * 60% — because a wide soft gradient averages out to "slightly uneven text" instead of
+ * reading as a sweep. Travel matches background-size (100% -> -100% over 200%) so the
+ * highlight crosses exactly once per cycle.
+ *
+ * The highlight is --text-primary in both variants, which is what makes it visible in
+ * either theme: near-black over a light ground, near-white over a dark one.
+ */
+.pipeline-step-shimmer,
+.pipeline-status-shimmer {
+  background-size: 200% 100%;
   background-clip: text;
   -webkit-background-clip: text;
+  /* Safari needs the fill-color, not just `color`, or the gradient never shows. */
+  -webkit-text-fill-color: transparent;
   color: transparent;
-  animation: pipeline-step-shimmer 2.4s ease-in-out infinite;
+  animation: pipeline-step-shimmer 3s ease-in-out infinite;
+}
+
+/* The active step's label. */
+.pipeline-step-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--text-secondary) 0%,
+    var(--text-secondary) 40%,
+    var(--text-primary) 50%,
+    var(--text-secondary) 60%,
+    var(--text-secondary) 100%
+  );
+}
+
+/* The collapsed status line, one notch quieter at rest — it sits under the filename and
+ * must not outrank it — but it sweeps to the same highlight so the motion still reads. */
+.pipeline-status-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--text-tertiary) 0%,
+    var(--text-tertiary) 40%,
+    var(--text-primary) 50%,
+    var(--text-tertiary) 60%,
+    var(--text-tertiary) 100%
+  );
 }
 
 /* Tailwind's animate-* utilities do not honour this on their own. */
 @keyframes pipeline-step-shimmer {
-  from { background-position: 200% center; }
-  to   { background-position: -200% center; }
+  from { background-position: 100% center; }
+  to   { background-position: -100% center; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pipeline-step-shimmer {
+  .pipeline-step-shimmer,
+  .pipeline-status-shimmer {
     animation: none;
     background-image: none;
     background-clip: border-box;
     -webkit-background-clip: border-box;
+    -webkit-text-fill-color: currentColor;
+  }
+  .pipeline-step-shimmer {
     color: var(--text-primary);
+  }
+  .pipeline-status-shimmer {
+    color: var(--text-tertiary);
   }
   .perimeter-progress--indeterminate {
     animation: none;

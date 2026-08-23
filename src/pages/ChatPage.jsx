@@ -25,6 +25,8 @@ import SubscriptionSuccess from '../components/SubscriptionSuccess';
 import SubscriptionCanceled from '../components/SubscriptionCanceled';
 import ColumnInterpretationResults from '../components/ColumnInterpretationResults';
 import PipelineDrawer from '../components/PipelineDrawer';
+import Module1UploadForm from '../components/Module1UploadForm';
+import Module1PipelineStepper from '../components/Module1PipelineStepper';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
 import VariantUploadLoadingModal from '@/components/VariantUploadLoadingModal';
 import ThinkingIndicator from '@/components/chat/ThinkingIndicator';
@@ -36,6 +38,7 @@ import { buildVariantDataFromConversation, variantFileRowCountForSidebar } from 
 import { conversationPath, isValidConversationId } from '@/lib/conversationRoutes';
 import { getDeviceId } from '@/lib/deviceId';
 import { useVariantPipeline } from '@/hooks/useVariantPipeline';
+import { useModule1Pipeline } from '@/hooks/useModule1Pipeline';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { getTierChatLimit, DEFAULT_GUEST_CHAT_LIMIT } from '@/services/backendApi';
 import { useSeo } from '@/hooks/useSeo';
@@ -134,6 +137,15 @@ const ChatPage = () => {
     [navigate]
   );
 
+  // useModule1Pipeline is constructed further below (it needs presentFileAnalysisModal /
+  // syncAfterColumnInterpretation from `pipeline`), but `pipeline` itself needs to know
+  // whether a Module 1 job is active to suppress the Step1-fail chat gate. Break the cycle
+  // with refs updated in-render right after module1 is constructed (same idiom as
+  // syncPipelineFromConversationRef below) — one render behind at worst, which self-corrects
+  // on the very next re-render triggered by that same state change.
+  const module1JobActiveRef = useRef(false);
+  const onOpenModule1UploadRef = useRef(null);
+
   const pipeline = useVariantPipeline({
     userTier,
     userId,
@@ -152,6 +164,8 @@ const ChatPage = () => {
     setIsShowingAuthForm,
     setJustSignedUp,
     getDeviceId,
+    module1JobActive: module1JobActiveRef.current,
+    onOpenModule1Upload: () => onOpenModule1UploadRef.current?.(),
   });
 
   const {
@@ -285,6 +299,21 @@ const ChatPage = () => {
     },
     [userTier, remapProprietaryFiltersForConversation, refreshChatEligibilityFromApi]
   );
+
+  const module1 = useModule1Pipeline({
+    userTier,
+    activeConversationId,
+    setColumnInterpretationResult,
+    setVariantData,
+    setCurrentDocument,
+    presentFileAnalysisModal,
+    syncPipelineFromConversationRef,
+    syncAfterColumnInterpretation,
+    setAnnovarMessageModal,
+    onNeedsEmailVerification: () => setPendingEmailVerification(true),
+  });
+  module1JobActiveRef.current = module1.module1JobActive;
+  onOpenModule1UploadRef.current = module1.openModule1Form;
 
   const { handleDocumentUpload } = useDocumentUpload({
     userId,
@@ -803,6 +832,11 @@ const ChatPage = () => {
     setShowUploadModal(true);
   };
 
+  const onSelectFastq = () => {
+    setShowFileTypeDropdown(null);
+    module1.openModule1Form();
+  };
+
   useEffect(() => {
     if (!columnInterpretationResult) {
       setIsAnnovarRecommended(false);
@@ -884,6 +918,10 @@ const ChatPage = () => {
     },
     [runAnnovarForCurrentConversation]
   );
+
+  const module1PipelineBlock = module1.module1JobActive ? (
+    <Module1PipelineStepper job={module1.module1Job} onStartOver={module1.openModule1Form} />
+  ) : null;
 
 
   // --- MAIN RENDER GATING LOGIC ---
@@ -1053,10 +1091,18 @@ const ChatPage = () => {
     onUploadButtonClick: handleUploadButtonClick,
     onSelectLocalFile,
     onSelectFromUrl: userTier === 'guest' ? undefined : onSelectImportFromUrl,
+    onSelectFastq: userTier === 'guest' ? undefined : onSelectFastq,
     isVariantSidebarOpen,
     onToggleVariantSidebar: () => setIsVariantSidebarOpen(!isVariantSidebarOpen),
     hasDocument: !!currentDocument,
-    pipelineDrawer,
+    // Module 1's stepper shares the drawer slot with the variant pipeline; only one of
+    // the two is ever non-null for a given conversation.
+    pipelineDrawer: (
+      <>
+        {module1PipelineBlock}
+        {pipelineDrawer}
+      </>
+    ),
   };
 
   const shellLeftState =
@@ -1530,6 +1576,22 @@ const ChatPage = () => {
         </div>
       )}
 
+      {/* Module 1 (FASTQ) upload form — independent modal, not part of DocumentUpload's flow */}
+      {userTier !== 'guest' && (
+        <Module1UploadForm
+          open={module1.module1FormOpen}
+          onClose={module1.closeModule1Form}
+          bedCatalog={module1.bedCatalog}
+          bedCatalogLoading={module1.bedCatalogLoading}
+          loadBedCatalog={module1.loadBedCatalog}
+          module1UploadProgress={module1.module1UploadProgress}
+          module1Submitting={module1.module1Submitting}
+          module1SubmitError={module1.module1SubmitError}
+          uploadAndValidateCustomBed={module1.uploadAndValidateCustomBed}
+          startModule1Run={module1.startModule1Run}
+        />
+      )}
+
       {/* Profile Management Modal */}
       {userTier !== 'guest' && (
         <ProfileManagement
@@ -1582,6 +1644,12 @@ const ChatPage = () => {
             setInterpretationModalStep(null);
             setActiveFileTypeTab('vcf');
             setShowUploadModal(true);
+          }}
+          onUploadRawSequencing={() => {
+            interpretationDismissedRef.current = true;
+            setShowInterpretationModal(false);
+            setInterpretationModalStep(null);
+            module1.openModule1Form();
           }}
           onConvertToVcf={async () => {
             interpretationDismissedRef.current = true;

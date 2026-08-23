@@ -197,6 +197,122 @@ export async function completeVariantUpload({
   return data;
 }
 
+/** FASTQ/BED filename checks per Module 1 role — mirrors the server-side extension validation. */
+export function isAllowedModule1RoleFilename(role, fileName) {
+  const n = (fileName || '').toLowerCase();
+  if (role === 'bed') return n.endsWith('.bed');
+  return n.endsWith('.fastq.gz') || n.endsWith('.fastq') || n.endsWith('.fq.gz') || n.endsWith('.fq');
+}
+
+export async function fetchModule1BedCatalog(genome = 'hg38') {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/module1/bed-catalog?genome=${encodeURIComponent(genome)}`), {
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to load BED catalog');
+    err.status = response.status;
+    throw err;
+  }
+  return data; // { genome, genome_ready, items }
+}
+
+export async function presignModule1Upload({ conversationId, role, fileName, fileSize, contentType }) {
+  const headers = {
+    ...(await getAuthHeaders()),
+    'Content-Type': 'application/json',
+  };
+  const response = await fetch(apiUrl('/api/module1/presign'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      conversation_id: conversationId,
+      role,
+      file_name: fileName,
+      file_size: fileSize,
+      content_type: contentType || 'application/octet-stream',
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to prepare upload');
+    err.status = response.status;
+    throw err;
+  }
+  return data; // { method, url, s3_key, role, headers, expires_in }
+}
+
+/**
+ * POST /api/module1/validate-bed returns a flat `{ok:true,...}` on 200 but wraps
+ * `{ok:false,...}` inside `detail` on 400 — normalize both into one flat shape so
+ * callers never need to branch on response.ok.
+ */
+export async function validateModule1Bed({ conversationId, s3Key, genome = 'hg38' }) {
+  const headers = {
+    ...(await getAuthHeaders()),
+    'Content-Type': 'application/json',
+  };
+  const response = await fetch(apiUrl('/api/module1/validate-bed'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ conversation_id: conversationId, s3_key: s3Key, genome }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (data.detail && typeof data.detail === 'object') return data.detail;
+    const err = new Error(parseApiErrorDetail(data.detail) || 'BED validation failed');
+    err.status = response.status;
+    throw err;
+  }
+  return data; // { ok:true, code, message, lines_checked, example_chroms }
+}
+
+export async function runModule1Pipeline(payload) {
+  const headers = {
+    ...(await getAuthHeaders()),
+    'Content-Type': 'application/json',
+  };
+  const response = await fetch(apiUrl('/api/module1/run'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = data.detail;
+    const err = new Error(parseApiErrorDetail(detail) || 'Failed to start Module 1 run');
+    err.status = response.status;
+    err.code = typeof detail === 'object' ? detail.code : undefined;
+    err.jobId = typeof detail === 'object' ? detail.job_id : undefined;
+    throw err;
+  }
+  return data; // { job_id, conversation_id, status, phase, message }
+}
+
+export async function fetchModule1Status(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/module1/status/${encodeURIComponent(conversationId)}`), {
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to fetch Module 1 status');
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
+/** Fast, non-authoritative client hint only — the server /validate-bed call remains the real gate. */
+export async function precheckBedChromStyle(file) {
+  const head = await file.slice(0, 64 * 1024).text();
+  const firstDataLine = head.split('\n').find((l) => l.trim() && !l.startsWith('#'));
+  if (!firstDataLine) return { ok: null };
+  const firstCol = firstDataLine.split(/\s+/)[0] || '';
+  return { ok: /^chr/i.test(firstCol), sampleChrom: firstCol };
+}
+
 /** Build per-column payload expected by POST /api/map-proprietary-filters. */
 export function buildColumnInterpretationsPayload(columnInterpretation) {
   if (!columnInterpretation) return {};

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { Upload, FileText, PanelRight, ArrowUp, Plus, Square, Link2, FolderOpen } from 'lucide-react';
+import { Upload, FileText, PanelRight, ArrowUp, Plus, Square, Link2, FolderOpen, Dna } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -23,6 +23,7 @@ const FileTypeDropdown = ({
   onUploadButtonClick,
   onSelectLocalFile,
   onSelectFromUrl,
+  onSelectFastq,
 }) => {
   if (!showFileTypeDropdown) return null;
 
@@ -57,6 +58,20 @@ const FileTypeDropdown = ({
           </button>
         </>
       )}
+      {onSelectFastq && (
+        <>
+          <div style={{ height: '1px', backgroundColor: 'var(--border-default)' }} />
+          <button
+            type="button"
+            onClick={onSelectFastq}
+            className="w-full px-3 py-2.5 text-sm text-left flex items-center gap-2.5 transition-colors hover:bg-white/5"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            <Dna className="w-3.5 h-3.5" style={{ color: 'var(--text-secondary)' }} />
+            Raw sequencing data (FASTQ)
+          </button>
+        </>
+      )}
     </div>
   );
 };
@@ -77,6 +92,7 @@ const ChatPromptInput = ({
   onUploadButtonClick,
   onSelectLocalFile,
   onSelectFromUrl,
+  onSelectFastq,
   isVariantSidebarOpen,
   onToggleVariantSidebar,
   hasDocument = false,
@@ -148,6 +164,7 @@ const ChatPromptInput = ({
         onUploadButtonClick={onUploadButtonClick}
         onSelectLocalFile={onSelectLocalFile}
         onSelectFromUrl={onSelectFromUrl}
+        onSelectFastq={onSelectFastq}
       />
     </div>
   );

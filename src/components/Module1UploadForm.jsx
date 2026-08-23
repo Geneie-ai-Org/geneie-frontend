@@ -13,23 +13,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
 import { precheckBedChromStyle } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
 
 const GENOME_OPTIONS = [
   { value: 'hg38', label: 'hg38 (GRCh38)' },
-  { value: 'hg19', label: 'hg19 (GRCh37)', disabled: true, disabledReason: 'hg19 references coming soon' },
+  { value: 'hg19', label: 'hg19 (GRCh37)', disabled: true, disabledReason: 'hg19 (GRCh37) references are coming soon.' },
 ];
 
 const SEQUENCING_TYPE_OPTIONS = [
   { value: 'WES', label: 'Whole Exome (WES)' },
-  { value: 'WGS', label: 'Whole Genome (WGS)', disabled: true, disabledReason: 'Coming soon' },
-  { value: 'Targeted', label: 'Targeted', disabled: true, disabledReason: 'Coming soon' },
+  { value: 'WGS', label: 'Whole Genome (WGS)', disabled: true, disabledReason: 'Whole genome (WGS) analysis is coming soon.' },
+  { value: 'Targeted', label: 'Targeted', disabled: true, disabledReason: 'Targeted panel analysis is coming soon.' },
 ];
 
-/** Select with per-option disabled+tooltip support — no existing pattern for this in the codebase. */
+/**
+ * Select whose unavailable options render as greyed-out rows that toast their reason on
+ * click instead of using SelectItem's `disabled` (which sets pointer-events: none, so the
+ * row could never report why it is unavailable).
+ */
 function SelectWithDisabledOptions({ value, onChange, placeholder, options, className = '' }) {
   const items = Object.fromEntries((options || []).map((o) => [o.value, o.label]));
   return (
@@ -46,14 +51,23 @@ function SelectWithDisabledOptions({ value, onChange, placeholder, options, clas
       <SelectContent className="p-1.5">
         {(options || []).map((opt) =>
           opt.disabled ? (
-            <Tooltip key={opt.value}>
-              <TooltipTrigger render={<span className="block" />}>
-                <SelectItem value={opt.value} disabled>
-                  {opt.label}
-                </SelectItem>
-              </TooltipTrigger>
-              <TooltipContent>{opt.disabledReason}</TooltipContent>
-            </Tooltip>
+            <div
+              key={opt.value}
+              role="option"
+              aria-disabled="true"
+              aria-selected="false"
+              className="relative flex w-full cursor-not-allowed items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm select-none"
+              style={{ color: 'var(--text-tertiary)' }}
+              // Keep the popup open so the toast reads as a response to this row.
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toast.info(opt.disabledReason);
+              }}
+            >
+              {opt.label}
+            </div>
           ) : (
             <SelectItem key={opt.value} value={opt.value}>
               {opt.label}

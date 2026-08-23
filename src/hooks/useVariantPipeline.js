@@ -35,6 +35,8 @@ export function useVariantPipeline({
   setIsShowingAuthForm,
   setJustSignedUp,
   getDeviceId,
+  module1JobActive = false,
+  onOpenModule1Upload,
 }) {
   // `allowed: null` means "not confirmed yet" — never assume chat is open before
   // /api/chat-eligibility has answered.
@@ -630,13 +632,20 @@ export function useVariantPipeline({
   const variantUploadInProgress =
     Boolean(uploadSessionConversationId) && uploadSessionConversationId === activeConversationId;
 
+  // A Step1-fail (missing essential VCF columns) blocks chat too, on top of the
+  // backend-driven chatEligibility gate — suppressed while the user is already mid-flow
+  // on the fix (a Module 1 run), and self-clears once that run's ingested VCF re-passes
+  // Step 1 and columnInterpretationResult updates.
+  const step1Failed = columnInterpretationResult?.step1?.passed === false;
+  const step1FailBlocksChat = step1Failed && !module1JobActive;
+
   // Unknown (`null`) gates just like an explicit `false`: only a real `allowed: true`
   // from /api/chat-eligibility opens chat (F2/F8).
   const isChatPipelineGated =
     userTier !== 'guest' &&
     !!currentDocument &&
     !!activeConversationId &&
-    chatEligibility.allowed !== true;
+    (chatEligibility.allowed !== true || step1FailBlocksChat);
 
   /**
    * Optimistic gate on the start of any pipeline mutation (ANNOVAR, ACMG, Exomiser,
@@ -750,6 +759,20 @@ export function useVariantPipeline({
 
   const promptChatBlocked = useCallback(() => {
     if (!isChatPipelineGated) return false;
+    if (step1FailBlocksChat) {
+      setAnnovarMessageModal({
+        title: 'Raw sequencing data needed',
+        message:
+          'This file is missing essential VCF columns. Upload raw sequencing data (FASTQ) to generate a valid VCF, or replace this file.',
+        variant: 'warning',
+        ctaLabel: 'Upload raw sequencing data',
+        onCta: () => {
+          setAnnovarMessageModal(null);
+          onOpenModule1Upload?.();
+        },
+      });
+      return true;
+    }
     if (enrichmentState.failed) {
       setAnnovarMessageModal({
         title: 'Enrichment failed',
@@ -806,7 +829,7 @@ export function useVariantPipeline({
       variant: 'warning',
     });
     return true;
-  }, [isChatPipelineGated, enrichmentState.failed, enrichmentState.active, enrichmentState.message, indexingState.failed, indexingState.active, indexingState.message, isRunningAnnovar, pipelineSnapshot.annovarJob, chatEligibility.message, setAnnovarMessageModal]);
+  }, [isChatPipelineGated, step1FailBlocksChat, onOpenModule1Upload, enrichmentState.failed, enrichmentState.active, enrichmentState.message, indexingState.failed, indexingState.active, indexingState.message, isRunningAnnovar, pipelineSnapshot.annovarJob, chatEligibility.message, setAnnovarMessageModal]);
 
   const runAnnovarForCurrentConversation = useCallback(async () => {
     if (userTier === 'guest') {

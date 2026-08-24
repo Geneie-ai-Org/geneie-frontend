@@ -1484,24 +1484,7 @@ const DocumentUpload = ({
 
               {/* Conditional Fields - Only shown if Analysis Type = Germline */}
               {sampleMetadata.analysisType === 'Germline' && (
-                <div
-                  className="border-t border-[var(--border-default)] pt-4 mt-4 transition-all duration-500 ease-in-out"
-                  style={{
-                    animation: 'fadeInSlide 0.5s ease-out'
-                  }}
-                >
-                  <style>{`
-                    @keyframes fadeInSlide {
-                      from {
-                        opacity: 0;
-                        transform: translateY(-15px);
-                      }
-                      to {
-                        opacity: 1;
-                        transform: translateY(0);
-                      }
-                    }
-                  `}</style>
+                <div className="disclosure-enter border-t border-[var(--border-default)] pt-4 mt-4">
                   <h4 className="text-md font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
                     Germline Analysis Fields
                   </h4>
@@ -1599,12 +1582,7 @@ const DocumentUpload = ({
               {(sampleMetadata.analysisType === 'Somatic' ||
                 sampleMetadata.analysisType === 'Tumor-Normal Paired' ||
                 sampleMetadata.analysisType === 'Tumor-Only') && (
-                  <div
-                    className="border-t border-[var(--border-default)] pt-4 mt-4 transition-all duration-500 ease-in-out"
-                    style={{
-                      animation: 'fadeInSlide 0.5s ease-out'
-                    }}
-                  >
+                  <div className="disclosure-enter border-t border-[var(--border-default)] pt-4 mt-4">
                     <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
                       Tumor Analysis Fields
                     </h4>

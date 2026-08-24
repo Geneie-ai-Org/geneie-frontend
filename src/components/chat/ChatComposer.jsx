@@ -25,7 +25,7 @@ const FileTypeDropdown = ({ showFileTypeDropdown, onSelectVariantFile, onSelectF
 
   return (
     <div
-      className="absolute bottom-full left-0 mb-2 rounded-lg border overflow-hidden shadow-xl min-w-[260px] z-50"
+      className="chat-upload-menu absolute bottom-full left-0 mb-2 rounded-lg border overflow-hidden shadow-xl min-w-[260px] z-50"
       style={{
         backgroundColor: 'var(--bg-surface-raised)',
         borderColor: 'var(--border-default)',
@@ -139,8 +139,7 @@ const ChatComposer = ({
               variant="ghost"
               size="icon"
               onClick={() => onUploadButtonClick(dropdownSource)}
-              className="chat-chrome-btn size-9 rounded-[0.5rem]"
-              aria-label="Upload variant file"
+              className="chat-chrome-btn chat-chrome-btn-plus size-9 rounded-[0.5rem]"
             >
               <Plus className="size-5" />
             </Button>

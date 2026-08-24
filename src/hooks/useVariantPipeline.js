@@ -392,6 +392,12 @@ export function useVariantPipeline({
     let cancelled = false;
     let timerId = null;
 
+    // Dev-only trace: the loop is self-rescheduling, so a silent exit looks exactly like
+    // "the status froze". This says which branch ended it.
+    const pollTrace = (msg) => {
+      if (import.meta.env.DEV) console.debug('[pipeline-poll]', msg);
+    };
+
     const pollBackgroundPipelineJobs = async () => {
       if (cancelled) return;
 
@@ -412,15 +418,31 @@ export function useVariantPipeline({
         uploadConvId === activeConversationId ||
         lineCountActive;
 
-      if (!pipelineWorkActive) return;
+      if (!pipelineWorkActive) {
+        pollTrace('idle — nothing active, loop parked until a dep re-arms it');
+        return;
+      }
 
       try {
         const auth = getAuth();
         const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-        if (!token) return;
+        // A missing token is transient (Firebase refreshing); retry rather than
+        // abandoning a job that is still running server-side.
+        if (!token) {
+          pollTrace('no auth token yet — retrying in 5s');
+          if (!cancelled) timerId = setTimeout(pollBackgroundPipelineJobs, 5000);
+          return;
+        }
 
         const convData = await mongodbApi.getConversation(activeConversationId);
-        if (cancelled || !convData) return;
+        if (cancelled) return;
+        // getConversation resolves null on 404 and can resolve undefined if the payload
+        // shape shifts. Either way the job is still running, so retry.
+        if (!convData) {
+          pollTrace('conversation fetch returned nothing — retrying in 8s');
+          if (!cancelled) timerId = setTimeout(pollBackgroundPipelineJobs, 8000);
+          return;
+        }
 
         const lineStatus = convData.s3_line_count_status;
         if (lineStatus === 'pending' || lineStatus === 'running' || lineStatus === 'completed') {
@@ -530,10 +552,20 @@ export function useVariantPipeline({
 
         if (!cancelled && (annStill || filtStill || lineStill || uploadStill)) {
           const delayMs = lineStill && !annStill && !filtStill && !uploadStill ? 15000 : 8000;
+          pollTrace(
+            `tick ok — annovar=${annJob.status || 'none'}/${annJob.phase || '-'} ` +
+              `msg="${annJob.message || ''}" filter=${filtJob.status || 'none'} next=${delayMs}ms`
+          );
           timerId = setTimeout(pollBackgroundPipelineJobs, delayMs);
+        } else {
+          pollTrace(
+            `loop ending — annovar=${annJob.status || 'none'} filter=${filtJob.status || 'none'} ` +
+              `line=${lineStatus || 'none'} upload=${uploadStill}`
+          );
         }
       } catch (e) {
         console.warn('[useVariantPipeline] background pipeline poll failed:', e);
+        pollTrace(`tick threw (${e?.message || e}) — retrying in 12s`);
         if (!cancelled) {
           timerId = setTimeout(pollBackgroundPipelineJobs, 12000);
         }

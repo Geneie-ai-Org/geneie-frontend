@@ -44,7 +44,9 @@ function ProgressIndicator({
   return (
     <ProgressPrimitive.Indicator
       data-slot="progress-indicator"
-      className={cn("h-full bg-primary transition-all", className)}
+      // Width only: `all` also animated the colour, so a bar that changes state mid-fill
+      // had its colour chase the fill instead of switching with it.
+      className={cn("h-full bg-primary transition-[width] duration-300 ease-out", className)}
       {...props} />
   );
 }

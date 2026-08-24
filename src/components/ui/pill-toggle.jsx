@@ -3,7 +3,8 @@
  * upload (computer vs URL), the source of a BED file, and so on.
  *
  * Options may set `disabled` with a `disabledReason`: the pill stays clickable so the
- * click can report why it is unavailable, rather than going inert with no explanation.
+ * click can report why it is unavailable, rather than going inert with no explanation —
+ * but it does not scale on press, since nothing is going to happen.
  */
 export function PillToggle({ options, value, onChange, className = '' }) {
   return (
@@ -16,8 +17,8 @@ export function PillToggle({ options, value, onChange, className = '' }) {
             type="button"
             onClick={() => (opt.disabled ? opt.onDisabledClick?.(opt) : onChange(opt.value))}
             aria-pressed={active}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-              opt.disabled ? 'cursor-not-allowed' : ''
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-[background-color,border-color,color,transform] duration-150 ease-out ${
+              opt.disabled ? 'cursor-not-allowed' : 'active:scale-[0.97]'
             }`}
             style={{
               borderColor: active ? 'var(--accent-teal)' : 'var(--border-default)',

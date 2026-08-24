@@ -243,6 +243,110 @@ export async function presignModule1Upload({ conversationId, role, fileName, fil
   return data; // { method, url, s3_key, role, headers, expires_in }
 }
 
+export async function module1UrlPreflight({ conversationId, role, fileUrl, fileName }) {
+  const headers = {
+    ...(await getAuthHeaders()),
+    'Content-Type': 'application/json',
+  };
+  const body = { role, file_url: fileUrl };
+  if (fileName) body.file_name = fileName;
+  if (conversationId) body.conversation_id = conversationId;
+  const response = await fetch(apiUrl('/api/module1/url-preflight'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'URL validation failed');
+    err.status = response.status;
+    err.code = typeof data.detail === 'object' ? data.detail?.code : undefined;
+    err.limitBytes = typeof data.detail === 'object' ? data.detail?.limit_bytes : undefined;
+    throw err;
+  }
+  return data; // { ok, role, file_url, file_name, content_length, max_bytes, source_kind }
+}
+
+export function module1UrlErrorMessage(error, fallback = 'URL import failed.') {
+  if (!error) return fallback;
+  if (error.status === 401) return 'Your session expired. Sign in again to import from a URL.';
+  if (error.status === 404) return 'This chat is no longer available. Start a new chat and try again.';
+  if (error.status === 503) return 'Raw data analysis is unavailable right now. Try again later.';
+  if (error.status === 413) {
+    const gb = error.limitBytes ? error.limitBytes / 1024 ** 3 : null;
+    const limit = gb ? (gb >= 1 ? `${gb.toFixed(0)} GB` : `${Math.round(error.limitBytes / 1024 ** 2)} MB`) : null;
+    return limit
+      ? `This file is larger than the ${limit} limit for this slot.`
+      : error.message || 'This file is too large.';
+  }
+  return error.message || fallback;
+}
+
+
+export async function module1ImportFromUrl({ conversationId, role, fileUrl, fileName }) {
+  const headers = {
+    ...(await getAuthHeaders()),
+    'Content-Type': 'application/json',
+  };
+  const response = await fetch(apiUrl('/api/module1/from-url'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      conversation_id: conversationId,
+      role,
+      file_url: fileUrl,
+      file_name: fileName || undefined,
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'URL import failed');
+    err.status = response.status;
+    err.code = typeof data.detail === 'object' ? data.detail?.code : undefined;
+    err.limitBytes = typeof data.detail === 'object' ? data.detail?.limit_bytes : undefined;
+    throw err;
+  }
+  return data; // { ok, conversation_id, role, file_name, s3_key, bytes, source_kind }
+}
+
+
+export async function module1ImportFromUrls({
+  conversationId,
+  r1Url,
+  r2Url,
+  r1FileName,
+  r2FileName,
+  bedUrl,
+  bedFileName,
+}) {
+  const headers = {
+    ...(await getAuthHeaders()),
+    'Content-Type': 'application/json',
+  };
+  const response = await fetch(apiUrl('/api/module1/from-urls'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      conversation_id: conversationId,
+      r1_url: r1Url,
+      r2_url: r2Url,
+      r1_file_name: r1FileName || undefined,
+      r2_file_name: r2FileName || undefined,
+      bed_url: bedUrl || undefined,
+      bed_file_name: bedFileName || undefined,
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'URL import failed');
+    err.status = response.status;
+    err.code = typeof data.detail === 'object' ? data.detail?.code : undefined;
+    err.limitBytes = typeof data.detail === 'object' ? data.detail?.limit_bytes : undefined;
+    throw err;
+  }
+  return data; // { ok, r1, r2, bed, r1_s3_key, r2_s3_key, custom_bed_s3_key }
+}
+
 /**
  * POST /api/module1/validate-bed returns a flat `{ok:true,...}` on 200 but wraps
  * `{ok:false,...}` inside `detail` on 400 — normalize both into one flat shape so

@@ -1588,6 +1588,8 @@ const ChatPage = () => {
           module1UploadProgress={module1.module1UploadProgress}
           module1Submitting={module1.module1Submitting}
           module1SubmitError={module1.module1SubmitError}
+          module1ImportStatus={module1.module1ImportStatus}
+          preflightModule1Url={module1.preflightModule1Url}
           uploadAndValidateCustomBed={module1.uploadAndValidateCustomBed}
           startModule1Run={module1.startModule1Run}
         />

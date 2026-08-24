@@ -6,6 +6,9 @@ import {
   fetchModule1BedCatalog,
   fetchModule1Status,
   isAllowedModule1RoleFilename,
+  module1ImportFromUrls,
+  module1UrlErrorMessage,
+  module1UrlPreflight,
   presignModule1Upload,
   putFileToPresignedUrl,
   runModule1Pipeline,
@@ -52,6 +55,7 @@ export function useModule1Pipeline({
   const [module1FormOpen, setModule1FormOpen] = useState(false);
   const [module1UploadProgress, setModule1UploadProgress] = useState({ r1: null, r2: null, bed: null });
   const [module1Submitting, setModule1Submitting] = useState(false);
+  const [module1ImportStatus, setModule1ImportStatus] = useState(null);
   const [module1SubmitError, setModule1SubmitError] = useState(null);
   const [module1Job, setModule1Job] = useState(null);
 
@@ -209,6 +213,7 @@ export function useModule1Pipeline({
     }
     setModule1SubmitError(null);
     setModule1UploadProgress({ r1: null, r2: null, bed: null });
+    setModule1ImportStatus(null);
     setModule1FormOpen(true);
   }, [userTier]);
 
@@ -250,6 +255,13 @@ export function useModule1Pipeline({
     return presign.s3_key;
   }, []);
 
+  /** Validate one pasted R1/R2/BED URL and return the resolved file_url + file_name. */
+  const preflightModule1Url = useCallback(
+    async ({ role, fileUrl, fileName }) =>
+      module1UrlPreflight({ conversationId: activeConversationId || undefined, role, fileUrl, fileName }),
+    [activeConversationId]
+  );
+
   /** Uploads a custom BED and validates it server-side; the returned s3Key is only usable in /run if validation.ok. */
   const uploadAndValidateCustomBed = useCallback(
     async (file, genome) => {
@@ -262,7 +274,22 @@ export function useModule1Pipeline({
   );
 
   const startModule1Run = useCallback(
-    async ({ sampleName, genome, sequencingType, r1File, r2File, bedCatalogId, customBedS3Key }) => {
+    async ({
+      sampleName,
+      genome,
+      sequencingType,
+      sourceMode = 'file',
+      r1File,
+      r2File,
+      r1Url,
+      r2Url,
+      r1FileName,
+      r2FileName,
+      bedUrl,
+      bedFileName,
+      bedCatalogId,
+      customBedS3Key,
+    }) => {
       if (userTier === 'guest') {
         setModule1SubmitError('Please sign in to run Module 1.');
         return;
@@ -272,16 +299,53 @@ export function useModule1Pipeline({
         setModule1SubmitError('Start or open a conversation first.');
         return;
       }
-      if (!bedCatalogId && !customBedS3Key) {
+      const bedFromUrl = sourceMode === 'url' && !!bedUrl;
+      if (!bedCatalogId && !customBedS3Key && !bedFromUrl) {
         setModule1SubmitError('Choose a BED file (catalog or validated custom upload).');
         return;
       }
 
       setModule1Submitting(true);
       setModule1SubmitError(null);
+      setModule1ImportStatus(null);
       try {
-        const r1S3Key = await uploadModule1File('r1', r1File, conversationId);
-        const r2S3Key = await uploadModule1File('r2', r2File, conversationId);
+        let r1S3Key;
+        let r2S3Key;
+        let resolvedCustomBedS3Key = customBedS3Key;
+
+        if (sourceMode === 'url') {
+          // One request streams R1 + R2 (+ optional BED) server-side. Multi-GB FASTQs mean
+          // this can sit here for many minutes with no byte-level progress available.
+          setModule1ImportStatus('Importing files from URL… this can take several minutes.');
+          const imported = await module1ImportFromUrls({
+            conversationId,
+            r1Url,
+            r2Url,
+            r1FileName,
+            r2FileName,
+            bedUrl,
+            bedFileName,
+          });
+          r1S3Key = imported.r1_s3_key;
+          r2S3Key = imported.r2_s3_key;
+          if (imported.custom_bed_s3_key) {
+            setModule1ImportStatus('Validating custom BED…');
+            const validation = await validateModule1Bed({
+              conversationId,
+              s3Key: imported.custom_bed_s3_key,
+              genome,
+            });
+            if (!validation.ok) {
+              setModule1SubmitError(validation.message || 'Custom BED failed validation.');
+              return;
+            }
+            resolvedCustomBedS3Key = imported.custom_bed_s3_key;
+          }
+          setModule1ImportStatus('Starting pipeline…');
+        } else {
+          r1S3Key = await uploadModule1File('r1', r1File, conversationId);
+          r2S3Key = await uploadModule1File('r2', r2File, conversationId);
+        }
 
         const result = await runModule1Pipeline({
           conversation_id: conversationId,
@@ -290,7 +354,9 @@ export function useModule1Pipeline({
           sequencing_type: sequencingType,
           r1_s3_key: r1S3Key,
           r2_s3_key: r2S3Key,
-          ...(customBedS3Key ? { custom_bed_s3_key: customBedS3Key } : { bed_catalog_id: bedCatalogId }),
+          ...(resolvedCustomBedS3Key
+            ? { custom_bed_s3_key: resolvedCustomBedS3Key }
+            : { bed_catalog_id: bedCatalogId }),
         });
 
         adoptJob(result.job_id, conversationId, {
@@ -308,10 +374,11 @@ export function useModule1Pipeline({
           setModule1FormOpen(false);
           onNeedsEmailVerification?.();
         } else {
-          setModule1SubmitError(error.message || 'Failed to start Module 1 run.');
+          setModule1SubmitError(module1UrlErrorMessage(error, 'Failed to start Module 1 run.'));
         }
       } finally {
         setModule1Submitting(false);
+        setModule1ImportStatus(null);
       }
     },
     [userTier, activeConversationId, uploadModule1File, adoptJob, onNeedsEmailVerification]
@@ -332,6 +399,8 @@ export function useModule1Pipeline({
     module1UploadProgress,
     module1Submitting,
     module1SubmitError,
+    module1ImportStatus,
+    preflightModule1Url,
     uploadAndValidateCustomBed,
     startModule1Run,
     module1Job,

@@ -16,13 +16,16 @@ import {
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
-import { precheckBedChromStyle } from '@/services/backendApi';
+import { isRecognizedImportUrl, module1UrlErrorMessage, precheckBedChromStyle } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
 
 const GENOME_OPTIONS = [
   { value: 'hg38', label: 'hg38 (GRCh38)' },
   { value: 'hg19', label: 'hg19 (GRCh37)', disabled: true, disabledReason: 'hg19 (GRCh37) references are coming soon.' },
 ];
+
+const EMPTY_URL_ROW = { url: '', meta: null, error: null, checking: false };
+const EMPTY_URL_STATE = { r1: EMPTY_URL_ROW, r2: EMPTY_URL_ROW, bed: EMPTY_URL_ROW };
 
 const SEQUENCING_TYPE_OPTIONS = [
   { value: 'WES', label: 'Whole Exome (WES)' },
@@ -100,6 +103,95 @@ function FilePickerRow({ label, file, onSelect, progress, accept }) {
   );
 }
 
+function formatBytes(bytes) {
+  if (bytes == null) return null;
+  const gb = bytes / 1024 ** 3;
+  if (gb >= 1) return `${gb.toFixed(2)} GB`;
+  const mb = bytes / 1024 ** 2;
+  if (mb >= 1) return `${mb.toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function PillToggle({ options, value, onChange }) {
+  return (
+    <div className="flex gap-2 mb-2">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          className="px-3 py-1.5 text-xs font-medium rounded-lg border"
+          style={{
+            borderColor: value === opt.value ? 'var(--accent-teal)' : 'var(--border-default)',
+            color: value === opt.value ? 'var(--accent-teal)' : 'var(--text-secondary)',
+            backgroundColor: value === opt.value ? 'var(--accent-teal-soft)' : 'transparent',
+          }}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * URL field for one Module 1 role. Validates on blur/Enter rather than behind a button —
+ * the resolved `file_url` + `file_name` from preflight are what the import call needs,
+ * since Drive/Dropbox share links are not directly downloadable.
+ */
+function UrlPickerRow({ label, required = true, placeholder, state, onChange, onValidate }) {
+  const size = formatBytes(state.meta?.content_length);
+  return (
+    <div>
+      {label && (
+        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+          {label} {required && <span style={{ color: 'var(--error)' }}>*</span>}
+        </label>
+      )}
+      <input
+        type="url"
+        inputMode="url"
+        value={state.url}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => onValidate()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            onValidate();
+          }
+        }}
+        placeholder={placeholder}
+        className="w-full px-3 h-10 border rounded-lg text-sm focus:outline-none placeholder:text-[var(--text-tertiary)]"
+        style={{
+          borderColor: state.error ? 'var(--error)' : 'var(--border-default)',
+          background: 'var(--bg-input)',
+          color: 'var(--text-primary)',
+        }}
+      />
+      {state.checking && (
+        <div className="flex items-center gap-1.5 mt-1.5">
+          <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--accent-teal)' }} />
+          <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>Checking link…</span>
+        </div>
+      )}
+      {!state.checking && state.error && (
+        <div className="flex items-start gap-1.5 mt-1.5">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: 'var(--error)' }} />
+          <span className="text-2xs" style={{ color: 'var(--error)' }}>{state.error}</span>
+        </div>
+      )}
+      {!state.checking && !state.error && state.meta && (
+        <div className="flex items-start gap-1.5 mt-1.5">
+          <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: 'var(--success)' }} />
+          <span className="text-2xs truncate" style={{ color: 'var(--text-secondary)' }}>
+            {state.meta.file_name}{size ? ` · ${size}` : ''}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const Module1UploadForm = ({
   open,
   onClose,
@@ -109,6 +201,8 @@ const Module1UploadForm = ({
   module1UploadProgress,
   module1Submitting,
   module1SubmitError,
+  module1ImportStatus,
+  preflightModule1Url,
   uploadAndValidateCustomBed,
   startModule1Run,
 }) => {
@@ -124,6 +218,8 @@ const Module1UploadForm = ({
   const [customBedValidation, setCustomBedValidation] = useState(null); // { ok, message, lines_checked, example_chroms }
   const [customBedPrecheck, setCustomBedPrecheck] = useState(null);
   const [isValidatingBed, setIsValidatingBed] = useState(false);
+  const [sourceMode, setSourceMode] = useState('file'); // 'file' | 'url'
+  const [urlState, setUrlState] = useState(EMPTY_URL_STATE);
 
   useEffect(() => {
     if (!open) return;
@@ -138,6 +234,8 @@ const Module1UploadForm = ({
     setCustomBedS3Key(null);
     setCustomBedValidation(null);
     setCustomBedPrecheck(null);
+    setSourceMode('file');
+    setUrlState(EMPTY_URL_STATE);
     loadBedCatalog?.('hg38');
   }, [open, loadBedCatalog]);
 
@@ -146,6 +244,46 @@ const Module1UploadForm = ({
     loadBedCatalog?.(genome);
     setBedCatalogId('');
   }, [genome, bedMode, open, loadBedCatalog]);
+
+  const patchUrlRow = (role, patch) =>
+    setUrlState((prev) => ({ ...prev, [role]: { ...prev[role], ...patch } }));
+
+  const setUrlValue = (role, url) => patchUrlRow(role, { url, meta: null, error: null });
+
+  const validateUrlRow = async (role) => {
+    const row = urlState[role] || EMPTY_URL_ROW;
+    const url = (row.url || '').trim();
+    // meta is cleared on every edit, so its presence means this exact URL already passed.
+    if (row.checking || row.meta) return;
+    if (!url) {
+      patchUrlRow(role, { meta: null, error: null });
+      return;
+    }
+    if (!isRecognizedImportUrl(url)) {
+      patchUrlRow(role, { meta: null, error: 'Enter a full https:// URL, or a Google Drive / Dropbox share link.' });
+      return;
+    }
+    patchUrlRow(role, { checking: true, error: null });
+    try {
+      const result = await preflightModule1Url({ role, fileUrl: url });
+      patchUrlRow(role, { checking: false, meta: result, error: null });
+    } catch (error) {
+      patchUrlRow(role, { checking: false, meta: null, error: module1UrlErrorMessage(error, 'URL validation failed.') });
+    }
+  };
+
+  /** Switching source drops the other mode's selections so a stale s3_key can never reach /run. */
+  const handleSourceModeChange = (next) => {
+    if (next === sourceMode) return;
+    setSourceMode(next);
+    setR1File(null);
+    setR2File(null);
+    setUrlState(EMPTY_URL_STATE);
+    setCustomBedFile(null);
+    setCustomBedS3Key(null);
+    setCustomBedValidation(null);
+    setCustomBedPrecheck(null);
+  };
 
   const handleCustomBedSelect = async (file) => {
     setCustomBedFile(file);
@@ -176,28 +314,47 @@ const Module1UploadForm = ({
     }
   };
 
-  const bedResolved = bedMode === 'catalog' ? !!bedCatalogId : customBedValidation?.ok === true && !!customBedS3Key;
+  const isUrlMode = sourceMode === 'url';
+  const anyUrlChecking = isUrlMode && Object.values(urlState).some((row) => row.checking);
+  const readsResolved = isUrlMode ? !!urlState.r1.meta && !!urlState.r2.meta : !!r1File && !!r2File;
+  const bedResolved =
+    bedMode === 'catalog'
+      ? !!bedCatalogId
+      : isUrlMode
+        ? !!urlState.bed.meta
+        : customBedValidation?.ok === true && !!customBedS3Key;
   const canSubmit =
     !!sampleName.trim() &&
     genome === 'hg38' &&
     sequencingType === 'WES' &&
-    !!r1File &&
-    !!r2File &&
+    readsResolved &&
     bedResolved &&
     !module1Submitting &&
-    !isValidatingBed;
+    !isValidatingBed &&
+    !anyUrlChecking;
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!canSubmit) return;
+    const useCustomBed = bedMode === 'custom';
     startModule1Run({
       sampleName: sampleName.trim(),
       genome,
       sequencingType,
-      r1File,
-      r2File,
+      sourceMode,
+      ...(isUrlMode
+        ? {
+            // Send the preflight-resolved URL/name — a raw Drive/Dropbox share link is not
+            // directly downloadable server-side.
+            r1Url: urlState.r1.meta.file_url,
+            r2Url: urlState.r2.meta.file_url,
+            r1FileName: urlState.r1.meta.file_name,
+            r2FileName: urlState.r2.meta.file_name,
+            bedUrl: useCustomBed ? urlState.bed.meta?.file_url : undefined,
+            bedFileName: useCustomBed ? urlState.bed.meta?.file_name : undefined,
+          }
+        : { r1File, r2File, customBedS3Key: useCustomBed ? customBedS3Key : undefined }),
       bedCatalogId: bedMode === 'catalog' ? bedCatalogId : undefined,
-      customBedS3Key: bedMode === 'custom' ? customBedS3Key : undefined,
     });
   };
 
@@ -266,53 +423,74 @@ const Module1UploadForm = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
-                <FilePickerRow
-                  label="R1"
-                  file={r1File}
-                  onSelect={setR1File}
-                  progress={module1UploadProgress?.r1}
-                  accept=".fastq.gz,.fastq,.fq.gz,.fq"
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  Raw data <span style={{ color: 'var(--error)' }}>*</span>
+                </label>
+                <PillToggle
+                  value={sourceMode}
+                  onChange={handleSourceModeChange}
+                  options={[
+                    { value: 'file', label: 'From computer' },
+                    { value: 'url', label: 'From URL' },
+                  ]}
                 />
-                <FilePickerRow
-                  label="R2"
-                  file={r2File}
-                  onSelect={setR2File}
-                  progress={module1UploadProgress?.r2}
-                  accept=".fastq.gz,.fastq,.fq.gz,.fq"
-                />
+                {isUrlMode ? (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
+                      <UrlPickerRow
+                        label="R1 link"
+                        placeholder="https://…/sample_R1_001.fastq.gz"
+                        state={urlState.r1}
+                        onChange={(v) => setUrlValue('r1', v)}
+                        onValidate={() => validateUrlRow('r1')}
+                      />
+                      <UrlPickerRow
+                        label="R2 link"
+                        placeholder="https://…/sample_R2_001.fastq.gz"
+                        state={urlState.r2}
+                        onChange={(v) => setUrlValue('r2', v)}
+                        onValidate={() => validateUrlRow('r2')}
+                      />
+                    </div>
+                    <p className="text-2xs mt-2" style={{ color: 'var(--text-tertiary)' }}>
+                      Direct https links, Google Drive or Dropbox share links (
+                      <span style={{ color: 'var(--text-secondary)' }}>&ldquo;Anyone with the link&rdquo;</span>), or
+                      presigned S3 URLs. Files are copied server-side after you start the run.
+                    </p>
+                  </>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
+                    <FilePickerRow
+                      label="R1"
+                      file={r1File}
+                      onSelect={setR1File}
+                      progress={module1UploadProgress?.r1}
+                      accept=".fastq.gz,.fastq,.fq.gz,.fq"
+                    />
+                    <FilePickerRow
+                      label="R2"
+                      file={r2File}
+                      onSelect={setR2File}
+                      progress={module1UploadProgress?.r2}
+                      accept=".fastq.gz,.fastq,.fq.gz,.fq"
+                    />
+                  </div>
+                )}
               </div>
 
               <div>
                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                   Capture BED <span style={{ color: 'var(--error)' }}>*</span>
                 </label>
-                <div className="flex gap-2 mb-2">
-                  <button
-                    type="button"
-                    onClick={() => setBedMode('catalog')}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg border"
-                    style={{
-                      borderColor: bedMode === 'catalog' ? 'var(--accent-teal)' : 'var(--border-default)',
-                      color: bedMode === 'catalog' ? 'var(--accent-teal)' : 'var(--text-secondary)',
-                      backgroundColor: bedMode === 'catalog' ? 'var(--accent-teal-soft)' : 'transparent',
-                    }}
-                  >
-                    Use catalog BED
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBedMode('custom')}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg border"
-                    style={{
-                      borderColor: bedMode === 'custom' ? 'var(--accent-teal)' : 'var(--border-default)',
-                      color: bedMode === 'custom' ? 'var(--accent-teal)' : 'var(--text-secondary)',
-                      backgroundColor: bedMode === 'custom' ? 'var(--accent-teal-soft)' : 'transparent',
-                    }}
-                  >
-                    Upload custom BED
-                  </button>
-                </div>
+                <PillToggle
+                  value={bedMode}
+                  onChange={setBedMode}
+                  options={[
+                    { value: 'catalog', label: 'Use catalog BED' },
+                    { value: 'custom', label: isUrlMode ? 'Custom BED from URL' : 'Upload custom BED' },
+                  ]}
+                />
 
                 {bedMode === 'catalog' ? (
                   <SelectWithDisabledOptions
@@ -321,6 +499,19 @@ const Module1UploadForm = ({
                     placeholder={bedCatalogLoading ? 'Loading…' : !bedCatalog?.genome_ready ? 'No catalog available for this genome' : 'Choose a BED file'}
                     options={(bedCatalog?.items || []).map((item) => ({ value: item.id, label: item.label || item.filename }))}
                   />
+                ) : isUrlMode ? (
+                  <div>
+                    <UrlPickerRow
+                      label={null}
+                      placeholder="https://…/capture_targets.bed"
+                      state={urlState.bed}
+                      onChange={(v) => setUrlValue('bed', v)}
+                      onValidate={() => validateUrlRow('bed')}
+                    />
+                    <p className="text-2xs mt-1.5" style={{ color: 'var(--text-tertiary)' }}>
+                      The BED is validated for {genome} contig style after it is imported.
+                    </p>
+                  </div>
                 ) : (
                   <div>
                     <label
@@ -361,6 +552,12 @@ const Module1UploadForm = ({
             </div>
 
             <div className="flex-shrink-0 px-7 py-4 border-t flex items-center justify-end gap-2" style={{ borderColor: 'var(--border-default)' }}>
+              {module1Submitting && module1ImportStatus && (
+                <div className="flex items-center gap-1.5 mr-auto min-w-0">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" style={{ color: 'var(--accent-teal)' }} />
+                  <span className="text-2xs truncate" style={{ color: 'var(--text-tertiary)' }}>{module1ImportStatus}</span>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={onClose}
@@ -375,7 +572,7 @@ const Module1UploadForm = ({
                 className="px-4 py-2 text-sm font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
               >
-                {module1Submitting ? 'Starting…' : 'Start pipeline'}
+                {module1Submitting ? (isUrlMode ? 'Importing…' : 'Starting…') : 'Start pipeline'}
               </button>
             </div>
           </form>

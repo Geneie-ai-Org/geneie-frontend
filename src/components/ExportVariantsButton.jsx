@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Download, RefreshCw } from 'lucide-react';
+import { Download, Loader2, RefreshCw } from 'lucide-react';
 import { getExportEligibility, exportVariants } from '@/services/backendApi';
 
 /**
@@ -145,7 +145,7 @@ export default function ExportVariantsButton({
         }`}
       >
         {isExporting ? (
-          <div className="w-3.5 h-3.5 rounded-full animate-spin" />
+          <Loader2 className="w-4 h-4 animate-spin" />
         ) : countMismatch ? (
           <RefreshCw className="w-4 h-4" />
         ) : (

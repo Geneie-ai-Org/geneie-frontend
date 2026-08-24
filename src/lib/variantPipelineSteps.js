@@ -17,6 +17,42 @@ function hasManualFilters(activeVariantFilters) {
   return Object.keys(activeVariantFilters).length > 0;
 }
 
+/** Reduction inputs, exported so a caller can report them without re-deriving them. */
+export function getReductionState(activeProprietaryFilter, activeVariantFilters) {
+  const hasProprietary =
+    activeProprietaryFilter === 'filter_1' || activeProprietaryFilter === 'filter_3';
+  const hasManual = hasManualFilters(activeVariantFilters);
+  return { hasProprietary, hasManual, hasReduction: hasProprietary || hasManual };
+}
+
+/**
+ * The `reduce` step, with the branch that decided it. Returning the reason keeps the
+ * diagnostic honest — it comes from the same evaluation, not a second copy of the rules.
+ */
+export function computeReduceStep({
+  hasReduction,
+  filterRunning,
+  filterFailed,
+  filteredVariantCount,
+  chatEligibility,
+  requiresAnnovar,
+  hasAnnotatedFile,
+  annovar,
+}) {
+  if (filterFailed) return { status: 'failed', reason: 'filter/exomiser job reported failed' };
+  if (filterRunning) return { status: 'running', reason: 'filter/exomiser job in flight' };
+  if (hasReduction && filteredVariantCount != null) {
+    return { status: 'done', reason: 'stored filter + stored filtered_variant_count' };
+  }
+  if (chatEligibility?.allowed && !requiresAnnovar && hasAnnotatedFile && !hasReduction) {
+    return { status: 'skipped', reason: 'chat allowed without a filter' };
+  }
+  if (chatEligibility?.allowed && hasReduction) {
+    return { status: 'done', reason: 'chat allowed with a stored filter' };
+  }
+  return { status: 'pending', reason: 'no filter recorded yet' };
+}
+
 export function computePipelineSteps({
   hasUploadedFile,
   columnInterpretationResult,
@@ -76,8 +112,7 @@ export function computePipelineSteps({
     return 'pending';
   })();
 
-  const hasReduction =
-    (activeProprietaryFilter === 'filter_1' || activeProprietaryFilter === 'filter_3') || hasManualFilters(activeVariantFilters);
+  const { hasReduction } = getReductionState(activeProprietaryFilter, activeVariantFilters);
   const filterRunning =
     isApplyingProprietaryFilter ||
     filterJob?.status === 'running' ||
@@ -87,17 +122,16 @@ export function computePipelineSteps({
     exomiserStatus?.status === 'queued';
   const filterFailed = filterJob?.status === 'failed' || exomiserStatus?.status === 'failed';
 
-  const reduce = (() => {
-    if (filterFailed) return 'failed';
-    if (filterRunning) return 'running';
-    if (hasReduction && filteredVariantCount != null) return 'done';
-    if (chatEligibility?.allowed && !requiresAnnovar && hasAnnotatedFile && !hasReduction) {
-      return 'skipped';
-    }
-    if (chatEligibility?.allowed && hasReduction) return 'done';
-    if (annovar === 'done' || annovar === 'skipped') return 'pending';
-    return 'pending';
-  })();
+  const { status: reduce } = computeReduceStep({
+    hasReduction,
+    filterRunning,
+    filterFailed,
+    filteredVariantCount,
+    chatEligibility,
+    requiresAnnovar,
+    hasAnnotatedFile,
+    annovar,
+  });
 
   const chat = (() => {
     if (chatEligibility?.allowed) return 'done';
@@ -106,7 +140,20 @@ export function computePipelineSteps({
     return 'pending';
   })();
 
-  return { upload, interpret, annovar, reduce, chat };
+  /* A step cannot be finished while an earlier one is still running or has failed — that
+   * run will invalidate whatever the later step recorded. The statuses above are each
+   * derived independently from current conversation fields, so without this clamp the
+   * pipeline can show Filter complete while ANNOVAR is mid-run on a variant set that
+   * annotation is about to change. */
+  const statuses = { upload, interpret, annovar, reduce, chat };
+  let invalidated = false;
+  for (const { id } of PIPELINE_STEP_DEFS) {
+    if (invalidated && (statuses[id] === 'done' || statuses[id] === 'skipped')) {
+      statuses[id] = 'pending';
+    }
+    if (statuses[id] === 'running' || statuses[id] === 'failed') invalidated = true;
+  }
+  return statuses;
 }
 
 export function getPipelineBackgroundActive({
@@ -137,8 +184,6 @@ export function getPipelineBackgroundActive({
   );
 }
 
-import { getUploadDisplayMessage } from '@/lib/uploadProcessingPhases';
-
 export function getPipelineStatusLine(props, steps) {
   const {
     uploadInProgress,
@@ -161,9 +206,9 @@ export function getPipelineStatusLine(props, steps) {
     s3LineCountStatus === 'pending' || s3LineCountStatus === 'running';
 
   if (uploadInProgress) {
-    const uploadMsg = getUploadDisplayMessage({ uploadProgress });
-    if (uploadMsg) return uploadMsg;
-    return 'Processing your variant file on the server…';
+    return uploadProgress != null && uploadProgress < 100
+      ? 'Sending your variant file to the server…'
+      : 'Processing your variant file on the server…';
   }
   if (lineCountInProgress && !interpretationReady) {
     return 'Counting variant rows in your file on the server…';
@@ -209,15 +254,6 @@ export function getPipelineFocusStep(steps, hasUploadedFile) {
   const pending = order.find((id) => steps[id] === 'pending');
   if (pending) return pending;
   return 'chat';
-}
-
-export function getPipelineStepNumber(steps, focusId) {
-  const idx = PIPELINE_STEP_DEFS.findIndex((d) => d.id === focusId);
-  if (idx < 0) return null;
-  const doneCount = PIPELINE_STEP_DEFS.filter(
-    (d, i) => i <= idx && (steps[d.id] === 'done' || steps[d.id] === 'skipped')
-  ).length;
-  return Math.min(doneCount + (steps[focusId] === 'running' ? 0 : 1), PIPELINE_STEP_DEFS.length);
 }
 
 export function getPipelineChipSummary(steps, hasUploadedFile) {

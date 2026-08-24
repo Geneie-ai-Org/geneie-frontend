@@ -44,7 +44,7 @@ const ConversationSidebar = ({
     const isMobile = useIsMobile();
     const navigate = useNavigate();
     const { isDark, toggleTheme } = useTheme();
-    const themeLabel = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+    const themeLabel = isDark ? 'Light mode' : 'Dark mode';
     const freeChatLimit = userTier === 'free' ? chatLimit : Infinity;
     const [pendingDeleteId, setPendingDeleteId] = useState(null);
 
@@ -111,7 +111,7 @@ const ConversationSidebar = ({
             {!isMobile && (
                 <button
                     onClick={onToggle}
-                    className="absolute z-50 w-5 h-5 rounded-full flex items-center justify-center right-[-10px] top-[37px] bg-[var(--bg-surface-raised)] text-[var(--text-secondary)] border border-[var(--border-subtle)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                    className="absolute z-50 w-5 h-5 rounded-full flex items-center justify-center right-[-10px] top-[calc(2.3rem)] bg-[var(--bg-surface-raised)] text-[var(--text-secondary)] border border-[var(--border-subtle)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
                     aria-label={isOpen ? "Collapse sidebar" : "Expand sidebar"}
                 >
                     {isOpen ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
@@ -123,19 +123,16 @@ const ConversationSidebar = ({
 
                 {/* Top: Logo — desktop only (mobile uses main top bar) */}
                 {!isMobile && (
-                    <div className={`flex items-center h-16 overflow-hidden shrink-0 ${isOpen ? 'px-3' : 'justify-center'}`}>
-                        <div className={`flex items-center min-w-0 ${isOpen ? 'gap-0 pl-2' : ''}`}>
+                    <div className={`flex items-center h-12 overflow-hidden shrink-0 ${isOpen ? 'px-3' : 'justify-center'}`}>
+                        {isOpen ? (
                             <img
-                                src="/geneie-g.svg"
-                                alt="G"
-                                className="w-6 h-6 shrink-0"
+                                src={isDark ? '/Final logo dark.svg' : '/Final logo light.svg'}
+                                alt="Geneie"
+                                className="ml-3 h-6 w-auto shrink-0"
                             />
-                            {isOpen && (
-                                <span className="-ml-1 text-xl font-semibold font-brand tracking-tight whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>
-                                    eneie
-                                </span>
-                            )}
-                        </div>
+                        ) : (
+                            <img src="/geneie-g.svg" alt="Geneie" className="h-6 w-auto shrink-0" />
+                        )}
                     </div>
                 )}
 
@@ -143,10 +140,14 @@ const ConversationSidebar = ({
                 <div className={`py-2 overflow-hidden shrink-0 ${isOpen ? 'px-3' : 'flex justify-center'}`}>
                     <button
                         onClick={onCreateConversation}
-                        className={`rounded-lg text-sm text-[var(--text-primary)] transition-colors flex items-center overflow-hidden hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${isOpen ? 'w-full py-2.5 px-3 gap-2.5' : 'w-8 h-8 justify-center shrink-0'}`}
+                        className={`group rounded-lg text-sm text-[var(--text-primary)] transition-colors flex items-center overflow-hidden hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${isOpen ? 'w-full py-2.5 px-3 gap-2.5' : 'w-8 h-8 justify-center shrink-0'}`}
                         title="New Chat"
                     >
-                        <Plus className="w-4 h-4 shrink-0 text-[var(--text-secondary)]" />
+                        {/* A plus is 4-fold symmetric, so the quarter turn lands on the same
+                          * glyph — the travel is the whole effect. */}
+                        <Plus
+                            className="hover-quarter-turn w-4 h-4 shrink-0 text-[var(--text-secondary)]"
+                        />
                         {isOpen && (
                             <span className="whitespace-nowrap">
                                 New Chat
@@ -208,10 +209,10 @@ const ConversationSidebar = ({
                     {/* Account bar: profile + bell as one segmented unit */}
                     {isOpen ? (
                         <div className="px-3 pb-2">
-                            <div className="flex items-stretch rounded-lg overflow-hidden bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
+                            <div className="flex items-stretch gap-1 p-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger
-                                        className="flex-1 min-w-0 h-10 px-2.5 flex items-center gap-2.5 cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)]"
+                                        className="flex-1 min-w-0 h-8 px-1.5 rounded-md flex items-center gap-2.5 cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)]"
                                     >
                                         <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-[var(--accent-teal-soft)]">
                                             <span className="text-2xs font-semibold text-[var(--accent-teal)]">
@@ -227,6 +228,10 @@ const ConversationSidebar = ({
                                             <DropdownMenuLabel>{email || displayName}</DropdownMenuLabel>
                                         </DropdownMenuGroup>
                                         <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={toggleTheme}>
+                                            {isDark ? <Sun /> : <Moon />} {themeLabel}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
                                         <DropdownMenuItem onClick={onOpenProfile}>
                                             <Settings /> Settings
                                         </DropdownMenuItem>
@@ -237,25 +242,11 @@ const ConversationSidebar = ({
                                     </DropdownMenuContent>
                                 </DropdownMenu>
 
-                                <div className="w-px bg-[var(--border-subtle)]" aria-hidden />
-
+                                {/* Two children, each with its own hover surface — no rules needed. */}
                                 <NotificationBell
                                     onNavigateToConversation={(convId) => onSelectConversation(convId)}
-                                    triggerClassName="h-10 w-10 shrink-0 flex items-center justify-center text-[var(--text-secondary)] cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)]"
+                                    triggerClassName="h-8 w-8 shrink-0 rounded-md flex items-center justify-center text-[var(--text-secondary)] cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)]"
                                 />
-
-                                <div className="w-px bg-[var(--border-subtle)]" aria-hidden />
-
-                                <button
-                                    type="button"
-                                    onClick={toggleTheme}
-                                    title={themeLabel}
-                                    aria-label={themeLabel}
-                                    aria-pressed={!isDark}
-                                    className="h-10 w-10 shrink-0 flex items-center justify-center text-[var(--text-secondary)] cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)]"
-                                >
-                                    {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                                </button>
                             </div>
                         </div>
                     ) : (
@@ -276,6 +267,10 @@ const ConversationSidebar = ({
                                         <DropdownMenuLabel>{email || displayName}</DropdownMenuLabel>
                                     </DropdownMenuGroup>
                                     <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={toggleTheme}>
+                                        {isDark ? <Sun /> : <Moon />} {themeLabel}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
                                     <DropdownMenuItem onClick={onOpenProfile}>
                                         <Settings /> Settings
                                     </DropdownMenuItem>
@@ -290,17 +285,6 @@ const ConversationSidebar = ({
                                 onNavigateToConversation={(convId) => onSelectConversation(convId)}
                                 triggerClassName="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--text-secondary)] cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
                             />
-
-                            <button
-                                type="button"
-                                onClick={toggleTheme}
-                                title={themeLabel}
-                                aria-label={themeLabel}
-                                aria-pressed={!isDark}
-                                className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--text-secondary)] cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
-                            >
-                                {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                            </button>
                         </div>
                     )}
                     {/* Usage indicator */}

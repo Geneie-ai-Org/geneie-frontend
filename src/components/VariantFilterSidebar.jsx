@@ -3,8 +3,8 @@ import { FileText, X, RotateCcw, CheckCircle, Upload, Trash2, Info, Zap, Search,
 import { doc, getDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import DocumentUpload from './DocumentUpload';
-import { useProcessingToast } from '@/hooks/useProcessingToast';
 import ExportVariantsButton from './ExportVariantsButton';
+import PerimeterProgress from '@/components/ui/PerimeterProgress';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -76,7 +76,7 @@ function getOrCreateDeviceId() {
 
 const apiErrorDetailToMessage = sharedApiErrorDetailToMessage;
 
-async function pollFilterJobStatus(conversationId, token, apiBase, onProgress) {
+async function pollFilterJobStatus(conversationId, token, apiBase) {
   const maxPollMs = 14 * 24 * 60 * 60 * 1000;
   const started = Date.now();
   const pollOnce = async () => {
@@ -90,7 +90,6 @@ async function pollFilterJobStatus(conversationId, token, apiBase, onProgress) {
     const statusData = await statusRes.json().catch(() => ({}));
     const job = statusData.filter_job || {};
     const msg = job.message || statusData.message || 'Applying ACMG filter…';
-    if (onProgress) onProgress(msg, job.progress_percent ?? statusData.progress_percent);
     if (job.status === 'completed' || statusData.status === 'completed') {
       return { filtered_count: job.filtered_count ?? statusData.filtered_count ?? 0 };
     }
@@ -550,7 +549,6 @@ const VariantFilterSidebar = ({
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isApplyingPreset, setIsApplyingPreset] = useState(false);
-  // useProcessingToast(isApplying ? 'Processing filters...' : null, isApplying);
   const [gardenNameInput, setGardenNameInput] = useState('');
   const [gardenNotesInput, setGardenNotesInput] = useState('');
   const [isEditingGardenEntry, setIsEditingGardenEntry] = useState(false);
@@ -1052,10 +1050,6 @@ const VariantFilterSidebar = ({
 
     // Clear filters in backend and Firestore
     setIsApplying(true);
-    // Show processing notification via parent component
-    if (window.dispatchEvent) {
-      window.dispatchEvent(new CustomEvent('showProcessing', { detail: { message: 'Resetting filters...' } }));
-    }
     try {
       const auth = getAuth();
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
@@ -1451,16 +1445,7 @@ const VariantFilterSidebar = ({
         let filteredCount = 0;
         let totalCount = null;
         if (response.status === 202) {
-          if (window.dispatchEvent) {
-            window.dispatchEvent(new CustomEvent('showProcessing', {
-              detail: { message: 'Applying ACMG filter to your annotated file…' },
-            }));
-          }
-          const pollResult = await pollFilterJobStatus(conversationId, token, apiBase, (msg) => {
-            if (window.dispatchEvent) {
-              window.dispatchEvent(new CustomEvent('showProcessing', { detail: { message: msg } }));
-            }
-          });
+          const pollResult = await pollFilterJobStatus(conversationId, token, apiBase);
           filteredCount = pollResult.filtered_count ?? 0;
         } else {
           const data = await response.json();
@@ -1739,38 +1724,9 @@ const VariantFilterSidebar = ({
                   default:
                 }
               };
-              const renderCount = (filterKey) => {
-                if (!filterKey) return null;
-                // Exomiser (filter_3) has no preview count — only show the count once it's active.
-                if (filterKey === 'filter_3') {
-                  if (activeProprietaryFilter === 'filter_3') {
-                    return (
-                      <span className="ml-1 opacity-70 tabular-nums">
-                        ({filteredCount != null ? filteredCount.toLocaleString() : '…'})
-                      </span>
-                    );
-                  }
-                  return null;
-                }
-                if (proprietaryFilterPreviews == null) {
-                  return (
-                    <span className="ml-1.5 inline-block h-2.5 w-6 align-middle rounded bg-[var(--bg-surface-hover)] animate-pulse" aria-hidden />
-                  );
-                }
-                if (filterKey === 'filter_1' && activeProprietaryFilter === 'filter_1') {
-                  return (
-                    <span className="ml-1 opacity-70 tabular-nums">
-                      ({filteredCount != null ? filteredCount.toLocaleString() : '…'})
-                    </span>
-                  );
-                }
-                const count = proprietaryFilterPreviews?.[filterKey]?.preview_count;
-                if (count == null) return null;
-                return <span className="ml-1 opacity-70 tabular-nums">({count.toLocaleString()})</span>;
-              };
               return (
                 <div
-                  className="flex w-full items-center gap-0.5 p-0.5 rounded-lg bg-[var(--segment-track)]"
+                  className="flex w-full items-center gap-0.5 p-1 rounded-lg bg-[var(--segment-track)]"
                   role="tablist"
                   aria-label="Filter mode"
                   aria-orientation="horizontal"
@@ -1796,7 +1752,6 @@ const VariantFilterSidebar = ({
                         }`}
                       >
                         {t.label}
-                        {/* {renderCount(t.filterKey)} */}
                       </button>
                     );
                   })}
@@ -2229,21 +2184,15 @@ const VariantFilterSidebar = ({
 
                   {/* Progress area while running */}
                   {running && (
-                    <div className="mb-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-3.5 h-3.5 border-2 border-[var(--accent-teal)] border-t-transparent rounded-full animate-spin" />
-                        <span className="text-xs font-medium text-[var(--text-primary)]">
-                          {exomiserStatus?.message || 'Starting Exomiser…'}
-                        </span>
-                      </div>
-                      {exomiserStatus?.progress_percent != null && (
-                        <div className="w-full h-1.5 rounded-full bg-[var(--bg-surface-hover)] overflow-hidden">
-                          <div
-                            className="h-full bg-[var(--accent-teal)] transition-all"
-                            style={{ width: `${Math.max(0, Math.min(100, Number(exomiserStatus.progress_percent)))}%` }}
-                          />
-                        </div>
-                      )}
+                    <div className="relative mb-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                      {/* Progress wraps the card, same travel as everywhere else. */}
+                      <PerimeterProgress
+                        progress={exomiserStatus?.progress_percent ?? null}
+                        radius={8}
+                      />
+                      <span className="text-xs font-medium text-[var(--text-primary)]">
+                        {exomiserStatus?.message || 'Starting Exomiser…'}
+                      </span>
                       <p className="text-2xs text-[var(--text-tertiary)] mt-1.5">
                         This can take several minutes. You can leave this tab open or come back later.
                       </p>
@@ -2969,7 +2918,6 @@ const VariantFilterSidebar = ({
         </DialogContent>
       </Dialog>
 
-      {/* Processing Notification */}
     </div>
   );
 };

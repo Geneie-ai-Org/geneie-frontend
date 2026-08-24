@@ -15,7 +15,7 @@ import AuthForm from '../components/AuthForm';
 import ChatMessage, { GlobalTypingStyles } from '../components/chat/ChatMessage';
 import AuthPageLayout from '../components/chat/AuthPageLayout';
 import AnnovarMessageModal from '../components/chat/AnnovarMessageModal';
-import ChatPromptInput from '../components/chat/ChatPromptInput';
+import ChatComposer from '../components/chat/ChatComposer';
 import SubscriptionManager from '../components/SubscriptionManager';
 import ConversationSidebar from '../components/ConversationSidebar';
 import DocumentUpload from '../components/DocumentUpload';
@@ -24,7 +24,7 @@ import ProfileManagement from '../components/ProfileManagement';
 import SubscriptionSuccess from '../components/SubscriptionSuccess';
 import SubscriptionCanceled from '../components/SubscriptionCanceled';
 import ColumnInterpretationResults from '../components/ColumnInterpretationResults';
-import VariantAnalysisPipeline from '../components/VariantAnalysisPipeline';
+import PipelineDrawer from '../components/PipelineDrawer';
 import Module1UploadForm from '../components/Module1UploadForm';
 import Module1PipelineStepper from '../components/Module1PipelineStepper';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
@@ -85,7 +85,6 @@ const ChatPage = () => {
   const [activeFileTypeTab, setActiveFileTypeTab] = useState('tabular'); // Track active tab for modal color
   const [showFileTypeDropdown, setShowFileTypeDropdown] = useState(null); // 'new-chat' | 'conversation' | null
   const [preSelectedFile, setPreSelectedFile] = useState(null); // File selected via dropdown before modal
-  const [uploadModalImportMode, setUploadModalImportMode] = useState('file'); // 'file' | 'url' — initial mode for upload modal
   const [uploadingFileName, setUploadingFileName] = useState(null);
   const fileTypeDropdownRef = useRef(null);
   const tsvFileInputRef = useRef(null);
@@ -108,7 +107,14 @@ const ChatPage = () => {
   const [justSignedUp, setJustSignedUp] = useState(false);
   const [pendingEmailVerification, setPendingEmailVerification] = useState(false);
   const [pipelineExpanded, setPipelineExpanded] = useState(false);
-  const [pipelineDismissed, setPipelineDismissed] = useState(false);
+  const [, setPipelineDismissed] = useState(false);
+
+  /* The composer dock floats over the message list, so the list needs bottom padding
+   * equal to the dock's height. The dock's height moves with the textarea, the pipeline
+   * drawer expanding, and the guest banner, so it is measured rather than guessed, and
+   * published as a CSS variable to avoid re-rendering the whole page on every resize. */
+  const chatColumnRef = useRef(null);
+  const composerDockRef = useRef(null);
 
   // --- HOOK INTEGRATION ---
   const { userId, isAuthReady, userLoading, userTier, subscriptionStatus, refreshSubscriptionStatus } = useAuth();
@@ -165,8 +171,6 @@ const ChatPage = () => {
     chatEligibility,
     setChatEligibility,
     pipelineSnapshot,
-    pipelineToast,
-    setPipelineToast,
     isRunningAnnovar,
     isApplyingProprietaryFilter,
     setIsApplyingProprietaryFilter,
@@ -328,6 +332,7 @@ const ChatPage = () => {
     setAnnovarMessageModal,
     setIsShowingAuthForm,
     syncPipelineFromConversationRef,
+    setConversationFilterState,
   });
 
   const handleUploadStarted = useCallback((fileName) => {
@@ -771,7 +776,28 @@ const ChatPage = () => {
 
 
   const isConversationStarted = messages.length > 0;
+
   const isCurrentlyActive = isLoading || typingText;
+
+  /* The composer dock floats over the message list, so the list needs bottom padding
+   * equal to the dock's height. The dock's height moves with the textarea, the pipeline
+   * drawer expanding, and the guest banner, so it is measured rather than guessed, and
+   * published as a CSS variable to avoid re-rendering the whole page on every resize. */
+  useEffect(() => {
+    const dock = composerDockRef.current;
+    const column = chatColumnRef.current;
+    if (!dock || !column) return;
+    const publish = () => {
+      column.style.setProperty('--composer-dock-height', `${dock.offsetHeight}px`);
+    };
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(dock);
+    return () => {
+      ro.disconnect();
+      column.style.removeProperty('--composer-dock-height');
+    };
+  }, [isConversationStarted, isCurrentlyActive, isMobile]);
 
   const activeConversation = useMemo(
     () => conversations.find((c) => String(c.id) === String(activeConversationId)),
@@ -793,15 +819,10 @@ const ChatPage = () => {
     (userTier === 'guest' && guestLimitExceeded) ||
     (userTier !== 'guest' && currentExchanges >= tierLimit);
 
-  const onSelectLocalFile = () => {
-    setShowFileTypeDropdown(null);
-    tsvFileInputRef.current?.click();
-  };
-
-  const onSelectImportFromUrl = () => {
+  // One row per data kind; the file-vs-URL choice is a toggle inside the modal.
+  const onSelectVariantFile = () => {
     setShowFileTypeDropdown(null);
     setActiveFileTypeTab('tabular');
-    setUploadModalImportMode('url');
     setPreSelectedFile(null);
     setShowUploadModal(true);
   };
@@ -841,9 +862,6 @@ const ChatPage = () => {
   useEffect(() => {
     if (variantUploadInProgress || pipelineJobActive) {
       setPipelineDismissed(false);
-    }
-    if (variantUploadInProgress || isRunningAnnovar || isApplyingProprietaryFilter) {
-      setPipelineExpanded(true);
     }
     const fileReadyForAnnovar =
       currentDocument &&
@@ -900,51 +918,6 @@ const ChatPage = () => {
     <Module1PipelineStepper job={module1.module1Job} onStartOver={module1.openModule1Form} />
   ) : null;
 
-  const variantAnalysisPipelineBlock = showAnalysisPipeline ? (
-    <VariantAnalysisPipeline
-      fileName={currentDocument?.name ?? currentDocument?.file_name}
-      expanded={pipelineExpanded}
-      onExpandedChange={setPipelineExpanded}
-      dismissed={pipelineDismissed}
-      onDismiss={() => setPipelineDismissed(true)}
-      compactReadyOnly={pipelineDismissed && !!chatEligibility.allowed}
-      isGuest={userTier === 'guest'}
-      onStepAction={handlePipelineStepAction}
-      uploadInProgress={variantUploadInProgress}
-      uploadProgress={uploadProgress}
-      hasUploadedFile={!!currentDocument || variantUploadInProgress}
-      columnInterpretationResult={columnInterpretationResult}
-      hasAnnotatedFile={pipelineSnapshot.hasAnnotatedFile}
-      vcfAnnotated={pipelineSnapshot.vcfAnnotated}
-      requiresAnnovar={chatEligibility.requires_annovar}
-      isRunningAnnovar={isRunningAnnovar}
-      isApplyingProprietaryFilter={isApplyingProprietaryFilter}
-      annovarJob={pipelineSnapshot.annovarJob}
-      filterJob={pipelineSnapshot.filterJob}
-      chatEligibility={chatEligibility}
-      activeProprietaryFilter={conversationFilterState.activeProprietaryFilter}
-      activeVariantFilters={conversationFilterState.activeVariantFilters}
-      filteredVariantCount={conversationFilterState.filteredVariantCount}
-      s3LineCountStatus={variantData?.s3_line_count_status || chatEligibility.s3_line_count_status}
-      variantsUnderConsideration={
-        chatEligibility.variants_under_consideration ??
-        conversationFilterState.filteredVariantCount
-      }
-      onEditSampleInfo={() => { setIsEditSampleModalOpen(true); }}
-      onRemoveFile={userTier === 'guest' ? undefined : () => handleDocumentUpload(null)}
-      enrichmentState={enrichmentState}
-      indexingState={indexingState}
-      isRunningExomiser={isRunningExomiser}
-      exomiserStatus={exomiserStatus}
-    />
-  ) : null;
-
-  const analysisPipelineBlock = (
-    <>
-      {module1PipelineBlock}
-      {variantAnalysisPipelineBlock}
-    </>
-  );
 
   // --- MAIN RENDER GATING LOGIC ---
   if (!isAuthReady || userLoading) {
@@ -1059,6 +1032,73 @@ const ChatPage = () => {
       ? { label: 'Apply a filter', onClick: () => setIsVariantSidebarOpen(true) }
       : null;
 
+  const pipelineDrawer = showAnalysisPipeline ? (
+    <PipelineDrawer
+      fileName={currentDocument?.name ?? currentDocument?.file_name}
+      expanded={pipelineExpanded}
+      onExpandedChange={setPipelineExpanded}
+      isGuest={userTier === 'guest'}
+      onStepAction={handlePipelineStepAction}
+      uploadInProgress={variantUploadInProgress}
+      uploadProgress={uploadProgress}
+      hasUploadedFile={!!currentDocument || variantUploadInProgress}
+      columnInterpretationResult={columnInterpretationResult}
+      hasAnnotatedFile={pipelineSnapshot.hasAnnotatedFile}
+      vcfAnnotated={pipelineSnapshot.vcfAnnotated}
+      requiresAnnovar={chatEligibility.requires_annovar}
+      isRunningAnnovar={isRunningAnnovar}
+      isApplyingProprietaryFilter={isApplyingProprietaryFilter}
+      annovarJob={pipelineSnapshot.annovarJob}
+      filterJob={pipelineSnapshot.filterJob}
+      chatEligibility={chatEligibility}
+      activeProprietaryFilter={conversationFilterState.activeProprietaryFilter}
+      activeVariantFilters={conversationFilterState.activeVariantFilters}
+      filteredVariantCount={conversationFilterState.filteredVariantCount}
+      s3LineCountStatus={variantData?.s3_line_count_status || chatEligibility.s3_line_count_status}
+      variantsUnderConsideration={
+        chatEligibility.variants_under_consideration ??
+        conversationFilterState.filteredVariantCount
+      }
+      onEditSampleInfo={() => { setIsEditSampleModalOpen(true); }}
+      onRemoveFile={userTier === 'guest' ? undefined : () => handleDocumentUpload(null)}
+      enrichmentState={enrichmentState}
+      indexingState={indexingState}
+      isRunningExomiser={isRunningExomiser}
+      exomiserStatus={exomiserStatus}
+      gatedMessage={pipelineGatedMessage}
+      gatedAction={gatedAction}
+    />
+  ) : null;
+
+  // Both composer call sites are the same component with the same wiring; only the
+  // layout and the dropdown's identity differ.
+  const composerProps = {
+    input,
+    onInputChange: setInput,
+    onSend: sendMessage,
+    onStop: cancelGeneration,
+    isCurrentlyActive,
+    isInputDisabled,
+    placeholder: inputPlaceholder,
+    showUpload: userTier === 'guest' || !!userId,
+    showFileTypeDropdown,
+    fileTypeDropdownRef,
+    onUploadButtonClick: handleUploadButtonClick,
+    onSelectVariantFile,
+    onSelectFastq: userTier === 'guest' ? undefined : onSelectFastq,
+    isVariantSidebarOpen,
+    onToggleVariantSidebar: () => setIsVariantSidebarOpen(!isVariantSidebarOpen),
+    hasDocument: !!currentDocument,
+    // Module 1's stepper shares the drawer slot with the variant pipeline; only one of
+    // the two is ever non-null for a given conversation.
+    pipelineDrawer: (
+      <>
+        {module1PipelineBlock}
+        {pipelineDrawer}
+      </>
+    ),
+  };
+
   const shellLeftState =
     userTier === 'guest' ? 'hidden' : isSidebarOpen ? 'open' : 'collapsed';
   const shellBothOpen =
@@ -1071,6 +1111,8 @@ const ChatPage = () => {
       data-left={shellLeftState}
       data-right={isVariantSidebarOpen ? 'open' : 'closed'}
       data-both-open={shellBothOpen ? 'true' : undefined}
+      /* The sidebar seam starts below the conversation header when there is one. */
+      data-header={!isMobile && (isConversationStarted || isCurrentlyActive) ? 'on' : 'off'}
     >
       <aside className="chat-shell-left" aria-hidden={userTier === 'guest'}>
         {userTier !== 'guest' && (
@@ -1183,7 +1225,7 @@ const ChatPage = () => {
       )}
 
         {/* Chat + Input column */}
-        <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
+        <div ref={chatColumnRef} className="relative flex flex-col flex-1 min-w-0 h-full overflow-hidden">
 
           {/* ===== NEW CHAT — centered layout ===== */}
           {!isConversationStarted && !isCurrentlyActive ? (
@@ -1219,30 +1261,7 @@ const ChatPage = () => {
               )}
 
               <div className={`w-full ${isMobile ? 'shrink-0' : ''}`}>
-                <ChatPromptInput
-                  mode="empty"
-                  input={input}
-                  onInputChange={setInput}
-                  onSend={sendMessage}
-                  onStop={cancelGeneration}
-                  isCurrentlyActive={isCurrentlyActive}
-                  isInputDisabled={isInputDisabled}
-                  placeholder={inputPlaceholder}
-                  pipelineGatedMessage={pipelineGatedMessage}
-                  gatedAction={gatedAction}
-                  showUpload={userTier === 'guest' || !!userId}
-                  dropdownSource="new-chat"
-                  showFileTypeDropdown={showFileTypeDropdown}
-                  fileTypeDropdownRef={fileTypeDropdownRef}
-                  onUploadButtonClick={handleUploadButtonClick}
-                  onSelectLocalFile={onSelectLocalFile}
-                  onSelectFromUrl={userTier === 'guest' ? undefined : onSelectImportFromUrl}
-                  onSelectFastq={userTier === 'guest' ? undefined : onSelectFastq}
-                  isVariantSidebarOpen={isVariantSidebarOpen}
-                  onToggleVariantSidebar={() => setIsVariantSidebarOpen(!isVariantSidebarOpen)}
-                  hasDocument={!!currentDocument}
-                  analysisPipelineBlock={analysisPipelineBlock}
-                />
+                <ChatComposer {...composerProps} layout="stacked" dropdownSource="new-chat" />
               </div>
             </div>
           ) : (
@@ -1281,7 +1300,14 @@ const ChatPage = () => {
                 ref={chatScrollRef}
                 role="log"
                 className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden relative"
-                style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
+                style={{
+                  wordBreak: 'break-word',
+                  overflowWrap: 'break-word',
+                  // Room for the dock, which now floats over this region rather than
+                  // sitting below it — so messages are occluded by the composer's actual
+                  // shape and stay visible beside the inset drawer.
+                  paddingBottom: 'var(--composer-dock-height, 0px)',
+                }}
               >
                 <div ref={chatContentRef} className="chat-column-inner space-y-8 pt-5 pb-4">
                   <div className="space-y-8 pb-4 w-full">
@@ -1318,7 +1344,11 @@ const ChatPage = () => {
                     )}
                   </div>
                 </div>
-                <div className="sticky bottom-4 flex justify-center pointer-events-none" style={{ zIndex: 10 }}>
+                {/* The scroll port now runs under the dock, so this has to clear it. */}
+                <div
+                  className="sticky flex justify-center pointer-events-none"
+                  style={{ zIndex: 10, bottom: 'calc(var(--composer-dock-height, 0px) - 6rem)' }}
+                >
                   <Button
                     type="button"
                     variant="outline"
@@ -1337,14 +1367,15 @@ const ChatPage = () => {
                 </div>
               </div>
 
-              {/* Bottom input — conversation mode */}
-              <div className="chat-column-inner pb-3 pt-1.5 shrink-0" style={{ backgroundColor: 'var(--bg-app)' }}>
+              {/* Bottom input — conversation mode. Absolutely placed so it overlaps the
+                  scroll region; nothing rectangular clips the messages any more. */}
+              <div ref={composerDockRef} className="chat-column-inner chat-composer-dock pb-3 pt-0.5">
                 {userTier === 'guest' && (
-                  <div className="flex items-center justify-center gap-2 mb-2">
+                  <div className="relative z-10 flex items-center justify-center gap-2.5 mb-2">
                     <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
                       {DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed} of {DEFAULT_GUEST_CHAT_LIMIT} free exchanges remaining
                     </span>
-                    <span className="text-xs" style={{ color: 'var(--border-default)' }}>|</span>
+                    <span className="text-xs" style={{ color: 'var(--text-disabled)' }} aria-hidden>·</span>
                     <button
                       type="button"
                       onClick={() => { setIsShowingAuthForm(true); setJustSignedUp(false); }}
@@ -1355,30 +1386,7 @@ const ChatPage = () => {
                     </button>
                   </div>
                 )}
-                <ChatPromptInput
-                  mode="conversation"
-                  input={input}
-                  onInputChange={setInput}
-                  onSend={sendMessage}
-                  onStop={cancelGeneration}
-                  isCurrentlyActive={isCurrentlyActive}
-                  isInputDisabled={isInputDisabled}
-                  placeholder={inputPlaceholder}
-                  showUpload={userTier === 'guest' || !!userId}
-                  dropdownSource="conversation"
-                  showFileTypeDropdown={showFileTypeDropdown}
-                  fileTypeDropdownRef={fileTypeDropdownRef}
-                  onUploadButtonClick={handleUploadButtonClick}
-                  onSelectLocalFile={onSelectLocalFile}
-                  onSelectFromUrl={userTier === 'guest' ? undefined : onSelectImportFromUrl}
-                  onSelectFastq={userTier === 'guest' ? undefined : onSelectFastq}
-                  isVariantSidebarOpen={isVariantSidebarOpen}
-                  onToggleVariantSidebar={() => setIsVariantSidebarOpen(!isVariantSidebarOpen)}
-                  hasDocument={!!currentDocument}
-                  pipelineGatedMessage={pipelineGatedMessage}
-                  gatedAction={gatedAction}
-                  analysisPipelineBlock={analysisPipelineBlock}
-                />
+                <ChatComposer {...composerProps} layout="inline" dropdownSource="conversation" />
               </div>
             </>
           )}
@@ -1490,13 +1498,10 @@ const ChatPage = () => {
               onClick={() => {
                 setShowUploadModal(false);
                 setPreSelectedFile(null);
-                setUploadModalImportMode('file');
-                if (uploadSessionConversationId === activeConversationId) {
-                  setPipelineToast({
-                    title: 'Upload in progress',
-                    message:
+                            if (uploadSessionConversationId === activeConversationId) {
+                  toast.info('Upload in progress', {
+                    description:
                       'Your file is still uploading. Please wait — chat will resume when processing finishes.',
-                    variant: 'info',
                   });
                 }
               }}
@@ -1528,12 +1533,10 @@ const ChatPage = () => {
                   onUploadingChange={handleVariantUploadingChangeWithCleanup}
                   onUploadProgressChange={handleUploadProgressChange}
                   onUploadStarted={handleUploadStarted}
-                  initialImportMode={uploadModalImportMode}
                   onDismissForUpload={() => {
                     setShowUploadModal(false);
                     setMetadataFormOpen(false);
-                    setUploadModalImportMode('file');
-                  }}
+                                  }}
                   onUploadSuccess={async (doc) => {
                     await handleDocumentUpload(doc);
                     if (doc !== null) {
@@ -1542,8 +1545,7 @@ const ChatPage = () => {
                       setActiveFileTypeTab('tabular');
                       setPreSelectedFile(null);
                       setUploadingFileName(null);
-                      setUploadModalImportMode('file');
-                    }
+                                      }
                   }}
                   existingDocument={currentDocument}
                   userTier={userTier}
@@ -1555,8 +1557,7 @@ const ChatPage = () => {
                     setPreSelectedFile(null);
                     setMetadataFormOpen(false);
                     setUploadingFileName(null);
-                    setUploadModalImportMode('file');
-                  }}
+                                  }}
                 />
               </div>
             </div>
@@ -1575,6 +1576,8 @@ const ChatPage = () => {
           module1UploadProgress={module1.module1UploadProgress}
           module1Submitting={module1.module1Submitting}
           module1SubmitError={module1.module1SubmitError}
+          module1ImportStatus={module1.module1ImportStatus}
+          preflightModule1Url={module1.preflightModule1Url}
           uploadAndValidateCustomBed={module1.uploadAndValidateCustomBed}
           startModule1Run={module1.startModule1Run}
         />

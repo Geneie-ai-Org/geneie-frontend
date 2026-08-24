@@ -85,7 +85,6 @@ const ChatPage = () => {
   const [activeFileTypeTab, setActiveFileTypeTab] = useState('tabular'); // Track active tab for modal color
   const [showFileTypeDropdown, setShowFileTypeDropdown] = useState(null); // 'new-chat' | 'conversation' | null
   const [preSelectedFile, setPreSelectedFile] = useState(null); // File selected via dropdown before modal
-  const [uploadModalImportMode, setUploadModalImportMode] = useState('file'); // 'file' | 'url' — initial mode for upload modal
   const [uploadingFileName, setUploadingFileName] = useState(null);
   const fileTypeDropdownRef = useRef(null);
   const tsvFileInputRef = useRef(null);
@@ -820,15 +819,10 @@ const ChatPage = () => {
     (userTier === 'guest' && guestLimitExceeded) ||
     (userTier !== 'guest' && currentExchanges >= tierLimit);
 
-  const onSelectLocalFile = () => {
-    setShowFileTypeDropdown(null);
-    tsvFileInputRef.current?.click();
-  };
-
-  const onSelectImportFromUrl = () => {
+  // One row per data kind; the file-vs-URL choice is a toggle inside the modal.
+  const onSelectVariantFile = () => {
     setShowFileTypeDropdown(null);
     setActiveFileTypeTab('tabular');
-    setUploadModalImportMode('url');
     setPreSelectedFile(null);
     setShowUploadModal(true);
   };
@@ -1090,8 +1084,7 @@ const ChatPage = () => {
     showFileTypeDropdown,
     fileTypeDropdownRef,
     onUploadButtonClick: handleUploadButtonClick,
-    onSelectLocalFile,
-    onSelectFromUrl: userTier === 'guest' ? undefined : onSelectImportFromUrl,
+    onSelectVariantFile,
     onSelectFastq: userTier === 'guest' ? undefined : onSelectFastq,
     isVariantSidebarOpen,
     onToggleVariantSidebar: () => setIsVariantSidebarOpen(!isVariantSidebarOpen),
@@ -1505,8 +1498,7 @@ const ChatPage = () => {
               onClick={() => {
                 setShowUploadModal(false);
                 setPreSelectedFile(null);
-                setUploadModalImportMode('file');
-                if (uploadSessionConversationId === activeConversationId) {
+                            if (uploadSessionConversationId === activeConversationId) {
                   toast.info('Upload in progress', {
                     description:
                       'Your file is still uploading. Please wait — chat will resume when processing finishes.',
@@ -1541,12 +1533,10 @@ const ChatPage = () => {
                   onUploadingChange={handleVariantUploadingChangeWithCleanup}
                   onUploadProgressChange={handleUploadProgressChange}
                   onUploadStarted={handleUploadStarted}
-                  initialImportMode={uploadModalImportMode}
                   onDismissForUpload={() => {
                     setShowUploadModal(false);
                     setMetadataFormOpen(false);
-                    setUploadModalImportMode('file');
-                  }}
+                                  }}
                   onUploadSuccess={async (doc) => {
                     await handleDocumentUpload(doc);
                     if (doc !== null) {
@@ -1555,8 +1545,7 @@ const ChatPage = () => {
                       setActiveFileTypeTab('tabular');
                       setPreSelectedFile(null);
                       setUploadingFileName(null);
-                      setUploadModalImportMode('file');
-                    }
+                                      }
                   }}
                   existingDocument={currentDocument}
                   userTier={userTier}
@@ -1568,8 +1557,7 @@ const ChatPage = () => {
                     setPreSelectedFile(null);
                     setMetadataFormOpen(false);
                     setUploadingFileName(null);
-                    setUploadModalImportMode('file');
-                  }}
+                                  }}
                 />
               </div>
             </div>

@@ -16,6 +16,7 @@ import {
   isRecognizedImportUrl,
 } from '@/services/backendApi';
 import { patchSampleMetadata } from '@/services/mongodbApi';
+import { PillToggle } from '@/components/ui/pill-toggle';
 import {
   Dialog,
   DialogContent,
@@ -95,7 +96,6 @@ const DocumentUpload = ({
   editMode = false,
   initialMetadata = null,
   onEditSaved = null,
-  initialImportMode = 'file',
 }) => {
   const { subscriptionStatus } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
@@ -131,16 +131,14 @@ const DocumentUpload = ({
   const [isDetectingGenome, setIsDetectingGenome] = useState(false);
   const [genomeDetection, setGenomeDetection] = useState(null); // { detected_build, genome, confidence, source }
   const [editImpact, setEditImpact] = useState(null); // metadata_edit_impact from PATCH response
-  const [importMode, setImportMode] = useState(initialImportMode); // 'file' | 'url'
+  const [importMode, setImportMode] = useState('file'); // 'file' | 'url' — chosen in-modal
+  const [isDragOver, setIsDragOver] = useState(false);
   const [fileUrl, setFileUrl] = useState('');
   const [urlFilenameOverride, setUrlFilenameOverride] = useState('');
   const [showUrlFilename, setShowUrlFilename] = useState(false);
   const [urlFieldFocused, setUrlFieldFocused] = useState(false);
   const [importUrlMeta, setImportUrlMeta] = useState(null); // preflight result
   const [isPreflighting, setIsPreflighting] = useState(false);
-  useEffect(() => {
-    setImportMode(initialImportMode);
-  }, [initialImportMode]);
   useEffect(() => {
     if (editMode && initialMetadata) {
       setSampleMetadata({
@@ -374,6 +372,18 @@ const DocumentUpload = ({
       processFile(preSelectedFile);
     }
   }, [preSelectedFile]);
+
+  /** Switching source clears the other mode's staged selection so neither can leak into submit. */
+  const handleImportModeChange = (next) => {
+    if (next === importMode) return;
+    setImportMode(next);
+    setError('');
+    setSelectedFile(null);
+    setImportUrlMeta(null);
+    setFileUrl('');
+    setUrlFilenameOverride('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const handleFileSelect = async (event) => {
     const file = event.target.files?.[0];
@@ -1025,6 +1035,76 @@ const DocumentUpload = ({
       {/* Hide upload UI when form is showing or file was pre-selected */}
       {!showInfoForm && !preSelectedFile && (
         <>
+          {!compact && !existingDocument && (
+            <div className="mb-3">
+              <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                Add an annotated variant file
+              </h3>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+                VCF, TSV or CSV with variant calls already annotated.
+              </p>
+            </div>
+          )}
+
+          {/* Source of the file — the kind of file was already chosen in the upload menu */}
+          {!compact && !existingDocument && userTier !== 'guest' && userId !== 'guest' && (
+            <PillToggle
+              className="mb-3"
+              value={importMode}
+              onChange={handleImportModeChange}
+              options={[
+                { value: 'file', label: 'From computer' },
+                { value: 'url', label: 'From URL' },
+              ]}
+            />
+          )}
+
+          {/* Pick a local file — click or drag. Drops route through the same processFile
+              path as the hidden input, so validation and genome detection are identical. */}
+          {importMode === 'file' && !compact && !existingDocument && (
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".tsv,.csv,.vcf,.vcf.gz,.gz,application/gzip"
+                onChange={handleFileSelect}
+                className="hidden"
+                id="document-upload-full"
+                disabled={isUploading}
+              />
+              <label
+                htmlFor="document-upload-full"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (!isUploading) setIsDragOver(true);
+                }}
+                onDragLeave={() => setIsDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragOver(false);
+                  if (isUploading) return;
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) processFile(file);
+                }}
+                className={`flex flex-col items-center justify-center gap-2 w-full px-4 py-8 border border-dashed rounded-xl text-center transition-colors ${
+                  isUploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                }`}
+                style={{
+                  borderColor: isDragOver ? 'var(--accent-teal)' : 'var(--border-default)',
+                  backgroundColor: isDragOver ? 'var(--accent-teal-soft)' : 'var(--bg-input)',
+                }}
+              >
+                <Upload className="w-5 h-5" style={{ color: 'var(--accent-teal)' }} />
+                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                  {isUploading ? 'Processing…' : 'Choose a file or drag it here'}
+                </span>
+                <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+                  .vcf, .vcf.gz, .tsv or .csv
+                </span>
+              </label>
+            </div>
+          )}
+
           {/* Import from a link — public URL / Drive / Dropbox */}
           {importMode === 'url' && !compact && (
             <div>

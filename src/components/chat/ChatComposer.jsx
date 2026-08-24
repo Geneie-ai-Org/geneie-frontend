@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { PanelRight, ArrowUp, Plus, Square, Link2, FolderOpen, Dna } from 'lucide-react';
+import { PanelRight, ArrowUp, Plus, Square, FileText, Dna } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -16,12 +16,11 @@ function useAutosizeTextarea(ref, value, maxHeight = 240) {
 const TEXTAREA_BASE =
   'w-full resize-none border-none bg-transparent dark:bg-transparent disabled:bg-transparent dark:disabled:bg-transparent shadow-none rounded-none px-0 outline-none focus-visible:ring-0 focus-visible:border-transparent';
 
-const FileTypeDropdown = ({
-  showFileTypeDropdown,
-  onSelectLocalFile,
-  onSelectFromUrl,
-  onSelectFastq,
-}) => {
+/**
+ * Two rows, one decision: which *kind* of data is being added. Where the file comes
+ * from (computer or URL) is a toggle inside each modal, not a second menu level.
+ */
+const FileTypeDropdown = ({ showFileTypeDropdown, onSelectVariantFile, onSelectFastq }) => {
   if (!showFileTypeDropdown) return null;
 
   return (
@@ -34,27 +33,13 @@ const FileTypeDropdown = ({
     >
       <button
         type="button"
-        onClick={onSelectLocalFile}
+        onClick={onSelectVariantFile}
         className="w-full px-3 py-2.5 text-sm text-left flex items-center gap-2.5 transition-colors hover:bg-white/5"
         style={{ color: 'var(--text-primary)' }}
       >
-        <FolderOpen className="w-3.5 h-3.5" style={{ color: 'var(--accent-teal)' }} />
-        Local File
+        <FileText className="w-3.5 h-3.5" style={{ color: 'var(--accent-teal)' }} />
+        Annotated variant file
       </button>
-      {onSelectFromUrl && (
-        <>
-          <div style={{ height: '1px', backgroundColor: 'var(--border-default)' }} />
-          <button
-            type="button"
-            onClick={onSelectFromUrl}
-            className="w-full px-3 py-2.5 text-sm text-left flex items-center gap-2.5 transition-colors hover:bg-white/5"
-            style={{ color: 'var(--text-primary)' }}
-          >
-            <Link2 className="w-3.5 h-3.5" style={{ color: 'var(--text-secondary)' }} />
-            From URL
-          </button>
-        </>
-      )}
       {onSelectFastq && (
         <>
           <div style={{ height: '1px', backgroundColor: 'var(--border-default)' }} />
@@ -102,8 +87,7 @@ const ChatComposer = ({
   showFileTypeDropdown,
   fileTypeDropdownRef,
   onUploadButtonClick,
-  onSelectLocalFile,
-  onSelectFromUrl,
+  onSelectVariantFile,
   onSelectFastq,
   isVariantSidebarOpen,
   onToggleVariantSidebar,
@@ -162,12 +146,11 @@ const ChatComposer = ({
             </Button>
           }
         />
-        <TooltipContent>Upload variant file</TooltipContent>
+        <TooltipContent>Add data</TooltipContent>
       </Tooltip>
       <FileTypeDropdown
         showFileTypeDropdown={showFileTypeDropdown === dropdownSource}
-        onSelectLocalFile={onSelectLocalFile}
-        onSelectFromUrl={onSelectFromUrl}
+        onSelectVariantFile={onSelectVariantFile}
         onSelectFastq={onSelectFastq}
       />
     </div>

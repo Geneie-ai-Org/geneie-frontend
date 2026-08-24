@@ -16,6 +16,7 @@ import {
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
+import { PillToggle } from '@/components/ui/pill-toggle';
 import { isRecognizedImportUrl, module1UrlErrorMessage, precheckBedChromStyle } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
 
@@ -110,28 +111,6 @@ function formatBytes(bytes) {
   const mb = bytes / 1024 ** 2;
   if (mb >= 1) return `${mb.toFixed(1)} MB`;
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-}
-
-function PillToggle({ options, value, onChange }) {
-  return (
-    <div className="flex gap-2 mb-2">
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => onChange(opt.value)}
-          className="px-3 py-1.5 text-xs font-medium rounded-lg border"
-          style={{
-            borderColor: value === opt.value ? 'var(--accent-teal)' : 'var(--border-default)',
-            color: value === opt.value ? 'var(--accent-teal)' : 'var(--text-secondary)',
-            backgroundColor: value === opt.value ? 'var(--accent-teal-soft)' : 'transparent',
-          }}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  );
 }
 
 /**
@@ -428,6 +407,7 @@ const Module1UploadForm = ({
                   Raw data <span style={{ color: 'var(--error)' }}>*</span>
                 </label>
                 <PillToggle
+                  className="mb-2"
                   value={sourceMode}
                   onChange={handleSourceModeChange}
                   options={[
@@ -484,6 +464,7 @@ const Module1UploadForm = ({
                   Capture BED <span style={{ color: 'var(--error)' }}>*</span>
                 </label>
                 <PillToggle
+                  className="mb-2"
                   value={bedMode}
                   onChange={setBedMode}
                   options={[

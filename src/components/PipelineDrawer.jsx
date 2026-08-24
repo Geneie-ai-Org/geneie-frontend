@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AlertCircle, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
 import PerimeterProgress from '@/components/ui/PerimeterProgress';
 import {
@@ -24,7 +24,7 @@ function stepTextStyle(status, locked) {
   if (locked) return { color: 'var(--text-tertiary)', fontWeight: 400 };
   if (status === 'done') return { color: 'var(--text-primary)', fontWeight: 600 };
   if (status === 'failed') return { color: 'var(--error)', fontWeight: 600 };
-  if (status === 'running') return { fontWeight: 600 };
+  if (status === 'running') return { color: 'var(--text-primary)', fontWeight: 600 };
   // `skipped` is struck through rather than dimmed — a step that will never run must not
   // read as one that hasn't run yet.
   if (status === 'skipped') {
@@ -137,7 +137,7 @@ function SegmentMeter({ steps }) {
  *
  * Progress is deliberately unnumbered. The backend reports percentages in lumps
  * (queued 5, exporting 30, tertiary 65, literature 85), so a printed number invites
- * watching a value that jumps. Instead the active step's label shimmers and a stroke
+ * watching a value that jumps. Instead the collapsed status line shimmers and a stroke
  * travels the drawer's perimeter, carrying the percentage as distance only.
  */
 const PipelineDrawer = ({
@@ -172,6 +172,7 @@ const PipelineDrawer = ({
   gatedMessage = null,
   gatedAction = null,
 }) => {
+  const reduceMotion = useReducedMotion();
   const [removeFileDialogOpen, setRemoveFileDialogOpen] = useState(false);
 
   const pipelineProps = {
@@ -355,8 +356,16 @@ const PipelineDrawer = ({
             key="body"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+            // The collapse is faster than the expand: opening is the user asking to read
+            // something, closing is the interface getting out of the way. The exit timing
+            // has to ride on `exit` itself — AnimatePresence replays the element's last
+            // props, so a `transition` that branched on `expanded` would never see false.
+            exit={{
+              height: 0,
+              opacity: 0,
+              transition: reduceMotion ? { duration: 0 } : { duration: 0.15, ease: [0.23, 1, 0.32, 1] },
+            }}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
             className="overflow-hidden"
           >
             <div className="px-3.5 pt-0.5">
@@ -383,16 +392,14 @@ const PipelineDrawer = ({
                         }`}
                         style={{
                           ...stepTextStyle(status, guestLocked),
-                          // The active step keeps a standing tint so it stays findable
-                          // when the shimmer is off under prefers-reduced-motion.
+                          // Tint + weight are the whole "you are here" signal here; the
+                          // shimmer is reserved for the collapsed status line.
                           ...(running ? { backgroundColor: 'var(--accent-teal-soft)' } : null),
                         }}
                         title={guestLocked ? 'Sign in for full analysis' : `View ${def.label}`}
                       >
                         <StepGlyph status={status} locked={guestLocked} />
-                        <span className={running ? 'pipeline-step-shimmer' : undefined}>
-                          {def.shortLabel || def.label}
-                        </span>
+                        <span>{def.shortLabel || def.label}</span>
                       </button>
                       {!isLast && (
                         <span

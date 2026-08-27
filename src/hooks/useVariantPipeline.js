@@ -3,6 +3,9 @@ import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
 import { apiUrl } from '@/config/api';
 import { apiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
+import { useAuth } from '@/hooks/useAuth';
+import { actionGate } from '@/services/tierLimits';
+import { describeLimitError } from '@/services/limitErrors';
 import {
   convertToVcf,
   fetchChatEligibility,
@@ -37,7 +40,9 @@ export function useVariantPipeline({
   getDeviceId,
   module1JobActive = false,
   onOpenModule1Upload,
+  onRequestUpgrade,
 }) {
+  const { limits, refreshSubscriptionStatus } = useAuth();
   // `allowed: null` means "not confirmed yet" — never assume chat is open before
   // /api/chat-eligibility has answered.
   const [chatEligibility, setChatEligibility] = useState({
@@ -855,6 +860,24 @@ export function useVariantPipeline({
       return;
     }
 
+    // Quota check before doing any work. The backend 403 remains the real enforcement; this just
+    // avoids burning a round trip and shows the count the user actually has left.
+    const annovarQuotaGate = actionGate(limits, 'annovar');
+    if (!annovarQuotaGate.allowed) {
+      setAnnovarMessageModal({
+        title: 'ANNOVAR limit reached',
+        message: annovarQuotaGate.reason,
+        variant: 'info',
+        ...(annovarQuotaGate.cta && annovarQuotaGate.cta.kind !== 'none'
+          ? {
+              ctaLabel: annovarQuotaGate.cta.label,
+              onCta: () => { setAnnovarMessageModal(null); onRequestUpgrade?.(annovarQuotaGate.cta.kind); },
+            }
+          : {}),
+      });
+      return;
+    }
+
     let annovarStartedAsync = false;
     try {
       const auth = getAuth();
@@ -908,13 +931,22 @@ export function useVariantPipeline({
         const detail = errBody.detail || errBody.error || runResponse.statusText || 'Annotation failed';
         const code = typeof detail === 'object' ? detail.code : null;
         const msg = typeof detail === 'object' ? detail.message : detail;
-        if (code === 'FREE_TIER_LIMIT_REACHED') {
+        const descriptor = describeLimitError(
+          { status: runResponse.status, code, message: msg },
+          { context: 'annovar', limits },
+        );
+        if (descriptor) {
+          if (descriptor.refresh) refreshSubscriptionStatus?.();
           setAnnovarMessageModal({
-            title: 'ANNOVAR Limit Reached',
-            message: msg,
-            variant: 'info',
-            ctaLabel: 'Upgrade to Pro',
-            onCta: () => setAnnovarMessageModal(null),
+            title: descriptor.title,
+            message: descriptor.message,
+            variant: descriptor.variant,
+            ...(descriptor.cta.kind === 'upgrade' || descriptor.cta.kind === 'topup'
+              ? {
+                  ctaLabel: descriptor.cta.label,
+                  onCta: () => { setAnnovarMessageModal(null); onRequestUpgrade?.(descriptor.cta.kind); },
+                }
+              : {}),
           });
         } else {
           setAnnovarMessageModal({
@@ -925,6 +957,9 @@ export function useVariantPipeline({
         }
         return;
       }
+
+      // Either path consumes a Module 2 unit, so the cached counters are now stale.
+      refreshSubscriptionStatus?.();
 
       if (runResponse.status === 202) {
         annovarStartedAsync = true;
@@ -973,6 +1008,9 @@ export function useVariantPipeline({
     setIsShowingAuthForm,
     setJustSignedUp,
     getDeviceId,
+    limits,
+    refreshSubscriptionStatus,
+    onRequestUpgrade,
   ]);
 
   const FILTER_DISPLAY_NAMES = {
@@ -1003,6 +1041,23 @@ export function useVariantPipeline({
       return;
     }
     if (isApplyingProprietaryFilter) return;
+
+    // ACMG and Exomiser applies share one metered budget. Manual filters are free and unaffected.
+    const filterGate = actionGate(limits, 'acmgExomiser');
+    if (!filterGate.allowed) {
+      setAnnovarMessageModal({
+        title: 'Filter limit reached',
+        message: filterGate.reason,
+        variant: 'info',
+        ...(filterGate.cta && filterGate.cta.kind !== 'none'
+          ? {
+              ctaLabel: filterGate.cta.label,
+              onCta: () => { setAnnovarMessageModal(null); onRequestUpgrade?.(filterGate.cta.kind); },
+            }
+          : {}),
+      });
+      return;
+    }
 
     // Gate check: filter_1 needs CLNSIG/InterVar; filter_2 needs its own columns
     if (filterType === 'filter_1') {
@@ -1045,8 +1100,30 @@ export function useVariantPipeline({
 
       if (!res.ok && res.status !== 202) {
         const err = await res.json().catch(() => ({}));
+        const descriptor = describeLimitError(
+          { status: res.status, detail: err.detail },
+          { context: 'filter', limits },
+        );
+        if (descriptor) {
+          if (descriptor.refresh) refreshSubscriptionStatus?.();
+          setAnnovarMessageModal({
+            title: descriptor.title,
+            message: descriptor.message,
+            variant: descriptor.variant,
+            ...(descriptor.cta.kind === 'upgrade' || descriptor.cta.kind === 'topup'
+              ? {
+                  ctaLabel: descriptor.cta.label,
+                  onCta: () => { setAnnovarMessageModal(null); onRequestUpgrade?.(descriptor.cta.kind); },
+                }
+              : {}),
+          });
+          return;
+        }
         throw new Error(apiErrorDetailToMessage(err.detail) || `Failed to apply ${displayName}`);
       }
+
+      // Either path spends one ACMG/Exomiser unit.
+      refreshSubscriptionStatus?.();
 
       if (res.status === 202) {
         filterStartedAsync = true;
@@ -1105,11 +1182,16 @@ export function useVariantPipeline({
     setIsShowingAuthForm,
     setJustSignedUp,
     getDeviceId,
+    limits,
+    refreshSubscriptionStatus,
+    onRequestUpgrade,
   ]);
 
   const step2ReqGate = columnInterpretationResult?.step2?.required_columns || {};
   const step2AcmgReady = Boolean(step2ReqGate.CLNSIG?.found || step2ReqGate.InterVar_automated?.found);
-  const acmgFilterCanApply = !!step2AcmgReady && !chatEligibility.requires_annovar;
+  const annovarGate = actionGate(limits, 'annovar');
+  const acmgExomiserGate = actionGate(limits, 'acmgExomiser');
+  const acmgFilterCanApply = !!step2AcmgReady && !chatEligibility.requires_annovar && acmgExomiserGate.allowed;
 
   const fetchExomiserEligibility = useCallback(async () => {
     if (!activeConversationId || userTier === 'guest') return null;
@@ -1361,6 +1443,8 @@ export function useVariantPipeline({
     pipelineJobActive,
     variantUploadInProgress,
     acmgFilterCanApply,
+    annovarGate,
+    acmgExomiserGate,
     isRunningExomiser,
     exomiserStatus,
     fetchExomiserEligibility,

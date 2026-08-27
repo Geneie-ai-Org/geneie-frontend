@@ -1,28 +1,20 @@
 import { getAuth } from 'firebase/auth';
 import { apiUrl } from '@/config/api';
-
-const DEVICE_ID_STORAGE_KEY = 'geneie_device_id';
+import { env } from '@/config/env';
+import { meterFor, PRO_LIKE } from '@/services/tierLimits';
+import { getDeviceId } from '@/lib/deviceId';
 
 /** Defaults aligned with backend env when subscription-status is unavailable (guest). */
 export const DEFAULT_GUEST_CHAT_LIMIT = 5;
-export const DEFAULT_FREE_CHAT_LIMIT = 10;
 export const DEFAULT_GUEST_FILE_SIZE_MB = 5;
 export const DEFAULT_FREE_FILE_SIZE_MB = 10;
 
-/** Pro files above this use direct-to-S3 presign instead of multipart POST. */
-export const PRO_PRESIGN_UPLOAD_THRESHOLD_BYTES = 10 * 1024 * 1024;
+/** Files above this use direct-to-S3 presign instead of multipart POST. Configurable via env. */
+export const PRESIGN_UPLOAD_THRESHOLD_BYTES = env.variantDirectUploadMinBytes;
 
-export function getOrCreateDeviceId() {
-  try {
-    const existing = localStorage.getItem(DEVICE_ID_STORAGE_KEY);
-    if (existing?.trim()) return existing;
-    const created = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem(DEVICE_ID_STORAGE_KEY, created);
-    return created;
-  } catch {
-    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  }
-}
+/** Product caps from TIER_LIMITS_SPEC §6 — same for every cohort allowed on the path. */
+export const MODULE1_FASTQ_MAX_BYTES = 12 * 1024 ** 3;
+export const MODULE1_BED_MAX_BYTES = 50 * 1024 * 1024;
 
 export async function getAuthHeaders() {
   const auth = getAuth();
@@ -30,8 +22,18 @@ export async function getAuthHeaders() {
   if (!token) throw new Error('Authentication required');
   return {
     Authorization: `Bearer ${token}`,
-    'X-Device-Id': getOrCreateDeviceId(),
+    'X-Device-Id': getDeviceId(),
   };
+}
+
+export async function releaseDevice({ unregister = true } = {}) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  return fetch(apiUrl('/api/device/release'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ unregister }),
+    keepalive: true, // survive the navigation that follows sign-out
+  });
 }
 
 export function parseApiErrorDetail(detail) {
@@ -40,6 +42,69 @@ export function parseApiErrorDetail(detail) {
   if (typeof detail === 'object' && detail.message) return detail.message;
   if (Array.isArray(detail)) return detail.map((d) => d.msg || d).join(', ');
   return null;
+}
+
+/* --- Admin: tier management (unlisted /admin-haha tool) -----------------------------
+ * These replace the frontend writing Firestore user documents directly. Authorisation is
+ * enforced server-side by a signed Firebase custom claim or an env allowlist; the
+ * VITE_ADMIN_EMAILS gate in the UI is only there to avoid showing a page that would 403.
+ */
+
+export async function adminListUsers({ plan, email, limit = 100, cursor } = {}) {
+  const params = new URLSearchParams();
+  if (plan) params.set('plan', plan);
+  if (email) params.set('email', email);
+  if (limit) params.set('limit', String(limit));
+  if (cursor) params.set('cursor', cursor);
+
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/admin/users?${params.toString()}`), { headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load users');
+  }
+  return data;
+}
+
+export async function adminSetPlan(uid, planStatus, { reason, seedBetaQuotas = true } = {}) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(apiUrl(`/api/admin/users/${encodeURIComponent(uid)}/plan`), {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ planStatus, reason, seedBetaQuotas }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to set plan');
+  }
+  return data.user;
+}
+
+export async function adminSetCounters(uid, fields, { reason } = {}) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(apiUrl(`/api/admin/users/${encodeURIComponent(uid)}/counters`), {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ set: fields, reason }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to update counters');
+  }
+  return data.user;
+}
+
+export async function adminResetDevices(uid) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(
+    apiUrl(`/api/admin/users/${encodeURIComponent(uid)}/devices/reset`),
+    { method: 'POST', headers, body: '{}' },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to reset devices');
+  }
+  return data.user;
 }
 
 export async function fetchSubscriptionStatus() {
@@ -466,27 +531,25 @@ export function getProUploadMaxBytes(fileName, proEntitlements) {
   return caps.tsv_csv_txt ?? 4 * 1024 ** 3;
 }
 
-export function getMaxUploadBytes(fileName, userTier, subscriptionStatus) {
+export function getMaxUploadBytes(fileName, limits) {
   const name = (fileName || '').toLowerCase();
-  if (userTier === 'pro') {
-    return getProUploadMaxBytes(name, subscriptionStatus?.proEntitlements);
+  const cohort = limits?.cohort ?? 'guest';
+  if (cohort === 'guest') return DEFAULT_GUEST_FILE_SIZE_MB * 1024 * 1024;
+  if (cohort === 'free') {
+    return limits?.upload?.previewMaxBytes ?? DEFAULT_FREE_FILE_SIZE_MB * 1024 * 1024;
   }
-  if (userTier === 'free') {
-    const mb = subscriptionStatus?.freeTierUsage?.upload_preview?.max_file_size_mb;
-    return (mb ?? DEFAULT_FREE_FILE_SIZE_MB) * 1024 * 1024;
-  }
-  return DEFAULT_GUEST_FILE_SIZE_MB * 1024 * 1024;
+  return getProUploadMaxBytes(name, limits?.raw?.proEntitlements);
 }
 
-export function getTierChatLimit(userTier, subscriptionStatus) {
-  if (userTier === 'guest') return DEFAULT_GUEST_CHAT_LIMIT;
-  if (userTier === 'pro') return Infinity;
-  const fromApi = subscriptionStatus?.freeTierUsage?.limits?.chat;
-  return fromApi ?? DEFAULT_FREE_CHAT_LIMIT;
+export function getChatMeter(limits) {
+  return meterFor(limits, 'chat');
 }
 
-export function shouldUsePresignedUpload(userTier, fileSize) {
-  return userTier === 'pro' && fileSize > PRO_PRESIGN_UPLOAD_THRESHOLD_BYTES;
+export function shouldUsePresignedUpload(fileSize, limits) {
+  const cohort = limits?.cohort ?? 'guest';
+  if (cohort === 'guest' || cohort === 'free') return false;
+  if (!PRO_LIKE.has(cohort) && cohort !== 'beta') return false;
+  return fileSize > PRESIGN_UPLOAD_THRESHOLD_BYTES;
 }
 
 export async function getExportEligibility(conversationId) {

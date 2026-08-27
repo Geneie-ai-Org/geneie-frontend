@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { FileText, X, RotateCcw, CheckCircle, Upload, Trash2, Info, Zap, Search, Sprout, PencilLine, ChevronDown, PanelRightClose } from 'lucide-react';
+import { getDeviceId } from '@/lib/deviceId';
 import { doc, getDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import DocumentUpload from './DocumentUpload';
@@ -58,22 +59,6 @@ export const ACMG_FILTER_DISPLAY_NAME = 'ACMG filter';
 const PROPRIETARY_FILTER_1_DESCRIPTION = "ClinVar and/or InterVar pathogenic classes, with rare gnomAD frequency (<1%) or missing frequency retained.";
 const EXOMISER_FILTER_DESCRIPTION = "Phenotype-driven variant prioritization for Germline cases using HPO terms and Exomiser gene/variant scoring. Requires ANNOVAR annotation and a phenotype description.";
 
-const DEVICE_ID_STORAGE_KEY = 'geneie_device_id';
-
-function getOrCreateDeviceId() {
-  try {
-    const existing = localStorage.getItem(DEVICE_ID_STORAGE_KEY);
-    if (existing && existing.trim()) return existing;
-    const created = (typeof crypto !== 'undefined' && crypto.randomUUID)
-      ? crypto.randomUUID()
-      : `dev_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    localStorage.setItem(DEVICE_ID_STORAGE_KEY, created);
-    return created;
-  } catch (_) {
-    return `dev_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-  }
-}
-
 const apiErrorDetailToMessage = sharedApiErrorDetailToMessage;
 
 async function pollFilterJobStatus(conversationId, token, apiBase) {
@@ -83,7 +68,7 @@ async function pollFilterJobStatus(conversationId, token, apiBase) {
     const statusRes = await fetch(`${apiBase}/api/filter-status/${conversationId}`, {
       headers: {
         Authorization: `Bearer ${token}`,
-        'X-Device-Id': getOrCreateDeviceId(),
+        'X-Device-Id': getDeviceId(),
       },
     });
     if (!statusRes.ok) return null;
@@ -502,6 +487,9 @@ const VariantFilterSidebar = ({
   requestedTab = null,
   onRequestedTabConsumed = null,
   acmgFilterCanApply = false,
+  // Quota gates from the normalized limits: { allowed, reason, cta, meter }
+  annovarGate,
+  acmgExomiserGate,
   // Pipeline state owned by useVariantPipeline. The sidebar and the pipeline stepper must
   // share one busy flag so dual applies cannot race.
   isRunningAnnovar = false,
@@ -513,6 +501,19 @@ const VariantFilterSidebar = ({
   refreshAfterFilterChange = null,
   downloadGate = null,
 }) => {
+  /* Quota is orthogonal to filter readiness. `=== false` (rather than a falsy check) so a missing
+   * gate — degraded limits, still loading — never disables anything. */
+  const annovarQuotaBlocked = annovarGate?.allowed === false;
+  const acmgQuotaBlocked = acmgExomiserGate?.allowed === false;
+  const acmgQuotaMeter = acmgExomiserGate?.meter;
+  const acmgMeterLabel = acmgQuotaMeter?.tracked && !acmgQuotaMeter.unlimited && acmgQuotaMeter.remaining != null
+    ? `${acmgQuotaMeter.remaining} of ${acmgQuotaMeter.limit} ACMG / Exomiser applies left`
+    : null;
+  const annovarQuotaMeter = annovarGate?.meter;
+  const annovarMeterLabel = annovarQuotaMeter?.tracked && !annovarQuotaMeter.unlimited && annovarQuotaMeter.remaining != null
+    ? `${annovarQuotaMeter.remaining} of ${annovarQuotaMeter.limit} ANNOVAR runs left`
+    : null;
+
   const [filters, setFilters] = useState({});
   const [categoricalFilters, setCategoricalFilters] = useState({});
   const [filteredCount, setFilteredCount] = useState(null);
@@ -1433,7 +1434,7 @@ const VariantFilterSidebar = ({
         headers: {
           'Content-Type': 'application/json',
           ...(token && { 'Authorization': `Bearer ${token}` }),
-          'X-Device-Id': getOrCreateDeviceId(),
+          'X-Device-Id': getDeviceId(),
         },
         body: JSON.stringify({
           conversation_id: conversationId,
@@ -2144,6 +2145,11 @@ const VariantFilterSidebar = ({
                       )}
                     </button>
                   )}
+                  {(acmgQuotaBlocked || acmgMeterLabel) && (
+                    <p className="text-2xs mt-1.5" style={{ color: acmgQuotaBlocked ? 'var(--error)' : 'var(--text-tertiary)' }}>
+                      {acmgQuotaBlocked ? acmgExomiserGate.reason : acmgMeterLabel}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -2248,12 +2254,18 @@ const VariantFilterSidebar = ({
                     <button
                       type="button"
                       onClick={() => runExomiser && runExomiser()}
-                      disabled={!canRun || running || !runExomiser}
+                      disabled={!canRun || running || !runExomiser || acmgQuotaBlocked}
+                      title={acmgQuotaBlocked ? acmgExomiserGate.reason : undefined}
                       className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ backgroundColor: 'var(--accent-teal)' }}
                     >
                       {running ? 'Running…' : failed ? 'Retry Exomiser' : 'Run Exomiser'}
                     </button>
+                  )}
+                  {!isActive && (acmgQuotaBlocked || acmgMeterLabel) && (
+                    <p className="text-2xs mt-1.5" style={{ color: acmgQuotaBlocked ? 'var(--error)' : 'var(--text-tertiary)' }}>
+                      {acmgQuotaBlocked ? acmgExomiserGate.reason : acmgMeterLabel}
+                    </p>
                   )}
                 </div>
               );
@@ -2832,12 +2844,18 @@ const VariantFilterSidebar = ({
                           <button
                             type="button"
                             onClick={handleRunAnnovarFromGarden}
-                            disabled={isRunningAnnovar}
-                            className="mt-1 inline-flex items-center gap-1 text-2xs font-medium underline"
+                            disabled={isRunningAnnovar || annovarQuotaBlocked}
+                            title={annovarQuotaBlocked ? annovarGate.reason : undefined}
+                            className="mt-1 inline-flex items-center gap-1 text-2xs font-medium underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
                           >
                             <img src={qiagenLogo} alt="" className="w-3 h-3 object-contain" />
                             {isRunningAnnovar ? 'Running ANNOVAR...' : 'Try ANNOVAR'}
                           </button>
+                          {(annovarQuotaBlocked || annovarMeterLabel) && (
+                            <div className="mt-1 text-2xs" style={{ color: annovarQuotaBlocked ? 'var(--error)' : 'var(--text-tertiary)' }}>
+                              {annovarQuotaBlocked ? annovarGate.reason : annovarMeterLabel}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

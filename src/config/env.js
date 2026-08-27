@@ -24,8 +24,15 @@ export const env = {
     return `${readApiOrigin()}/api/chat`;
   })(),
   variantDirectUploadMinBytes: Number(
-    viteVar('VARIANT_DIRECT_UPLOAD_MIN_BYTES') || 5 * 1024 * 1024
+    viteVar('VARIANT_DIRECT_UPLOAD_MIN_BYTES') || 10 * 1024 * 1024
   ),
+  /* Comma-separated emails allowed into /admin-haha. Env-driven so the list is not committed,
+   * and email-based rather than planStatus-based so changing your own tier for testing does not
+   * lock you out of the page that sets tiers. Firestore rules are the real boundary either way. */
+  adminEmails: (viteVar('ADMIN_EMAILS') || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
   firebase: {
     apiKey: viteVar('FIREBASE_API_KEY'),
     authDomain: viteVar('FIREBASE_AUTH_DOMAIN'),

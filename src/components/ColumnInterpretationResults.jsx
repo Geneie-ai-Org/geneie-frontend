@@ -41,6 +41,8 @@ const ColumnInterpretationResults = ({
   interpretationResult,
   onClose,
   onAnnovarClick,
+  annovarGate,
+  acmgExomiserGate,
   onProprietaryFilterClick,
   onOpenExomiser,
   isApplyingProprietaryFilter = false,
@@ -83,6 +85,17 @@ const ColumnInterpretationResults = ({
   if (!interpretationResult) return null;
 
   const { step1, step2, step3, overall_status, recommendations } = interpretationResult;
+  const annovarQuotaBlocked = annovarGate?.allowed === false;
+  const annovarEnabled = Boolean(step1?.passed) && !genomeMismatch && !annovarQuotaBlocked;
+  const annovarMeter = annovarGate?.meter;
+  const annovarMeterLabel = annovarMeter?.tracked && !annovarMeter.unlimited && annovarMeter.remaining != null
+    ? `${annovarMeter.remaining} of ${annovarMeter.limit} ANNOVAR runs left`
+    : null;
+  const acmgQuotaBlocked = acmgExomiserGate?.allowed === false;
+  const acmgMeter = acmgExomiserGate?.meter;
+  const acmgMeterLabel = acmgMeter?.tracked && !acmgMeter.unlimited && acmgMeter.remaining != null
+    ? `${acmgMeter.remaining} of ${acmgMeter.limit} ACMG / Exomiser applies left`
+    : null;
 
   // Determine status for each step
   const step1Status = step1?.passed ? 'passed' : 'failed';
@@ -948,25 +961,31 @@ const ColumnInterpretationResults = ({
               {!hasAnnotatedFile && !step2?.passed && (
               <div className="relative group">
                 <button
-                  onClick={(step1?.passed && !genomeMismatch) ? () => {
+                  onClick={annovarEnabled ? () => {
                     const allComplete = step1?.passed && step2?.passed && step3?.passed;
                     if (allComplete) { setShowAnnovarConfirm(true); } else { onAnnovarClick?.(); }
                   } : undefined}
-                  disabled={!step1?.passed || genomeMismatch}
+                  disabled={!annovarEnabled}
+                  title={annovarQuotaBlocked ? annovarGate.reason : undefined}
                   className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${
-                    (step1?.passed && !genomeMismatch) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+                    annovarEnabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
                   }`}
                   style={{
-                    backgroundColor: (step1?.passed && !genomeMismatch) ? C.surfaceCard : C.surfaceHover,
+                    backgroundColor: annovarEnabled ? C.surfaceCard : C.surfaceHover,
                     border: `1px solid ${genomeMismatch ? C.error : C.border}`,
-                    color: (step1?.passed && !genomeMismatch) ? C.textMuted : C.textDim,
+                    color: annovarEnabled ? C.textMuted : C.textDim,
                   }}
-                  onMouseEnter={(e) => { if (step1?.passed && !genomeMismatch) { e.target.style.backgroundColor = C.surfaceHover; e.target.style.color = C.text; } }}
-                  onMouseLeave={(e) => { if (step1?.passed && !genomeMismatch) { e.target.style.backgroundColor = C.surfaceCard; e.target.style.color = C.textMuted; } }}
+                  onMouseEnter={(e) => { if (annovarEnabled) { e.target.style.backgroundColor = C.surfaceHover; e.target.style.color = C.text; } }}
+                  onMouseLeave={(e) => { if (annovarEnabled) { e.target.style.backgroundColor = C.surfaceCard; e.target.style.color = C.textMuted; } }}
                 >
-                  <img src={qiagenLogo} alt="Qiagen" className="w-5 h-5 object-contain" style={{ filter: (step1?.passed && !genomeMismatch) ? 'none' : 'grayscale(100%) opacity(0.5)' }} />
+                  <img src={qiagenLogo} alt="Qiagen" className="w-5 h-5 object-contain" style={{ filter: annovarEnabled ? 'none' : 'grayscale(100%) opacity(0.5)' }} />
                   Run ANNOVAR
                 </button>
+                {annovarMeterLabel && (
+                  <p className="text-2xs mt-1" style={{ color: annovarQuotaBlocked ? C.error : C.textDim }}>
+                    {annovarQuotaBlocked ? annovarGate.reason : annovarMeterLabel}
+                  </p>
+                )}
                 {genomeMismatch && (
                   <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '250px', whiteSpace: 'normal', textAlign: 'left' }}>
                     <div className="flex items-center gap-2">
@@ -1024,17 +1043,24 @@ const ColumnInterpretationResults = ({
                 >
                   {isApplyingProprietaryFilter ? 'Applying…' : acmgFilterActive ? `${ACMG_FILTER_DISPLAY_NAME} applied` : `Apply ${ACMG_FILTER_DISPLAY_NAME}`}
                 </button>
-                {!acmgFilterCanApply && !acmgFilterActive && step1?.passed && (
+                {/* Quota and readiness are different problems, so they get different copy. */}
+                {!acmgFilterCanApply && !acmgFilterActive && step1?.passed && !acmgQuotaBlocked && (
                   <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '280px', whiteSpace: 'normal', textAlign: 'left' }}>
                     Run ANNOVAR first — the ACMG filter needs ClinVar or InterVar annotations and gnomAD frequency.
                     <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
                   </div>
                 )}
+                {(acmgMeterLabel || acmgQuotaBlocked) && !acmgFilterActive && (
+                  <p className="text-2xs mt-1" style={{ color: acmgQuotaBlocked ? C.error : C.textDim }}>
+                    {acmgQuotaBlocked ? acmgExomiserGate.reason : acmgMeterLabel}
+                  </p>
+                )}
               </div>
 
               {/* Exomiser — needs an annotated file; remaining eligibility (phenotype, germline) is checked in the sidebar tab */}
               {onOpenExomiser && (() => {
-                const exomiserEnabled = exomiserCanApply && !genomeMismatch;
+                // Exomiser applies draw on the same metered budget as ACMG.
+                const exomiserEnabled = exomiserCanApply && !genomeMismatch && !acmgQuotaBlocked;
                 return (
                   <div className="relative group">
                     <button

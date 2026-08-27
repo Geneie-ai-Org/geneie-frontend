@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import * as mongodbApi from '../services/mongodbApi';
 import { buildVariantDataFromConversation } from '@/lib/variantPipelineUtils';
+import { useAuth } from '@/hooks/useAuth';
+import { actionGate } from '@/services/tierLimits';
+import { describeLimitError, isEmailVerificationCode } from '@/services/limitErrors';
 import {
   fetchModule1BedCatalog,
   fetchModule1Status,
@@ -49,7 +52,14 @@ export function useModule1Pipeline({
   syncAfterColumnInterpretation,
   setAnnovarMessageModal,
   onNeedsEmailVerification,
+  onLimitBlocked,
 }) {
+  const { limits, refreshSubscriptionStatus } = useAuth();
+  // Free stages and runs later; beta/pro run directly. Whichever path is open decides the form.
+  // Memoized because these land in callback dependency arrays.
+  const module1Gate = useMemo(() => actionGate(limits, 'module1'), [limits]);
+  const module1StageGate = useMemo(() => actionGate(limits, 'module1Stage'), [limits]);
+  const module1EntryGate = module1Gate.allowed ? module1Gate : module1StageGate;
   const [bedCatalog, setBedCatalog] = useState(null);
   const [bedCatalogLoading, setBedCatalogLoading] = useState(false);
   const [module1FormOpen, setModule1FormOpen] = useState(false);
@@ -211,11 +221,24 @@ export function useModule1Pipeline({
       toast.info('Sign up to upload raw sequencing data.');
       return;
     }
+    // Don't let someone fill in a long form they cannot submit.
+    if (!module1EntryGate.allowed) {
+      onLimitBlocked?.({
+        family: 'module1',
+        title: 'Module 1 unavailable',
+        message: module1EntryGate.reason,
+        variant: 'info',
+        cta: module1EntryGate.cta,
+        refresh: false,
+        blocking: false,
+      });
+      return;
+    }
     setModule1SubmitError(null);
     setModule1UploadProgress({ r1: null, r2: null, bed: null });
     setModule1ImportStatus(null);
     setModule1FormOpen(true);
-  }, [userTier]);
+  }, [userTier, module1EntryGate, onLimitBlocked]);
 
   const closeModule1Form = useCallback(() => {
     setModule1FormOpen(false);
@@ -365,23 +388,52 @@ export function useModule1Pipeline({
           message: result.message,
         });
         setModule1FormOpen(false);
+        refreshSubscriptionStatus?.();
       } catch (error) {
         if (error.status === 409 && error.code === 'MODULE1_JOB_IN_PROGRESS' && error.jobId) {
           adoptJob(error.jobId, conversationId, {});
           setModule1FormOpen(false);
           toast.info('A Module 1 job is already running for this conversation — resuming progress.');
-        } else if (error.status === 403) {
+          return;
+        }
+
+        // A quota 403 is not an auth problem. Taking over the page with the verification screen
+        // (the old behaviour for every 403) reads to the user as "you got signed out".
+        const limitError = (error.status === 403 || error.status === 400)
+          ? describeLimitError(error, { context: 'module1', limits })
+          : null;
+
+        if (limitError) {
+          setModule1FormOpen(false);
+          setModule1SubmitError(null);
+          onLimitBlocked?.(limitError);
+          if (limitError.refresh) refreshSubscriptionStatus?.();
+          return;
+        }
+
+        // Page takeover now requires positive evidence, rather than being the default for any 403.
+        if (error.status === 403 && isEmailVerificationCode(error.code)) {
           setModule1FormOpen(false);
           onNeedsEmailVerification?.();
-        } else {
-          setModule1SubmitError(module1UrlErrorMessage(error, 'Failed to start Module 1 run.'));
+          return;
         }
+
+        setModule1SubmitError(module1UrlErrorMessage(error, 'Failed to start Module 1 run.'));
       } finally {
         setModule1Submitting(false);
         setModule1ImportStatus(null);
       }
     },
-    [userTier, activeConversationId, uploadModule1File, adoptJob, onNeedsEmailVerification]
+    [
+      userTier,
+      activeConversationId,
+      uploadModule1File,
+      adoptJob,
+      onNeedsEmailVerification,
+      onLimitBlocked,
+      limits,
+      refreshSubscriptionStatus,
+    ]
   );
 
   const module1JobActive =
@@ -405,5 +457,8 @@ export function useModule1Pipeline({
     startModule1Run,
     module1Job,
     module1JobActive,
+    module1Gate,
+    module1StageGate,
+    module1EntryGate,
   };
 }

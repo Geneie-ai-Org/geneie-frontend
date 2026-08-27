@@ -30,6 +30,7 @@ export function useChatMessaging({
   setConversationWarning,
   onRequestUpgrade,
   onDeviceBlocked,
+  onGuestExchange,
 }) {
   const { limits, patchLimitsFromChat, refreshSubscriptionStatus } = useAuth();
   const [messages, setMessages] = useState([]);
@@ -285,6 +286,8 @@ export function useChatMessaging({
 
     if (data) {
       patchLimitsFromChat(data);
+      // Guests get no limits block on the response; re-read the server-side Redis meter.
+      onGuestExchange?.();
       const warned = data.beta_conversation_warning || data.free_conversation_warning;
       if (warned) {
         setConversationWarning?.(
@@ -353,6 +356,7 @@ export function useChatMessaging({
     setConversationWarning,
     onRequestUpgrade,
     onDeviceBlocked,
+    onGuestExchange,
     limits,
     patchLimitsFromChat,
     refreshSubscriptionStatus,
@@ -391,6 +395,8 @@ export function useChatMessaging({
 
     if (data) {
       patchLimitsFromChat(data);
+      // Guests get no limits block on the response; re-read the server-side Redis meter.
+      onGuestExchange?.();
       const warned = data.beta_conversation_warning || data.free_conversation_warning;
       if (warned) {
         setConversationWarning?.(

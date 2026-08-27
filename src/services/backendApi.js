@@ -107,6 +107,24 @@ export async function adminResetDevices(uid) {
   return data.user;
 }
 
+/**
+ * Guest usage, keyed on X-Device-Id. No auth — guests have no token.
+ *
+ * Guest meters now live in Redis server-side, so this is authoritative. The localStorage
+ * tally we used to rely on is only a pre-response hint: clearing it resets the client
+ * counter while the server still refuses, which reads as the UI lying.
+ */
+export async function fetchGuestStatus() {
+  const response = await fetch(apiUrl('/api/guest-status'), {
+    headers: { 'X-Device-Id': getDeviceId() },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load guest status');
+  }
+  return data;
+}
+
 export async function fetchSubscriptionStatus() {
   const headers = await getAuthHeaders();
   const response = await fetch(apiUrl('/api/subscription-status'), { headers });
@@ -375,6 +393,12 @@ export async function module1ImportFromUrl({ conversationId, role, fileUrl, file
 }
 
 
+/**
+ * Server-side import of R1/R2 (and optional BED) from URLs.
+ *
+ * Multi-GB imports legitimately run for many minutes, so there is deliberately NO client-side
+ * timeout — one would abort a healthy transfer. `signal` lets the user cancel instead.
+ */
 export async function module1ImportFromUrls({
   conversationId,
   r1Url,
@@ -383,14 +407,18 @@ export async function module1ImportFromUrls({
   r2FileName,
   bedUrl,
   bedFileName,
+  signal,
 }) {
   const headers = {
     ...(await getAuthHeaders()),
     'Content-Type': 'application/json',
   };
-  const response = await fetch(apiUrl('/api/module1/from-urls'), {
+  let response;
+  try {
+    response = await fetch(apiUrl('/api/module1/from-urls'), {
     method: 'POST',
     headers,
+    signal,
     body: JSON.stringify({
       conversation_id: conversationId,
       r1_url: r1Url,
@@ -400,7 +428,20 @@ export async function module1ImportFromUrls({
       bed_url: bedUrl || undefined,
       bed_file_name: bedFileName || undefined,
     }),
-  });
+    });
+  } catch (error) {
+    // A dropped connection on a long import surfaces as a bare "Failed to fetch"; name it.
+    if (error?.name === 'AbortError') {
+      throw Object.assign(new Error('Import cancelled.'), { code: 'IMPORT_CANCELLED' });
+    }
+    throw Object.assign(
+      new Error(
+        'The connection dropped while importing. Large files can take several minutes — '
+        + 'check your network and try again.',
+      ),
+      { code: 'IMPORT_NETWORK_ERROR', cause: error },
+    );
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const err = new Error(parseApiErrorDetail(data.detail) || 'URL import failed');

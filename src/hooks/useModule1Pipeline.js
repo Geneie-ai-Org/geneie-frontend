@@ -69,6 +69,8 @@ export function useModule1Pipeline({
   const [module1SubmitError, setModule1SubmitError] = useState(null);
   const [module1Job, setModule1Job] = useState(null);
 
+  // Aborts an in-flight URL import. Multi-GB transfers run for minutes with no other way out.
+  const importAbortRef = useRef(null);
   const ingestHandledRef = useRef(false);
   const pollAbortRef = useRef(null);
 
@@ -244,6 +246,16 @@ export function useModule1Pipeline({
     setModule1FormOpen(false);
   }, []);
 
+  /** Abort an in-flight URL import. No-op once the import has returned. */
+  const cancelModule1Import = useCallback(() => {
+    if (importAbortRef.current) {
+      importAbortRef.current.abort();
+      importAbortRef.current = null;
+    }
+    setModule1ImportStatus(null);
+    setModule1Submitting(false);
+  }, []);
+
   const loadBedCatalog = useCallback(async (genome = 'hg38') => {
     setBedCatalogLoading(true);
     try {
@@ -340,7 +352,9 @@ export function useModule1Pipeline({
           // One request streams R1 + R2 (+ optional BED) server-side. Multi-GB FASTQs mean
           // this can sit here for many minutes with no byte-level progress available.
           setModule1ImportStatus('Importing files from URL… this can take several minutes.');
+          importAbortRef.current = new AbortController();
           const imported = await module1ImportFromUrls({
+            signal: importAbortRef.current.signal,
             conversationId,
             r1Url,
             r2Url,
@@ -366,8 +380,21 @@ export function useModule1Pipeline({
           }
           setModule1ImportStatus('Starting pipeline…');
         } else {
+          /* R1 and R2 upload sequentially, so a failure on R2 leaves R1 already in S3. The
+           * pipeline needs both, and there is no client-side way to remove the orphan — so say
+           * plainly that a retry re-uploads both, rather than surfacing a bare PUT error that
+           * makes it look like R1 is lost. Cleaning up the orphan is a backend concern. */
           r1S3Key = await uploadModule1File('r1', r1File, conversationId);
-          r2S3Key = await uploadModule1File('r2', r2File, conversationId);
+          try {
+            r2S3Key = await uploadModule1File('r2', r2File, conversationId);
+          } catch (r2Error) {
+            setModule1UploadProgress((prev) => ({ ...prev, r2: null }));
+            const detail = module1UrlErrorMessage(r2Error, r2Error?.message || 'Upload failed.');
+            throw Object.assign(
+              new Error(`R2 upload failed after R1 finished — please retry and both files will be uploaded again. (${detail})`),
+              { status: r2Error?.status, code: r2Error?.code },
+            );
+          }
         }
 
         const result = await runModule1Pipeline({
@@ -418,8 +445,13 @@ export function useModule1Pipeline({
           return;
         }
 
+        if (error?.code === 'IMPORT_CANCELLED') {
+          setModule1SubmitError(null);
+          return;
+        }
         setModule1SubmitError(module1UrlErrorMessage(error, 'Failed to start Module 1 run.'));
       } finally {
+        importAbortRef.current = null;
         setModule1Submitting(false);
         setModule1ImportStatus(null);
       }
@@ -448,6 +480,7 @@ export function useModule1Pipeline({
     module1FormOpen,
     openModule1Form,
     closeModule1Form,
+    cancelModule1Import,
     module1UploadProgress,
     module1Submitting,
     module1SubmitError,

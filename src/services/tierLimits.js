@@ -190,8 +190,52 @@ export function degradedLimits(cohort = 'free') {
 }
 
 /**
- * Guest is the one cohort whose gates are deliberately CLOSED: there is no signed-in identity to
- * enforce against, and this preserves the existing "sign up to continue" behavior.
+ * Guest limits from `GET /api/guest-status`.
+ *
+ * The server meters guests in Redis keyed on X-Device-Id, so this — not localStorage — is
+ * authoritative. `uploads` has no equivalent on the signed-in tiers, so it is carried through
+ * as an extra meter rather than forced into the shared four.
+ */
+export function guestLimitsFromApi(status) {
+  const block = status?.guestLimits;
+  if (!isObject(block)) return guestLimits();
+
+  const gates = isObject(block.gates) ? block.gates : {};
+  return shell('guest', 'api', {
+    meters: {
+      module1: buildMeter('module1', block.module1, { stagingOnly: true }),
+      module2: buildMeter('module2', block.module2),
+      chat: buildMeter('chat', block.chat),
+      filterApplies: buildMeter('filterApplies', block.filterApplies),
+    },
+    uploads: buildMeter('uploads', block.uploads),
+    // Guest gates come from the server and are mostly closed by design; unlike the signed-in
+    // cohorts we do NOT degrade these open, because there is no identity to enforce against.
+    gates: {
+      canRunModule1: gates.canRunModule1 === true,
+      canStageModule1: gates.canStageModule1 === true,
+      canRunModule2: gates.canRunModule2 === true,
+      canChat: gates.canChat !== false,
+      canApplyAcmgExomiser: gates.canApplyAcmgExomiser === true,
+      module1ExhaustedAllowVcf: false,
+    },
+    redirect: gates.redirectToSignup === true ? 'signup' : null,
+    chat: {
+      warningThreshold: DEFAULT_WARNING_THRESHOLD,
+      maxVariantsWithoutFilter: num(block.chatMaxVariantsWithoutFilter),
+    },
+    upload: { previewMaxBytes: GUEST_UPLOAD_MAX_BYTES },
+    persistence: typeof block.persistence === 'string' ? block.persistence : null,
+    raw: status,
+  });
+}
+
+/**
+ * Offline fallback for guests, used before /api/guest-status answers or if it fails.
+ *
+ * Gates are deliberately CLOSED rather than degraded open like the signed-in cohorts: there is
+ * no identity to enforce against, so guessing generously would hand out access the server will
+ * then refuse.
  */
 export function guestLimits() {
   return shell('guest', 'guest-default', {
@@ -427,6 +471,41 @@ export function formatMeter(meter) {
   return `${meter.remaining} of ${meter.limit} left`;
 }
 
+/**
+ * Secondary line for the monthly pools: how the remaining total splits between the base
+ * allowance and purchased top-ups, and when the base resets.
+ *
+ * Only meaningful for pro/super_pro; returns null everywhere else, so callers can render it
+ * unconditionally.
+ */
+export function formatMeterDetail(limits, meter) {
+  if (!meter?.tracked || meter.unlimited) return null;
+  if (!PRO_LIKE.has(limits?.cohort)) return null;
+
+  const parts = [];
+  // Only worth splitting out when a top-up actually exists — otherwise base === remaining and
+  // the extra line is noise.
+  if (meter.topupRemaining !== null && meter.topupRemaining > 0) {
+    parts.push(`${meter.baseRemaining ?? 0} base + ${meter.topupRemaining} top-up`);
+  }
+  if (limits.periodKey) {
+    parts.push(`resets ${formatPeriodReset(limits.periodKey)}`);
+  }
+  return parts.length ? parts.join(' · ') : null;
+}
+
+/** "2026-08" -> "1 Sep" — the day the pool rolls, which is the start of the NEXT period. */
+export function formatPeriodReset(periodKey) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(periodKey || ''));
+  if (!match) return String(periodKey || '');
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  // Pools roll at the start of the following month (UTC), so month index `month` in a
+  // 0-indexed constructor is already the next month.
+  const next = new Date(Date.UTC(year, month, 1));
+  return next.toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
 /* -------------------------------------------------------------------------- *
  * Action gating
  * -------------------------------------------------------------------------- */
@@ -456,7 +535,9 @@ const ACTION_TO_GATE = {
 
 /** CTA kind derived from the API's own redirect flag rather than from the tier name. */
 function ctaFor(limits) {
-  if (limits?.cohort === 'guest') return { kind: 'signup', label: 'Sign up' };
+  if (limits?.cohort === 'guest' || limits?.redirect === 'signup') {
+    return { kind: 'signup', label: 'Sign up' };
+  }
   if (limits?.redirect === 'topup') return { kind: 'topup', label: 'Get more runs' };
   if (limits?.redirect === 'subscription') return { kind: 'upgrade', label: 'Upgrade to Pro' };
   return { kind: 'upgrade', label: 'Upgrade to Pro' };

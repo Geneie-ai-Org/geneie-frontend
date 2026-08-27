@@ -43,6 +43,9 @@ const ColumnInterpretationResults = ({
   onAnnovarClick,
   annovarGate,
   acmgExomiserGate,
+  // "2 base + 5 top-up · resets 1 Sep" for pro/super_pro; null on other tiers.
+  annovarMeterDetail,
+  acmgMeterDetail,
   onProprietaryFilterClick,
   onOpenExomiser,
   isApplyingProprietaryFilter = false,
@@ -984,6 +987,9 @@ const ColumnInterpretationResults = ({
                 {annovarMeterLabel && (
                   <p className="text-2xs mt-1" style={{ color: annovarQuotaBlocked ? C.error : C.textDim }}>
                     {annovarQuotaBlocked ? annovarGate.reason : annovarMeterLabel}
+                    {!annovarQuotaBlocked && annovarMeterDetail && (
+                      <span style={{ color: C.textDim }}> · {annovarMeterDetail}</span>
+                    )}
                   </p>
                 )}
                 {genomeMismatch && (
@@ -1053,6 +1059,9 @@ const ColumnInterpretationResults = ({
                 {(acmgMeterLabel || acmgQuotaBlocked) && !acmgFilterActive && (
                   <p className="text-2xs mt-1" style={{ color: acmgQuotaBlocked ? C.error : C.textDim }}>
                     {acmgQuotaBlocked ? acmgExomiserGate.reason : acmgMeterLabel}
+                    {!acmgQuotaBlocked && acmgMeterDetail && (
+                      <span style={{ color: C.textDim }}> · {acmgMeterDetail}</span>
+                    )}
                   </p>
                 )}
               </div>

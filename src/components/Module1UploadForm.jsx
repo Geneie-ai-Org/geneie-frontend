@@ -578,17 +578,30 @@ const Module1UploadForm = ({
                   {oversizedRead
                     ? `${oversizedRead.name} is larger than the ${MODULE1_FASTQ_MAX_BYTES / 1024 ** 3} GB limit per FASTQ.`
                     : quotaBlocked ? gate.reason : gateMeterLabel}
+                  {!oversizedRead && !quotaBlocked && gateMeterDetail && ` · ${gateMeterDetail}`}
                 </p>
               )}
               {module1Submitting && module1ImportStatus && (
                 <div className="flex items-center gap-1.5 mr-auto min-w-0">
                   <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" style={{ color: 'var(--accent-teal)' }} />
                   <span className="text-2xs truncate" style={{ color: 'var(--text-tertiary)' }}>{module1ImportStatus}</span>
+                  {/* A multi-GB import can run for many minutes; without this there is no way
+                    * out except closing the tab. */}
+                  {cancelModule1Import && isUrlMode && (
+                    <button
+                      type="button"
+                      onClick={cancelModule1Import}
+                      className="text-2xs underline flex-shrink-0"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      Cancel
+                    </button>
+                  )}
                 </div>
               )}
               <button
                 type="button"
-                onClick={onClose}
+                onClick={() => { cancelModule1Import?.(); onClose(); }}
                 className="px-4 py-2 text-sm font-medium rounded-lg border"
                 style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
               >

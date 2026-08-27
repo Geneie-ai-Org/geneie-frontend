@@ -44,7 +44,7 @@ import { useVariantPipeline } from '@/hooks/useVariantPipeline';
 import { useModule1Pipeline } from '@/hooks/useModule1Pipeline';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { DEFAULT_GUEST_CHAT_LIMIT } from '@/services/backendApi';
-import { meterExhausted, meterFor, meterNearLimit, patchGuestChatUsed } from '@/services/tierLimits';
+import { formatMeterDetail, meterExhausted, meterFor, meterNearLimit, patchGuestChatUsed } from '@/services/tierLimits';
 import { describeLimitError, isEmailVerificationCode } from '@/services/limitErrors';
 import { useSeo } from '@/hooks/useSeo';
 
@@ -122,7 +122,7 @@ const ChatPage = () => {
   const composerDockRef = useRef(null);
 
   // --- HOOK INTEGRATION ---
-  const { userId, isAuthReady, userLoading, userTier, limits: rawLimits, refreshSubscriptionStatus } = useAuth();
+  const { userId, isAuthReady, userLoading, userTier, limits: rawLimits, refreshSubscriptionStatus, refreshGuestStatus } = useAuth();
 
   const [guestExchangesUsed, setGuestExchangesUsed] = useState(0);
   const [guestLimitExceeded, setGuestLimitExceeded] = useState(false);
@@ -136,23 +136,30 @@ const ChatPage = () => {
   const [deviceBlock, setDeviceBlock] = useState(null);
 
   // --- TIER GATING ---
-  const limits = userTier === 'guest' ? patchGuestChatUsed(rawLimits, guestExchangesUsed) : rawLimits;
+  /* Guests are metered server-side (Redis, keyed on X-Device-Id), so the API value wins when we
+   * have it. The localStorage tally is only a pre-response hint — and it is trivially clearable,
+   * which used to mean the counter read "fresh" while the server refused the next send. */
+  const limits = userTier === 'guest' && rawLimits.source !== 'api'
+    ? patchGuestChatUsed(rawLimits, guestExchangesUsed)
+    : rawLimits;
   const limitsRef = useRef(limits);
   limitsRef.current = limits;
 
   const chatMeter = meterFor(limits, 'chat');
-  const currentExchanges = userTier === 'guest' ? guestExchangesUsed : (chatMeter.used ?? 0);
+  const currentExchanges = userTier === 'guest'
+    ? (chatMeter.used ?? guestExchangesUsed)
+    : (chatMeter.used ?? 0);
+  /* For guests, take whichever source says "blocked": the server gate is authoritative, and the
+   * local flag catches the moment before the next refresh lands. Never the other way round —
+   * that would let a cleared localStorage appear to grant exchanges the server will refuse. */
   const isChatLimitReached = userTier === 'guest'
-    ? guestLimitExceeded
+    ? (guestLimitExceeded || !limits.gates.canChat || meterExhausted(limits, 'chat'))
     : (!limits.gates.canChat || meterExhausted(limits, 'chat'));
 
   const chatRunningLow = userTier !== 'guest'
     && !isChatLimitReached
     && meterNearLimit(limits, 'chat');
-  const usageNudgeMessage = nudgeDismissed
-    ? null
-    : (conversationWarning
-      || (chatRunningLow ? `${chatMeter.remaining} chat exchanges left on your plan.` : null));
+
 
   const activeConversationId =
     userTier !== 'guest' && urlConversationId && isValidConversationId(urlConversationId)
@@ -243,6 +250,28 @@ const ChatPage = () => {
     refreshChatEligibilityFromApi,
   } = pipeline;
 
+  /* Chat needs either a proprietary filter applied or a working set under the plan's cap
+   * (free/guest 100, beta/pro 1000). The backend enforces this and returns
+   * CHAT_TOO_MANY_VARIANTS — but only after a send. Warning from the cap the API already gives
+   * us means the user finds out before typing a question that will be rejected. */
+  const variantWorkingSet =
+    chatEligibility.variants_under_consideration ?? conversationFilterState.filteredVariantCount;
+  const variantCap = limits.chat.maxVariantsWithoutFilter;
+  const needsFilterForChat =
+    variantCap != null
+    && typeof variantWorkingSet === 'number'
+    && variantWorkingSet > variantCap
+    && !conversationFilterState.activeProprietaryFilter;
+
+  const usageNudgeMessage = nudgeDismissed
+    ? null
+    : (conversationWarning
+      || (needsFilterForChat
+        ? `${variantWorkingSet.toLocaleString()} variants in play — chat needs ACMG or Exomiser applied, `
+          + `or a working set of ${variantCap.toLocaleString()} or fewer.`
+        : null)
+      || (chatRunningLow ? `${chatMeter.remaining} chat exchanges left on your plan.` : null));
+
   const syncPipelineFromConversationRef = useRef(syncPipelineFromConversation);
   syncPipelineFromConversationRef.current = syncPipelineFromConversation;
 
@@ -329,6 +358,8 @@ const ChatPage = () => {
     setConversationWarning,
     onRequestUpgrade,
     onDeviceBlocked: setDeviceBlock,
+    // Guest meters live in Redis, so the count has to come back from the server after a send.
+    onGuestExchange: userTier === 'guest' ? refreshGuestStatus : undefined,
   });
 
   const syncAfterColumnInterpretation = useCallback(
@@ -1036,7 +1067,7 @@ const ChatPage = () => {
     );
   }
 
-  if (userTier === 'guest' && (guestLimitExceeded || isShowingAuthForm)) {
+  if (userTier === 'guest' && (isChatLimitReached || isShowingAuthForm)) {
     return (
       <AuthPageLayout>
         <AuthForm
@@ -1675,7 +1706,9 @@ const ChatPage = () => {
           preflightModule1Url={module1.preflightModule1Url}
           uploadAndValidateCustomBed={module1.uploadAndValidateCustomBed}
           startModule1Run={module1.startModule1Run}
+          cancelModule1Import={module1.cancelModule1Import}
           gate={module1.module1EntryGate}
+          gateMeterDetail={formatMeterDetail(limits, module1.module1EntryGate?.meter)}
         />
       )}
 
@@ -1765,6 +1798,8 @@ const ChatPage = () => {
           acmgFilterCanApply={acmgFilterCanApply}
           annovarGate={annovarGate}
           acmgExomiserGate={acmgExomiserGate}
+          annovarMeterDetail={formatMeterDetail(limits, annovarGate?.meter)}
+          acmgMeterDetail={formatMeterDetail(limits, acmgExomiserGate?.meter)}
           exomiserCanApply={pipelineSnapshot.hasAnnotatedFile || !chatEligibility.requires_annovar}
           showVcfTabHighlight={columnInterpretationResult?.step1?.passed === false}
           onDeleteDocument={() => handleDocumentUpload(null)}

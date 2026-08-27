@@ -2,9 +2,9 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { auth } from '../services/firebase';
 import { onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
-import { fetchSubscriptionStatus } from '@/services/backendApi';
+import { fetchGuestStatus, fetchSubscriptionStatus } from '@/services/backendApi';
 import { identifyUser, resetAnalytics } from '@/lib/analytics';
-import { normalizeLimits, patchLiveLimits, guestLimits } from '@/services/tierLimits';
+import { normalizeLimits, patchLiveLimits, guestLimits, guestLimitsFromApi } from '@/services/tierLimits';
 import { readTierDebugFixture } from '@/services/tierLimitsFixtures';
 
 // Define the initial state for an authenticated user's profile
@@ -25,6 +25,7 @@ const defaultAuthValue = {
   limits: guestLimits(),
   patchLimitsFromChat: () => {},
   refreshSubscriptionStatus: () => Promise.resolve(null),
+  refreshGuestStatus: () => Promise.resolve(null),
 };
 
 // --- CONTEXT SETUP ---
@@ -56,6 +57,9 @@ export const AuthProvider = ({ children }) => {
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [subscriptionStatusLoading, setSubscriptionStatusLoading] = useState(false);
   const [liveLimits, setLiveLimits] = useState(null);
+  // Guest usage is metered server-side (Redis, keyed on X-Device-Id), so it has to be fetched
+  // rather than derived from localStorage — which a guest can simply clear.
+  const [guestStatus, setGuestStatus] = useState(null);
 
   // Determine the final active tier for easy access
   // Treat 'admin' as 'pro' for feature checks (admin gets all pro features)
@@ -149,6 +153,27 @@ export const AuthProvider = ({ children }) => {
     });
   }, [userId, subscriptionStatus]);
 
+  const refreshGuestStatus = useCallback(async () => {
+    try {
+      const data = await fetchGuestStatus();
+      setGuestStatus(data);
+      return data;
+    } catch (error) {
+      // Falls back to the conservative offline guest defaults rather than blocking the app.
+      console.warn('[useAuth] Failed to fetch guest status:', error);
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (userId) {
+      setGuestStatus(null);
+      return;
+    }
+    if (!isAuthReady) return;
+    refreshGuestStatus();
+  }, [userId, isAuthReady, refreshGuestStatus]);
+
   const refreshSubscriptionStatus = useCallback(async () => {
     if (!userId) {
       setSubscriptionStatus(null);
@@ -187,12 +212,15 @@ export const AuthProvider = ({ children }) => {
     if (import.meta.env.DEV) {
       status = readTierDebugFixture() || status;
     }
+    if (!userId) {
+      return guestStatus ? guestLimitsFromApi(guestStatus) : guestLimits();
+    }
     const base = normalizeLimits(status, userTier, userId);
     if (liveLimits && liveLimits.at >= (base.fetchedAt ?? 0)) {
       return patchLiveLimits(base, liveLimits.block);
     }
     return base;
-  }, [subscriptionStatus, userTier, userId, liveLimits]);
+  }, [subscriptionStatus, userTier, userId, liveLimits, guestStatus]);
 
   const patchLimitsFromChat = useCallback((payload) => {
     const block = payload?.beta_limits || payload?.free_limits;
@@ -223,6 +251,7 @@ export const AuthProvider = ({ children }) => {
     limits,
     patchLimitsFromChat,
     refreshSubscriptionStatus,
+    refreshGuestStatus,
   };
 
   return (

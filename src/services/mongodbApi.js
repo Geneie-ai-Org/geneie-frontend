@@ -9,13 +9,21 @@ import { getApiOrigin } from '../config/api.js';
 const API_BASE_URL = getApiOrigin();
 
 const handleResponseError = async (response) => {
-  let detail = response.statusText;
+  let detail = null;
   try {
     const body = await response.json();
     if (body.detail) detail = body.detail;
   } catch (_) {}
-  const error = new Error(detail);
+
+  const isStructured = detail && typeof detail === 'object';
+  const message = (isStructured ? detail.message : detail) || response.statusText;
+
+  const error = new Error(message);
   error.status = response.status;
+  if (isStructured) {
+    error.code = detail.code ?? null;
+    error.detail = detail;
+  }
   throw error;
 };
 

@@ -17,6 +17,7 @@ initAnalytics();
 const LandingPage = React.lazy(() => import('./pages/LandingPage'));
 const AuthPage = React.lazy(() => import('./pages/AuthPage'));
 const ChatPage = React.lazy(() => import('./pages/ChatPage'));
+const AdminPage = React.lazy(() => import('./pages/AdminPage'));
 
 function ThemedToaster() {
   const { theme } = useTheme();
@@ -65,8 +66,7 @@ root.render(
           {/* Chat — guests and authenticated users */}
           <Route path="/app" element={<ChatPage />} />
           <Route path="/app/:conversationId" element={<ChatPage />} />
-
-          {/* Stripe return URLs → chat with modal handling */}
+          <Route path="/admin-haha" element={<AdminPage />} />
           <Route path="/subscription-success" element={<Navigate to="/app" replace />} />
           <Route path="/subscription-canceled" element={<Navigate to="/app" replace />} />
 

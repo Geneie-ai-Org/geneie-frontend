@@ -1,11 +1,12 @@
-const DEVICE_ID_STORAGE_KEY = 'geneie_device_id';
-
-/** Stable device identifier for Pro session tracking */
+export const DEVICE_ID_STORAGE_KEY = 'geneie_device_id';
 export function getDeviceId() {
-  let id = localStorage.getItem(DEVICE_ID_STORAGE_KEY);
-  if (!id) {
-    id = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem(DEVICE_ID_STORAGE_KEY, id);
+  try {
+    const existing = localStorage.getItem(DEVICE_ID_STORAGE_KEY);
+    if (existing?.trim()) return existing;
+    const created = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(DEVICE_ID_STORAGE_KEY, created);
+    return created;
+  } catch {
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   }
-  return id;
 }

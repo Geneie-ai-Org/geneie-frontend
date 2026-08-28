@@ -19,8 +19,6 @@ export function useDocumentUpload({
   presentFileAnalysisModal,
   syncAfterColumnInterpretation,
   refreshSubscriptionStatus,
-  setAnnovarMessageModal,
-  setIsShowingAuthForm,
   syncPipelineFromConversationRef,
   setConversationFilterState,
 }) {
@@ -212,31 +210,6 @@ export function useDocumentUpload({
           refreshSubscriptionStatus();
         }
 
-        if (documentData.free_tier_preview?.enabled) {
-          const p = documentData.free_tier_preview;
-          setAnnovarMessageModal({
-            title: 'Preview Mode',
-            message: `Showing first ${p.sampled_rows} rows and ${p.sampled_cols} columns of ${p.original_rows} rows and ${p.original_cols} columns. ${userTier === 'guest' ? 'Sign up' : 'Upgrade to Pro'} to access the full dataset.`,
-            variant: 'info',
-            ...(userTier === 'guest'
-              ? {
-                  ctaLabel: 'Sign Up',
-                  onCta: () => {
-                    setAnnovarMessageModal(null);
-                    setIsShowingAuthForm(true);
-                  },
-                }
-              : userTier === 'free'
-                ? {
-                    ctaLabel: 'Upgrade to Pro',
-                    onCta: () => {
-                      setAnnovarMessageModal(null);
-                    },
-                  }
-                : {}),
-          });
-        }
-
         if (!documentData.column_interpretation) {
           setVariantData(null);
           setColumnInterpretationResult(null);
@@ -310,8 +283,6 @@ export function useDocumentUpload({
     presentFileAnalysisModal,
     syncAfterColumnInterpretation,
     refreshSubscriptionStatus,
-    setAnnovarMessageModal,
-    setIsShowingAuthForm,
     syncPipelineFromConversationRef,
     setConversationFilterState,
   ]);

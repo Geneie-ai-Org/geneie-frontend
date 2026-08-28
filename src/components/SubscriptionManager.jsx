@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { performLogout } from '@/lib/logout';
+import { meterFor } from '@/services/tierLimits';
 import { useAuth } from '../hooks/useAuth';
 import { Zap, Unlock, TrendingUp } from 'lucide-react';
-import { getAuth } from 'firebase/auth';
 import SubscriptionPage from './SubscriptionPage';
 
 const FeatureItem = ({ text, isIncluded }) => (
@@ -16,10 +17,14 @@ const FeatureItem = ({ text, isIncluded }) => (
     </li>
 );
 
-const SubscriptionManager = ({ isInputGated, userId, db }) => {
-    const { userTier } = useAuth();
-    const auth = getAuth();
+const SubscriptionManager = ({ isInputGated, userId }) => {
+    const { userTier, limits } = useAuth();
     const navigate = useNavigate();
+    const chatMeter = meterFor(limits, 'chat');
+    // The real number from the API rather than a hardcoded one — free is 60 and beta is 100 now.
+    const chatLimitCopy = chatMeter.tracked && chatMeter.limit != null
+        ? `your plan's limit of ${chatMeter.limit} chat exchanges`
+        : "your plan's chat limit";
     const [showSubscriptionPage, setShowSubscriptionPage] = useState(false);
 
     const getManagerContent = () => {
@@ -33,10 +38,10 @@ const SubscriptionManager = ({ isInputGated, userId, db }) => {
                     navigate('/auth');
                 }
             };
-        } else if (userTier === 'free') {
+        } else if (userTier === 'free' || userTier === 'beta') {
             return {
                 title: "Unlock Unlimited Research",
-                description: `Thank you for using Geneie! You've reached your free tier limit of 10 chat exchanges. Upgrade to Pro to continue your research with unlimited conversations, advanced features, and priority support.`,
+                description: `Thank you for using Geneie! You've reached ${chatLimitCopy}. Upgrade to Pro to continue your research with a larger monthly allowance, advanced features, and priority support.`,
                 showUpgrade: true,
                 upgradeText: "Upgrade to Pro",
                 action: () => {
@@ -66,8 +71,7 @@ const SubscriptionManager = ({ isInputGated, userId, db }) => {
                     isOpen={showSubscriptionPage}
                     onClose={() => setShowSubscriptionPage(false)}
                     userId={userId}
-                    db={db}
-                />
+                          />
             )}
             <div className="w-full max-w-4xl mx-auto p-6 space-y-8">
             <div className="p-8 rounded-xl border-t-4"
@@ -80,7 +84,7 @@ const SubscriptionManager = ({ isInputGated, userId, db }) => {
                     </div>
                     {userTier !== 'guest' && (
                         <button
-                            onClick={() => { auth.signOut(); navigate('/auth'); }}
+                            onClick={() => performLogout(navigate)}
                             className="text-sm px-3 py-1 rounded-lg hover:bg-white/5 transition-colors"
                             style={{ color: 'var(--text-tertiary)' }}
                         >

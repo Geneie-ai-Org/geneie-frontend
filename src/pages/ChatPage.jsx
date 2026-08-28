@@ -15,8 +15,11 @@ import AuthForm from '../components/AuthForm';
 import ChatMessage, { GlobalTypingStyles } from '../components/chat/ChatMessage';
 import AuthPageLayout from '../components/chat/AuthPageLayout';
 import AnnovarMessageModal from '../components/chat/AnnovarMessageModal';
+import UsageNudge from '../components/UsageNudge';
+import DeviceFrozenOverlay from '../components/DeviceFrozenOverlay';
 import ChatComposer from '../components/chat/ChatComposer';
 import SubscriptionManager from '../components/SubscriptionManager';
+import SubscriptionPage from '../components/SubscriptionPage';
 import ConversationSidebar from '../components/ConversationSidebar';
 import DocumentUpload from '../components/DocumentUpload';
 import VariantFilterSidebar from '../components/VariantFilterSidebar';
@@ -40,7 +43,9 @@ import { getDeviceId } from '@/lib/deviceId';
 import { useVariantPipeline } from '@/hooks/useVariantPipeline';
 import { useModule1Pipeline } from '@/hooks/useModule1Pipeline';
 import { useIsMobile } from '@/hooks/useIsMobile';
-import { getTierChatLimit, DEFAULT_GUEST_CHAT_LIMIT } from '@/services/backendApi';
+import { DEFAULT_GUEST_CHAT_LIMIT } from '@/services/backendApi';
+import { formatMeterDetail, meterExhausted, meterFor, meterNearLimit, patchGuestChatUsed } from '@/services/tierLimits';
+import { describeLimitError, isEmailVerificationCode } from '@/services/limitErrors';
 import { useSeo } from '@/hooks/useSeo';
 
 const ChatPage = () => {
@@ -117,17 +122,55 @@ const ChatPage = () => {
   const composerDockRef = useRef(null);
 
   // --- HOOK INTEGRATION ---
-  const { userId, isAuthReady, userLoading, userTier, subscriptionStatus, refreshSubscriptionStatus } = useAuth();
-
-  const tierChatLimit = getTierChatLimit(userTier, subscriptionStatus);
+  const { userId, isAuthReady, userLoading, userTier, limits: rawLimits, refreshSubscriptionStatus, refreshGuestStatus } = useAuth();
 
   const [guestExchangesUsed, setGuestExchangesUsed] = useState(0);
   const [guestLimitExceeded, setGuestLimitExceeded] = useState(false);
+  // 'upgrade' | 'topup' | null — owns the Dodo checkout modal so any limit CTA can reach it.
+  const [upgradeModal, setUpgradeModal] = useState(null);
+  const [conversationWarning, setConversationWarning] = useState(null);
+
+  const onRequestUpgrade = useCallback((kind) => setUpgradeModal(kind || 'upgrade'), []);
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
+  // Blocking device error (frozen / over the device limit). Session-wide, not dismissible.
+  const [deviceBlock, setDeviceBlock] = useState(null);
+
+  // --- TIER GATING ---
+  /* Guests are metered server-side (Redis, keyed on X-Device-Id), so the API value wins when we
+   * have it. The localStorage tally is only a pre-response hint — and it is trivially clearable,
+   * which used to mean the counter read "fresh" while the server refused the next send. */
+  const limits = userTier === 'guest' && rawLimits.source !== 'api'
+    ? patchGuestChatUsed(rawLimits, guestExchangesUsed)
+    : rawLimits;
+  const limitsRef = useRef(limits);
+  limitsRef.current = limits;
+
+  const chatMeter = meterFor(limits, 'chat');
+  const currentExchanges = userTier === 'guest'
+    ? (chatMeter.used ?? guestExchangesUsed)
+    : (chatMeter.used ?? 0);
+  /* For guests, take whichever source says "blocked": the server gate is authoritative, and the
+   * local flag catches the moment before the next refresh lands. Never the other way round —
+   * that would let a cleared localStorage appear to grant exchanges the server will refuse. */
+  const isChatLimitReached = userTier === 'guest'
+    ? (guestLimitExceeded || !limits.gates.canChat || meterExhausted(limits, 'chat'))
+    : (!limits.gates.canChat || meterExhausted(limits, 'chat'));
+
+  const chatRunningLow = userTier !== 'guest'
+    && !isChatLimitReached
+    && meterNearLimit(limits, 'chat');
+
 
   const activeConversationId =
     userTier !== 'guest' && urlConversationId && isValidConversationId(urlConversationId)
       ? urlConversationId
       : null;
+
+  // The soft warning and its dismissal are per-conversation, so both reset on a switch.
+  useEffect(() => {
+    setConversationWarning(null);
+    setNudgeDismissed(false);
+  }, [activeConversationId]);
 
   const navigateToConversation = useCallback(
     (conversationId, { replace = false } = {}) => {
@@ -165,6 +208,7 @@ const ChatPage = () => {
     getDeviceId,
     module1JobActive: module1JobActiveRef.current,
     onOpenModule1Upload: () => onOpenModule1UploadRef.current?.(),
+    onRequestUpgrade,
   });
 
   const {
@@ -192,6 +236,8 @@ const ChatPage = () => {
     pipelineJobActive,
     variantUploadInProgress,
     acmgFilterCanApply,
+    annovarGate,
+    acmgExomiserGate,
     isRunningExomiser,
     exomiserStatus,
     fetchExomiserEligibility,
@@ -203,6 +249,28 @@ const ChatPage = () => {
     convertTabularToVcfForConversation,
     refreshChatEligibilityFromApi,
   } = pipeline;
+
+  /* Chat needs either a proprietary filter applied or a working set under the plan's cap
+   * (free/guest 100, beta/pro 1000). The backend enforces this and returns
+   * CHAT_TOO_MANY_VARIANTS — but only after a send. Warning from the cap the API already gives
+   * us means the user finds out before typing a question that will be rejected. */
+  const variantWorkingSet =
+    chatEligibility.variants_under_consideration ?? conversationFilterState.filteredVariantCount;
+  const variantCap = limits.chat.maxVariantsWithoutFilter;
+  const needsFilterForChat =
+    variantCap != null
+    && typeof variantWorkingSet === 'number'
+    && variantWorkingSet > variantCap
+    && !conversationFilterState.activeProprietaryFilter;
+
+  const usageNudgeMessage = nudgeDismissed
+    ? null
+    : (conversationWarning
+      || (needsFilterForChat
+        ? `${variantWorkingSet.toLocaleString()} variants in play — chat needs ACMG or Exomiser applied, `
+          + `or a working set of ${variantCap.toLocaleString()} or fewer.`
+        : null)
+      || (chatRunningLow ? `${chatMeter.remaining} chat exchanges left on your plan.` : null));
 
   const syncPipelineFromConversationRef = useRef(syncPipelineFromConversation);
   syncPipelineFromConversationRef.current = syncPipelineFromConversation;
@@ -283,11 +351,15 @@ const ChatPage = () => {
     normalizeChatEligibilityMessage,
     promptChatBlocked,
     variantUploadInProgress,
-    tierChatLimit,
-    guestLimitExceeded,
+    isChatLimitReached,
     updateConversationTitle,
     setAnnovarMessageModal,
     setIsShowingAuthForm,
+    setConversationWarning,
+    onRequestUpgrade,
+    onDeviceBlocked: setDeviceBlock,
+    // Guest meters live in Redis, so the count has to come back from the server after a send.
+    onGuestExchange: userTier === 'guest' ? refreshGuestStatus : undefined,
   });
 
   const syncAfterColumnInterpretation = useCallback(
@@ -310,6 +382,18 @@ const ChatPage = () => {
     syncAfterColumnInterpretation,
     setAnnovarMessageModal,
     onNeedsEmailVerification: () => setPendingEmailVerification(true),
+
+    onLimitBlocked: (descriptor) => setAnnovarMessageModal({
+      title: descriptor.title,
+      message: descriptor.message,
+      variant: descriptor.variant,
+      ...(descriptor.cta && (descriptor.cta.kind === 'upgrade' || descriptor.cta.kind === 'topup')
+        ? {
+            ctaLabel: descriptor.cta.label,
+            onCta: () => { setAnnovarMessageModal(null); onRequestUpgrade(descriptor.cta.kind); },
+          }
+        : {}),
+    }),
   });
   module1JobActiveRef.current = module1.module1JobActive;
   onOpenModule1UploadRef.current = module1.openModule1Form;
@@ -329,8 +413,6 @@ const ChatPage = () => {
     presentFileAnalysisModal,
     syncAfterColumnInterpretation,
     refreshSubscriptionStatus,
-    setAnnovarMessageModal,
-    setIsShowingAuthForm,
     syncPipelineFromConversationRef,
     setConversationFilterState,
   });
@@ -566,7 +648,16 @@ const ChatPage = () => {
       }
 
       try {
-        const loadedConversations = await mongodbApi.getConversations();
+        let loadedConversations;
+        try {
+          loadedConversations = await mongodbApi.getConversations();
+        } catch (error) {
+          if (error.status !== 401) throw error;
+          const current = getAuth().currentUser;
+          if (!current) throw error;
+          await current.getIdToken(true);
+          loadedConversations = await mongodbApi.getConversations();
+        }
         const mappedConversations = loadedConversations.map(mapConversationRecord);
 
         setConversations(mappedConversations);
@@ -575,18 +666,45 @@ const ChatPage = () => {
           await createConversation();
         }
       } catch (error) {
-        if (error.status === 403 || error.status === 401) {
+        const descriptor = (error.status === 403 || error.status === 400)
+          ? describeLimitError(error, { context: 'chat', limits: limitsRef.current })
+          : null;
+
+        if (descriptor) {
+          if (descriptor.refresh) refreshSubscriptionStatus();
+          if (descriptor.blocking) {
+            setDeviceBlock(descriptor);
+          } else {
+            setAnnovarMessageModal({
+              title: descriptor.title,
+              message: descriptor.message,
+              variant: descriptor.variant,
+              ...(descriptor.cta.kind === 'upgrade' || descriptor.cta.kind === 'topup'
+                ? {
+                    ctaLabel: descriptor.cta.label,
+                    onCta: () => { setAnnovarMessageModal(null); onRequestUpgrade(descriptor.cta.kind); },
+                  }
+                : {}),
+            });
+          }
+          return;
+        }
+
+        if (error.status === 401 || (error.status === 403 && isEmailVerificationCode(error.code))) {
           console.warn('[App] Auth rejected by backend, forcing verification check:', error.message);
           localStorage.setItem('pendingEmailVerification', '');
           setPendingEmailVerification(true);
           return;
         }
+
+        // An unrecognized 403 is a real error, not a reason to log the user out of the UI.
         console.error('[App] Error loading conversations:', error);
+        toast.error(error.message || 'Could not load your conversations.');
       }
     };
 
     loadConversationsOnce();
-  }, [userId, userTier, isAuthReady]);
+  }, [userId, userTier, isAuthReady, refreshSubscriptionStatus, onRequestUpgrade]);
 
   const clearConversationScopedState = useCallback(() => {
     setMessages([]);
@@ -811,14 +929,6 @@ const ChatPage = () => {
     return 'Geneie';
   }, [userTier, activeConversation?.title, isConversationStarted, isCurrentlyActive]);
 
-  // --- TIER GATING LOGIC ---
-  const tierLimit = tierChatLimit;
-  const currentExchanges = Math.floor(messages.length / 2);
-
-  const isChatLimitReached =
-    (userTier === 'guest' && guestLimitExceeded) ||
-    (userTier !== 'guest' && currentExchanges >= tierLimit);
-
   // One row per data kind; the file-vs-URL choice is a toggle inside the modal.
   const onSelectVariantFile = () => {
     setShowFileTypeDropdown(null);
@@ -957,7 +1067,7 @@ const ChatPage = () => {
     );
   }
 
-  if (userTier === 'guest' && (guestLimitExceeded || isShowingAuthForm)) {
+  if (userTier === 'guest' && (isChatLimitReached || isShowingAuthForm)) {
     return (
       <AuthPageLayout>
         <AuthForm
@@ -969,7 +1079,7 @@ const ChatPage = () => {
     );
   }
 
-  if (userTier === 'free' && isChatLimitReached) {
+  if (isChatLimitReached && userTier !== 'guest' && limits.redirect === 'subscription') {
     return (
       <div className="flex flex-col h-screen" style={{ backgroundColor: 'var(--bg-app)' }}>
         <header className="px-6 py-4 border-b flex justify-start items-center z-10" style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-subtle)' }}>
@@ -1019,7 +1129,7 @@ const ChatPage = () => {
   } else if (isChatLimitReached) {
     inputPlaceholder = userTier === 'guest'
       ? `Limit reached (${DEFAULT_GUEST_CHAT_LIMIT} exchanges). Please Sign Up or Log In.`
-      : `Limit reached (${tierChatLimit} exchanges). Please upgrade to Pro.`;
+      : `Limit reached${chatMeter.limit != null ? ` (${chatMeter.limit} exchanges)` : ''}. Please upgrade to Pro.`;
   }
 
   const pipelineOwnsMessage = enrichmentState.active || enrichmentState.failed || indexingState.active || indexingState.failed;
@@ -1125,8 +1235,6 @@ const ChatPage = () => {
             isOpen={isSidebarOpen}
             onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
             userTier={userTier}
-            currentExchanges={currentExchanges}
-            chatLimit={tierChatLimit}
             userId={userId}
             onOpenProfile={() => setShowProfileModal(true)}
           />
@@ -1260,6 +1368,14 @@ const ChatPage = () => {
                 </div>
               )}
 
+              <UsageNudge
+                message={usageNudgeMessage}
+                layout="card"
+                ctaLabel={limits.redirect === 'topup' ? 'Get more' : 'Upgrade to Pro'}
+                onCta={() => onRequestUpgrade(limits.redirect === 'topup' ? 'topup' : 'upgrade')}
+                onDismiss={() => setNudgeDismissed(true)}
+              />
+
               <div className={`w-full ${isMobile ? 'shrink-0' : ''}`}>
                 <ChatComposer {...composerProps} layout="stacked" dropdownSource="new-chat" />
               </div>
@@ -1283,6 +1399,14 @@ const ChatPage = () => {
                   </button>
                 </div>
               )}
+
+              <UsageNudge
+                message={usageNudgeMessage}
+                layout="strip"
+                ctaLabel={limits.redirect === 'topup' ? 'Get more' : 'Upgrade to Pro'}
+                onCta={() => onRequestUpgrade(limits.redirect === 'topup' ? 'topup' : 'upgrade')}
+                onDismiss={() => setNudgeDismissed(true)}
+              />
               {!isMobile && <header className="chat-conversation-header">
                 <div className="chat-column-inner flex items-center justify-between gap-3 h-12">
                   <h1
@@ -1464,6 +1588,8 @@ const ChatPage = () => {
             requestedTab={sidebarRequestedTab}
             onRequestedTabConsumed={() => setSidebarRequestedTab(null)}
             acmgFilterCanApply={acmgFilterCanApply}
+            annovarGate={annovarGate}
+            acmgExomiserGate={acmgExomiserGate}
             isRunningAnnovar={isRunningAnnovar}
             runAnnovar={runAnnovarForCurrentConversation}
             isApplyingProprietaryFilter={isApplyingProprietaryFilter}
@@ -1580,6 +1706,9 @@ const ChatPage = () => {
           preflightModule1Url={module1.preflightModule1Url}
           uploadAndValidateCustomBed={module1.uploadAndValidateCustomBed}
           startModule1Run={module1.startModule1Run}
+          cancelModule1Import={module1.cancelModule1Import}
+          gate={module1.module1EntryGate}
+          gateMeterDetail={formatMeterDetail(limits, module1.module1EntryGate?.meter)}
         />
       )}
 
@@ -1591,8 +1720,6 @@ const ChatPage = () => {
           userTier={userTier}
           userId={userId}
           conversations={conversations}
-          currentExchanges={currentExchanges}
-          chatLimit={tierChatLimit}
         />
       )}
 
@@ -1669,6 +1796,10 @@ const ChatPage = () => {
           hasAnnotatedFile={pipelineSnapshot.hasAnnotatedFile}
           acmgFilterActive={conversationFilterState.activeProprietaryFilter === 'filter_1'}
           acmgFilterCanApply={acmgFilterCanApply}
+          annovarGate={annovarGate}
+          acmgExomiserGate={acmgExomiserGate}
+          annovarMeterDetail={formatMeterDetail(limits, annovarGate?.meter)}
+          acmgMeterDetail={formatMeterDetail(limits, acmgExomiserGate?.meter)}
           exomiserCanApply={pipelineSnapshot.hasAnnotatedFile || !chatEligibility.requires_annovar}
           showVcfTabHighlight={columnInterpretationResult?.step1?.passed === false}
           onDeleteDocument={() => handleDocumentUpload(null)}
@@ -1739,6 +1870,17 @@ const ChatPage = () => {
       <AnnovarMessageModal
         modal={annovarMessageModal}
         onClose={() => setAnnovarMessageModal(null)}
+      />
+      <DeviceFrozenOverlay
+        descriptor={deviceBlock}
+        devices={limits.devices}
+        onRetry={() => { setDeviceBlock(null); refreshSubscriptionStatus(); }}
+      />
+
+      <SubscriptionPage
+        isOpen={!!upgradeModal}
+        onClose={() => setUpgradeModal(null)}
+        userId={userId}
       />
     </div>
   );

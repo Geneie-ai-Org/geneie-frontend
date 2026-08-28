@@ -1,10 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { auth, db } from '../services/firebase';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { auth } from '../services/firebase';
 import { onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
-import { fetchSubscriptionStatus } from '@/services/backendApi';
+import { fetchGuestStatus, fetchSubscriptionStatus } from '@/services/backendApi';
 import { identifyUser, resetAnalytics } from '@/lib/analytics';
+import { normalizeLimits, patchLiveLimits, guestLimits, guestLimitsFromApi } from '@/services/tierLimits';
+import { readTierDebugFixture } from '@/services/tierLimitsFixtures';
 
 // Define the initial state for an authenticated user's profile
 const initialProfileState = {
@@ -14,8 +15,6 @@ const initialProfileState = {
 
 // Define a safe, non-null default value for the context to prevent destructuring errors
 const defaultAuthValue = {
-  // Expose db with a safe fallback to prevent TypeError if firebase.js fails
-  db: db || null,
   isAuthReady: false,
   userLoading: true,
   userId: null,
@@ -23,8 +22,10 @@ const defaultAuthValue = {
   userTier: 'guest',
   subscriptionStatus: null,
   subscriptionStatusLoading: false,
+  limits: guestLimits(),
+  patchLimitsFromChat: () => {},
   refreshSubscriptionStatus: () => Promise.resolve(null),
-  markExperimentUsed: () => console.warn("markExperimentUsed called outside Provider"),
+  refreshGuestStatus: () => Promise.resolve(null),
 };
 
 // --- CONTEXT SETUP ---
@@ -55,6 +56,10 @@ export const AuthProvider = ({ children }) => {
   const [userProfile, setUserProfile] = useState(initialProfileState);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [subscriptionStatusLoading, setSubscriptionStatusLoading] = useState(false);
+  const [liveLimits, setLiveLimits] = useState(null);
+  // Guest usage is metered server-side (Redis, keyed on X-Device-Id), so it has to be fetched
+  // rather than derived from localStorage — which a guest can simply clear.
+  const [guestStatus, setGuestStatus] = useState(null);
 
   // Determine the final active tier for easy access
   // Treat 'admin' as 'pro' for feature checks (admin gets all pro features)
@@ -127,49 +132,61 @@ export const AuthProvider = ({ children }) => {
     }
   }, [userId, userTier, isAuthReady]);
 
-  // --- Step B: Fetch User Profile (Tier Status) from Firestore ---
+  /* --- Step B: Derive the profile from GET /api/subscription-status ---
+   * Previously a Firestore onSnapshot on users/{uid}. That document is no longer the
+   * source of truth (the backend reads MongoDB), and it is client-writable — which is the
+   * vulnerability this migration closes. The API is now the only place a tier comes from.
+   *
+   * What is lost: the live push, so a webhook upgrading someone to Pro no longer updates
+   * an open tab instantly. refreshSubscriptionStatus already runs after checkout, Module 1,
+   * ANNOVAR, filter applies and every limit 403, so the gap is small.
+   */
   useEffect(() => {
-    let unsubscribeProfile;
-
-    // Only subscribe to Firestore if we have a valid userId AND db is initialized
-    if (userId && db) {
-      const docRef = doc(db, 'users', userId);
-
-      unsubscribeProfile = onSnapshot(docRef, (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setUserProfile({
-            planStatus: data.planStatus || 'free',
-            freeExperimentsUsed: data.freeExperimentsUsed || 0,
-          });
-        } else {
-          // If profile doesn't exist for an authenticated user, default them to 'free'
-          setUserProfile(prev => ({ ...prev, planStatus: 'free' }));
-        }
-      }, (error) => {
-        console.error("Error listening to user profile:", error);
-      });
-    } else {
-      // When userId is null (unauthenticated), set the profile to guest
+    if (!userId) {
       setUserProfile(initialProfileState);
+      return;
     }
+    if (!subscriptionStatus) return;
+    setUserProfile({
+      planStatus: subscriptionStatus.planStatus || 'free',
+      freeExperimentsUsed: subscriptionStatus.freeExperimentsUsed || 0,
+    });
+  }, [userId, subscriptionStatus]);
 
-    return () => {
-      if (unsubscribeProfile) unsubscribeProfile();
-    };
-  }, [userId]);
+  const refreshGuestStatus = useCallback(async () => {
+    try {
+      const data = await fetchGuestStatus();
+      setGuestStatus(data);
+      return data;
+    } catch (error) {
+      // Falls back to the conservative offline guest defaults rather than blocking the app.
+      console.warn('[useAuth] Failed to fetch guest status:', error);
+      return null;
+    }
+  }, []);
 
+  useEffect(() => {
+    if (userId) {
+      setGuestStatus(null);
+      return;
+    }
+    if (!isAuthReady) return;
+    refreshGuestStatus();
+  }, [userId, isAuthReady, refreshGuestStatus]);
 
   const refreshSubscriptionStatus = useCallback(async () => {
     if (!userId) {
       setSubscriptionStatus(null);
+      setLiveLimits(null);
       return null;
     }
     try {
       setSubscriptionStatusLoading(true);
       const data = await fetchSubscriptionStatus();
-      setSubscriptionStatus(data);
-      return data;
+      const stamped = { ...data, fetchedAt: Date.now() };
+      setSubscriptionStatus(stamped);
+      setLiveLimits(null);
+      return stamped;
     } catch (error) {
       console.warn('[useAuth] Failed to fetch subscription status:', error);
       return null;
@@ -179,6 +196,7 @@ export const AuthProvider = ({ children }) => {
   }, [userId]);
 
   useEffect(() => {
+    setLiveLimits(null);
     if (!userId) {
       setSubscriptionStatus(null);
       return undefined;
@@ -188,23 +206,41 @@ export const AuthProvider = ({ children }) => {
   }, [userId, refreshSubscriptionStatus]);
 
 
-  // --- Utility Function: Update Experiments Count ---
-  const markExperimentUsed = async () => {
-    if (!userId || userTier === 'guest' || !db) return;
-
-    try {
-      const userRef = doc(db, 'users', userId);
-      const newCount = (userProfile.freeExperimentsUsed || 0) + 1;
-      // setDoc will create the document if it doesn't exist
-      await setDoc(userRef, { freeExperimentsUsed: newCount }, { merge: true });
-    } catch (error) {
-      console.error("Failed to update experiment count:", error);
+  // --- Normalized usage limits (single seam for every cohort) ---
+  const limits = useMemo(() => {
+    let status = subscriptionStatus;
+    if (import.meta.env.DEV) {
+      status = readTierDebugFixture() || status;
     }
-  };
+    if (!userId) {
+      return guestStatus ? guestLimitsFromApi(guestStatus) : guestLimits();
+    }
+    const base = normalizeLimits(status, userTier, userId);
+    if (liveLimits && liveLimits.at >= (base.fetchedAt ?? 0)) {
+      return patchLiveLimits(base, liveLimits.block);
+    }
+    return base;
+  }, [subscriptionStatus, userTier, userId, liveLimits, guestStatus]);
 
+  const patchLimitsFromChat = useCallback((payload) => {
+    const block = payload?.beta_limits || payload?.free_limits;
+    if (block && typeof block === 'object') {
+      setLiveLimits({ block, at: Date.now() });
+    }
+  }, []);
+
+  /* markExperimentUsed was removed with the Firestore write path. It computed the new
+   * count IN THE BROWSER (current + 1) and wrote it to a client-writable document, so it
+   * was never trustworthy; nothing enforced on it and it was read only for display. If a
+   * limit is ever keyed on it, the counter has to move server-side.
+   */
+
+  /* The tier is unknown until subscription-status answers. Gating on this keeps the
+   * existing SessionLoadingScreen up rather than briefly rendering a paying user as free
+   * — the flicker-then-block failure mode. */
+  const profileReady = !userId || subscriptionStatus !== null || !subscriptionStatusLoading;
 
   const value = {
-    db,
     isAuthReady,
     userLoading,
     userId,
@@ -212,14 +248,18 @@ export const AuthProvider = ({ children }) => {
     userTier,
     subscriptionStatus,
     subscriptionStatusLoading,
+    limits,
+    patchLimitsFromChat,
     refreshSubscriptionStatus,
-    markExperimentUsed,
+    refreshGuestStatus,
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {/* Show Loader if Firebase hasn't checked the auth state yet */}
-      {userLoading && !isAuthReady ? (
+      {/* Wait for Firebase auth AND, for a signed-in user, the first
+        * subscription-status response — the tier is not known before it lands, and
+        * rendering early would show a paying user free-tier gating for a beat. */}
+      {(userLoading && !isAuthReady) || !profileReady ? (
         <SessionLoadingScreen />
       ) : children}
     </AuthContext.Provider>

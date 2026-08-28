@@ -4,6 +4,8 @@ import * as mongodbApi from '../services/mongodbApi';
 import { getChatApiUrl } from '@/config/api';
 import { getDeviceId } from '@/lib/deviceId';
 import { DEFAULT_GUEST_CHAT_LIMIT } from '@/services/backendApi';
+import { useAuth } from '@/hooks/useAuth';
+import { describeLimitError, isLimitCode } from '@/services/limitErrors';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const MAX_RETRIES = 3;
@@ -21,12 +23,16 @@ export function useChatMessaging({
   normalizeChatEligibilityMessage,
   promptChatBlocked,
   variantUploadInProgress,
-  tierChatLimit,
-  guestLimitExceeded,
+  isChatLimitReached,
   updateConversationTitle,
   setAnnovarMessageModal,
   setIsShowingAuthForm,
+  setConversationWarning,
+  onRequestUpgrade,
+  onDeviceBlocked,
+  onGuestExchange,
 }) {
+  const { limits, patchLimitsFromChat, refreshSubscriptionStatus } = useAuth();
   const [messages, setMessages] = useState([]);
   const [typingText, setTypingText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -36,10 +42,6 @@ export function useChatMessaging({
   const typingGenerationIdRef = useRef(0);
   const chatAbortControllerRef = useRef(null);
   const pendingTurnRef = useRef(null);
-
-  const isChatLimitReached =
-    (userTier === 'guest' && guestLimitExceeded) ||
-    (userTier !== 'guest' && Math.floor(messages.length / 2) >= tierChatLimit);
 
   const typeMessage = useCallback((fullText, onComplete, sources) => {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -201,14 +203,12 @@ export function useChatMessaging({
             const code = errorDetail?.detail?.code;
             const message = errorDetail?.detail?.message;
 
-            if (
-              code === 'GUEST_LIMIT_REACHED' ||
-              code === 'FREE_TIER_LIMIT_REACHED' ||
-              code === 'PRO_DAILY_CHAT_LIMIT_REACHED' ||
-              code === 'PRO_DEVICE_LIMIT_REACHED' ||
-              code === 'PRO_DEVICE_ID_REQUIRED'
-            ) {
-              return { data: null, lastError: { code, message }, aborted: false };
+            if (isLimitCode(code)) {
+              return {
+                data: null,
+                lastError: { code, message, status: response.status, detail: errorDetail?.detail },
+                aborted: false,
+              };
             }
 
             if (
@@ -231,6 +231,12 @@ export function useChatMessaging({
             }
 
             lastError = new Error(message || `API Error: ${response.status} ${response.statusText}`);
+            lastError.status = response.status;
+            lastError.code = code;
+            const worthRetrying = response.status >= 500 || response.status === 408 || response.status === 429;
+            if (!worthRetrying) {
+              return { data: null, lastError, aborted: false };
+            }
             throw lastError;
           }
 
@@ -279,6 +285,17 @@ export function useChatMessaging({
     if (aborted) return;
 
     if (data) {
+      patchLimitsFromChat(data);
+      // Guests get no limits block on the response; re-read the server-side Redis meter.
+      onGuestExchange?.();
+      const warned = data.beta_conversation_warning || data.free_conversation_warning;
+      if (warned) {
+        setConversationWarning?.(
+          data.beta_conversation_warning_message
+            || data.free_conversation_warning_message
+            || 'This conversation is getting long.'
+        );
+      }
       typeMessage(data.response, async (finalText, finalSources) => {
         pendingTurnRef.current = null;
         await appendAssistantAndPersist(wasFirstInConversation, userMessageText, finalText, finalSources || [], 'full');
@@ -288,54 +305,32 @@ export function useChatMessaging({
       setIsLoading(false);
       typingGenerationIdRef.current += 1;
 
-      const code = lastError?.code;
-      if (code === 'GUEST_LIMIT_REACHED') {
-        setGuestLimitExceeded(true);
+      const descriptor = describeLimitError(lastError, { context: 'chat', limits });
+      if (descriptor) {
+        // Drop the optimistic user bubble — the turn never happened server-side.
         setMessages((prev) => prev.filter((m) => m.id !== userLocalId));
+        if (descriptor.family === 'guestChat') setGuestLimitExceeded(true);
+        if (descriptor.refresh) refreshSubscriptionStatus?.();
+        if (descriptor.blocking) {
+          onDeviceBlocked?.(descriptor);
+          return;
+        }
         setAnnovarMessageModal({
-          title: 'Chat Limit Reached',
-          message: lastError.message || `Guest chat limit reached (${DEFAULT_GUEST_CHAT_LIMIT} exchanges). Sign up to continue.`,
-          variant: 'info',
-          ctaLabel: 'Sign Up / Log In',
-          onCta: () => { setAnnovarMessageModal(null); setIsShowingAuthForm(true); },
-        });
-        return;
-      }
-      if (code === 'FREE_TIER_LIMIT_REACHED') {
-        setMessages((prev) => prev.filter((m) => m.id !== userLocalId));
-        setAnnovarMessageModal({
-          title: 'Chat Limit Reached',
-          message: lastError.message || `Free tier chat limit reached (${tierChatLimit} exchanges). Upgrade to Pro to continue.`,
-          variant: 'info',
-          ctaLabel: 'Upgrade to Pro',
-          onCta: () => { setAnnovarMessageModal(null); },
-        });
-        return;
-      }
-      if (code === 'PRO_DAILY_CHAT_LIMIT_REACHED') {
-        setMessages((prev) => prev.filter((m) => m.id !== userLocalId));
-        setAnnovarMessageModal({
-          title: 'Daily Limit Reached',
-          message: lastError.message || 'Pro daily chat limit reached (50). Please try again tomorrow.',
-          variant: 'info',
-        });
-        return;
-      }
-      if (code === 'PRO_DEVICE_LIMIT_REACHED') {
-        setMessages((prev) => prev.filter((m) => m.id !== userLocalId));
-        setAnnovarMessageModal({
-          title: 'Device Limit Reached',
-          message: lastError.message || 'Too many active devices. Sign out from another device first.',
-          variant: 'error',
-        });
-        return;
-      }
-      if (code === 'PRO_DEVICE_ID_REQUIRED') {
-        setMessages((prev) => prev.filter((m) => m.id !== userLocalId));
-        setAnnovarMessageModal({
-          title: 'Session Error',
-          message: 'Device identification required. Please refresh the page.',
-          variant: 'error',
+          title: descriptor.title,
+          message: descriptor.message,
+          variant: descriptor.variant,
+          ...(descriptor.cta.kind === 'signup'
+            ? {
+                ctaLabel: descriptor.cta.label,
+                onCta: () => { setAnnovarMessageModal(null); setIsShowingAuthForm(true); },
+              }
+            : {}),
+          ...(descriptor.cta.kind === 'upgrade' || descriptor.cta.kind === 'topup'
+            ? {
+                ctaLabel: descriptor.cta.label,
+                onCta: () => { setAnnovarMessageModal(null); onRequestUpgrade?.(descriptor.cta.kind); },
+              }
+            : {}),
         });
         return;
       }
@@ -358,8 +353,13 @@ export function useChatMessaging({
     setGuestLimitExceeded,
     setAnnovarMessageModal,
     setIsShowingAuthForm,
-    tierChatLimit,
-    guestLimitExceeded,
+    setConversationWarning,
+    onRequestUpgrade,
+    onDeviceBlocked,
+    onGuestExchange,
+    limits,
+    patchLimitsFromChat,
+    refreshSubscriptionStatus,
   ]);
 
   const regenerateLastResponse = useCallback(async () => {
@@ -394,6 +394,17 @@ export function useChatMessaging({
     if (aborted) return;
 
     if (data) {
+      patchLimitsFromChat(data);
+      // Guests get no limits block on the response; re-read the server-side Redis meter.
+      onGuestExchange?.();
+      const warned = data.beta_conversation_warning || data.free_conversation_warning;
+      if (warned) {
+        setConversationWarning?.(
+          data.beta_conversation_warning_message
+            || data.free_conversation_warning_message
+            || 'This conversation is getting long.'
+        );
+      }
       typeMessage(data.response, async (finalText, finalSources) => {
         await appendAssistantAndPersist(false, userMessageText, finalText, finalSources || [], 'assistant-only');
       }, data.sources || []);

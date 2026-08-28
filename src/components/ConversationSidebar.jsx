@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MessageSquare, Plus, Trash2, ChevronLeft, ChevronRight, Settings, LogOut, Sun, Moon } from 'lucide-react';
-import { getAuth, signOut } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
+import { performLogout } from '@/lib/logout';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useTheme } from '@/hooks/useTheme';
+import { useLimits } from '@/hooks/useLimits';
+import { meterFor } from '@/services/tierLimits';
 import NotificationBell from './NotificationBell';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
@@ -36,8 +39,6 @@ const ConversationSidebar = ({
     isOpen,
     onToggle,
     userTier,
-    currentExchanges,
-    chatLimit = 10,
     userId,
     onOpenProfile
 }) => {
@@ -45,7 +46,7 @@ const ConversationSidebar = ({
     const navigate = useNavigate();
     const { isDark, toggleTheme } = useTheme();
     const themeLabel = isDark ? 'Light mode' : 'Dark mode';
-    const freeChatLimit = userTier === 'free' ? chatLimit : Infinity;
+    const chatMeter = meterFor(useLimits(), 'chat');
     const [pendingDeleteId, setPendingDeleteId] = useState(null);
 
     const confirmDelete = () => {
@@ -62,12 +63,8 @@ const ConversationSidebar = ({
     const email = currentUser?.email || '';
 
     const handleSignOut = async () => {
-        try {
-            await signOut(auth);
-            navigate('/auth');
-        } catch (err) {
-            console.error('Sign out error:', err);
-        }
+        // Releases this browser's device slot before signing out. See lib/logout.js.
+        await performLogout(navigate);
     };
 
     // Group conversations by time period (newest first within each group)
@@ -288,18 +285,18 @@ const ConversationSidebar = ({
                         </div>
                     )}
                     {/* Usage indicator */}
-                    {userTier !== 'pro' && (
+                    {chatMeter.tracked && !chatMeter.unlimited && chatMeter.limit != null && (
                         <div className="px-5 py-2.5 mb-1 overflow-hidden" style={{ opacity: isOpen ? 1 : 0, transition: 'opacity 150ms', height: isOpen ? 'auto' : 0 }}>
                             <div className="flex items-center justify-between mb-1.5">
                                 <span className="text-xs whitespace-nowrap" style={{ color: 'var(--text-tertiary)' }}>Exchanges</span>
                                 <span className="text-xs tabular-nums whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>
-                                    {currentExchanges || 0}/{freeChatLimit}
+                                    {chatMeter.used || 0}/{chatMeter.limit}
                                 </span>
                             </div>
                             <Progress
-                                value={Math.min(((currentExchanges || 0) / freeChatLimit) * 100, 100)}
+                                value={Math.min(((chatMeter.used || 0) / chatMeter.limit) * 100, 100)}
                                 className={`w-full [&_[data-slot=progress-track]]:h-1 [&_[data-slot=progress-track]]:bg-[var(--bg-surface-hover)] [&_[data-slot=progress-indicator]]:duration-500 ${
-                                    (currentExchanges || 0) >= freeChatLimit
+                                    (chatMeter.used || 0) >= chatMeter.limit
                                         ? '[&_[data-slot=progress-indicator]]:bg-[var(--error)]'
                                         : '[&_[data-slot=progress-indicator]]:bg-[var(--accent-teal)]'
                                 }`}

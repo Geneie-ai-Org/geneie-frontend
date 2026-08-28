@@ -3,10 +3,11 @@ import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2, Link2, Info, Pl
 import { getAuth } from 'firebase/auth';
 import { apiUrl as buildApiUrl } from '@/config/api';
 import { useAuth } from '@/hooks/useAuth';
+import { guestLimits } from '@/services/tierLimits';
+import { getDeviceId } from '@/lib/deviceId';
 import {
   completeVariantUpload,
   getMaxUploadBytes,
-  getOrCreateDeviceId,
   presignVariantUpload,
   putFileToPresignedUrl,
   shouldUsePresignedUpload,
@@ -97,7 +98,9 @@ const DocumentUpload = ({
   initialMetadata = null,
   onEditSaved = null,
 }) => {
-  const { subscriptionStatus } = useAuth();
+  const { limits } = useAuth();
+  const isGuestUser = userTier === 'guest' || userId === 'guest';
+  const uploadLimits = isGuestUser ? guestLimits() : limits;
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState('');
@@ -286,7 +289,7 @@ const DocumentUpload = ({
 
     // Check file size — tier-aware (from GET /api/subscription-status when signed in)
     const isGuest = userTier === 'guest' || userId === 'guest';
-    const maxSize = getMaxUploadBytes(file.name, isGuest ? 'guest' : userTier, subscriptionStatus);
+    const maxSize = getMaxUploadBytes(file.name, uploadLimits);
     if (file.size > maxSize) {
       const limitMb = Math.round(maxSize / (1024 * 1024));
       const limitGb = maxSize / (1024 ** 3);
@@ -698,7 +701,7 @@ const DocumentUpload = ({
         }
         : null;
 
-      if (shouldUsePresignedUpload(userTier, file.size)) {
+      if (shouldUsePresignedUpload(file.size, uploadLimits)) {
         console.log('[DocumentUpload] Using Pro presigned S3 upload');
         const presign = await presignVariantUpload({
           conversationId,
@@ -782,7 +785,7 @@ const DocumentUpload = ({
 
       xhr.open('POST', uploadUrl);
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      xhr.setRequestHeader('X-Device-Id', getOrCreateDeviceId());
+      xhr.setRequestHeader('X-Device-Id', getDeviceId());
       xhr.send(formData);
 
     } catch (error) {
@@ -809,7 +812,6 @@ const DocumentUpload = ({
       s3_key: response.s3_key,
       is_variant_file: response.is_variant_file,
       variant_count: response.variant_count,
-      free_tier_preview: response.free_tier_preview || null,
       column_interpretation: response.column_interpretation || null,
       variant_metadata: response.variant_metadata || null,
       // Carry the metadata the user just submitted so "Edit Sample Information" is prefilled
@@ -871,7 +873,7 @@ const DocumentUpload = ({
       }
 
       if (result.content_length != null) {
-        const maxSize = getMaxUploadBytes(result.file_name, isGuest ? 'guest' : userTier, subscriptionStatus);
+        const maxSize = getMaxUploadBytes(result.file_name, uploadLimits);
         if (result.content_length > maxSize) {
           const limitMb = Math.round(maxSize / (1024 * 1024));
           const limitGb = maxSize / (1024 ** 3);

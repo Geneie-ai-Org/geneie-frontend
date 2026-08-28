@@ -37,7 +37,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { apiUrl, getApiOrigin } from '@/config/api';
-import { buildVariantDataFromConversation, getGuestPipelineCta, variantFileRowCountForSidebar } from '@/lib/variantPipelineUtils';
+import { buildVariantDataFromConversation, getGuestPipelineCta, resolveVariantsUnderConsideration, variantFileRowCountForSidebar } from '@/lib/variantPipelineUtils';
 import { conversationPath, isValidConversationId } from '@/lib/conversationRoutes';
 import { getDeviceId } from '@/lib/deviceId';
 import { useVariantPipeline } from '@/hooks/useVariantPipeline';
@@ -1142,12 +1142,27 @@ const ChatPage = () => {
   }
 
   const pipelineOwnsMessage = enrichmentState.active || enrichmentState.failed || indexingState.active || indexingState.failed;
-  const pipelineGatedMessage = isChatPipelineGated && !annovarRunning && !pipelineOwnsMessage
+  const pipelineVariantsUnderConsideration = resolveVariantsUnderConsideration({
+    activeProprietaryFilter: conversationFilterState.activeProprietaryFilter,
+    filteredVariantCount: conversationFilterState.filteredVariantCount,
+    filterWorkingSetCount: conversationFilterState.filterWorkingSetCount,
+    fileTotal: currentDocument?.variant_count ?? variantData?.total_variants ?? null,
+    eligibilityUnderCount: chatEligibility.variants_under_consideration,
+  });
+  const guestFilterGateBlocked =
+    userTier === 'guest' &&
+    isChatPipelineGated &&
+    chatEligibility.reason === 'CHAT_REQUIRES_FILTER';
+  const pipelineGatedMessage =
+    isChatPipelineGated && !annovarRunning && !pipelineOwnsMessage && !guestFilterGateBlocked
       ? chatEligibility.message || inputPlaceholder
       : null;
-  // >1000 files need a filter before chat — give the user a way there.
+  // Signed-in only — guests use guestPipelineCta (single row, no duplicate button).
   const gatedAction =
-    isChatPipelineGated && !annovarRunning && chatEligibility.reason === 'CHAT_REQUIRES_FILTER'
+    isChatPipelineGated &&
+    !annovarRunning &&
+    chatEligibility.reason === 'CHAT_REQUIRES_FILTER' &&
+    userTier !== 'guest'
       ? { label: 'Apply a filter', onClick: () => setIsVariantSidebarOpen(true) }
       : null;
 
@@ -1189,10 +1204,7 @@ const ChatPage = () => {
       activeVariantFilters={conversationFilterState.activeVariantFilters}
       filteredVariantCount={conversationFilterState.filteredVariantCount}
       s3LineCountStatus={variantData?.s3_line_count_status || chatEligibility.s3_line_count_status}
-      variantsUnderConsideration={
-        chatEligibility.variants_under_consideration ??
-        conversationFilterState.filteredVariantCount
-      }
+      variantsUnderConsideration={pipelineVariantsUnderConsideration}
       onEditSampleInfo={() => { setIsEditSampleModalOpen(true); }}
       onRemoveFile={userTier === 'guest' ? undefined : () => handleDocumentUpload(null)}
       enrichmentState={enrichmentState}

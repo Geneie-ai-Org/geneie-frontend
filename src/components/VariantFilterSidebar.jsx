@@ -1407,7 +1407,11 @@ const VariantFilterSidebar = ({
   // Apply proprietary filter (toggle: if already active, remove it)
   const handleApplyProprietaryFilter = async (filterType) => {
     if (!conversationId || (!userId && !isGuest)) return;
-    if (pipelineBusy) return;
+    // pipelineBusy can be stuck true from a stale filter_job after remove — guest ACMG
+    // re-apply goes through onProprietaryFilterClick which clears that before fetching.
+    const blockedByPipelineBusy =
+      pipelineBusy && !(isGuest && filterType === 'filter_1' && onProprietaryFilterClick);
+    if (blockedByPipelineBusy) return;
     if (hasAppliedManualFilters && activeProprietaryFilter !== filterType) {
       notify({
         message: 'Manual filters are active. Reset manual filters before applying an annotation-stage filter.',

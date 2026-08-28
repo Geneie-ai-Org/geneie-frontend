@@ -17,6 +17,7 @@ import {
   formatAnnovarProgressMessage,
   guestStatusPayloadToConversationStub,
   normalizeChatEligibilityMessage,
+  resolveVariantsUnderConsideration,
 } from '@/lib/variantPipelineUtils';
 
 /**
@@ -79,6 +80,7 @@ export function useVariantPipeline({
 
   const exomiserPollAbortRef = useRef(null);
   const annovarPollTimerRef = useRef(null);
+  const filterPollTimerRef = useRef(null);
   const userTierRef = useRef(userTier);
   userTierRef.current = userTier;
   const prevAnnovarJobStatusRef = useRef(null);
@@ -136,17 +138,21 @@ export function useVariantPipeline({
       currentDocumentRef.current?.variant_count ??
       variantDataRef.current?.total_variants ??
       null;
-    const underConsideration =
-      filterState.filterWorkingSetCount ??
-      filterState.filteredVariantCount ??
-      fileTotal;
+    const activePf = overrides.activeProprietaryFilter ?? filterState.activeProprietaryFilter ?? null;
+    const underConsideration = resolveVariantsUnderConsideration({
+      activeProprietaryFilter: activePf,
+      filteredVariantCount: overrides.filteredVariantCount ?? filterState.filteredVariantCount,
+      filterWorkingSetCount: filterState.filterWorkingSetCount,
+      fileTotal,
+      eligibilityUnderCount: overrides.variantsUnderConsideration,
+    });
     return buildGuestChatEligibility({
       hasAnnotatedFile: pipelineSnapshotRef.current?.hasAnnotatedFile,
       isRunningAnnovar: isRunningAnnovarRef.current,
       annovarJobStatus: pipelineSnapshotRef.current?.annovarJob?.status ?? null,
       variantCount: fileTotal,
       variantsUnderConsideration: underConsideration,
-      activeProprietaryFilter: filterState.activeProprietaryFilter ?? null,
+      activeProprietaryFilter: activePf,
       ...overrides,
     });
   }, []);
@@ -174,16 +180,30 @@ export function useVariantPipeline({
               }
             : null;
       const filtJob = payload.filter_job?.status ? payload.filter_job : null;
-      setPipelineSnapshot((prev) => ({
-        ...prev,
-        hasAnnotatedFile:
-          prev.hasAnnotatedFile ||
-          Boolean(payload.annotated_file_s3_key) ||
-          annJob?.status === 'completed' ||
-          payload.status === 'completed',
-        annovarJob: annJob?.status ? annJob : prev.annovarJob,
-        filterJob: filtJob || prev.filterJob,
-      }));
+      if (filtJob?.status === 'completed' || filtJob?.status === 'failed') {
+        setIsApplyingProprietaryFilter(false);
+      }
+      setPipelineSnapshot((prev) => {
+        let nextFilterJob = filtJob || prev.filterJob;
+        if (
+          payload.active_proprietary_filter &&
+          prev.filterJob?.status === 'running' &&
+          (!filtJob || filtJob.status === 'running')
+        ) {
+          nextFilterJob = { status: 'completed', message: 'Filter applied.' };
+          setIsApplyingProprietaryFilter(false);
+        }
+        return {
+          ...prev,
+          hasAnnotatedFile:
+            prev.hasAnnotatedFile ||
+            Boolean(payload.annotated_file_s3_key) ||
+            annJob?.status === 'completed' ||
+            payload.status === 'completed',
+          annovarJob: annJob?.status ? annJob : prev.annovarJob,
+          filterJob: nextFilterJob,
+        };
+      });
       if (
         payload.active_proprietary_filter !== undefined ||
         payload.filtered_variant_count !== undefined ||
@@ -351,6 +371,134 @@ export function useVariantPipeline({
 
   useEffect(() => () => clearAnnovarPollTimer(), [clearAnnovarPollTimer]);
 
+  const clearFilterPollTimer = useCallback(() => {
+    if (filterPollTimerRef.current) {
+      clearTimeout(filterPollTimerRef.current);
+      filterPollTimerRef.current = null;
+    }
+  }, []);
+
+  /** Dedicated filter status poll — started on 202 from apply-proprietary-filter (guest + signed-in). */
+  const pollFilterStatusOnce = useCallback(
+    async (conversationId) => {
+      if (!conversationId) return;
+      const isGuestUser = userTierRef.current === 'guest';
+      try {
+        const headers = { 'X-Device-Id': getDeviceIdRef.current() };
+        if (!isGuestUser) {
+          const token = await optionalIdToken();
+          if (!token) {
+            if (isApplyingProprietaryFilterRef.current) {
+              filterPollTimerRef.current = setTimeout(
+                () => pollFilterStatusOnce(conversationId),
+                5000
+              );
+            }
+            return;
+          }
+          headers.Authorization = `Bearer ${token}`;
+        }
+
+        const statusRes = await fetch(
+          apiUrl(`/api/filter-status/${encodeURIComponent(conversationId)}`),
+          { headers }
+        );
+
+        if (!statusRes.ok) {
+          console.warn('[useVariantPipeline] filter-status HTTP', statusRes.status);
+          if (isApplyingProprietaryFilterRef.current) {
+            filterPollTimerRef.current = setTimeout(
+              () => pollFilterStatusOnce(conversationId),
+              8000
+            );
+          }
+          return;
+        }
+
+        const statusData = await statusRes.json().catch(() => ({}));
+        const filtJob = {
+          ...(statusData.filter_job || {}),
+          status: statusData.status || statusData.filter_job?.status,
+          phase: statusData.phase || statusData.filter_job?.phase,
+          message: statusData.message || statusData.filter_job?.message,
+          progress_percent:
+            statusData.progress_percent ?? statusData.filter_job?.progress_percent,
+        };
+
+        setPipelineSnapshot((prev) => ({
+          ...prev,
+          filterJob: filtJob.status ? filtJob : prev.filterJob,
+        }));
+
+        if (isGuestUser) {
+          applyGuestStatusPayloadRef.current(statusData);
+        } else if (
+          statusData.active_proprietary_filter !== undefined ||
+          statusData.filtered_variant_count !== undefined ||
+          statusData.variant_filter_working_set_count !== undefined
+        ) {
+          setConversationFilterState((prev) => ({
+            ...prev,
+            activeProprietaryFilter:
+              statusData.active_proprietary_filter ?? prev.activeProprietaryFilter,
+            filteredVariantCount:
+              statusData.filtered_variant_count ?? prev.filteredVariantCount,
+            filterWorkingSetCount:
+              statusData.variant_filter_working_set_count ?? prev.filterWorkingSetCount,
+          }));
+        }
+
+        const prevFilt = prevFilterJobStatusRef.current;
+        prevFilterJobStatusRef.current = filtJob.status || null;
+
+        if (prevFilt === 'running' && filtJob.status === 'completed') {
+          if (isGuestUser) {
+            refreshGuestStatus?.();
+            setChatEligibility(
+              resolveGuestChatEligibility({
+                hasAnnotatedFile: true,
+                activeProprietaryFilter: statusData.active_proprietary_filter ?? undefined,
+                filteredVariantCount: statusData.filtered_variant_count ?? undefined,
+                variantsUnderConsideration: statusData.filtered_variant_count ?? undefined,
+              })
+            );
+          } else {
+            await refreshConversationAfterAnnovarRef.current?.(conversationId);
+            refreshSubscriptionStatus?.();
+          }
+        }
+
+        if (filtJob.status === 'completed' || filtJob.status === 'failed') {
+          setIsApplyingProprietaryFilter(false);
+          clearFilterPollTimer();
+          return;
+        }
+
+        if (
+          filtJob.status === 'running' ||
+          filtJob.status === 'pending' ||
+          isApplyingProprietaryFilterRef.current
+        ) {
+          filterPollTimerRef.current = setTimeout(
+            () => pollFilterStatusOnce(conversationId),
+            8000
+          );
+        }
+      } catch (error) {
+        console.warn('[useVariantPipeline] filter-status poll failed:', error);
+        if (isApplyingProprietaryFilterRef.current) {
+          filterPollTimerRef.current = setTimeout(
+            () => pollFilterStatusOnce(conversationId),
+            12000
+          );
+        }
+      }
+    },
+    [clearFilterPollTimer, refreshGuestStatus, refreshSubscriptionStatus, resolveGuestChatEligibility]
+  );
+
+  useEffect(() => () => clearFilterPollTimer(), [clearFilterPollTimer]);
+
   const applyChatEligibilityFromConversation = useCallback(
     (convData, { announceReady = false } = {}) => {
       if (!convData) {
@@ -511,7 +659,36 @@ export function useVariantPipeline({
   const refreshAfterFilterChange = useCallback(
     async (conversationId, { enrichmentWillRequeue, totalCount } = {}) => {
       if (!conversationId) return null;
+      // A completed or removed filter can leave filter_job stuck at "running" in local
+      // snapshot state, which blocks re-apply via pipelineBusy with no network call.
+      prevFilterJobStatusRef.current = null;
+      setIsApplyingProprietaryFilter(false);
+      setPipelineSnapshot((prev) => ({
+        ...prev,
+        filterJob: null,
+      }));
       if (userTierRef.current === 'guest') {
+        try {
+          const filterRes = await fetch(
+            apiUrl(`/api/filter-status/${encodeURIComponent(conversationId)}`),
+            { headers: { 'X-Device-Id': getDeviceIdRef.current() } }
+          );
+          if (filterRes.ok) {
+            const filterData = await filterRes.json().catch(() => ({}));
+            applyGuestStatusPayloadRef.current(filterData);
+            const fj = filterData.filter_job;
+            const fjStatus = (fj?.status || filterData.status || '').trim().toLowerCase();
+            if (fjStatus && fjStatus !== 'running' && fjStatus !== 'pending') {
+              setPipelineSnapshot((prev) => ({
+                ...prev,
+                filterJob: fj?.status ? fj : null,
+              }));
+              prevFilterJobStatusRef.current = fj?.status || null;
+            }
+          }
+        } catch (err) {
+          console.warn('[useVariantPipeline] guest filter-status refresh failed:', err);
+        }
         await refreshGuestConversationFromStatusRef.current?.(conversationId);
         setChatEligibility(
           resolveGuestChatEligibility({
@@ -768,6 +945,7 @@ export function useVariantPipeline({
 
         let annJob = { ...(convData.annovar_job || {}) };
         let filtJob = { ...(convData.filter_job || snap.filterJob || {}) };
+        let latestFilterStatusPayload = null;
         const filtShouldPoll =
           isApplyingProprietaryFilterRef.current ||
           filtJob.status === 'running' ||
@@ -802,6 +980,7 @@ export function useVariantPipeline({
           });
           if (statusRes.ok) {
             const statusData = await statusRes.json().catch(() => ({}));
+            latestFilterStatusPayload = statusData;
             filtJob = { ...filtJob, ...(statusData.filter_job || {}) };
             if (statusData.status) filtJob.status = statusData.status;
             if (isGuestUser) {
@@ -854,7 +1033,15 @@ export function useVariantPipeline({
             await refreshConversationAfterAnnovarRef.current(activeConversationId);
           } else {
             refreshGuestStatus?.();
-            setChatEligibility(resolveGuestChatEligibility({ hasAnnotatedFile: true }));
+            const fp = latestFilterStatusPayload;
+            setChatEligibility(
+              resolveGuestChatEligibility({
+                hasAnnotatedFile: true,
+                activeProprietaryFilter: fp?.active_proprietary_filter ?? undefined,
+                filteredVariantCount: fp?.filtered_variant_count ?? undefined,
+                variantsUnderConsideration: fp?.filtered_variant_count ?? undefined,
+              })
+            );
           }
         } else if (prevFilt === 'running' && filtJob.status === 'failed') {
           if (isGuestUser) {
@@ -1406,6 +1593,15 @@ export function useVariantPipeline({
       setAnnovarMessageModal({ title: 'No file', message: 'Please upload a file first.', variant: 'info' });
       return;
     }
+    // Stale filter_job from a prior apply can survive remove and block re-apply via pipelineBusy.
+    const staleFilterJob =
+      !isApplyingProprietaryFilterRef.current &&
+      (pipelineSnapshotRef.current?.filterJob?.status === 'running' ||
+        pipelineSnapshotRef.current?.filterJob?.status === 'pending');
+    if (staleFilterJob) {
+      prevFilterJobStatusRef.current = null;
+      setPipelineSnapshot((prev) => ({ ...prev, filterJob: null }));
+    }
     if (isApplyingProprietaryFilter) return;
 
     // ACMG and Exomiser applies share one metered budget. Manual filters are free and unaffected.
@@ -1491,9 +1687,8 @@ export function useVariantPipeline({
         throw new Error(apiErrorDetailToMessage(err.detail) || `Failed to apply ${displayName}`);
       }
 
-      // Either path spends one ACMG/Exomiser unit.
-      if (userTier === 'guest') refreshGuestStatus?.();
-      else refreshSubscriptionStatus?.();
+      // Either path spends one ACMG/Exomiser unit — refresh meters only after the server
+      // has recorded the apply (sync 200 here; async 202 in pollFilterStatusOnce).
 
       if (res.status === 202) {
         filterStartedAsync = true;
@@ -1509,9 +1704,12 @@ export function useVariantPipeline({
         interpretationDismissedRef.current = true;
         setShowInterpretationModal(false);
         setAnnovarMessageModal(null);
+        pollFilterStatusOnce(activeConversationId);
       } else {
         const data = await res.json();
         const filteredCount = data.filtered_count ?? 0;
+        if (userTier === 'guest') refreshGuestStatus?.();
+        else refreshSubscriptionStatus?.();
         interpretationDismissedRef.current = true;
         setShowInterpretationModal(false);
         if (userTier === 'guest') {
@@ -1520,6 +1718,7 @@ export function useVariantPipeline({
             resolveGuestChatEligibility({
               hasAnnotatedFile: true,
               activeProprietaryFilter: filterType,
+              filteredVariantCount: filteredCount ?? null,
               variantsUnderConsideration: filteredCount ?? null,
             })
           );
@@ -1530,7 +1729,11 @@ export function useVariantPipeline({
           ...prev,
           activeProprietaryFilter: filterType,
           filteredVariantCount: filteredCount ?? prev.filteredVariantCount,
-          filterWorkingSetCount: filteredCount ?? prev.filterWorkingSetCount,
+          filterWorkingSetCount:
+            currentDocument?.variant_count ??
+            variantData?.total_variants ??
+            filteredCount ??
+            prev.filterWorkingSetCount,
         }));
         setAnnovarMessageModal({
           title: `${displayName} applied`,
@@ -1582,6 +1785,7 @@ export function useVariantPipeline({
     refreshGuestConversationFromStatus,
     resolveGuestChatEligibility,
     onRequestUpgrade,
+    pollFilterStatusOnce,
   ]);
 
   const step2ReqGate = columnInterpretationResult?.step2?.required_columns || {};

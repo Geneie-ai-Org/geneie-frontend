@@ -80,6 +80,41 @@ const GUEST_ELIGIBILITY_DEFAULTS = {
 
 export const GUEST_CHAT_MAX_VARIANTS_WITHOUT_FILTER = 100;
 
+/** True when ACMG or Exomiser proprietary filter is active. */
+export function isProprietaryPrioritizationFilter(activeProprietaryFilter) {
+  return activeProprietaryFilter === 'filter_1' || activeProprietaryFilter === 'filter_3';
+}
+
+/**
+ * Rows the chat/pipeline UI should treat as "under consideration".
+ * With ACMG/Exomiser, that is the prioritized keep-set (e.g. 2), not the file denominator (e.g. 1,000).
+ */
+export function resolveVariantsUnderConsideration({
+  activeProprietaryFilter = null,
+  filteredVariantCount = null,
+  filterWorkingSetCount = null,
+  fileTotal = null,
+  eligibilityUnderCount = null,
+} = {}) {
+  const hasProprietary = isProprietaryPrioritizationFilter(activeProprietaryFilter);
+  if (hasProprietary && filteredVariantCount != null) {
+    return Number(filteredVariantCount);
+  }
+  if (eligibilityUnderCount != null) {
+    return Number(eligibilityUnderCount);
+  }
+  if (filteredVariantCount != null) {
+    return Number(filteredVariantCount);
+  }
+  if (filterWorkingSetCount != null) {
+    return Number(filterWorkingSetCount);
+  }
+  if (fileTotal != null) {
+    return Number(fileTotal);
+  }
+  return null;
+}
+
 /** Guest pipeline/chat eligibility — never leaves `allowed: null` (avoids stuck "Checking…"). */
 export function buildGuestChatEligibility({
   hasAnnotatedFile = false,
@@ -120,8 +155,7 @@ export function buildGuestChatEligibility({
 
   if (annovarDone) {
     const under = variantsUnderConsideration ?? variantCount;
-    const hasProprietary =
-      activeProprietaryFilter === 'filter_1' || activeProprietaryFilter === 'filter_3';
+    const hasProprietary = isProprietaryPrioritizationFilter(activeProprietaryFilter);
     const needsFilter =
       !hasProprietary && under != null && under > maxVariantsWithoutFilter;
 
@@ -218,9 +252,7 @@ export function getGuestPipelineCta({
     }
     if (chatEligibility?.allowed) {
       return {
-        message:
-          chatEligibility.message ||
-          'Guest preview ready — chat below. Sign up to save history and unlock filters.',
+        message: null,
         action: onSignUp ? { label: 'Sign up free', onClick: onSignUp } : null,
       };
     }

@@ -569,10 +569,14 @@ const VariantFilterSidebar = ({
   const isGuest = userTier === 'guest';
 
   // After guest ANNOVAR, reload sidebar columns from annovar-status (needs deployed BE).
+  // Callback is stored in a ref — an inline parent lambda would retrigger this every render
+  // and hammer annovar-status while the sidebar is open.
+  const onGuestRefreshMetadataRef = useRef(onGuestRefreshMetadata);
+  onGuestRefreshMetadataRef.current = onGuestRefreshMetadata;
   useEffect(() => {
     if (!isGuest || !isOpen || !conversationId) return;
-    void onGuestRefreshMetadata?.();
-  }, [isGuest, isOpen, conversationId, onGuestRefreshMetadata]);
+    void onGuestRefreshMetadataRef.current?.();
+  }, [isGuest, isOpen, conversationId]);
   // Manual filters can narrow the ACMG (or other) Postgres working set; proprietary apply still
   // requires manual filters to be reset first (see handleApplyProprietaryFilter).
   // Locked while any pipeline job is in flight, from either the stepper or this sidebar.
@@ -1501,6 +1505,7 @@ const VariantFilterSidebar = ({
     // >1000 returns false, so we must not wait — eligibility goes back to
     // CHAT_REQUIRES_FILTER and the annotated baseline is the final schema.
     let enrichmentWillRequeue = false;
+    let restoredTotalCount = null;
     try {
       const token = await optionalIdToken();
 
@@ -1540,6 +1545,7 @@ const VariantFilterSidebar = ({
         }
 
         enrichmentWillRequeue = Boolean(data.enrichment_will_requeue);
+        restoredTotalCount = data.total_count ?? null;
       } else {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(apiErrorDetailToMessage(errorData.detail) || 'Failed to remove filter');
@@ -1552,7 +1558,10 @@ const VariantFilterSidebar = ({
       });
     } finally {
       setIsApplyingProprietaryFilter(false);
-      await refreshAfterFilterChange?.(conversationId, { enrichmentWillRequeue });
+      await refreshAfterFilterChange?.(conversationId, {
+        enrichmentWillRequeue: isGuest ? false : enrichmentWillRequeue,
+        totalCount: restoredTotalCount,
+      });
     }
   };
 

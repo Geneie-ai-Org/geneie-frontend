@@ -78,12 +78,17 @@ const GUEST_ELIGIBILITY_DEFAULTS = {
   advanced_chat_status: null,
 };
 
+export const GUEST_CHAT_MAX_VARIANTS_WITHOUT_FILTER = 100;
+
 /** Guest pipeline/chat eligibility — never leaves `allowed: null` (avoids stuck "Checking…"). */
 export function buildGuestChatEligibility({
   hasAnnotatedFile = false,
   isRunningAnnovar = false,
   annovarJobStatus = null,
   variantCount = null,
+  variantsUnderConsideration = null,
+  activeProprietaryFilter = null,
+  maxVariantsWithoutFilter = GUEST_CHAT_MAX_VARIANTS_WITHOUT_FILTER,
 } = {}) {
   const annovarRunning = isRunningAnnovar || annovarJobStatus === 'running';
   const annovarFailed = annovarJobStatus === 'failed';
@@ -114,17 +119,48 @@ export function buildGuestChatEligibility({
   }
 
   if (annovarDone) {
-    const needsFilter = variantCount != null && variantCount > 100;
+    const under = variantsUnderConsideration ?? variantCount;
+    const hasProprietary =
+      activeProprietaryFilter === 'filter_1' || activeProprietaryFilter === 'filter_3';
+    const needsFilter =
+      !hasProprietary && under != null && under > maxVariantsWithoutFilter;
+
+    if (hasProprietary) {
+      const label = activeProprietaryFilter === 'filter_3' ? 'Exomiser' : 'ACMG';
+      const countLabel =
+        under != null ? `${Number(under).toLocaleString()} variant${under === 1 ? '' : 's'}` : 'your prioritized set';
+      return {
+        ...GUEST_ELIGIBILITY_DEFAULTS,
+        allowed: true,
+        message: `Chat is using your ${label}-prioritized set (${countLabel}). Sign up to save history.`,
+        reason: null,
+        requires_annovar: false,
+        requires_filter: false,
+        variants_under_consideration: under,
+      };
+    }
+
+    if (needsFilter) {
+      return {
+        ...GUEST_ELIGIBILITY_DEFAULTS,
+        allowed: false,
+        message: `This file has ${Number(under).toLocaleString()} variant rows. Apply the ACMG or Exomiser filter to enable guest chat.`,
+        reason: 'CHAT_REQUIRES_FILTER',
+        requires_annovar: false,
+        requires_filter: true,
+        variants_under_consideration: under,
+      };
+    }
+
     return {
       ...GUEST_ELIGIBILITY_DEFAULTS,
       allowed: true,
-      message: needsFilter
-        ? 'Annotation complete. Apply a filter to focus variants, or start a guest chat preview below.'
-        : 'Annotation complete. Start chatting below — sign up to save history and unlock filters.',
-      reason: needsFilter ? 'CHAT_REQUIRES_FILTER' : null,
+      message:
+        'Annotation complete. Start chatting below — sign up to save history and unlock filters.',
+      reason: null,
       requires_annovar: false,
-      requires_filter: needsFilter,
-      variants_under_consideration: variantCount,
+      requires_filter: false,
+      variants_under_consideration: under,
     };
   }
 
@@ -171,18 +207,29 @@ export function getGuestPipelineCta({
   }
 
   if (hasAnnotatedFile || annovarJob?.status === 'completed') {
-    if (chatEligibility?.reason === 'CHAT_REQUIRES_FILTER') {
+    if (!chatEligibility?.allowed && chatEligibility?.reason === 'CHAT_REQUIRES_FILTER') {
       return {
         message:
-          'Large variant set — apply a filter to focus chat, or sign up for full analysis and saved history.',
-        action: onApplyFilter ? { label: 'Apply filter', onClick: onApplyFilter } : null,
+          chatEligibility.message ||
+          'Large variant set — apply the ACMG filter to enable guest chat, or sign up for full analysis.',
+        action: onApplyFilter ? { label: 'Apply ACMG filter', onClick: onApplyFilter } : null,
         secondaryAction: onSignUp ? { label: 'Sign up free', onClick: onSignUp } : null,
       };
     }
-    return {
-      message: 'Guest preview ready — chat below. Sign up to save history and unlock filters.',
-      action: onSignUp ? { label: 'Sign up free', onClick: onSignUp } : null,
-    };
+    if (chatEligibility?.allowed) {
+      return {
+        message:
+          chatEligibility.message ||
+          'Guest preview ready — chat below. Sign up to save history and unlock filters.',
+        action: onSignUp ? { label: 'Sign up free', onClick: onSignUp } : null,
+      };
+    }
+    if (chatEligibility?.message) {
+      return {
+        message: chatEligibility.message,
+        action: onSignUp ? { label: 'Sign up free', onClick: onSignUp } : null,
+      };
+    }
   }
 
   return {

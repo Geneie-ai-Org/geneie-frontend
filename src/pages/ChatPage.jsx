@@ -254,6 +254,10 @@ const ChatPage = () => {
     refreshGuestConversationFromStatus,
   } = pipeline;
 
+  const handleGuestRefreshMetadata = useCallback(() => {
+    void refreshGuestConversationFromStatus(activeConversationId || GUEST_SESSION_CONVERSATION_ID);
+  }, [refreshGuestConversationFromStatus, activeConversationId]);
+
   /* Chat needs either a proprietary filter applied or a working set under the plan's cap
    * (free/guest 100, beta/pro 1000). The backend enforces this and returns
    * CHAT_TOO_MANY_VARIANTS — but only after a send. Warning from the cap the API already gives
@@ -1329,8 +1333,8 @@ const ChatPage = () => {
         </div>
       )}
 
-      {/* Desktop guest login button */}
-      {userTier === 'guest' && !isMobile && (
+      {/* Desktop guest login — hide when filter sidebar is open (counter lives above composer). */}
+      {userTier === 'guest' && !isMobile && !isVariantSidebarOpen && (
         <div className="fixed top-3 right-4 z-50 flex items-center gap-3">
           <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>
             {DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed}/{DEFAULT_GUEST_CHAT_LIMIT} free
@@ -1620,9 +1624,7 @@ const ChatPage = () => {
             refreshAfterFilterChange={refreshAfterFilterChange}
             downloadGate={downloadGate}
             onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
-            onGuestRefreshMetadata={() =>
-              refreshGuestConversationFromStatus(activeConversationId || 'guest-session')
-            }
+            onGuestRefreshMetadata={handleGuestRefreshMetadata}
           />
       </aside>
 

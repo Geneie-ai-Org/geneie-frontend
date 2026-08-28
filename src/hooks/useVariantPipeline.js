@@ -97,6 +97,8 @@ export function useVariantPipeline({
   uploadSessionConversationIdRef.current = uploadSessionConversationId;
   const variantDataRef = useRef(variantData);
   variantDataRef.current = variantData;
+  const conversationFilterStateRef = useRef(conversationFilterState);
+  conversationFilterStateRef.current = conversationFilterState;
   const refreshConversationAfterAnnovarRef = useRef(null);
   const refreshChatEligibilityFromApiRef = useRef(null);
   const presentFileAnalysisModalRef = useRef(null);
@@ -128,20 +130,26 @@ export function useVariantPipeline({
     []
   );
 
-  const resolveGuestChatEligibility = useCallback(
-    (overrides = {}) =>
-      buildGuestChatEligibility({
-        hasAnnotatedFile: pipelineSnapshotRef.current?.hasAnnotatedFile,
-        isRunningAnnovar: isRunningAnnovarRef.current,
-        annovarJobStatus: pipelineSnapshotRef.current?.annovarJob?.status ?? null,
-        variantCount:
-          currentDocumentRef.current?.variant_count ??
-          variantDataRef.current?.total_variants ??
-          null,
-        ...overrides,
-      }),
-    []
-  );
+  const resolveGuestChatEligibility = useCallback((overrides = {}) => {
+    const filterState = conversationFilterStateRef.current || {};
+    const fileTotal =
+      currentDocumentRef.current?.variant_count ??
+      variantDataRef.current?.total_variants ??
+      null;
+    const underConsideration =
+      filterState.filterWorkingSetCount ??
+      filterState.filteredVariantCount ??
+      fileTotal;
+    return buildGuestChatEligibility({
+      hasAnnotatedFile: pipelineSnapshotRef.current?.hasAnnotatedFile,
+      isRunningAnnovar: isRunningAnnovarRef.current,
+      annovarJobStatus: pipelineSnapshotRef.current?.annovarJob?.status ?? null,
+      variantCount: fileTotal,
+      variantsUnderConsideration: underConsideration,
+      activeProprietaryFilter: filterState.activeProprietaryFilter ?? null,
+      ...overrides,
+    });
+  }, []);
 
   const applyGuestStatusPayload = useCallback(
     (payload) => {
@@ -312,14 +320,10 @@ export function useVariantPipeline({
           clearAnnovarPollTimer();
           if (isGuestUser) {
             setChatEligibility(
-              buildGuestChatEligibility({
+              resolveGuestChatEligibility({
                 hasAnnotatedFile: annJob.status === 'completed',
                 isRunningAnnovar: false,
                 annovarJobStatus: annJob.status,
-                variantCount:
-                  currentDocumentRef.current?.variant_count ??
-                  variantDataRef.current?.total_variants ??
-                  null,
               })
             );
           }
@@ -342,7 +346,7 @@ export function useVariantPipeline({
         }
       }
     },
-    [clearAnnovarPollTimer, refreshGuestStatus]
+    [clearAnnovarPollTimer, refreshGuestStatus, resolveGuestChatEligibility]
   );
 
   useEffect(() => () => clearAnnovarPollTimer(), [clearAnnovarPollTimer]);
@@ -505,8 +509,28 @@ export function useVariantPipeline({
    * the manual-clear path passes nothing and lets eligibility alone decide.
    */
   const refreshAfterFilterChange = useCallback(
-    async (conversationId, { enrichmentWillRequeue } = {}) => {
+    async (conversationId, { enrichmentWillRequeue, totalCount } = {}) => {
       if (!conversationId) return null;
+      if (userTierRef.current === 'guest') {
+        await refreshGuestConversationFromStatusRef.current?.(conversationId);
+        setChatEligibility(
+          resolveGuestChatEligibility({
+            hasAnnotatedFile: true,
+            activeProprietaryFilter: null,
+            variantCount:
+              totalCount ??
+              currentDocumentRef.current?.variant_count ??
+              variantDataRef.current?.total_variants ??
+              null,
+            variantsUnderConsideration:
+              totalCount ??
+              currentDocumentRef.current?.variant_count ??
+              variantDataRef.current?.total_variants ??
+              null,
+          })
+        );
+        return null;
+      }
       if (enrichmentWillRequeue) {
         setChatEligibility((prev) => ({
           ...prev,
@@ -517,7 +541,7 @@ export function useVariantPipeline({
       }
       return refreshConversationAfterAnnovar(conversationId);
     },
-    [refreshConversationAfterAnnovar]
+    [refreshConversationAfterAnnovar, resolveGuestChatEligibility]
   );
 
   const presentFileAnalysisModal = useCallback(
@@ -613,14 +637,7 @@ export function useVariantPipeline({
       return;
     }
     if (userTier === 'guest') {
-      setChatEligibility(
-        buildGuestChatEligibility({
-          hasAnnotatedFile: pipelineSnapshot.hasAnnotatedFile,
-          isRunningAnnovar,
-          annovarJobStatus: pipelineSnapshot.annovarJob?.status ?? null,
-          variantCount: currentDocument.variant_count ?? variantData?.total_variants ?? null,
-        })
-      );
+      setChatEligibility(resolveGuestChatEligibility());
       return;
     }
     if (!activeConversationId) {
@@ -635,13 +652,21 @@ export function useVariantPipeline({
     pipelineSnapshot.annovarJob?.status,
     isRunningAnnovar,
     variantData?.total_variants,
+    conversationFilterState?.activeProprietaryFilter,
+    conversationFilterState?.filteredVariantCount,
+    conversationFilterState?.filterWorkingSetCount,
+    resolveGuestChatEligibility,
   ]);
 
-  // Guest: restore ANNOVAR/filter state from server after refresh (no Mongo conversation fetch).
+  // Guest: restore ANNOVAR/filter state once per conversation + file (not on every document object churn).
+  const guestRestoreKey =
+    userTier === 'guest' && currentDocument
+      ? `${activeConversationId}:${currentDocument.name ?? currentDocument.file_name ?? 'file'}`
+      : null;
   useEffect(() => {
-    if (userTier !== 'guest' || !activeConversationId || !currentDocument) return;
+    if (!guestRestoreKey || !activeConversationId) return;
     void refreshGuestConversationFromStatus(activeConversationId);
-  }, [userTier, activeConversationId, currentDocument, refreshGuestConversationFromStatus]);
+  }, [guestRestoreKey, activeConversationId, refreshGuestConversationFromStatus]);
 
   useEffect(() => {
     if (!activeConversationId || !currentDocument) {
@@ -742,8 +767,13 @@ export function useVariantPipeline({
           convData.annovar_job?.status === 'running';
 
         let annJob = { ...(convData.annovar_job || {}) };
-        let filtJob = { ...(convData.filter_job || {}) };
-        const filtRunning = filtJob.status === 'running' || filtJob.status === 'pending';
+        let filtJob = { ...(convData.filter_job || snap.filterJob || {}) };
+        const filtShouldPoll =
+          isApplyingProprietaryFilterRef.current ||
+          filtJob.status === 'running' ||
+          filtJob.status === 'pending' ||
+          snap.filterJob?.status === 'running' ||
+          snap.filterJob?.status === 'pending';
 
         if (annShouldPoll) {
           const statusHeaders = { 'X-Device-Id': getDeviceIdRef.current() };
@@ -764,7 +794,7 @@ export function useVariantPipeline({
           }
         }
 
-        if (filtRunning) {
+        if (filtShouldPoll) {
           const filterHeaders = { 'X-Device-Id': getDeviceIdRef.current() };
           if (token) filterHeaders.Authorization = `Bearer ${token}`;
           const statusRes = await fetch(apiUrl(`/api/filter-status/${activeConversationId}`), {
@@ -774,7 +804,7 @@ export function useVariantPipeline({
             const statusData = await statusRes.json().catch(() => ({}));
             filtJob = { ...filtJob, ...(statusData.filter_job || {}) };
             if (statusData.status) filtJob.status = statusData.status;
-            if (isGuestUser && statusData.status === 'completed') {
+            if (isGuestUser) {
               applyGuestStatusPayloadRef.current(statusData);
             }
           }
@@ -824,8 +854,12 @@ export function useVariantPipeline({
             await refreshConversationAfterAnnovarRef.current(activeConversationId);
           } else {
             refreshGuestStatus?.();
+            setChatEligibility(resolveGuestChatEligibility({ hasAnnotatedFile: true }));
           }
         } else if (prevFilt === 'running' && filtJob.status === 'failed') {
+          if (isGuestUser) {
+            setChatEligibility(resolveGuestChatEligibility({ hasAnnotatedFile: true }));
+          }
         }
 
         prevAnnovarJobStatusRef.current = annJob.status || null;
@@ -923,29 +957,44 @@ export function useVariantPipeline({
   // Unknown (`null`) gates just like an explicit `false`: only a real `allowed: true`
   // from /api/chat-eligibility opens chat (F2/F8).
   const isChatPipelineGated =
-    userTier !== 'guest' &&
     !!currentDocument &&
-    !!activeConversationId &&
-    (chatEligibility.allowed !== true || step1FailBlocksChat);
+    (userTier === 'guest'
+      ? chatEligibility.allowed !== true || step1FailBlocksChat
+      : !!activeConversationId &&
+        (chatEligibility.allowed !== true || step1FailBlocksChat));
 
   /**
    * Optimistic gate on the start of any pipeline mutation (ANNOVAR, ACMG, Exomiser,
    * manual apply/reset, remove). Flipping eligibility back to unknown disables chat and
    * download immediately and holds until a real eligibility response lands.
+   *
+   * @param {'default'|'annovar'} scope — only `annovar` should park guest chat as
+   *   ANNOVAR-running; filter apply/remove must not reuse that message.
    */
-  const beginPipelineWork = useCallback(() => {
-    if (userTier === 'guest') {
-      setChatEligibility(
-        resolveGuestChatEligibility({
-          isRunningAnnovar: true,
-          annovarJobStatus: 'running',
-        })
-      );
-    } else {
+  const beginPipelineWork = useCallback(
+    (scope = 'default') => {
+      if (userTier === 'guest') {
+        if (scope === 'annovar') {
+          setChatEligibility(
+            resolveGuestChatEligibility({
+              isRunningAnnovar: true,
+              annovarJobStatus: 'running',
+              hasAnnotatedFile: pipelineSnapshotRef.current?.hasAnnotatedFile,
+              variantCount:
+                currentDocumentRef.current?.variant_count ??
+                variantDataRef.current?.total_variants ??
+                null,
+            })
+          );
+        }
+        setDownloadValidationGeneration((prev) => prev + 1);
+        return;
+      }
       setChatEligibility((prev) => ({ ...prev, allowed: null, reason: null }));
-    }
-    setDownloadValidationGeneration((prev) => prev + 1);
-  }, [resolveGuestChatEligibility, userTier]);
+      setDownloadValidationGeneration((prev) => prev + 1);
+    },
+    [resolveGuestChatEligibility, userTier]
+  );
 
   // Derived view of the (fully automatic, backend-driven) variant enrichment gate.
   // Enrichment has no dedicated endpoint — its state is surfaced only via /api/chat-eligibility.
@@ -1193,7 +1242,7 @@ export function useVariantPipeline({
         return;
       }
 
-      beginPipelineWork();
+      beginPipelineWork('annovar');
       setIsRunningAnnovar(true);
       prevAnnovarJobStatusRef.current = 'running';
       interpretationDismissedRef.current = true;
@@ -1449,6 +1498,14 @@ export function useVariantPipeline({
       if (res.status === 202) {
         filterStartedAsync = true;
         await res.json().catch(() => ({}));
+        prevFilterJobStatusRef.current = 'running';
+        setPipelineSnapshot((prev) => ({
+          ...prev,
+          filterJob: {
+            status: 'running',
+            message: `Applying ${displayName}…`,
+          },
+        }));
         interpretationDismissedRef.current = true;
         setShowInterpretationModal(false);
         setAnnovarMessageModal(null);
@@ -1459,6 +1516,13 @@ export function useVariantPipeline({
         setShowInterpretationModal(false);
         if (userTier === 'guest') {
           await refreshGuestConversationFromStatus(activeConversationId);
+          setChatEligibility(
+            resolveGuestChatEligibility({
+              hasAnnotatedFile: true,
+              activeProprietaryFilter: filterType,
+              variantsUnderConsideration: filteredCount ?? null,
+            })
+          );
         } else {
           await refreshConversationAfterAnnovar(activeConversationId);
         }

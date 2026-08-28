@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { getAuth } from 'firebase/auth';
+import { optionalIdToken } from '@/lib/safeAuth';
 import * as mongodbApi from '../services/mongodbApi';
 import { getChatApiUrl } from '@/config/api';
 import { getDeviceId } from '@/lib/deviceId';
@@ -183,15 +183,14 @@ export function useChatMessaging({
             conversationId: activeConversationId || (userTier === 'guest' ? 'guest-session' : null),
             hasUploadedFile: userTier === 'guest' && currentDocument !== null,
           };
-          const auth = getAuth();
-          const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+          const token = userTier === 'guest' ? null : await optionalIdToken();
 
           const response = await fetch(getChatApiUrl(), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               ...(token && { Authorization: `Bearer ${token}` }),
-              ...(token && { 'X-Device-Id': getDeviceId() }),
+              'X-Device-Id': getDeviceId(),
             },
             body: JSON.stringify(requestBody),
             signal,

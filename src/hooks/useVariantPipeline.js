@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { getAuth } from 'firebase/auth';
+import { optionalIdToken, requiredIdToken } from '@/lib/safeAuth';
 import * as mongodbApi from '../services/mongodbApi';
 import { apiUrl } from '@/config/api';
 import { apiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
@@ -12,8 +12,10 @@ import {
   mapProprietaryFilters,
 } from '@/services/backendApi';
 import {
+  buildGuestChatEligibility,
   buildVariantDataFromConversation,
   formatAnnovarProgressMessage,
+  guestStatusPayloadToConversationStub,
   normalizeChatEligibilityMessage,
 } from '@/lib/variantPipelineUtils';
 
@@ -42,7 +44,7 @@ export function useVariantPipeline({
   onOpenModule1Upload,
   onRequestUpgrade,
 }) {
-  const { limits, refreshSubscriptionStatus } = useAuth();
+  const { limits, refreshSubscriptionStatus, refreshGuestStatus } = useAuth();
   // `allowed: null` means "not confirmed yet" — never assume chat is open before
   // /api/chat-eligibility has answered.
   const [chatEligibility, setChatEligibility] = useState({
@@ -76,6 +78,9 @@ export function useVariantPipeline({
   const [downloadValidatedGeneration, setDownloadValidatedGeneration] = useState(0);
 
   const exomiserPollAbortRef = useRef(null);
+  const annovarPollTimerRef = useRef(null);
+  const userTierRef = useRef(userTier);
+  userTierRef.current = userTier;
   const prevAnnovarJobStatusRef = useRef(null);
   const prevFilterJobStatusRef = useRef(null);
   const prevChatAllowedRef = useRef(null);
@@ -122,6 +127,225 @@ export function useVariantPipeline({
     }),
     []
   );
+
+  const resolveGuestChatEligibility = useCallback(
+    (overrides = {}) =>
+      buildGuestChatEligibility({
+        hasAnnotatedFile: pipelineSnapshotRef.current?.hasAnnotatedFile,
+        isRunningAnnovar: isRunningAnnovarRef.current,
+        annovarJobStatus: pipelineSnapshotRef.current?.annovarJob?.status ?? null,
+        variantCount:
+          currentDocumentRef.current?.variant_count ??
+          variantDataRef.current?.total_variants ??
+          null,
+        ...overrides,
+      }),
+    []
+  );
+
+  const applyGuestStatusPayload = useCallback(
+    (payload) => {
+      if (!payload) return;
+      if (payload.column_interpretation) {
+        setColumnInterpretationResult(payload.column_interpretation);
+      }
+      const convStub = guestStatusPayloadToConversationStub(payload);
+      if (convStub) {
+        setVariantData(buildVariantDataFromConversation(convStub, payload.variant_metadata));
+      }
+      const annFromPayload = payload.annovar_job;
+      const annJob =
+        annFromPayload?.status
+          ? annFromPayload
+          : payload.status
+            ? {
+                status: payload.status,
+                phase: payload.phase,
+                message: payload.message,
+                progress_percent: payload.progress_percent,
+              }
+            : null;
+      const filtJob = payload.filter_job?.status ? payload.filter_job : null;
+      setPipelineSnapshot((prev) => ({
+        ...prev,
+        hasAnnotatedFile:
+          prev.hasAnnotatedFile ||
+          Boolean(payload.annotated_file_s3_key) ||
+          annJob?.status === 'completed' ||
+          payload.status === 'completed',
+        annovarJob: annJob?.status ? annJob : prev.annovarJob,
+        filterJob: filtJob || prev.filterJob,
+      }));
+      if (
+        payload.active_proprietary_filter !== undefined ||
+        payload.filtered_variant_count !== undefined ||
+        payload.variant_filter_working_set_count !== undefined
+      ) {
+        setConversationFilterState((prev) => ({
+          ...prev,
+          activeProprietaryFilter: payload.active_proprietary_filter ?? prev.activeProprietaryFilter,
+          filteredVariantCount: payload.filtered_variant_count ?? prev.filteredVariantCount,
+          filterWorkingSetCount: payload.variant_filter_working_set_count ?? prev.filterWorkingSetCount,
+        }));
+      }
+    },
+    [setColumnInterpretationResult, setVariantData, setConversationFilterState]
+  );
+
+  const applyGuestStatusPayloadRef = useRef(applyGuestStatusPayload);
+  applyGuestStatusPayloadRef.current = applyGuestStatusPayload;
+
+  const refreshGuestConversationFromStatus = useCallback(
+    async (conversationId) => {
+      if (!conversationId) return null;
+      try {
+        const res = await fetch(
+          apiUrl(`/api/annovar-status/${encodeURIComponent(conversationId)}`),
+          { headers: { 'X-Device-Id': getDeviceIdRef.current() } }
+        );
+        if (!res.ok) return null;
+        const data = await res.json().catch(() => ({}));
+        applyGuestStatusPayload(data);
+        return data;
+      } catch (error) {
+        console.warn('[useVariantPipeline] refreshGuestConversationFromStatus failed:', error);
+        return null;
+      }
+    },
+    [applyGuestStatusPayload]
+  );
+
+  const refreshGuestConversationFromStatusRef = useRef(refreshGuestConversationFromStatus);
+  refreshGuestConversationFromStatusRef.current = refreshGuestConversationFromStatus;
+
+  const clearAnnovarPollTimer = useCallback(() => {
+    if (annovarPollTimerRef.current) {
+      clearTimeout(annovarPollTimerRef.current);
+      annovarPollTimerRef.current = null;
+    }
+  }, []);
+
+  /** Dedicated ANNOVAR status poll — started on 202 from run-annovar (guest + signed-in). */
+  const pollAnnovarStatusOnce = useCallback(
+    async (conversationId) => {
+      if (!conversationId) return;
+      const isGuestUser = userTierRef.current === 'guest';
+      try {
+        const headers = { 'X-Device-Id': getDeviceIdRef.current() };
+        if (!isGuestUser) {
+          const token = await optionalIdToken();
+          if (!token) {
+            if (isRunningAnnovarRef.current) {
+              annovarPollTimerRef.current = setTimeout(
+                () => pollAnnovarStatusOnce(conversationId),
+                5000
+              );
+            }
+            return;
+          }
+          headers.Authorization = `Bearer ${token}`;
+        }
+
+        const statusRes = await fetch(
+          apiUrl(`/api/annovar-status/${encodeURIComponent(conversationId)}`),
+          { headers }
+        );
+
+        if (!statusRes.ok) {
+          console.warn('[useVariantPipeline] annovar-status HTTP', statusRes.status);
+          if (isRunningAnnovarRef.current) {
+            annovarPollTimerRef.current = setTimeout(
+              () => pollAnnovarStatusOnce(conversationId),
+              8000
+            );
+          }
+          return;
+        }
+
+        const statusData = await statusRes.json().catch(() => ({}));
+        const annJob = {
+          ...(statusData.annovar_job || {}),
+          status: statusData.status || statusData.annovar_job?.status,
+          phase: statusData.phase || statusData.annovar_job?.phase,
+          message: statusData.message || statusData.annovar_job?.message,
+          progress_percent:
+            statusData.progress_percent ?? statusData.annovar_job?.progress_percent,
+        };
+
+        setPipelineSnapshot((prev) => ({
+          ...prev,
+          annovarJob: annJob.status ? annJob : prev.annovarJob,
+          hasAnnotatedFile: prev.hasAnnotatedFile || annJob.status === 'completed',
+        }));
+
+        if (isGuestUser) {
+          applyGuestStatusPayloadRef.current(statusData);
+        }
+
+        const prevAnn = prevAnnovarJobStatusRef.current;
+        prevAnnovarJobStatusRef.current = annJob.status || null;
+
+        if (prevAnn === 'running' && annJob.status === 'completed') {
+          if (isGuestUser) {
+            refreshGuestStatus?.();
+            const doc = currentDocumentRef.current;
+            if (statusData.column_interpretation) {
+              presentFileAnalysisModalRef.current?.({
+                column_interpretation: statusData.column_interpretation,
+                document:
+                  doc?.url || doc?.s3_url
+                    ? {
+                        s3_url: doc.url || doc.s3_url,
+                        file_name: doc.name ?? doc.file_name,
+                      }
+                    : null,
+              });
+            }
+          } else {
+            const convAfterAnn = await refreshConversationAfterAnnovarRef.current?.(conversationId);
+            if (convAfterAnn) presentFileAnalysisModalRef.current?.(convAfterAnn);
+          }
+        }
+
+        if (annJob.status === 'completed' || annJob.status === 'failed') {
+          setIsRunningAnnovar(false);
+          clearAnnovarPollTimer();
+          if (isGuestUser) {
+            setChatEligibility(
+              buildGuestChatEligibility({
+                hasAnnotatedFile: annJob.status === 'completed',
+                isRunningAnnovar: false,
+                annovarJobStatus: annJob.status,
+                variantCount:
+                  currentDocumentRef.current?.variant_count ??
+                  variantDataRef.current?.total_variants ??
+                  null,
+              })
+            );
+          }
+          return;
+        }
+
+        if (annJob.status === 'running' || isRunningAnnovarRef.current) {
+          annovarPollTimerRef.current = setTimeout(
+            () => pollAnnovarStatusOnce(conversationId),
+            8000
+          );
+        }
+      } catch (error) {
+        console.warn('[useVariantPipeline] annovar-status poll failed:', error);
+        if (isRunningAnnovarRef.current) {
+          annovarPollTimerRef.current = setTimeout(
+            () => pollAnnovarStatusOnce(conversationId),
+            12000
+          );
+        }
+      }
+    },
+    [clearAnnovarPollTimer, refreshGuestStatus]
+  );
+
+  useEffect(() => () => clearAnnovarPollTimer(), [clearAnnovarPollTimer]);
 
   const applyChatEligibilityFromConversation = useCallback(
     (convData, { announceReady = false } = {}) => {
@@ -384,15 +608,47 @@ export function useVariantPipeline({
   );
 
   useEffect(() => {
-    if (!currentDocument || !activeConversationId || userTier === 'guest') {
+    if (!currentDocument) {
+      setChatEligibility(defaultChatEligibility());
+      return;
+    }
+    if (userTier === 'guest') {
+      setChatEligibility(
+        buildGuestChatEligibility({
+          hasAnnotatedFile: pipelineSnapshot.hasAnnotatedFile,
+          isRunningAnnovar,
+          annovarJobStatus: pipelineSnapshot.annovarJob?.status ?? null,
+          variantCount: currentDocument.variant_count ?? variantData?.total_variants ?? null,
+        })
+      );
+      return;
+    }
+    if (!activeConversationId) {
       setChatEligibility(defaultChatEligibility());
     }
-  }, [activeConversationId, currentDocument, userTier, defaultChatEligibility]);
+  }, [
+    activeConversationId,
+    currentDocument,
+    userTier,
+    defaultChatEligibility,
+    pipelineSnapshot.hasAnnotatedFile,
+    pipelineSnapshot.annovarJob?.status,
+    isRunningAnnovar,
+    variantData?.total_variants,
+  ]);
+
+  // Guest: restore ANNOVAR/filter state from server after refresh (no Mongo conversation fetch).
+  useEffect(() => {
+    if (userTier !== 'guest' || !activeConversationId || !currentDocument) return;
+    void refreshGuestConversationFromStatus(activeConversationId);
+  }, [userTier, activeConversationId, currentDocument, refreshGuestConversationFromStatus]);
 
   useEffect(() => {
-    if (!activeConversationId || !currentDocument || userTier === 'guest') {
+    if (!activeConversationId || !currentDocument) {
       return undefined;
     }
+
+    const isGuestUser = userTier === 'guest';
 
     let cancelled = false;
     let timerId = null;
@@ -429,28 +685,43 @@ export function useVariantPipeline({
       }
 
       try {
-        const auth = getAuth();
-        const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-        // A missing token is transient (Firebase refreshing); retry rather than
-        // abandoning a job that is still running server-side.
-        if (!token) {
-          pollTrace('no auth token yet — retrying in 5s');
-          if (!cancelled) timerId = setTimeout(pollBackgroundPipelineJobs, 5000);
-          return;
+        let token = null;
+        if (!isGuestUser) {
+          token = await optionalIdToken();
+          // A missing token is transient (Firebase refreshing); retry rather than
+          // abandoning a job that is still running server-side.
+          if (!token) {
+            pollTrace('no auth token yet — retrying in 5s');
+            if (!cancelled) timerId = setTimeout(pollBackgroundPipelineJobs, 5000);
+            return;
+          }
         }
 
-        const convData = await mongodbApi.getConversation(activeConversationId);
-        if (cancelled) return;
-        // getConversation resolves null on 404 and can resolve undefined if the payload
-        // shape shifts. Either way the job is still running, so retry.
-        if (!convData) {
-          pollTrace('conversation fetch returned nothing — retrying in 8s');
-          if (!cancelled) timerId = setTimeout(pollBackgroundPipelineJobs, 8000);
-          return;
+        let convData = null;
+        if (!isGuestUser) {
+          convData = await mongodbApi.getConversation(activeConversationId);
+          if (cancelled) return;
+          // getConversation resolves null on 404 and can resolve undefined if the payload
+          // shape shifts. Either way the job is still running, so retry.
+          if (!convData) {
+            pollTrace('conversation fetch returned nothing — retrying in 8s');
+            if (!cancelled) timerId = setTimeout(pollBackgroundPipelineJobs, 8000);
+            return;
+          }
+        } else {
+          const snap = pipelineSnapshotRef.current;
+          convData = {
+            annovar_job: snap.annovarJob,
+            annotated_file_s3_key: snap.hasAnnotatedFile ? 'guest' : null,
+            vcf_annotated: snap.vcfAnnotated,
+          };
         }
 
         const lineStatus = convData.s3_line_count_status;
-        if (lineStatus === 'pending' || lineStatus === 'running' || lineStatus === 'completed') {
+        if (
+          !isGuestUser &&
+          (lineStatus === 'pending' || lineStatus === 'running' || lineStatus === 'completed')
+        ) {
           if (convData.variant_metadata) {
             setVariantDataRef.current(buildVariantDataFromConversation(convData, convData.variant_metadata));
           }
@@ -475,11 +746,10 @@ export function useVariantPipeline({
         const filtRunning = filtJob.status === 'running' || filtJob.status === 'pending';
 
         if (annShouldPoll) {
+          const statusHeaders = { 'X-Device-Id': getDeviceIdRef.current() };
+          if (token) statusHeaders.Authorization = `Bearer ${token}`;
           const statusRes = await fetch(apiUrl(`/api/annovar-status/${activeConversationId}`), {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'X-Device-Id': getDeviceIdRef.current(),
-            },
+            headers: statusHeaders,
           });
           if (cancelled) return;
           if (statusRes.ok) {
@@ -490,20 +760,23 @@ export function useVariantPipeline({
             if (statusData.phase) annJob.phase = statusData.phase;
             if (statusData.message) annJob.message = statusData.message;
             if (statusData.progress_percent != null) annJob.progress_percent = statusData.progress_percent;
+            if (isGuestUser) applyGuestStatusPayloadRef.current(statusData);
           }
         }
 
         if (filtRunning) {
+          const filterHeaders = { 'X-Device-Id': getDeviceIdRef.current() };
+          if (token) filterHeaders.Authorization = `Bearer ${token}`;
           const statusRes = await fetch(apiUrl(`/api/filter-status/${activeConversationId}`), {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'X-Device-Id': getDeviceIdRef.current(),
-            },
+            headers: filterHeaders,
           });
           if (statusRes.ok) {
             const statusData = await statusRes.json().catch(() => ({}));
             filtJob = { ...filtJob, ...(statusData.filter_job || {}) };
             if (statusData.status) filtJob.status = statusData.status;
+            if (isGuestUser && statusData.status === 'completed') {
+              applyGuestStatusPayloadRef.current(statusData);
+            }
           }
         }
 
@@ -538,12 +811,20 @@ export function useVariantPipeline({
         const prevFilt = prevFilterJobStatusRef.current;
 
         if (prevAnn === 'running' && annJob.status === 'completed') {
-          const convAfterAnn = await refreshConversationAfterAnnovarRef.current(activeConversationId);
-          if (convAfterAnn) presentFileAnalysisModalRef.current(convAfterAnn);
+          if (!isGuestUser) {
+            const convAfterAnn = await refreshConversationAfterAnnovarRef.current(activeConversationId);
+            if (convAfterAnn) presentFileAnalysisModalRef.current(convAfterAnn);
+          } else {
+            refreshGuestStatus?.();
+          }
         } else if (prevAnn === 'running' && annJob.status === 'failed') {
         }
         if (prevFilt === 'running' && filtJob.status === 'completed') {
-          await refreshConversationAfterAnnovarRef.current(activeConversationId);
+          if (!isGuestUser) {
+            await refreshConversationAfterAnnovarRef.current(activeConversationId);
+          } else {
+            refreshGuestStatus?.();
+          }
         } else if (prevFilt === 'running' && filtJob.status === 'failed') {
         }
 
@@ -551,8 +832,14 @@ export function useVariantPipeline({
         prevFilterJobStatusRef.current = filtJob.status || null;
 
         const lineStill = lineStatus === 'pending' || lineStatus === 'running';
-        const annStill = annJob.status === 'running';
-        const filtStill = filtJob.status === 'running' || filtJob.status === 'pending';
+        const annStill =
+          annJob.status === 'running' ||
+          isRunningAnnovarRef.current ||
+          prevAnnovarJobStatusRef.current === 'running';
+        const filtStill =
+          filtJob.status === 'running' ||
+          filtJob.status === 'pending' ||
+          isApplyingProprietaryFilterRef.current;
         const uploadStill = uploadSessionConversationIdRef.current === activeConversationId;
 
         if (!cancelled && (annStill || filtStill || lineStill || uploadStill)) {
@@ -647,9 +934,18 @@ export function useVariantPipeline({
    * download immediately and holds until a real eligibility response lands.
    */
   const beginPipelineWork = useCallback(() => {
-    setChatEligibility((prev) => ({ ...prev, allowed: null, reason: null }));
+    if (userTier === 'guest') {
+      setChatEligibility(
+        resolveGuestChatEligibility({
+          isRunningAnnovar: true,
+          annovarJobStatus: 'running',
+        })
+      );
+    } else {
+      setChatEligibility((prev) => ({ ...prev, allowed: null, reason: null }));
+    }
     setDownloadValidationGeneration((prev) => prev + 1);
-  }, []);
+  }, [resolveGuestChatEligibility, userTier]);
 
   // Derived view of the (fully automatic, backend-driven) variant enrichment gate.
   // Enrichment has no dedicated endpoint — its state is surfaced only via /api/chat-eligibility.
@@ -826,22 +1122,6 @@ export function useVariantPipeline({
   }, [isChatPipelineGated, step1FailBlocksChat, onOpenModule1Upload, enrichmentState.failed, enrichmentState.active, enrichmentState.message, indexingState.failed, indexingState.active, indexingState.message, isRunningAnnovar, pipelineSnapshot.annovarJob, chatEligibility.message, setAnnovarMessageModal]);
 
   const runAnnovarForCurrentConversation = useCallback(async () => {
-    if (userTier === 'guest') {
-      setAnnovarMessageModal({
-        title: 'Sign up to run ANNOVAR',
-        message:
-          'ANNOVAR is available for signed-in users. Create an account to run annotation and unlock full analysis.',
-        variant: 'info',
-        ctaLabel: 'Sign Up / Log In',
-        onCta: () => {
-          setAnnovarMessageModal(null);
-          setIsShowingAuthForm(true);
-          setJustSignedUp(false);
-        },
-      });
-      return;
-    }
-
     if (!activeConversationId || !currentDocument) {
       setAnnovarMessageModal({ title: 'No file', message: 'Please upload a file first.', variant: 'info' });
       return;
@@ -880,15 +1160,18 @@ export function useVariantPipeline({
 
     let annovarStartedAsync = false;
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      if (!token) {
-        setAnnovarMessageModal({
-          title: 'Sign in required',
-          message: 'Please log in to run ANNOVAR annotation.',
-          variant: 'info',
-        });
-        return;
+      let token = null;
+      if (userTier !== 'guest') {
+        try {
+          token = await requiredIdToken();
+        } catch {
+          setAnnovarMessageModal({
+            title: 'Sign in required',
+            message: 'Please log in to run ANNOVAR annotation.',
+            variant: 'info',
+          });
+          return;
+        }
       }
 
       const fileType = (currentDocument.file_type ?? currentDocument.type)?.toLowerCase() || '';
@@ -916,13 +1199,17 @@ export function useVariantPipeline({
       interpretationDismissedRef.current = true;
       setShowInterpretationModal(false);
 
+      const runHeaders = {
+        'Content-Type': 'application/json',
+        'X-Device-Id': getDeviceId(),
+      };
+      if (token) {
+        runHeaders.Authorization = `Bearer ${token}`;
+      }
+
       const runResponse = await fetch(apiUrl('/api/run-annovar'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          'X-Device-Id': getDeviceId(),
-        },
+        headers: runHeaders,
         body: JSON.stringify({ conversation_id: activeConversationId }),
       });
 
@@ -936,7 +1223,10 @@ export function useVariantPipeline({
           { context: 'annovar', limits },
         );
         if (descriptor) {
-          if (descriptor.refresh) refreshSubscriptionStatus?.();
+          if (descriptor.refresh) {
+            if (userTier === 'guest') refreshGuestStatus?.();
+            else refreshSubscriptionStatus?.();
+          }
           setAnnovarMessageModal({
             title: descriptor.title,
             message: descriptor.message,
@@ -959,12 +1249,23 @@ export function useVariantPipeline({
       }
 
       // Either path consumes a Module 2 unit, so the cached counters are now stale.
-      refreshSubscriptionStatus?.();
+      if (userTier === 'guest') {
+        refreshGuestStatus?.();
+      } else {
+        refreshSubscriptionStatus?.();
+      }
 
       if (runResponse.status === 202) {
         annovarStartedAsync = true;
         await runResponse.json().catch(() => ({}));
         setAnnovarMessageModal(null);
+        setPipelineSnapshot((prev) => ({
+          ...prev,
+          annovarJob: { status: 'running', message: 'Annotation queued…' },
+        }));
+        prevAnnovarJobStatusRef.current = 'running';
+        clearAnnovarPollTimer();
+        void pollAnnovarStatusOnce(activeConversationId);
       } else {
         const runResult = await runResponse.json();
         const successMessage =
@@ -972,8 +1273,17 @@ export function useVariantPipeline({
           (runResult.variant_count != null
             ? `${runResult.variant_count} variants annotated and stored.`
             : 'Annotation complete.');
-        const convAfterAnn = await refreshConversationAfterAnnovar(activeConversationId);
+        const convAfterAnn = userTier === 'guest' ? null : await refreshConversationAfterAnnovar(activeConversationId);
         if (convAfterAnn) presentFileAnalysisModal(convAfterAnn);
+        else if (userTier === 'guest' && runResult.column_interpretation) {
+          setColumnInterpretationResult(runResult.column_interpretation);
+          presentFileAnalysisModal({
+            column_interpretation: runResult.column_interpretation,
+            document: currentDocument?.url
+              ? { s3_url: currentDocument.url, file_name: currentDocument.name ?? currentDocument.file_name }
+              : null,
+          });
+        }
         setAnnovarMessageModal({ title: 'Annotation complete', message: successMessage, variant: 'success' });
         setIsAnnovarRecommended(false);
       }
@@ -986,7 +1296,11 @@ export function useVariantPipeline({
       });
       // beginPipelineWork() parked eligibility at "unknown"; resolve it so a failed start
       // doesn't leave chat gated forever.
-      await refreshChatEligibilityFromApi(activeConversationId);
+      if (userTier !== 'guest') {
+        await refreshChatEligibilityFromApi(activeConversationId);
+      } else {
+        setChatEligibility(resolveGuestChatEligibility());
+      }
     } finally {
       if (!annovarStartedAsync) {
         setIsRunningAnnovar(false);
@@ -1010,7 +1324,10 @@ export function useVariantPipeline({
     getDeviceId,
     limits,
     refreshSubscriptionStatus,
+    refreshGuestStatus,
     onRequestUpgrade,
+    pollAnnovarStatusOnce,
+    clearAnnovarPollTimer,
   ]);
 
   const FILTER_DISPLAY_NAMES = {
@@ -1021,7 +1338,7 @@ export function useVariantPipeline({
   const runProprietaryFilter = useCallback(async (filterType) => {
     const displayName = FILTER_DISPLAY_NAMES[filterType] || 'Proprietary filter';
 
-    if (userTier === 'guest') {
+    if (userTier === 'guest' && filterType !== 'filter_1') {
       setAnnovarMessageModal({
         title: `Sign up to apply ${displayName}`,
         message: `The ${displayName} is available for signed-in users. Create an account to prioritize variants for chat.`,
@@ -1064,7 +1381,8 @@ export function useVariantPipeline({
       const step2 = columnInterpretationResult?.step2;
       const step2Req = step2?.required_columns || {};
       const step2Ready = Boolean(step2Req.CLNSIG?.found || step2Req.InterVar_automated?.found);
-      if (!step2Ready && chatEligibility.requires_annovar) {
+      const guestAnnotated = userTier === 'guest' && pipelineSnapshot.hasAnnotatedFile;
+      if (!step2Ready && !guestAnnotated && chatEligibility.requires_annovar) {
         setAnnovarMessageModal({
           title: 'Run ANNOVAR first',
           message:
@@ -1084,15 +1402,14 @@ export function useVariantPipeline({
     // filter. We only dismiss on success below.
 
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      if (!token) throw new Error('Authentication required');
+      const token = userTier !== 'guest' ? await optionalIdToken() : null;
+      if (userTier !== 'guest' && !token) throw new Error('Authentication required');
 
       const res = await fetch(apiUrl('/api/apply-proprietary-filter'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          ...(token && { Authorization: `Bearer ${token}` }),
           'X-Device-Id': getDeviceId(),
         },
         body: JSON.stringify({ conversation_id: activeConversationId, filter_type: filterType }),
@@ -1105,7 +1422,10 @@ export function useVariantPipeline({
           { context: 'filter', limits },
         );
         if (descriptor) {
-          if (descriptor.refresh) refreshSubscriptionStatus?.();
+          if (descriptor.refresh) {
+            if (userTier === 'guest') refreshGuestStatus?.();
+            else refreshSubscriptionStatus?.();
+          }
           setAnnovarMessageModal({
             title: descriptor.title,
             message: descriptor.message,
@@ -1123,7 +1443,8 @@ export function useVariantPipeline({
       }
 
       // Either path spends one ACMG/Exomiser unit.
-      refreshSubscriptionStatus?.();
+      if (userTier === 'guest') refreshGuestStatus?.();
+      else refreshSubscriptionStatus?.();
 
       if (res.status === 202) {
         filterStartedAsync = true;
@@ -1136,7 +1457,11 @@ export function useVariantPipeline({
         const filteredCount = data.filtered_count ?? 0;
         interpretationDismissedRef.current = true;
         setShowInterpretationModal(false);
-        await refreshConversationAfterAnnovar(activeConversationId);
+        if (userTier === 'guest') {
+          await refreshGuestConversationFromStatus(activeConversationId);
+        } else {
+          await refreshConversationAfterAnnovar(activeConversationId);
+        }
         setConversationFilterState((prev) => ({
           ...prev,
           activeProprietaryFilter: filterType,
@@ -1159,7 +1484,11 @@ export function useVariantPipeline({
         variant: 'error',
       });
       // Resolve the optimistic "unknown" state set by beginPipelineWork().
-      await refreshChatEligibilityFromApi(activeConversationId);
+      if (userTier === 'guest') {
+        setChatEligibility(resolveGuestChatEligibility());
+      } else {
+        await refreshChatEligibilityFromApi(activeConversationId);
+      }
     } finally {
       if (!filterStartedAsync) {
         setIsApplyingProprietaryFilter(false);
@@ -1184,6 +1513,10 @@ export function useVariantPipeline({
     getDeviceId,
     limits,
     refreshSubscriptionStatus,
+    refreshGuestStatus,
+    pipelineSnapshot.hasAnnotatedFile,
+    refreshGuestConversationFromStatus,
+    resolveGuestChatEligibility,
     onRequestUpgrade,
   ]);
 
@@ -1191,7 +1524,12 @@ export function useVariantPipeline({
   const step2AcmgReady = Boolean(step2ReqGate.CLNSIG?.found || step2ReqGate.InterVar_automated?.found);
   const annovarGate = actionGate(limits, 'annovar');
   const acmgExomiserGate = actionGate(limits, 'acmgExomiser');
-  const acmgFilterCanApply = !!step2AcmgReady && !chatEligibility.requires_annovar && acmgExomiserGate.allowed;
+  const acmgFilterCanApply =
+    (!!step2AcmgReady ||
+      (userTier === 'guest' &&
+        (pipelineSnapshot.hasAnnotatedFile || pipelineSnapshot.annovarJob?.status === 'completed'))) &&
+    !chatEligibility.requires_annovar &&
+    acmgExomiserGate.allowed;
 
   const fetchExomiserEligibility = useCallback(async () => {
     if (!activeConversationId || userTier === 'guest') return null;
@@ -1455,5 +1793,6 @@ export function useVariantPipeline({
     refreshChatEligibilityFromApi,
     remapProprietaryFiltersForConversation,
     convertTabularToVcfForConversation,
+    refreshGuestConversationFromStatus,
   };
 }

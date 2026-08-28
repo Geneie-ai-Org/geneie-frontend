@@ -63,84 +63,25 @@ export function useDocumentUpload({
               ? { s3_url: documentData.url, file_name: documentData.name ?? documentData.file_name }
               : null,
           });
+          syncPipelineFromConversationRef?.current?.({
+            column_interpretation: documentData.column_interpretation,
+            variant_metadata: documentData.variant_metadata,
+            document: documentData.url
+              ? { s3_url: documentData.url, file_name: documentData.name ?? documentData.file_name }
+              : null,
+            s3_line_count_status: documentData.s3_line_count_status || null,
+          });
         }
         if (documentData.variant_metadata) {
           setVariantData(buildVariantDataFromConversation(documentData, documentData.variant_metadata));
         }
 
-        if (!documentData.column_interpretation && documentData.type && ['tsv', 'csv'].includes(documentData.type.toLowerCase())) {
-          try {
-            console.log('[App] Calling validation endpoint for variant extraction (guest mode)...');
-
-            const validationResponse = await fetch(apiUrl('/api/validate-document'), {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                document_url: documentData.url,
-                document_type: documentData.type,
-                conversation_id: 'guest-session',
-              }),
-            });
-
-            if (validationResponse.ok) {
-              const validationData = await validationResponse.json();
-              console.log('[App] Validation response (guest):', validationData);
-
-              if (validationData.is_variant_file && validationData.variant_data) {
-                const variantDataObj = {
-                  parameter_ranges: validationData.variant_data.parameter_ranges || {},
-                  categorical_columns: validationData.variant_data.categorical_columns || {},
-                  columns: validationData.variant_data.columns || [],
-                  numeric_columns: validationData.variant_data.numeric_columns || [],
-                  all_unique_values: validationData.variant_data.all_unique_values || {},
-                  total_variants: validationData.variant_data.total_variants || 0,
-                  filtered_variants: null,
-                };
-                setVariantData(variantDataObj);
-
-                try {
-                  const sampleVariants = validationData.variant_data.sample_variants || [];
-                  const sampleData = {};
-                  (variantDataObj.columns || []).forEach((col) => {
-                    sampleData[col] = sampleVariants
-                      .slice(0, 50)
-                      .map((row) => (row && row[col] != null ? String(row[col]) : ''));
-                  });
-
-                  const interpResponse = await fetch(apiUrl('/api/three-step-interpretation'), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      file_columns: variantDataObj.columns || [],
-                      sample_data: sampleData,
-                      is_vcf: false,
-                    }),
-                  });
-
-                  if (interpResponse.ok) {
-                    const interpretation = await interpResponse.json();
-                    setColumnInterpretationResult(interpretation);
-                    const resultId = JSON.stringify(interpretation);
-                    interpretationShownRef.current = resultId;
-                    presentFileAnalysisModal({
-                      column_interpretation: interpretation,
-                      document: documentData.url
-                        ? { s3_url: documentData.url, file_name: documentData.name ?? documentData.file_name }
-                        : null,
-                    });
-                  }
-                } catch (interpError) {
-                  console.error('[App] Error running guest 3-step interpretation:', interpError);
-                }
-              }
-            } else {
-              console.warn('[App] Validation endpoint returned error (guest):', validationResponse.status);
-            }
-          } catch (validationError) {
-            console.error('[App] Error calling validation endpoint (guest):', validationError);
-          }
+        if (
+          documentData.storageType === 's3'
+          && documentData.is_variant_file
+          && !documentData.column_interpretation
+        ) {
+          console.warn('[App] Guest S3 upload finished without column_interpretation in response');
         }
       }
       return;

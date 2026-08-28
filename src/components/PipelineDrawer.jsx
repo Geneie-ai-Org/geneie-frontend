@@ -171,6 +171,7 @@ const PipelineDrawer = ({
   exomiserStatus,
   gatedMessage = null,
   gatedAction = null,
+  guestPipelineCta = null,
 }) => {
   const reduceMotion = useReducedMotion();
   const [removeFileDialogOpen, setRemoveFileDialogOpen] = useState(false);
@@ -312,7 +313,14 @@ const PipelineDrawer = ({
       : 'var(--text-secondary)';
 
   const handleStepClick = (stepId) => {
-    if (isGuest && (stepId === 'annovar' || stepId === 'reduce')) return;
+    if (
+      isGuest &&
+      stepId === 'reduce' &&
+      steps.annovar !== 'done' &&
+      steps.annovar !== 'skipped'
+    ) {
+      return;
+    }
     onStepAction?.(stepId);
   };
 
@@ -374,7 +382,11 @@ const PipelineDrawer = ({
                   const status = steps[def.id];
                   const isLast = index === PIPELINE_STEP_DEFS.length - 1;
                   const annovarDone = def.id === 'annovar' && status === 'done';
-                  const guestLocked = isGuest && (def.id === 'annovar' || def.id === 'reduce');
+                  const guestLocked =
+                    isGuest &&
+                    def.id === 'reduce' &&
+                    steps.annovar !== 'done' &&
+                    steps.annovar !== 'skipped';
                   const clickable = !guestLocked && !annovarDone;
                   const running = status === 'running' && !guestLocked;
 
@@ -440,10 +452,32 @@ const PipelineDrawer = ({
                 )}
               </div>
 
-              {isGuest && (
-                <p className="text-2xs pb-1 px-0.5" style={{ color: 'var(--warning)' }}>
-                  Sign in to run ANNOVAR, apply filters, and chat with your full variant set.
-                </p>
+              {guestPipelineCta?.message && (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pb-1 px-0.5">
+                  <p className="text-2xs leading-relaxed flex-1 min-w-0" style={{ color: 'var(--text-secondary)' }}>
+                    {guestPipelineCta.message}
+                  </p>
+                  {guestPipelineCta.action && (
+                    <button
+                      type="button"
+                      onClick={guestPipelineCta.action.onClick}
+                      className="shrink-0 px-2 py-0.5 rounded-md text-2xs font-medium border transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                      style={{ borderColor: 'var(--accent-teal)', color: 'var(--accent-teal)' }}
+                    >
+                      {guestPipelineCta.action.label}
+                    </button>
+                  )}
+                  {guestPipelineCta.secondaryAction && (
+                    <button
+                      type="button"
+                      onClick={guestPipelineCta.secondaryAction.onClick}
+                      className="shrink-0 px-2 py-0.5 rounded-md text-2xs font-medium transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      {guestPipelineCta.secondaryAction.label}
+                    </button>
+                  )}
+                </div>
               )}
 
               {/* Destructive actions live here, not on the collapsed line. */}

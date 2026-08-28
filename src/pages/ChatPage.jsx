@@ -37,7 +37,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { apiUrl, getApiOrigin } from '@/config/api';
-import { buildVariantDataFromConversation, variantFileRowCountForSidebar } from '@/lib/variantPipelineUtils';
+import { buildVariantDataFromConversation, getGuestPipelineCta, variantFileRowCountForSidebar } from '@/lib/variantPipelineUtils';
 import { conversationPath, isValidConversationId } from '@/lib/conversationRoutes';
 import { getDeviceId } from '@/lib/deviceId';
 import { useVariantPipeline } from '@/hooks/useVariantPipeline';
@@ -161,10 +161,13 @@ const ChatPage = () => {
     && meterNearLimit(limits, 'chat');
 
 
+  const GUEST_SESSION_CONVERSATION_ID = 'guest-session';
   const activeConversationId =
-    userTier !== 'guest' && urlConversationId && isValidConversationId(urlConversationId)
-      ? urlConversationId
-      : null;
+    userTier === 'guest'
+      ? GUEST_SESSION_CONVERSATION_ID
+      : urlConversationId && isValidConversationId(urlConversationId)
+        ? urlConversationId
+        : null;
 
   // The soft warning and its dismissal are per-conversation, so both reset on a switch.
   useEffect(() => {
@@ -248,6 +251,7 @@ const ChatPage = () => {
     remapProprietaryFiltersForConversation,
     convertTabularToVcfForConversation,
     refreshChatEligibilityFromApi,
+    refreshGuestConversationFromStatus,
   } = pipeline;
 
   /* Chat needs either a proprietary filter applied or a working set under the plan's cap
@@ -258,6 +262,7 @@ const ChatPage = () => {
     chatEligibility.variants_under_consideration ?? conversationFilterState.filteredVariantCount;
   const variantCap = limits.chat.maxVariantsWithoutFilter;
   const needsFilterForChat =
+    userTier !== 'guest' &&
     variantCap != null
     && typeof variantWorkingSet === 'number'
     && variantWorkingSet > variantCap
@@ -1142,6 +1147,21 @@ const ChatPage = () => {
       ? { label: 'Apply a filter', onClick: () => setIsVariantSidebarOpen(true) }
       : null;
 
+  const guestPipelineCta =
+    userTier === 'guest' && showAnalysisPipeline
+      ? getGuestPipelineCta({
+          hasAnnotatedFile: pipelineSnapshot.hasAnnotatedFile,
+          isRunningAnnovar,
+          annovarJob: pipelineSnapshot.annovarJob,
+          chatEligibility,
+          onSignUp: () => {
+            setIsShowingAuthForm(true);
+            setJustSignedUp(false);
+          },
+          onApplyFilter: () => setIsVariantSidebarOpen(true),
+        })
+      : null;
+
   const pipelineDrawer = showAnalysisPipeline ? (
     <PipelineDrawer
       fileName={currentDocument?.name ?? currentDocument?.file_name}
@@ -1177,6 +1197,7 @@ const ChatPage = () => {
       exomiserStatus={exomiserStatus}
       gatedMessage={pipelineGatedMessage}
       gatedAction={gatedAction}
+      guestPipelineCta={guestPipelineCta}
     />
   ) : null;
 
@@ -1345,9 +1366,9 @@ const ChatPage = () => {
                 </h2>
               </div>
 
-              {userTier === 'guest' && (
-                <p className="text-xs font-medium mb-4 flex items-center justify-center gap-1.5 w-full" style={{ color: 'var(--warning)' }}>
-                  <AlertCircle className="w-5 h-5 shrink-0" /> Variants won't be included in chat context until you sign up.
+              {userTier === 'guest' && currentDocument && (
+                <p className="text-xs font-medium mb-4 flex items-center justify-center gap-1.5 w-full" style={{ color: 'var(--text-secondary)' }}>
+                  <AlertCircle className="w-5 h-5 shrink-0" /> Guest preview: chat can use your uploaded variant file (5 exchanges). Sign up to save history and unlock filters.
                 </p>
               )}
 
@@ -1598,6 +1619,10 @@ const ChatPage = () => {
             beginPipelineWork={beginPipelineWork}
             refreshAfterFilterChange={refreshAfterFilterChange}
             downloadGate={downloadGate}
+            onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
+            onGuestRefreshMetadata={() =>
+              refreshGuestConversationFromStatus(activeConversationId || 'guest-session')
+            }
           />
       </aside>
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { FileText, X, RotateCcw, CheckCircle, Upload, Trash2, Info, Zap, Search, Sprout, PencilLine, ChevronDown, PanelRightClose } from 'lucide-react';
 import { getDeviceId } from '@/lib/deviceId';
 import { doc, getDoc } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { optionalIdToken } from '@/lib/safeAuth';
 import DocumentUpload from './DocumentUpload';
 import ExportVariantsButton from './ExportVariantsButton';
 import PerimeterProgress from '@/components/ui/PerimeterProgress';
@@ -65,11 +65,10 @@ async function pollFilterJobStatus(conversationId, token, apiBase) {
   const maxPollMs = 14 * 24 * 60 * 60 * 1000;
   const started = Date.now();
   const pollOnce = async () => {
+    const headers = { 'X-Device-Id': getDeviceId() };
+    if (token) headers.Authorization = `Bearer ${token}`;
     const statusRes = await fetch(`${apiBase}/api/filter-status/${conversationId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'X-Device-Id': getDeviceId(),
-      },
+      headers,
     });
     if (!statusRes.ok) return null;
     const statusData = await statusRes.json().catch(() => ({}));
@@ -500,6 +499,8 @@ const VariantFilterSidebar = ({
   beginPipelineWork = () => {},
   refreshAfterFilterChange = null,
   downloadGate = null,
+  onProprietaryFilterClick = null,
+  onGuestRefreshMetadata = null,
 }) => {
   /* Quota is orthogonal to filter readiness. `=== false` (rather than a falsy check) so a missing
    * gate — degraded limits, still loading — never disables anything. */
@@ -566,6 +567,12 @@ const VariantFilterSidebar = ({
 
   // Define isGuest early so it can be used in functions below
   const isGuest = userTier === 'guest';
+
+  // After guest ANNOVAR, reload sidebar columns from annovar-status (needs deployed BE).
+  useEffect(() => {
+    if (!isGuest || !isOpen || !conversationId) return;
+    void onGuestRefreshMetadata?.();
+  }, [isGuest, isOpen, conversationId, onGuestRefreshMetadata]);
   // Manual filters can narrow the ACMG (or other) Postgres working set; proprietary apply still
   // requires manual filters to be reset first (see handleApplyProprietaryFilter).
   // Locked while any pipeline job is in flight, from either the stepper or this sidebar.
@@ -903,8 +910,7 @@ const VariantFilterSidebar = ({
     beginPipelineWork();
     setIsApplying(true);
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
 
       const API_URL = apiUrl('/api/filter-variants');
 
@@ -1052,8 +1058,7 @@ const VariantFilterSidebar = ({
     // Clear filters in backend and Firestore
     setIsApplying(true);
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
 
       const API_URL = apiUrl('/api/filter-variants');
 
@@ -1137,8 +1142,7 @@ const VariantFilterSidebar = ({
   const loadSavedFilterPresets = useCallback(async () => {
     if (!userId || isGuest) return;
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
       const base = getApiOrigin();
       const response = await fetch(`${base}/api/saved-filters`, {
         method: 'GET',
@@ -1225,8 +1229,7 @@ const VariantFilterSidebar = ({
     }
     setIsSavingPreset(true);
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
       const base = getApiOrigin();
       const response = await fetch(`${base}/api/saved-filters`, {
         method: 'POST',
@@ -1261,8 +1264,7 @@ const VariantFilterSidebar = ({
     beginPipelineWork();
     setIsApplyingPreset(true);
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
       const base = getApiOrigin();
       const response = await fetch(`${base}/api/apply-saved-filter`, {
         method: 'POST',
@@ -1307,8 +1309,7 @@ const VariantFilterSidebar = ({
     if (!presetId || !userId || isGuest) return;
     if (!window.confirm('Delete this Filter Garden entry?')) return;
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
       const base = getApiOrigin();
       const response = await fetch(`${base}/api/saved-filters/${encodeURIComponent(presetId)}`, {
         method: 'DELETE',
@@ -1336,8 +1337,7 @@ const VariantFilterSidebar = ({
   const handleUpdateSelectedGarden = async () => {
     if (!selectedPresetId || !selectedGardenEntry) return;
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
       const base = getApiOrigin();
       const response = await fetch(`${base}/api/saved-filters/${encodeURIComponent(selectedPresetId)}`, {
         method: 'PATCH',
@@ -1372,8 +1372,7 @@ const VariantFilterSidebar = ({
     if (!conversationId || !userId) return;
 
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
 
       const base = getApiOrigin();
       const API_URL = `${base}/api/preview-proprietary-filters`;
@@ -1403,7 +1402,7 @@ const VariantFilterSidebar = ({
 
   // Apply proprietary filter (toggle: if already active, remove it)
   const handleApplyProprietaryFilter = async (filterType) => {
-    if (!conversationId || !userId) return;
+    if (!conversationId || (!userId && !isGuest)) return;
     if (pipelineBusy) return;
     if (hasAppliedManualFilters && activeProprietaryFilter !== filterType) {
       notify({
@@ -1419,11 +1418,15 @@ const VariantFilterSidebar = ({
       return;
     }
 
+    if (isGuest && filterType === 'filter_1' && onProprietaryFilterClick) {
+      onProprietaryFilterClick('filter_1');
+      return;
+    }
+
     beginPipelineWork();
     setIsApplyingProprietaryFilter(true);
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
 
       const API_URL = apiUrl('/api/apply-proprietary-filter');
 
@@ -1490,7 +1493,7 @@ const VariantFilterSidebar = ({
 
   // Remove proprietary filter
   const handleRemoveProprietaryFilter = async () => {
-    if (!conversationId || !userId) return;
+    if (!conversationId || (!userId && !isGuest)) return;
 
     beginPipelineWork();
     setIsApplyingProprietaryFilter(true);
@@ -1499,8 +1502,7 @@ const VariantFilterSidebar = ({
     // CHAT_REQUIRES_FILTER and the annotated baseline is the final schema.
     let enrichmentWillRequeue = false;
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
 
       const API_URL = apiUrl('/api/remove-proprietary-filter');
 
@@ -1508,7 +1510,8 @@ const VariantFilterSidebar = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` })
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+          'X-Device-Id': getDeviceId(),
         },
         body: JSON.stringify({
           conversation_id: conversationId,

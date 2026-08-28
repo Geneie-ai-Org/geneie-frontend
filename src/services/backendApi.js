@@ -575,7 +575,10 @@ export function getProUploadMaxBytes(fileName, proEntitlements) {
 export function getMaxUploadBytes(fileName, limits) {
   const name = (fileName || '').toLowerCase();
   const cohort = limits?.cohort ?? 'guest';
-  if (cohort === 'guest') return DEFAULT_GUEST_FILE_SIZE_MB * 1024 * 1024;
+  if (cohort === 'guest') {
+    // Backend guest uploads use Pro-sized caps (GUEST_LIMITS_FE_HANDOFF §TL;DR).
+    return getProUploadMaxBytes(name, limits?.raw?.proEntitlements);
+  }
   if (cohort === 'free') {
     return limits?.upload?.previewMaxBytes ?? DEFAULT_FREE_FILE_SIZE_MB * 1024 * 1024;
   }

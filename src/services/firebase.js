@@ -7,7 +7,6 @@ import {
   GoogleAuthProvider,
   OAuthProvider
 } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
 
 import { env, isFirebaseConfigured } from '../config/env.js';
 
@@ -29,7 +28,6 @@ const firebaseConfig = getFirebaseConfig();
 // ---- SINGLETON PROTECTION ----
 let app = null;
 let auth = null;
-let db = null;
 
 if (isFirebaseConfigured()) {
   if (!getApps().length) {
@@ -39,7 +37,6 @@ if (isFirebaseConfigured()) {
     console.log("♻️ Reusing existing Firebase app");
   }
   auth = getAuth(app);
-  db = getFirestore(app);
 } else {
   console.error(
     'Missing config. Set VITE_FIREBASE_* in geneie-frontend/.env (see .env.example).'
@@ -52,4 +49,15 @@ if (auth) {
     .catch(() => setPersistence(auth, inMemoryPersistence));
 }
 
-export { app, auth, db, GoogleAuthProvider, OAuthProvider };
+/* Firestore is deliberately NOT initialised or exported.
+ *
+ * User and entitlement data lives in MongoDB behind the backend API. Firestore was
+ * reachable from the browser, and its per-document rules meant "a user may write their own
+ * profile" also meant "a user may set their own planStatus and quota counters". Not
+ * exporting `db` is what stops that path being reintroduced by accident — if you find
+ * yourself adding getFirestore() back, the data you want almost certainly belongs behind
+ * an API endpoint instead.
+ *
+ * Firebase Auth stays: it does authentication, which was never the problem.
+ */
+export { app, auth, GoogleAuthProvider, OAuthProvider };

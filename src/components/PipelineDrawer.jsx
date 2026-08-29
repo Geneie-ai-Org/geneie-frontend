@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AlertCircle, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
 import PerimeterProgress from '@/components/ui/PerimeterProgress';
 import {
@@ -24,7 +24,7 @@ function stepTextStyle(status, locked) {
   if (locked) return { color: 'var(--text-tertiary)', fontWeight: 400 };
   if (status === 'done') return { color: 'var(--text-primary)', fontWeight: 600 };
   if (status === 'failed') return { color: 'var(--error)', fontWeight: 600 };
-  if (status === 'running') return { fontWeight: 600 };
+  if (status === 'running') return { color: 'var(--text-primary)', fontWeight: 600 };
   // `skipped` is struck through rather than dimmed — a step that will never run must not
   // read as one that hasn't run yet.
   if (status === 'skipped') {
@@ -137,7 +137,7 @@ function SegmentMeter({ steps }) {
  *
  * Progress is deliberately unnumbered. The backend reports percentages in lumps
  * (queued 5, exporting 30, tertiary 65, literature 85), so a printed number invites
- * watching a value that jumps. Instead the active step's label shimmers and a stroke
+ * watching a value that jumps. Instead the collapsed status line shimmers and a stroke
  * travels the drawer's perimeter, carrying the percentage as distance only.
  */
 const PipelineDrawer = ({
@@ -171,7 +171,9 @@ const PipelineDrawer = ({
   exomiserStatus,
   gatedMessage = null,
   gatedAction = null,
+  guestPipelineCta = null,
 }) => {
+  const reduceMotion = useReducedMotion();
   const [removeFileDialogOpen, setRemoveFileDialogOpen] = useState(false);
 
   const pipelineProps = {
@@ -202,6 +204,9 @@ const PipelineDrawer = ({
   const chatReady = chatEligibility?.allowed === true;
   const variantCount = variantsUnderConsideration ?? filteredVariantCount;
   const displayName = fileName || 'Variant file';
+  const guestFilterGateBlocked =
+    isGuest && !chatReady && chatEligibility?.reason === 'CHAT_REQUIRES_FILTER';
+  const showGuestFilterCta = guestFilterGateBlocked && Boolean(guestPipelineCta?.message);
 
   const failed =
     enrichmentState?.failed ||
@@ -300,6 +305,8 @@ const PipelineDrawer = ({
     }
     if (enrichmentState?.active) return enrichmentState.message || 'Enriching your variants…';
     if (indexingState?.active) return indexingState.message || 'Indexing variants for chat…';
+    if (showGuestFilterCta) return null;
+    if (isGuest && chatReady && chatEligibility?.message) return chatEligibility.message;
     if (gatedMessage) return gatedMessage;
     return statusLine;
   })();
@@ -311,7 +318,14 @@ const PipelineDrawer = ({
       : 'var(--text-secondary)';
 
   const handleStepClick = (stepId) => {
-    if (isGuest && (stepId === 'annovar' || stepId === 'reduce')) return;
+    if (
+      isGuest &&
+      stepId === 'reduce' &&
+      steps.annovar !== 'done' &&
+      steps.annovar !== 'skipped'
+    ) {
+      return;
+    }
     onStepAction?.(stepId);
   };
 
@@ -355,8 +369,16 @@ const PipelineDrawer = ({
             key="body"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+            // The collapse is faster than the expand: opening is the user asking to read
+            // something, closing is the interface getting out of the way. The exit timing
+            // has to ride on `exit` itself — AnimatePresence replays the element's last
+            // props, so a `transition` that branched on `expanded` would never see false.
+            exit={{
+              height: 0,
+              opacity: 0,
+              transition: reduceMotion ? { duration: 0 } : { duration: 0.15, ease: [0.23, 1, 0.32, 1] },
+            }}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
             className="overflow-hidden"
           >
             <div className="px-3.5 pt-0.5">
@@ -365,7 +387,11 @@ const PipelineDrawer = ({
                   const status = steps[def.id];
                   const isLast = index === PIPELINE_STEP_DEFS.length - 1;
                   const annovarDone = def.id === 'annovar' && status === 'done';
-                  const guestLocked = isGuest && (def.id === 'annovar' || def.id === 'reduce');
+                  const guestLocked =
+                    isGuest &&
+                    def.id === 'reduce' &&
+                    steps.annovar !== 'done' &&
+                    steps.annovar !== 'skipped';
                   const clickable = !guestLocked && !annovarDone;
                   const running = status === 'running' && !guestLocked;
 
@@ -383,16 +409,14 @@ const PipelineDrawer = ({
                         }`}
                         style={{
                           ...stepTextStyle(status, guestLocked),
-                          // The active step keeps a standing tint so it stays findable
-                          // when the shimmer is off under prefers-reduced-motion.
+                          // Tint + weight are the whole "you are here" signal here; the
+                          // shimmer is reserved for the collapsed status line.
                           ...(running ? { backgroundColor: 'var(--accent-teal-soft)' } : null),
                         }}
                         title={guestLocked ? 'Sign in for full analysis' : `View ${def.label}`}
                       >
                         <StepGlyph status={status} locked={guestLocked} />
-                        <span className={running ? 'pipeline-step-shimmer' : undefined}>
-                          {def.shortLabel || def.label}
-                        </span>
+                        <span>{def.shortLabel || def.label}</span>
                       </button>
                       {!isLast && (
                         <span
@@ -414,14 +438,18 @@ const PipelineDrawer = ({
               </ol>
 
               <div className="flex items-start gap-2">
-                <p
-                  className="text-2xs leading-relaxed flex-1 min-w-0 px-0.5"
-                  style={{ color: detailColor }}
-                  aria-live="polite"
-                >
-                  {detailText}
-                </p>
-                {gatedAction && (
+                {detailText ? (
+                  <p
+                    className="text-2xs leading-relaxed flex-1 min-w-0 px-0.5"
+                    style={{ color: detailColor }}
+                    aria-live="polite"
+                  >
+                    {detailText}
+                  </p>
+                ) : (
+                  <span className="flex-1" aria-hidden />
+                )}
+                {gatedAction && !showGuestFilterCta && (
                   <button
                     type="button"
                     onClick={gatedAction.onClick}
@@ -433,10 +461,46 @@ const PipelineDrawer = ({
                 )}
               </div>
 
-              {isGuest && (
-                <p className="text-2xs pb-1 px-0.5" style={{ color: 'var(--warning)' }}>
-                  Sign in to run ANNOVAR, apply filters, and chat with your full variant set.
-                </p>
+              {guestPipelineCta?.message && (
+                <div className="flex flex-col gap-2 pb-1 px-0.5 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-2xs leading-relaxed min-w-0" style={{ color: 'var(--text-secondary)' }}>
+                    {guestPipelineCta.message}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {guestPipelineCta.action && (
+                      <button
+                        type="button"
+                        onClick={guestPipelineCta.action.onClick}
+                        className="shrink-0 px-2 py-0.5 rounded-md text-2xs font-medium border transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                        style={{ borderColor: 'var(--accent-teal)', color: 'var(--accent-teal)' }}
+                      >
+                        {guestPipelineCta.action.label}
+                      </button>
+                    )}
+                    {guestPipelineCta.secondaryAction && (
+                      <button
+                        type="button"
+                        onClick={guestPipelineCta.secondaryAction.onClick}
+                        className="shrink-0 px-2 py-0.5 rounded-md text-2xs font-medium transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                        style={{ color: 'var(--text-secondary)' }}
+                      >
+                        {guestPipelineCta.secondaryAction.label}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+              {!guestPipelineCta?.message && guestPipelineCta?.action && (
+                <div className="flex justify-end pb-1 px-0.5">
+                  <button
+                    type="button"
+                    onClick={guestPipelineCta.action.onClick}
+                    className="shrink-0 px-2 py-0.5 rounded-md text-2xs font-medium border transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                    style={{ borderColor: 'var(--accent-teal)', color: 'var(--accent-teal)' }}
+                  >
+                    {guestPipelineCta.action.label}
+                  </button>
+                </div>
               )}
 
               {/* Destructive actions live here, not on the collapsed line. */}

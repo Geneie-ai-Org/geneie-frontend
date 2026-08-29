@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, FileText, Loader2 } from 'lucide-react';
 import {
   Dialog,
@@ -17,6 +17,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
 import { PillToggle } from '@/components/ui/pill-toggle';
+import { MODULE1_BED_MAX_BYTES, MODULE1_FASTQ_MAX_BYTES } from '@/services/backendApi';
 import { isRecognizedImportUrl, module1UrlErrorMessage, precheckBedChromStyle } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
 
@@ -184,6 +185,7 @@ const Module1UploadForm = ({
   preflightModule1Url,
   uploadAndValidateCustomBed,
   startModule1Run,
+  gate,
 }) => {
   const [sampleName, setSampleName] = useState('');
   const [genome, setGenome] = useState('hg38');
@@ -229,8 +231,21 @@ const Module1UploadForm = ({
 
   const setUrlValue = (role, url) => patchUrlRow(role, { url, meta: null, error: null });
 
+  /* Monotonic per-role request id. Two preflights can overlap (blur then Enter, or fast edits),
+   * and without this the slower response wins and stamps `meta` for a URL the user has already
+   * replaced — which would then be sent to /from-urls. */
+  const urlRequestIdRef = useRef({ r1: 0, r2: 0, bed: 0 });
+
   const validateUrlRow = async (role) => {
-    const row = urlState[role] || EMPTY_URL_ROW;
+    // Read through the state updater rather than the render closure: onBlur and onKeyDown can
+    // fire in the same tick as an onChange, in which case `urlState[role]` here is one edit
+    // stale and we would validate the previous URL.
+    let row = EMPTY_URL_ROW;
+    setUrlState((prev) => {
+      row = prev[role] || EMPTY_URL_ROW;
+      return prev;
+    });
+
     const url = (row.url || '').trim();
     // meta is cleared on every edit, so its presence means this exact URL already passed.
     if (row.checking || row.meta) return;
@@ -242,11 +257,17 @@ const Module1UploadForm = ({
       patchUrlRow(role, { meta: null, error: 'Enter a full https:// URL, or a Google Drive / Dropbox share link.' });
       return;
     }
+
+    const requestId = (urlRequestIdRef.current[role] ?? 0) + 1;
+    urlRequestIdRef.current[role] = requestId;
+
     patchUrlRow(role, { checking: true, error: null });
     try {
       const result = await preflightModule1Url({ role, fileUrl: url });
+      if (urlRequestIdRef.current[role] !== requestId) return; // superseded
       patchUrlRow(role, { checking: false, meta: result, error: null });
     } catch (error) {
+      if (urlRequestIdRef.current[role] !== requestId) return;
       patchUrlRow(role, { checking: false, meta: null, error: module1UrlErrorMessage(error, 'URL validation failed.') });
     }
   };
@@ -258,6 +279,7 @@ const Module1UploadForm = ({
     setR1File(null);
     setR2File(null);
     setUrlState(EMPTY_URL_STATE);
+    urlRequestIdRef.current = { r1: 0, r2: 0, bed: 0 };
     setCustomBedFile(null);
     setCustomBedS3Key(null);
     setCustomBedValidation(null);
@@ -274,8 +296,11 @@ const Module1UploadForm = ({
       setCustomBedValidation({ ok: false, message: 'File must have a .bed extension.' });
       return;
     }
-    if (file.size > 50 * 1024 * 1024) {
-      setCustomBedValidation({ ok: false, message: 'BED file must be 50MB or smaller.' });
+    if (file.size > MODULE1_BED_MAX_BYTES) {
+      setCustomBedValidation({
+        ok: false,
+        message: `BED file must be ${MODULE1_BED_MAX_BYTES / 1024 ** 2}MB or smaller.`,
+      });
       return;
     }
     const precheck = await precheckBedChromStyle(file).catch(() => null);
@@ -302,6 +327,16 @@ const Module1UploadForm = ({
       : isUrlMode
         ? !!urlState.bed.meta
         : customBedValidation?.ok === true && !!customBedS3Key;
+  // `=== false` so an absent gate (degraded limits, still loading) never disables submit.
+  const quotaBlocked = gate?.allowed === false;
+  const gateMeter = gate?.meter;
+  const gateMeterLabel = gateMeter?.tracked && !gateMeter.unlimited && gateMeter.remaining != null
+    ? `${gateMeter.remaining} of ${gateMeter.limit} Module 1 runs left`
+    : null;
+  // Free stages the files and runs after upgrading, so the button says what will happen.
+  const submitLabel = gate?.staging ? 'Stage files' : 'Start pipeline';
+  const oversizedRead = [r1File, r2File].find((f) => f && f.size > MODULE1_FASTQ_MAX_BYTES) || null;
+
   const canSubmit =
     !!sampleName.trim() &&
     genome === 'hg38' &&
@@ -310,7 +345,9 @@ const Module1UploadForm = ({
     bedResolved &&
     !module1Submitting &&
     !isValidatingBed &&
-    !anyUrlChecking;
+    !anyUrlChecking &&
+    !quotaBlocked &&
+    !oversizedRead;
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -533,15 +570,38 @@ const Module1UploadForm = ({
             </div>
 
             <div className="flex-shrink-0 px-7 py-4 border-t flex items-center justify-end gap-2" style={{ borderColor: 'var(--border-default)' }}>
+              {(quotaBlocked || gateMeterLabel || oversizedRead) && (
+                <p
+                  className="text-2xs mr-auto min-w-0"
+                  style={{ color: (quotaBlocked || oversizedRead) ? 'var(--error)' : 'var(--text-tertiary)' }}
+                >
+                  {oversizedRead
+                    ? `${oversizedRead.name} is larger than the ${MODULE1_FASTQ_MAX_BYTES / 1024 ** 3} GB limit per FASTQ.`
+                    : quotaBlocked ? gate.reason : gateMeterLabel}
+                  {!oversizedRead && !quotaBlocked && gateMeterDetail && ` · ${gateMeterDetail}`}
+                </p>
+              )}
               {module1Submitting && module1ImportStatus && (
                 <div className="flex items-center gap-1.5 mr-auto min-w-0">
                   <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" style={{ color: 'var(--accent-teal)' }} />
                   <span className="text-2xs truncate" style={{ color: 'var(--text-tertiary)' }}>{module1ImportStatus}</span>
+                  {/* A multi-GB import can run for many minutes; without this there is no way
+                    * out except closing the tab. */}
+                  {cancelModule1Import && isUrlMode && (
+                    <button
+                      type="button"
+                      onClick={cancelModule1Import}
+                      className="text-2xs underline flex-shrink-0"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      Cancel
+                    </button>
+                  )}
                 </div>
               )}
               <button
                 type="button"
-                onClick={onClose}
+                onClick={() => { cancelModule1Import?.(); onClose(); }}
                 className="px-4 py-2 text-sm font-medium rounded-lg border"
                 style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
               >
@@ -550,10 +610,11 @@ const Module1UploadForm = ({
               <button
                 type="submit"
                 disabled={!canSubmit}
+                title={quotaBlocked ? gate.reason : undefined}
                 className="px-4 py-2 text-sm font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
               >
-                {module1Submitting ? (isUrlMode ? 'Importing…' : 'Starting…') : 'Start pipeline'}
+                {module1Submitting ? (isUrlMode ? 'Importing…' : 'Starting…') : submitLabel}
               </button>
             </div>
           </form>

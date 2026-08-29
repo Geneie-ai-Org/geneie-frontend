@@ -45,7 +45,10 @@ export function computeReduceStep({
     return { status: 'done', reason: 'stored filter + stored filtered_variant_count' };
   }
   if (chatEligibility?.allowed && !requiresAnnovar && hasAnnotatedFile && !hasReduction) {
-    return { status: 'skipped', reason: 'chat allowed without a filter' };
+    if (!chatEligibility.requires_filter) {
+      return { status: 'skipped', reason: 'chat allowed without a filter' };
+    }
+    return { status: 'pending', reason: 'filter recommended before chat' };
   }
   if (chatEligibility?.allowed && hasReduction) {
     return { status: 'done', reason: 'chat allowed with a stored filter' };

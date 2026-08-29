@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2, Link2, Info, Plus } from 'lucide-react';
-import { getAuth } from 'firebase/auth';
+import { optionalIdToken, requiredIdToken } from '@/lib/safeAuth';
 import { apiUrl as buildApiUrl } from '@/config/api';
 import { useAuth } from '@/hooks/useAuth';
+import { guestLimits } from '@/services/tierLimits';
+import { getDeviceId } from '@/lib/deviceId';
 import {
   completeVariantUpload,
   getMaxUploadBytes,
-  getOrCreateDeviceId,
   presignVariantUpload,
   putFileToPresignedUrl,
   shouldUsePresignedUpload,
@@ -97,7 +98,9 @@ const DocumentUpload = ({
   initialMetadata = null,
   onEditSaved = null,
 }) => {
-  const { subscriptionStatus } = useAuth();
+  const { limits } = useAuth();
+  const isGuestUser = userTier === 'guest' || userId === 'guest';
+  const uploadLimits = isGuestUser ? guestLimits() : limits;
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState('');
@@ -286,7 +289,7 @@ const DocumentUpload = ({
 
     // Check file size — tier-aware (from GET /api/subscription-status when signed in)
     const isGuest = userTier === 'guest' || userId === 'guest';
-    const maxSize = getMaxUploadBytes(file.name, isGuest ? 'guest' : userTier, subscriptionStatus);
+    const maxSize = getMaxUploadBytes(file.name, uploadLimits);
     if (file.size > maxSize) {
       const limitMb = Math.round(maxSize / (1024 * 1024));
       const limitGb = maxSize / (1024 ** 3);
@@ -333,35 +336,30 @@ const DocumentUpload = ({
       return;
     }
 
-    if (!isGuest) {
-      const fileName = file.name.toLowerCase();
-      const isVcf = fileName.endsWith('.vcf.gz') || fileName.endsWith('.vcf');
-      const isTsvOrCsv = fileName.endsWith('.tsv') || fileName.endsWith('.csv');
-      if (isVcf || isTsvOrCsv) {
-        setSelectedFile(file);
-        let detectedFileType = '';
-        if (isVcf) detectedFileType = 'VCF';
-        else if (fileName.endsWith('.tsv')) detectedFileType = 'TSV';
-        else if (fileName.endsWith('.csv')) detectedFileType = 'CSV';
-        const nameWithoutExt = fileName.endsWith('.vcf.gz')
-          ? file.name.substring(0, file.name.length - '.vcf.gz'.length)
-          : file.name.substring(0, file.name.lastIndexOf('.'));
-        setSampleMetadata(prev => ({
-          ...prev,
-          name: nameWithoutExt,
-          sampleFileType: detectedFileType
-        }));
-        setValidationAttempted(false);
-        setError('');
-        setGenomeDetection(null);
-        setShowInfoForm(true);
-        runGenomeDetection(file);
-      } else {
-        console.log('[DocumentUpload] Starting upload (non-CSV/TSV file)...');
-        await uploadFile(file);
-      }
+    const fileName = file.name.toLowerCase();
+    const isVcf = fileName.endsWith('.vcf.gz') || fileName.endsWith('.vcf');
+    const isTsvOrCsv = fileName.endsWith('.tsv') || fileName.endsWith('.csv');
+    if (isVcf || isTsvOrCsv) {
+      setSelectedFile(file);
+      let detectedFileType = '';
+      if (isVcf) detectedFileType = 'VCF';
+      else if (fileName.endsWith('.tsv')) detectedFileType = 'TSV';
+      else if (fileName.endsWith('.csv')) detectedFileType = 'CSV';
+      const nameWithoutExt = fileName.endsWith('.vcf.gz')
+        ? file.name.substring(0, file.name.length - '.vcf.gz'.length)
+        : file.name.substring(0, file.name.lastIndexOf('.'));
+      setSampleMetadata(prev => ({
+        ...prev,
+        name: nameWithoutExt,
+        sampleFileType: detectedFileType
+      }));
+      setValidationAttempted(false);
+      setError('');
+      setGenomeDetection(null);
+      setShowInfoForm(true);
+      runGenomeDetection(file);
     } else {
-      console.log('[DocumentUpload] Starting upload (guest mode)...');
+      console.log('[DocumentUpload] Starting upload (non-CSV/TSV/VCF file)...');
       await uploadFile(file);
     }
   };
@@ -597,67 +595,17 @@ const DocumentUpload = ({
     try {
       console.log('[DocumentUpload] Upload started for file:', file.name);
 
-      if (isGuest) {
-        // For guests: Store in IndexedDB
-        console.log('[DocumentUpload] Using IndexedDB (Guest Mode)');
-        setUploadProgress(50); // Simulate progress
+      console.log(
+        `[DocumentUpload] Using backend API (S3)${isGuest ? ' — guest + X-Device-Id' : ''}`
+      );
 
-        const fileData = await storeFileInIndexedDB(file, conversationId);
-        setUploadProgress(100);
-
-        // Create a data URL for the file so we can use it for validation
-        const blob = new Blob([fileData.data], { type: file.type || 'text/plain' });
-        const dataUrl = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.readAsDataURL(blob);
-        });
-
-        const documentData = {
-          url: dataUrl, // Data URL for guest files
-          name: fileData.name,
-          type: fileData.type,
-          size: fileData.size,
-          uploadedAt: fileData.uploadedAt,
-          storageType: 'indexeddb',
-          indexedDbId: fileData.id,
-          conversationId: conversationId
-        };
-
-        console.log('[DocumentUpload] File stored in IndexedDB:', documentData);
-        console.log('[DocumentUpload] Calling onUploadSuccess callback...');
-
-        // Notify parent component
-        if (onUploadSuccess) {
-          try {
-            await onUploadSuccess(documentData);
-            console.log('[DocumentUpload] onUploadSuccess callback completed');
-          } catch (callbackError) {
-            console.error('[DocumentUpload] Error in onUploadSuccess callback:', callbackError);
-            setError(`Upload succeeded but failed to save metadata: ${callbackError.message}`);
-          }
+      let token = null;
+      if (!isGuest) {
+        try {
+          token = await requiredIdToken();
+        } catch {
+          throw new Error('Authentication required. Please log in.');
         }
-
-        setSuccess(`Document "${file.name}" stored locally (sign up to enable full features)!`);
-        setIsUploading(false);
-        setUploadProgress(0);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-
-        // Clear success message after 3 seconds
-        setTimeout(() => setSuccess(''), 3000);
-        return;
-      }
-
-      // For authenticated users: Use backend API (S3)
-      console.log('[DocumentUpload] Using backend API (S3)');
-
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-
-      if (!token) {
-        throw new Error('Authentication required. Please log in.');
       }
 
       const handleUploadFailure = (status, responseText) => {
@@ -698,7 +646,7 @@ const DocumentUpload = ({
         }
         : null;
 
-      if (shouldUsePresignedUpload(userTier, file.size)) {
+      if (shouldUsePresignedUpload(file.size, uploadLimits)) {
         console.log('[DocumentUpload] Using Pro presigned S3 upload');
         const presign = await presignVariantUpload({
           conversationId,
@@ -781,14 +729,17 @@ const DocumentUpload = ({
       });
 
       xhr.open('POST', uploadUrl);
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      xhr.setRequestHeader('X-Device-Id', getOrCreateDeviceId());
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+      xhr.setRequestHeader('X-Device-Id', getDeviceId());
       xhr.send(formData);
 
     } catch (error) {
       console.error('[DocumentUpload] Upload error:', error);
       setError(`Upload failed: ${error.message}`);
       setIsUploading(false);
+      onUploadProgressChange?.(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -809,9 +760,9 @@ const DocumentUpload = ({
       s3_key: response.s3_key,
       is_variant_file: response.is_variant_file,
       variant_count: response.variant_count,
-      free_tier_preview: response.free_tier_preview || null,
       column_interpretation: response.column_interpretation || null,
       variant_metadata: response.variant_metadata || null,
+      s3_line_count_status: response.s3_line_count_status || null,
       // Carry the metadata the user just submitted so "Edit Sample Information" is prefilled
       // before the conversation reloads from the backend (the upload response omits it).
       sample_metadata: response.sample_metadata || {
@@ -871,7 +822,7 @@ const DocumentUpload = ({
       }
 
       if (result.content_length != null) {
-        const maxSize = getMaxUploadBytes(result.file_name, isGuest ? 'guest' : userTier, subscriptionStatus);
+        const maxSize = getMaxUploadBytes(result.file_name, uploadLimits);
         if (result.content_length > maxSize) {
           const limitMb = Math.round(maxSize / (1024 * 1024));
           const limitGb = maxSize / (1024 ** 3);
@@ -1484,24 +1435,7 @@ const DocumentUpload = ({
 
               {/* Conditional Fields - Only shown if Analysis Type = Germline */}
               {sampleMetadata.analysisType === 'Germline' && (
-                <div
-                  className="border-t border-[var(--border-default)] pt-4 mt-4 transition-all duration-500 ease-in-out"
-                  style={{
-                    animation: 'fadeInSlide 0.5s ease-out'
-                  }}
-                >
-                  <style>{`
-                    @keyframes fadeInSlide {
-                      from {
-                        opacity: 0;
-                        transform: translateY(-15px);
-                      }
-                      to {
-                        opacity: 1;
-                        transform: translateY(0);
-                      }
-                    }
-                  `}</style>
+                <div className="disclosure-enter border-t border-[var(--border-default)] pt-4 mt-4">
                   <h4 className="text-md font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
                     Germline Analysis Fields
                   </h4>
@@ -1599,12 +1533,7 @@ const DocumentUpload = ({
               {(sampleMetadata.analysisType === 'Somatic' ||
                 sampleMetadata.analysisType === 'Tumor-Normal Paired' ||
                 sampleMetadata.analysisType === 'Tumor-Only') && (
-                  <div
-                    className="border-t border-[var(--border-default)] pt-4 mt-4 transition-all duration-500 ease-in-out"
-                    style={{
-                      animation: 'fadeInSlide 0.5s ease-out'
-                    }}
-                  >
+                  <div className="disclosure-enter border-t border-[var(--border-default)] pt-4 mt-4">
                     <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
                       Tumor Analysis Fields
                     </h4>

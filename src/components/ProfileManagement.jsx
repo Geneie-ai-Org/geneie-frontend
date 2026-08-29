@@ -2,12 +2,14 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { X, LogOut, ChevronRight, Crown, MessageSquare, FileText, Zap } from 'lucide-react';
+import { useLimits } from '@/hooks/useLimits';
+import { meterFor } from '@/services/tierLimits';
 import { getAuth } from 'firebase/auth';
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { performLogout } from '@/lib/logout';
 import SubscriptionPage from './SubscriptionPage';
 import { useModalScrollLock } from '@/hooks/useModalScrollLock';
 
-const ProfileManagement = ({ isOpen, onClose, userTier, userId, db, conversations, currentExchanges, chatLimit = 10 }) => {
+const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations }) => {
   const navigate = useNavigate();
   const [userEmail, setUserEmail] = useState('');
   const [accountCreatedAt, setAccountCreatedAt] = useState(null);
@@ -20,7 +22,7 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, db, conversation
 
   useModalScrollLock(isOpen, panelRef);
 
-  const freeChatLimit = userTier === 'free' ? chatLimit : Infinity;
+  const chatMeter = meterFor(useLimits(), 'chat');
 
   const loadUserData = useCallback(async () => {
     try {
@@ -28,53 +30,33 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, db, conversation
       const auth = getAuth();
       setUserEmail(auth.currentUser?.email || 'N/A');
 
-      if (userId && db) {
-        const userRef = doc(db, 'users', userId);
-        const userDoc = await getDoc(userRef);
-
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          const planStatus = data.planStatus || data.plan_status || 'free';
-          setOriginalPlanStatus(planStatus);
-          setActualUserTier(planStatus === 'admin' ? 'pro' : planStatus);
-
-          if (auth.currentUser?.metadata?.creationTime) {
-            setAccountCreatedAt(new Date(auth.currentUser.metadata.creationTime));
-          }
-
-          try {
-            const appId = 'default-app-id';
-            const conversationsRef = collection(db, 'artifacts', appId, 'users', userId, 'conversations');
-            const conversationsSnapshot = await getDocs(conversationsRef);
-            let totalFiles = 0;
-            for (const convDoc of conversationsSnapshot.docs) {
-              const convData = convDoc.data();
-              if (convData.documentName || convData.documentUrl) totalFiles++;
-            }
-            setFilesUploaded(totalFiles);
-          } catch {
-            setFilesUploaded(0);
-          }
-        } else {
-          setActualUserTier('free');
-        }
+      /* The Firestore reads here are gone. The tier now comes from useAuth (which reads
+       * GET /api/subscription-status), and this block never ran anyway — ChatPage stopped
+       * passing the `db` prop, so `userId && db` was always false. */
+      setOriginalPlanStatus(userTier);
+      setActualUserTier(userTier);
+      if (auth.currentUser?.metadata?.creationTime) {
+        setAccountCreatedAt(new Date(auth.currentUser.metadata.creationTime));
       }
+      setFilesUploaded(
+        (conversations || []).filter((c) => c.documentName || c.documentUrl).length
+      );
     } catch (error) {
       console.error('[ProfileManagement] Error loading user data:', error);
     } finally {
       setLoading(false);
     }
-  }, [userId, db]);
+  }, [userId, userTier, conversations]);
 
   useEffect(() => {
-    if (isOpen && userId && db) {
+    if (isOpen && userId) {
       loadUserData();
     } else if (isOpen) {
       const auth = getAuth();
       setUserEmail(auth.currentUser?.email || 'N/A');
       setLoading(false);
     }
-  }, [isOpen, userId, db, loadUserData]);
+  }, [isOpen, userId, loadUserData]);
 
   if (!isOpen) return null;
 
@@ -160,8 +142,10 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, db, conversation
                       <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Exchanges</span>
                     </div>
                     <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                      {currentExchanges || 0}
-                      <span className="font-normal" style={{ color: 'var(--text-disabled)' }}>/{freeChatLimit}</span>
+                      {chatMeter.used || 0}
+                      <span className="font-normal" style={{ color: 'var(--text-disabled)' }}>
+                        /{chatMeter.unlimited ? '∞' : (chatMeter.limit ?? '—')}
+                      </span>
                     </span>
                   </div>
                 </div>
@@ -198,9 +182,8 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, db, conversation
               {/* Sign out */}
               <button
                 onClick={() => {
-                  getAuth().signOut();
                   onClose();
-                  navigate('/auth');
+                  performLogout(navigate);
                 }}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-colors"
                 style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
@@ -220,7 +203,6 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, db, conversation
         isOpen={showSubscriptionPage}
         onClose={() => setShowSubscriptionPage(false)}
         userId={userId}
-        db={db}
       />
     </dialog>,
     document.body

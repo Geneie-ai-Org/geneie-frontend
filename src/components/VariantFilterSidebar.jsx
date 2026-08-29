@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { FileText, X, RotateCcw, CheckCircle, Upload, Trash2, Info, Zap, Search, Sprout, PencilLine, ChevronDown, PanelRightClose } from 'lucide-react';
+import { getDeviceId } from '@/lib/deviceId';
 import { doc, getDoc } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { optionalIdToken } from '@/lib/safeAuth';
 import DocumentUpload from './DocumentUpload';
 import ExportVariantsButton from './ExportVariantsButton';
 import PerimeterProgress from '@/components/ui/PerimeterProgress';
@@ -58,33 +59,16 @@ export const ACMG_FILTER_DISPLAY_NAME = 'ACMG filter';
 const PROPRIETARY_FILTER_1_DESCRIPTION = "ClinVar and/or InterVar pathogenic classes, with rare gnomAD frequency (<1%) or missing frequency retained.";
 const EXOMISER_FILTER_DESCRIPTION = "Phenotype-driven variant prioritization for Germline cases using HPO terms and Exomiser gene/variant scoring. Requires ANNOVAR annotation and a phenotype description.";
 
-const DEVICE_ID_STORAGE_KEY = 'geneie_device_id';
-
-function getOrCreateDeviceId() {
-  try {
-    const existing = localStorage.getItem(DEVICE_ID_STORAGE_KEY);
-    if (existing && existing.trim()) return existing;
-    const created = (typeof crypto !== 'undefined' && crypto.randomUUID)
-      ? crypto.randomUUID()
-      : `dev_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    localStorage.setItem(DEVICE_ID_STORAGE_KEY, created);
-    return created;
-  } catch (_) {
-    return `dev_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-  }
-}
-
 const apiErrorDetailToMessage = sharedApiErrorDetailToMessage;
 
 async function pollFilterJobStatus(conversationId, token, apiBase) {
   const maxPollMs = 14 * 24 * 60 * 60 * 1000;
   const started = Date.now();
   const pollOnce = async () => {
+    const headers = { 'X-Device-Id': getDeviceId() };
+    if (token) headers.Authorization = `Bearer ${token}`;
     const statusRes = await fetch(`${apiBase}/api/filter-status/${conversationId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'X-Device-Id': getOrCreateDeviceId(),
-      },
+      headers,
     });
     if (!statusRes.ok) return null;
     const statusData = await statusRes.json().catch(() => ({}));
@@ -502,6 +486,9 @@ const VariantFilterSidebar = ({
   requestedTab = null,
   onRequestedTabConsumed = null,
   acmgFilterCanApply = false,
+  // Quota gates from the normalized limits: { allowed, reason, cta, meter }
+  annovarGate,
+  acmgExomiserGate,
   // Pipeline state owned by useVariantPipeline. The sidebar and the pipeline stepper must
   // share one busy flag so dual applies cannot race.
   isRunningAnnovar = false,
@@ -512,7 +499,22 @@ const VariantFilterSidebar = ({
   beginPipelineWork = () => {},
   refreshAfterFilterChange = null,
   downloadGate = null,
+  onProprietaryFilterClick = null,
+  onGuestRefreshMetadata = null,
 }) => {
+  /* Quota is orthogonal to filter readiness. `=== false` (rather than a falsy check) so a missing
+   * gate — degraded limits, still loading — never disables anything. */
+  const annovarQuotaBlocked = annovarGate?.allowed === false;
+  const acmgQuotaBlocked = acmgExomiserGate?.allowed === false;
+  const acmgQuotaMeter = acmgExomiserGate?.meter;
+  const acmgMeterLabel = acmgQuotaMeter?.tracked && !acmgQuotaMeter.unlimited && acmgQuotaMeter.remaining != null
+    ? `${acmgQuotaMeter.remaining} of ${acmgQuotaMeter.limit} ACMG / Exomiser applies left`
+    : null;
+  const annovarQuotaMeter = annovarGate?.meter;
+  const annovarMeterLabel = annovarQuotaMeter?.tracked && !annovarQuotaMeter.unlimited && annovarQuotaMeter.remaining != null
+    ? `${annovarQuotaMeter.remaining} of ${annovarQuotaMeter.limit} ANNOVAR runs left`
+    : null;
+
   const [filters, setFilters] = useState({});
   const [categoricalFilters, setCategoricalFilters] = useState({});
   const [filteredCount, setFilteredCount] = useState(null);
@@ -565,6 +567,16 @@ const VariantFilterSidebar = ({
 
   // Define isGuest early so it can be used in functions below
   const isGuest = userTier === 'guest';
+
+  // After guest ANNOVAR, reload sidebar columns from annovar-status (needs deployed BE).
+  // Callback is stored in a ref — an inline parent lambda would retrigger this every render
+  // and hammer annovar-status while the sidebar is open.
+  const onGuestRefreshMetadataRef = useRef(onGuestRefreshMetadata);
+  onGuestRefreshMetadataRef.current = onGuestRefreshMetadata;
+  useEffect(() => {
+    if (!isGuest || !isOpen || !conversationId) return;
+    void onGuestRefreshMetadataRef.current?.();
+  }, [isGuest, isOpen, conversationId]);
   // Manual filters can narrow the ACMG (or other) Postgres working set; proprietary apply still
   // requires manual filters to be reset first (see handleApplyProprietaryFilter).
   // Locked while any pipeline job is in flight, from either the stepper or this sidebar.
@@ -902,8 +914,7 @@ const VariantFilterSidebar = ({
     beginPipelineWork();
     setIsApplying(true);
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
 
       const API_URL = apiUrl('/api/filter-variants');
 
@@ -1051,8 +1062,7 @@ const VariantFilterSidebar = ({
     // Clear filters in backend and Firestore
     setIsApplying(true);
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
 
       const API_URL = apiUrl('/api/filter-variants');
 
@@ -1136,8 +1146,7 @@ const VariantFilterSidebar = ({
   const loadSavedFilterPresets = useCallback(async () => {
     if (!userId || isGuest) return;
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
       const base = getApiOrigin();
       const response = await fetch(`${base}/api/saved-filters`, {
         method: 'GET',
@@ -1224,8 +1233,7 @@ const VariantFilterSidebar = ({
     }
     setIsSavingPreset(true);
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
       const base = getApiOrigin();
       const response = await fetch(`${base}/api/saved-filters`, {
         method: 'POST',
@@ -1260,8 +1268,7 @@ const VariantFilterSidebar = ({
     beginPipelineWork();
     setIsApplyingPreset(true);
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
       const base = getApiOrigin();
       const response = await fetch(`${base}/api/apply-saved-filter`, {
         method: 'POST',
@@ -1306,8 +1313,7 @@ const VariantFilterSidebar = ({
     if (!presetId || !userId || isGuest) return;
     if (!window.confirm('Delete this Filter Garden entry?')) return;
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
       const base = getApiOrigin();
       const response = await fetch(`${base}/api/saved-filters/${encodeURIComponent(presetId)}`, {
         method: 'DELETE',
@@ -1335,8 +1341,7 @@ const VariantFilterSidebar = ({
   const handleUpdateSelectedGarden = async () => {
     if (!selectedPresetId || !selectedGardenEntry) return;
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
       const base = getApiOrigin();
       const response = await fetch(`${base}/api/saved-filters/${encodeURIComponent(selectedPresetId)}`, {
         method: 'PATCH',
@@ -1371,8 +1376,7 @@ const VariantFilterSidebar = ({
     if (!conversationId || !userId) return;
 
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
 
       const base = getApiOrigin();
       const API_URL = `${base}/api/preview-proprietary-filters`;
@@ -1402,8 +1406,12 @@ const VariantFilterSidebar = ({
 
   // Apply proprietary filter (toggle: if already active, remove it)
   const handleApplyProprietaryFilter = async (filterType) => {
-    if (!conversationId || !userId) return;
-    if (pipelineBusy) return;
+    if (!conversationId || (!userId && !isGuest)) return;
+    // pipelineBusy can be stuck true from a stale filter_job after remove — guest ACMG
+    // re-apply goes through onProprietaryFilterClick which clears that before fetching.
+    const blockedByPipelineBusy =
+      pipelineBusy && !(isGuest && filterType === 'filter_1' && onProprietaryFilterClick);
+    if (blockedByPipelineBusy) return;
     if (hasAppliedManualFilters && activeProprietaryFilter !== filterType) {
       notify({
         message: 'Manual filters are active. Reset manual filters before applying an annotation-stage filter.',
@@ -1418,11 +1426,15 @@ const VariantFilterSidebar = ({
       return;
     }
 
+    if (isGuest && filterType === 'filter_1' && onProprietaryFilterClick) {
+      onProprietaryFilterClick('filter_1');
+      return;
+    }
+
     beginPipelineWork();
     setIsApplyingProprietaryFilter(true);
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
 
       const API_URL = apiUrl('/api/apply-proprietary-filter');
 
@@ -1433,7 +1445,7 @@ const VariantFilterSidebar = ({
         headers: {
           'Content-Type': 'application/json',
           ...(token && { 'Authorization': `Bearer ${token}` }),
-          'X-Device-Id': getOrCreateDeviceId(),
+          'X-Device-Id': getDeviceId(),
         },
         body: JSON.stringify({
           conversation_id: conversationId,
@@ -1489,7 +1501,7 @@ const VariantFilterSidebar = ({
 
   // Remove proprietary filter
   const handleRemoveProprietaryFilter = async () => {
-    if (!conversationId || !userId) return;
+    if (!conversationId || (!userId && !isGuest)) return;
 
     beginPipelineWork();
     setIsApplyingProprietaryFilter(true);
@@ -1497,9 +1509,9 @@ const VariantFilterSidebar = ({
     // >1000 returns false, so we must not wait — eligibility goes back to
     // CHAT_REQUIRES_FILTER and the annotated baseline is the final schema.
     let enrichmentWillRequeue = false;
+    let restoredTotalCount = null;
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
 
       const API_URL = apiUrl('/api/remove-proprietary-filter');
 
@@ -1507,7 +1519,8 @@ const VariantFilterSidebar = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` })
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+          'X-Device-Id': getDeviceId(),
         },
         body: JSON.stringify({
           conversation_id: conversationId,
@@ -1536,6 +1549,7 @@ const VariantFilterSidebar = ({
         }
 
         enrichmentWillRequeue = Boolean(data.enrichment_will_requeue);
+        restoredTotalCount = data.total_count ?? null;
       } else {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(apiErrorDetailToMessage(errorData.detail) || 'Failed to remove filter');
@@ -1548,7 +1562,10 @@ const VariantFilterSidebar = ({
       });
     } finally {
       setIsApplyingProprietaryFilter(false);
-      await refreshAfterFilterChange?.(conversationId, { enrichmentWillRequeue });
+      await refreshAfterFilterChange?.(conversationId, {
+        enrichmentWillRequeue: isGuest ? false : enrichmentWillRequeue,
+        totalCount: restoredTotalCount,
+      });
     }
   };
 
@@ -2144,6 +2161,11 @@ const VariantFilterSidebar = ({
                       )}
                     </button>
                   )}
+                  {(acmgQuotaBlocked || acmgMeterLabel) && (
+                    <p className="text-2xs mt-1.5" style={{ color: acmgQuotaBlocked ? 'var(--error)' : 'var(--text-tertiary)' }}>
+                      {acmgQuotaBlocked ? acmgExomiserGate.reason : acmgMeterLabel}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -2248,12 +2270,18 @@ const VariantFilterSidebar = ({
                     <button
                       type="button"
                       onClick={() => runExomiser && runExomiser()}
-                      disabled={!canRun || running || !runExomiser}
+                      disabled={!canRun || running || !runExomiser || acmgQuotaBlocked}
+                      title={acmgQuotaBlocked ? acmgExomiserGate.reason : undefined}
                       className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ backgroundColor: 'var(--accent-teal)' }}
                     >
                       {running ? 'Running…' : failed ? 'Retry Exomiser' : 'Run Exomiser'}
                     </button>
+                  )}
+                  {!isActive && (acmgQuotaBlocked || acmgMeterLabel) && (
+                    <p className="text-2xs mt-1.5" style={{ color: acmgQuotaBlocked ? 'var(--error)' : 'var(--text-tertiary)' }}>
+                      {acmgQuotaBlocked ? acmgExomiserGate.reason : acmgMeterLabel}
+                    </p>
                   )}
                 </div>
               );
@@ -2832,12 +2860,18 @@ const VariantFilterSidebar = ({
                           <button
                             type="button"
                             onClick={handleRunAnnovarFromGarden}
-                            disabled={isRunningAnnovar}
-                            className="mt-1 inline-flex items-center gap-1 text-2xs font-medium underline"
+                            disabled={isRunningAnnovar || annovarQuotaBlocked}
+                            title={annovarQuotaBlocked ? annovarGate.reason : undefined}
+                            className="mt-1 inline-flex items-center gap-1 text-2xs font-medium underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
                           >
                             <img src={qiagenLogo} alt="" className="w-3 h-3 object-contain" />
                             {isRunningAnnovar ? 'Running ANNOVAR...' : 'Try ANNOVAR'}
                           </button>
+                          {(annovarQuotaBlocked || annovarMeterLabel) && (
+                            <div className="mt-1 text-2xs" style={{ color: annovarQuotaBlocked ? 'var(--error)' : 'var(--text-tertiary)' }}>
+                              {annovarQuotaBlocked ? annovarGate.reason : annovarMeterLabel}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

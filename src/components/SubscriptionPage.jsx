@@ -2,23 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { X, CreditCard, Check, Zap, Calendar, Receipt, AlertCircle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getAuth } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
 import { apiUrl } from '@/config/api';
 import { fetchSubscriptionStatus } from '@/services/backendApi';
 
 
-const SubscriptionPage = ({ isOpen, onClose, userId, db }) => {
+const SubscriptionPage = ({ isOpen, onClose, userId }) => {
   const { userTier } = useAuth();
   const [loading, setLoading] = useState(true);
   const [subscriptionDetails, setSubscriptionDetails] = useState(null);
   const [billingHistory, setBillingHistory] = useState([]);
 
   useEffect(() => {
-    if (isOpen && userId && db) {
+    if (isOpen && userId) {
       loadSubscriptionData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, userId, db]);
+  }, [isOpen, userId]);
 
   const loadSubscriptionData = async () => {
     try {
@@ -45,24 +44,10 @@ const SubscriptionPage = ({ isOpen, onClose, userId, db }) => {
         return;
       }
 
-      if (userId && db) {
-        const userRef = doc(db, 'users', userId);
-        const userDoc = await getDoc(userRef);
-        
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          setSubscriptionDetails({
-            planStatus: data.planStatus || 'free',
-            subscriptionStartDate: data.subscriptionStartDate || null,
-            subscriptionEndDate: data.subscriptionEndDate || null,
-            subscriptionId: data.dodoSubscriptionId || data.subscriptionId || null,
-            paymentMethod: data.paymentMethod || null,
-          });
-          
-          // Load billing history (placeholder - will be populated by payment gateway)
-          setBillingHistory(data.billingHistory || []);
-        }
-      }
+      /* The Firestore fallback that used to run here is gone. That document is no longer
+       * the source of truth, so falling back to it would quietly render a stale plan —
+       * worse than showing nothing. If the API call above fails we leave the previous
+       * state and log. */
     } catch (error) {
       console.error('[SubscriptionPage] Error loading subscription data:', error);
     } finally {
@@ -71,20 +56,12 @@ const SubscriptionPage = ({ isOpen, onClose, userId, db }) => {
   };
 
   const detectUserCountry = async () => {
-    // Try to get country from user profile first
-    if (userId && db) {
-      try {
-        const userRef = doc(db, 'users', userId);
-        const userDoc = await getDoc(userRef);
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          if (userData.country) {
-            return userData.country;
-          }
-        }
-      } catch (error) {
-        console.error('[SubscriptionPage] Error reading user country:', error);
-      }
+    // Served by GET /api/subscription-status; no direct user-document read.
+    try {
+      const status = await fetchSubscriptionStatus();
+      if (status?.country) return status.country;
+    } catch (error) {
+      console.error('[SubscriptionPage] Error reading user country:', error);
     }
     
     // Fallback: Try IP geolocation (optional - can be removed if not needed)

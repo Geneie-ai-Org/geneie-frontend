@@ -67,3 +67,205 @@ export function normalizeChatEligibilityMessage(message) {
     .replace(/ClinVar prioritization/gi, 'the ACMG filter')
     .replace(/\bFilter\s*1\b/gi, 'ACMG filter');
 }
+
+const GUEST_ELIGIBILITY_DEFAULTS = {
+  s3_line_count_status: null,
+  enrichment_status: null,
+  enrichment_phase: null,
+  enrichment_message: null,
+  enrichment_progress_percent: null,
+  literature_status: null,
+  advanced_chat_status: null,
+};
+
+export const GUEST_CHAT_MAX_VARIANTS_WITHOUT_FILTER = 100;
+
+/** True when ACMG or Exomiser proprietary filter is active. */
+export function isProprietaryPrioritizationFilter(activeProprietaryFilter) {
+  return activeProprietaryFilter === 'filter_1' || activeProprietaryFilter === 'filter_3';
+}
+
+/**
+ * Rows the chat/pipeline UI should treat as "under consideration".
+ * With ACMG/Exomiser, that is the prioritized keep-set (e.g. 2), not the file denominator (e.g. 1,000).
+ */
+export function resolveVariantsUnderConsideration({
+  activeProprietaryFilter = null,
+  filteredVariantCount = null,
+  filterWorkingSetCount = null,
+  fileTotal = null,
+  eligibilityUnderCount = null,
+} = {}) {
+  const hasProprietary = isProprietaryPrioritizationFilter(activeProprietaryFilter);
+  if (hasProprietary && filteredVariantCount != null) {
+    return Number(filteredVariantCount);
+  }
+  if (eligibilityUnderCount != null) {
+    return Number(eligibilityUnderCount);
+  }
+  if (filteredVariantCount != null) {
+    return Number(filteredVariantCount);
+  }
+  if (filterWorkingSetCount != null) {
+    return Number(filterWorkingSetCount);
+  }
+  if (fileTotal != null) {
+    return Number(fileTotal);
+  }
+  return null;
+}
+
+/** Guest pipeline/chat eligibility — never leaves `allowed: null` (avoids stuck "Checking…"). */
+export function buildGuestChatEligibility({
+  hasAnnotatedFile = false,
+  isRunningAnnovar = false,
+  annovarJobStatus = null,
+  variantCount = null,
+  variantsUnderConsideration = null,
+  activeProprietaryFilter = null,
+  maxVariantsWithoutFilter = GUEST_CHAT_MAX_VARIANTS_WITHOUT_FILTER,
+} = {}) {
+  const annovarRunning = isRunningAnnovar || annovarJobStatus === 'running';
+  const annovarFailed = annovarJobStatus === 'failed';
+  const annovarDone = hasAnnotatedFile || annovarJobStatus === 'completed';
+
+  if (annovarRunning) {
+    return {
+      ...GUEST_ELIGIBILITY_DEFAULTS,
+      allowed: false,
+      message: 'Annotation is running in the background.',
+      reason: 'ANNOVAR_RUNNING',
+      requires_annovar: true,
+      requires_filter: false,
+      variants_under_consideration: variantCount,
+    };
+  }
+
+  if (annovarFailed) {
+    return {
+      ...GUEST_ELIGIBILITY_DEFAULTS,
+      allowed: false,
+      message: 'ANNOVAR did not complete. Open details to retry.',
+      reason: 'ANNOVAR_FAILED',
+      requires_annovar: true,
+      requires_filter: false,
+      variants_under_consideration: variantCount,
+    };
+  }
+
+  if (annovarDone) {
+    const under = variantsUnderConsideration ?? variantCount;
+    const hasProprietary = isProprietaryPrioritizationFilter(activeProprietaryFilter);
+    const needsFilter =
+      !hasProprietary && under != null && under > maxVariantsWithoutFilter;
+
+    if (hasProprietary) {
+      const label = activeProprietaryFilter === 'filter_3' ? 'Exomiser' : 'ACMG';
+      const countLabel =
+        under != null ? `${Number(under).toLocaleString()} variant${under === 1 ? '' : 's'}` : 'your prioritized set';
+      return {
+        ...GUEST_ELIGIBILITY_DEFAULTS,
+        allowed: true,
+        message: `Chat is using your ${label}-prioritized set (${countLabel}). Sign up to save history.`,
+        reason: null,
+        requires_annovar: false,
+        requires_filter: false,
+        variants_under_consideration: under,
+      };
+    }
+
+    if (needsFilter) {
+      return {
+        ...GUEST_ELIGIBILITY_DEFAULTS,
+        allowed: false,
+        message: `This file has ${Number(under).toLocaleString()} variant rows. Apply the ACMG or Exomiser filter to enable guest chat.`,
+        reason: 'CHAT_REQUIRES_FILTER',
+        requires_annovar: false,
+        requires_filter: true,
+        variants_under_consideration: under,
+      };
+    }
+
+    return {
+      ...GUEST_ELIGIBILITY_DEFAULTS,
+      allowed: true,
+      message:
+        'Annotation complete. Start chatting below — sign up to save history and unlock filters.',
+      reason: null,
+      requires_annovar: false,
+      requires_filter: false,
+      variants_under_consideration: under,
+    };
+  }
+
+  return {
+    ...GUEST_ELIGIBILITY_DEFAULTS,
+    allowed: false,
+    message: 'Run ANNOVAR to annotate your variants, then chat or apply filters.',
+    reason: 'CHAT_REQUIRES_ANNOVAR',
+    requires_annovar: true,
+    requires_filter: false,
+    variants_under_consideration: variantCount,
+  };
+}
+
+/** Apply conversation fields returned by guest-safe status endpoints (annovar-status / filter-status). */
+export function guestStatusPayloadToConversationStub(payload) {
+  if (!payload?.variant_metadata) return null;
+  const vm = payload.variant_metadata;
+  return {
+    annotated_file_s3_key: payload.annotated_file_s3_key || null,
+    annotated_multianno_row_count: payload.annotated_multianno_row_count ?? vm.annotated_row_count ?? null,
+    s3_variant_line_count: payload.s3_variant_line_count ?? vm.total_variants ?? null,
+    s3_line_count_status: payload.s3_line_count_status || vm.s3_line_count_status || null,
+    variant_ingest_mode: payload.variant_ingest_mode || null,
+  };
+}
+
+/** Contextual guest CTA under the pipeline drawer (replaces blanket "sign in to run ANNOVAR"). */
+export function getGuestPipelineCta({
+  hasAnnotatedFile = false,
+  isRunningAnnovar = false,
+  annovarJob = null,
+  chatEligibility = null,
+  onSignUp,
+  onApplyFilter,
+} = {}) {
+  if (isRunningAnnovar || annovarJob?.status === 'running') return null;
+
+  if (annovarJob?.status === 'failed') {
+    return {
+      message: 'Annotation failed on this preview. Sign up for full support and saved history.',
+      action: onSignUp ? { label: 'Sign up free', onClick: onSignUp } : null,
+    };
+  }
+
+  if (hasAnnotatedFile || annovarJob?.status === 'completed') {
+    if (!chatEligibility?.allowed && chatEligibility?.reason === 'CHAT_REQUIRES_FILTER') {
+      return {
+        message:
+          chatEligibility.message ||
+          'Large variant set — apply the ACMG filter to enable guest chat, or sign up for full analysis.',
+        action: onApplyFilter ? { label: 'Apply ACMG filter', onClick: onApplyFilter } : null,
+        secondaryAction: onSignUp ? { label: 'Sign up free', onClick: onSignUp } : null,
+      };
+    }
+    if (chatEligibility?.allowed) {
+      return {
+        message: null,
+        action: onSignUp ? { label: 'Sign up free', onClick: onSignUp } : null,
+      };
+    }
+    if (chatEligibility?.message) {
+      return {
+        message: chatEligibility.message,
+        action: onSignUp ? { label: 'Sign up free', onClick: onSignUp } : null,
+      };
+    }
+  }
+
+  return {
+    message: 'Guest preview includes one ANNOVAR run and 5 chat exchanges on this device.',
+    action: onSignUp ? { label: 'Sign up for full analysis', onClick: onSignUp } : null,
+  };
+}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db, GoogleAuthProvider, OAuthProvider } from '../services/firebase';
+import { auth, GoogleAuthProvider, OAuthProvider } from '../services/firebase';
 import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
@@ -12,7 +12,6 @@ import {
     EmailAuthProvider,
     reauthenticateWithCredential
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { Loader2, Eye, EyeOff, AlertCircle, CheckCircle2, Info } from 'lucide-react';
 
 const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificationPending }) => {
@@ -62,18 +61,10 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
         }
     }, []);
 
-    // Create Firestore profile
-    const createFirestoreProfile = async (user) => {
-        try {
-            await setDoc(doc(db, 'users', user.uid), {
-                email: user.email,
-                planStatus: 'free',
-                freeExperimentsUsed: 0,
-            });
-        } catch (e) {
-            console.error("Error setting user profile document: ", e);
-        }
-    };
+    /* createFirestoreProfile was removed: the backend auto-provisions the user document
+     * on the first authenticated request (user_dependency -> user_store.ensure_user), so
+     * the client no longer needs to create one — and can no longer write to it at all.
+     */
 
     // Google Sign-In handler
     const handleGoogleSignIn = async () => {
@@ -85,11 +76,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
             const result = await signInWithPopup(auth, provider);
             const user = result.user;
 
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-
-            if (!userDoc.exists()) {
-                await createFirestoreProfile(user);
-            }
+            // Profile creation happens server-side on the first authenticated request.
 
             if (onSignupSuccess) {
                 onSignupSuccess(true);
@@ -136,11 +123,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
             const result = await signInWithPopup(auth, provider);
             const user = result.user;
 
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-
-            if (!userDoc.exists()) {
-                await createFirestoreProfile(user);
-            }
+            // Profile creation happens server-side on the first authenticated request.
 
             if (onSignupSuccess) {
                 onSignupSuccess(true);

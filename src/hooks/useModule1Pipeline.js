@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import * as mongodbApi from '../services/mongodbApi';
 import { buildVariantDataFromConversation } from '@/lib/variantPipelineUtils';
+import { useAuth } from '@/hooks/useAuth';
+import { actionGate } from '@/services/tierLimits';
+import { describeLimitError, isEmailVerificationCode } from '@/services/limitErrors';
 import {
   fetchModule1BedCatalog,
   fetchModule1Status,
@@ -49,7 +52,14 @@ export function useModule1Pipeline({
   syncAfterColumnInterpretation,
   setAnnovarMessageModal,
   onNeedsEmailVerification,
+  onLimitBlocked,
 }) {
+  const { limits, refreshSubscriptionStatus } = useAuth();
+  // Free stages and runs later; beta/pro run directly. Whichever path is open decides the form.
+  // Memoized because these land in callback dependency arrays.
+  const module1Gate = useMemo(() => actionGate(limits, 'module1'), [limits]);
+  const module1StageGate = useMemo(() => actionGate(limits, 'module1Stage'), [limits]);
+  const module1EntryGate = module1Gate.allowed ? module1Gate : module1StageGate;
   const [bedCatalog, setBedCatalog] = useState(null);
   const [bedCatalogLoading, setBedCatalogLoading] = useState(false);
   const [module1FormOpen, setModule1FormOpen] = useState(false);
@@ -59,6 +69,8 @@ export function useModule1Pipeline({
   const [module1SubmitError, setModule1SubmitError] = useState(null);
   const [module1Job, setModule1Job] = useState(null);
 
+  // Aborts an in-flight URL import. Multi-GB transfers run for minutes with no other way out.
+  const importAbortRef = useRef(null);
   const ingestHandledRef = useRef(false);
   const pollAbortRef = useRef(null);
 
@@ -211,14 +223,37 @@ export function useModule1Pipeline({
       toast.info('Sign up to upload raw sequencing data.');
       return;
     }
+    // Don't let someone fill in a long form they cannot submit.
+    if (!module1EntryGate.allowed) {
+      onLimitBlocked?.({
+        family: 'module1',
+        title: 'Module 1 unavailable',
+        message: module1EntryGate.reason,
+        variant: 'info',
+        cta: module1EntryGate.cta,
+        refresh: false,
+        blocking: false,
+      });
+      return;
+    }
     setModule1SubmitError(null);
     setModule1UploadProgress({ r1: null, r2: null, bed: null });
     setModule1ImportStatus(null);
     setModule1FormOpen(true);
-  }, [userTier]);
+  }, [userTier, module1EntryGate, onLimitBlocked]);
 
   const closeModule1Form = useCallback(() => {
     setModule1FormOpen(false);
+  }, []);
+
+  /** Abort an in-flight URL import. No-op once the import has returned. */
+  const cancelModule1Import = useCallback(() => {
+    if (importAbortRef.current) {
+      importAbortRef.current.abort();
+      importAbortRef.current = null;
+    }
+    setModule1ImportStatus(null);
+    setModule1Submitting(false);
   }, []);
 
   const loadBedCatalog = useCallback(async (genome = 'hg38') => {
@@ -317,7 +352,9 @@ export function useModule1Pipeline({
           // One request streams R1 + R2 (+ optional BED) server-side. Multi-GB FASTQs mean
           // this can sit here for many minutes with no byte-level progress available.
           setModule1ImportStatus('Importing files from URL… this can take several minutes.');
+          importAbortRef.current = new AbortController();
           const imported = await module1ImportFromUrls({
+            signal: importAbortRef.current.signal,
             conversationId,
             r1Url,
             r2Url,
@@ -343,8 +380,21 @@ export function useModule1Pipeline({
           }
           setModule1ImportStatus('Starting pipeline…');
         } else {
+          /* R1 and R2 upload sequentially, so a failure on R2 leaves R1 already in S3. The
+           * pipeline needs both, and there is no client-side way to remove the orphan — so say
+           * plainly that a retry re-uploads both, rather than surfacing a bare PUT error that
+           * makes it look like R1 is lost. Cleaning up the orphan is a backend concern. */
           r1S3Key = await uploadModule1File('r1', r1File, conversationId);
-          r2S3Key = await uploadModule1File('r2', r2File, conversationId);
+          try {
+            r2S3Key = await uploadModule1File('r2', r2File, conversationId);
+          } catch (r2Error) {
+            setModule1UploadProgress((prev) => ({ ...prev, r2: null }));
+            const detail = module1UrlErrorMessage(r2Error, r2Error?.message || 'Upload failed.');
+            throw Object.assign(
+              new Error(`R2 upload failed after R1 finished — please retry and both files will be uploaded again. (${detail})`),
+              { status: r2Error?.status, code: r2Error?.code },
+            );
+          }
         }
 
         const result = await runModule1Pipeline({
@@ -365,23 +415,57 @@ export function useModule1Pipeline({
           message: result.message,
         });
         setModule1FormOpen(false);
+        refreshSubscriptionStatus?.();
       } catch (error) {
         if (error.status === 409 && error.code === 'MODULE1_JOB_IN_PROGRESS' && error.jobId) {
           adoptJob(error.jobId, conversationId, {});
           setModule1FormOpen(false);
           toast.info('A Module 1 job is already running for this conversation — resuming progress.');
-        } else if (error.status === 403) {
+          return;
+        }
+
+        // A quota 403 is not an auth problem. Taking over the page with the verification screen
+        // (the old behaviour for every 403) reads to the user as "you got signed out".
+        const limitError = (error.status === 403 || error.status === 400)
+          ? describeLimitError(error, { context: 'module1', limits })
+          : null;
+
+        if (limitError) {
+          setModule1FormOpen(false);
+          setModule1SubmitError(null);
+          onLimitBlocked?.(limitError);
+          if (limitError.refresh) refreshSubscriptionStatus?.();
+          return;
+        }
+
+        // Page takeover now requires positive evidence, rather than being the default for any 403.
+        if (error.status === 403 && isEmailVerificationCode(error.code)) {
           setModule1FormOpen(false);
           onNeedsEmailVerification?.();
-        } else {
-          setModule1SubmitError(module1UrlErrorMessage(error, 'Failed to start Module 1 run.'));
+          return;
         }
+
+        if (error?.code === 'IMPORT_CANCELLED') {
+          setModule1SubmitError(null);
+          return;
+        }
+        setModule1SubmitError(module1UrlErrorMessage(error, 'Failed to start Module 1 run.'));
       } finally {
+        importAbortRef.current = null;
         setModule1Submitting(false);
         setModule1ImportStatus(null);
       }
     },
-    [userTier, activeConversationId, uploadModule1File, adoptJob, onNeedsEmailVerification]
+    [
+      userTier,
+      activeConversationId,
+      uploadModule1File,
+      adoptJob,
+      onNeedsEmailVerification,
+      onLimitBlocked,
+      limits,
+      refreshSubscriptionStatus,
+    ]
   );
 
   const module1JobActive =
@@ -396,6 +480,7 @@ export function useModule1Pipeline({
     module1FormOpen,
     openModule1Form,
     closeModule1Form,
+    cancelModule1Import,
     module1UploadProgress,
     module1Submitting,
     module1SubmitError,
@@ -405,5 +490,8 @@ export function useModule1Pipeline({
     startModule1Run,
     module1Job,
     module1JobActive,
+    module1Gate,
+    module1StageGate,
+    module1EntryGate,
   };
 }

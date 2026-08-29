@@ -35,8 +35,6 @@ const SEQUENCING_TYPE_OPTIONS = [
   { value: 'Targeted', label: 'Targeted', disabled: true, disabledReason: 'Targeted panel analysis is coming soon.' },
 ];
 
-/* Mirrors the VCF upload form (DocumentUpload.jsx) so a sample described here and a sample
- * described there carry the same vocabulary into `sample_metadata`. */
 const SAMPLE_SEX_OPTIONS = [
   { value: 'Male', label: 'Male' },
   { value: 'Female', label: 'Female' },
@@ -387,8 +385,7 @@ const Module1UploadForm = ({
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!canSubmit) return;
-    /* Validated here rather than folded into `canSubmit` so the button stays clickable and
-     * the missing field can point at itself instead of the user hunting a dead button. */
+
     setValidationAttempted(true);
     if (analysisTypeMissing || phenotypeMissing) return;
     const useCustomBed = bedMode === 'custom';
@@ -697,8 +694,7 @@ const Module1UploadForm = ({
                 <div className="flex items-center gap-1.5 mr-auto min-w-0">
                   <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" style={{ color: 'var(--accent-teal)' }} />
                   <span className="text-2xs truncate" style={{ color: 'var(--text-tertiary)' }}>{module1ImportStatus}</span>
-                  {/* A multi-GB import can run for many minutes; without this there is no way
-                    * out except closing the tab. */}
+                  {/* A multi-GB import can run for many minutes*/}
                   {cancelModule1Import && isUrlMode && (
                     <button
                       type="button"

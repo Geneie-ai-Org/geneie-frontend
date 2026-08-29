@@ -204,6 +204,9 @@ const PipelineDrawer = ({
   const chatReady = chatEligibility?.allowed === true;
   const variantCount = variantsUnderConsideration ?? filteredVariantCount;
   const displayName = fileName || 'Variant file';
+  const guestFilterGateBlocked =
+    isGuest && !chatReady && chatEligibility?.reason === 'CHAT_REQUIRES_FILTER';
+  const showGuestFilterCta = guestFilterGateBlocked && Boolean(guestPipelineCta?.message);
 
   const failed =
     enrichmentState?.failed ||
@@ -302,6 +305,8 @@ const PipelineDrawer = ({
     }
     if (enrichmentState?.active) return enrichmentState.message || 'Enriching your variants…';
     if (indexingState?.active) return indexingState.message || 'Indexing variants for chat…';
+    if (showGuestFilterCta) return null;
+    if (isGuest && chatReady && chatEligibility?.message) return chatEligibility.message;
     if (gatedMessage) return gatedMessage;
     return statusLine;
   })();
@@ -433,14 +438,18 @@ const PipelineDrawer = ({
               </ol>
 
               <div className="flex items-start gap-2">
-                <p
-                  className="text-2xs leading-relaxed flex-1 min-w-0 px-0.5"
-                  style={{ color: detailColor }}
-                  aria-live="polite"
-                >
-                  {detailText}
-                </p>
-                {gatedAction && (
+                {detailText ? (
+                  <p
+                    className="text-2xs leading-relaxed flex-1 min-w-0 px-0.5"
+                    style={{ color: detailColor }}
+                    aria-live="polite"
+                  >
+                    {detailText}
+                  </p>
+                ) : (
+                  <span className="flex-1" aria-hidden />
+                )}
+                {gatedAction && !showGuestFilterCta && (
                   <button
                     type="button"
                     onClick={gatedAction.onClick}
@@ -453,30 +462,44 @@ const PipelineDrawer = ({
               </div>
 
               {guestPipelineCta?.message && (
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pb-1 px-0.5">
-                  <p className="text-2xs leading-relaxed flex-1 min-w-0" style={{ color: 'var(--text-secondary)' }}>
+                <div className="flex flex-col gap-2 pb-1 px-0.5 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-2xs leading-relaxed min-w-0" style={{ color: 'var(--text-secondary)' }}>
                     {guestPipelineCta.message}
                   </p>
-                  {guestPipelineCta.action && (
-                    <button
-                      type="button"
-                      onClick={guestPipelineCta.action.onClick}
-                      className="shrink-0 px-2 py-0.5 rounded-md text-2xs font-medium border transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
-                      style={{ borderColor: 'var(--accent-teal)', color: 'var(--accent-teal)' }}
-                    >
-                      {guestPipelineCta.action.label}
-                    </button>
-                  )}
-                  {guestPipelineCta.secondaryAction && (
-                    <button
-                      type="button"
-                      onClick={guestPipelineCta.secondaryAction.onClick}
-                      className="shrink-0 px-2 py-0.5 rounded-md text-2xs font-medium transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
-                      style={{ color: 'var(--text-secondary)' }}
-                    >
-                      {guestPipelineCta.secondaryAction.label}
-                    </button>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {guestPipelineCta.action && (
+                      <button
+                        type="button"
+                        onClick={guestPipelineCta.action.onClick}
+                        className="shrink-0 px-2 py-0.5 rounded-md text-2xs font-medium border transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                        style={{ borderColor: 'var(--accent-teal)', color: 'var(--accent-teal)' }}
+                      >
+                        {guestPipelineCta.action.label}
+                      </button>
+                    )}
+                    {guestPipelineCta.secondaryAction && (
+                      <button
+                        type="button"
+                        onClick={guestPipelineCta.secondaryAction.onClick}
+                        className="shrink-0 px-2 py-0.5 rounded-md text-2xs font-medium transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                        style={{ color: 'var(--text-secondary)' }}
+                      >
+                        {guestPipelineCta.secondaryAction.label}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+              {!guestPipelineCta?.message && guestPipelineCta?.action && (
+                <div className="flex justify-end pb-1 px-0.5">
+                  <button
+                    type="button"
+                    onClick={guestPipelineCta.action.onClick}
+                    className="shrink-0 px-2 py-0.5 rounded-md text-2xs font-medium border transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                    style={{ borderColor: 'var(--accent-teal)', color: 'var(--accent-teal)' }}
+                  >
+                    {guestPipelineCta.action.label}
+                  </button>
                 </div>
               )}
 

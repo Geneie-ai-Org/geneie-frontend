@@ -313,6 +313,7 @@ export function useModule1Pipeline({
       sampleName,
       genome,
       sequencingType,
+      sampleMetadata,
       sourceMode = 'file',
       r1File,
       r2File,
@@ -397,11 +398,21 @@ export function useModule1Pipeline({
           }
         }
 
+        /* Same camelCase shape the VCF upload path sends as `sample_metadata`, so both
+         * entry points store one comparable record. Empty optional fields are dropped
+         * rather than stored as ''. */
+        const cleanedSampleMetadata = Object.fromEntries(
+          Object.entries(sampleMetadata || {}).filter(([, value]) => value != null && value !== '')
+        );
+
         const result = await runModule1Pipeline({
           conversation_id: conversationId,
           sample_name: sampleName,
           genome,
           sequencing_type: sequencingType,
+          ...(Object.keys(cleanedSampleMetadata).length
+            ? { sample_metadata: { ...cleanedSampleMetadata, name: sampleName, genome, sequencingType } }
+            : {}),
           r1_s3_key: r1S3Key,
           r2_s3_key: r2S3Key,
           ...(resolvedCustomBedS3Key

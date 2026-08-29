@@ -35,12 +35,39 @@ const SEQUENCING_TYPE_OPTIONS = [
   { value: 'Targeted', label: 'Targeted', disabled: true, disabledReason: 'Targeted panel analysis is coming soon.' },
 ];
 
+/* Mirrors the VCF upload form (DocumentUpload.jsx) so a sample described here and a sample
+ * described there carry the same vocabulary into `sample_metadata`. */
+const SAMPLE_SEX_OPTIONS = [
+  { value: 'Male', label: 'Male' },
+  { value: 'Female', label: 'Female' },
+  { value: 'Unknown', label: 'Unknown' },
+];
+
+const ANALYSIS_TYPE_OPTIONS = [
+  { value: 'Germline', label: 'Germline' },
+  { value: 'Somatic', label: 'Somatic' },
+  { value: 'Tumor-Normal Paired', label: 'Tumor-Normal Paired' },
+  { value: 'Tumor-Only', label: 'Tumor-Only' },
+  { value: 'IVF', label: 'IVF' },
+  { value: 'PGT', label: 'PGT' },
+  { value: 'Unknown', label: 'Unknown' },
+];
+
+const SAMPLE_SOURCE_OPTIONS = [
+  { value: 'Tissue', label: 'Tissue' },
+  { value: 'Blood', label: 'Blood' },
+  { value: 'FFPE', label: 'FFPE' },
+  { value: 'Other', label: 'Other' },
+];
+
+const EMPTY_SAMPLE_METADATA = { sampleSex: '', analysisType: '', sampleSource: '', phenotype: '' };
+
 /**
  * Select whose unavailable options render as greyed-out rows that toast their reason on
  * click instead of using SelectItem's `disabled` (which sets pointer-events: none, so the
  * row could never report why it is unavailable).
  */
-function SelectWithDisabledOptions({ value, onChange, placeholder, options, className = '' }) {
+function SelectWithDisabledOptions({ value, onChange, placeholder, options, className = '', error = false }) {
   const items = Object.fromEntries((options || []).map((o) => [o.value, o.label]));
   return (
     <Select value={value || ''} onValueChange={onChange} items={items}>
@@ -49,7 +76,7 @@ function SelectWithDisabledOptions({ value, onChange, placeholder, options, clas
           'w-full !h-10 px-3 text-sm rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] data-placeholder:text-[var(--text-tertiary)]',
           className
         )}
-        style={{ borderColor: 'var(--border-default)' }}
+        style={{ borderColor: error ? 'var(--error)' : 'var(--border-default)' }}
       >
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
@@ -201,6 +228,8 @@ const Module1UploadForm = ({
   const [isValidatingBed, setIsValidatingBed] = useState(false);
   const [sourceMode, setSourceMode] = useState('file'); // 'file' | 'url'
   const [urlState, setUrlState] = useState(EMPTY_URL_STATE);
+  const [sampleMetadata, setSampleMetadata] = useState(EMPTY_SAMPLE_METADATA);
+  const [validationAttempted, setValidationAttempted] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -217,6 +246,8 @@ const Module1UploadForm = ({
     setCustomBedPrecheck(null);
     setSourceMode('file');
     setUrlState(EMPTY_URL_STATE);
+    setSampleMetadata(EMPTY_SAMPLE_METADATA);
+    setValidationAttempted(false);
     loadBedCatalog?.('hg38');
   }, [open, loadBedCatalog]);
 
@@ -349,14 +380,28 @@ const Module1UploadForm = ({
     !quotaBlocked &&
     !oversizedRead;
 
+  const isGermline = sampleMetadata.analysisType === 'Germline';
+  const analysisTypeMissing = !sampleMetadata.analysisType;
+  const phenotypeMissing = isGermline && !sampleMetadata.phenotype.trim();
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!canSubmit) return;
+    /* Validated here rather than folded into `canSubmit` so the button stays clickable and
+     * the missing field can point at itself instead of the user hunting a dead button. */
+    setValidationAttempted(true);
+    if (analysisTypeMissing || phenotypeMissing) return;
     const useCustomBed = bedMode === 'custom';
     startModule1Run({
       sampleName: sampleName.trim(),
       genome,
       sequencingType,
+      sampleMetadata: {
+        sampleSex: sampleMetadata.sampleSex,
+        analysisType: sampleMetadata.analysisType,
+        sampleSource: sampleMetadata.sampleSource,
+        phenotype: isGermline ? sampleMetadata.phenotype.trim() : '',
+      },
       sourceMode,
       ...(isUrlMode
         ? {
@@ -437,6 +482,73 @@ const Module1UploadForm = ({
                     options={SEQUENCING_TYPE_OPTIONS}
                   />
                 </div>
+
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                    Sample sex
+                  </label>
+                  <SelectWithDisabledOptions
+                    value={sampleMetadata.sampleSex}
+                    onChange={(val) => setSampleMetadata((prev) => ({ ...prev, sampleSex: val }))}
+                    placeholder="Choose one"
+                    options={SAMPLE_SEX_OPTIONS}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                    Analysis type <span style={{ color: 'var(--error)' }}>*</span>
+                  </label>
+                  <SelectWithDisabledOptions
+                    value={sampleMetadata.analysisType}
+                    onChange={(val) => setSampleMetadata((prev) => ({ ...prev, analysisType: val }))}
+                    placeholder="Choose one"
+                    options={ANALYSIS_TYPE_OPTIONS}
+                    error={validationAttempted && analysisTypeMissing}
+                  />
+                  {validationAttempted && analysisTypeMissing && (
+                    <p className="text-2xs mt-1" style={{ color: 'var(--error)' }}>
+                      Select an analysis type.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                    Sample source
+                  </label>
+                  <SelectWithDisabledOptions
+                    value={sampleMetadata.sampleSource}
+                    onChange={(val) => setSampleMetadata((prev) => ({ ...prev, sampleSource: val }))}
+                    placeholder="Choose one"
+                    options={SAMPLE_SOURCE_OPTIONS}
+                  />
+                </div>
+
+                {isGermline && (
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                      Phenotype <span style={{ color: 'var(--error)' }}>*</span>
+                    </label>
+                    <textarea
+                      value={sampleMetadata.phenotype}
+                      onChange={(e) => setSampleMetadata((prev) => ({ ...prev, phenotype: e.target.value }))}
+                      rows={3}
+                      className="w-full px-3 py-2 border rounded-lg text-sm resize-none"
+                      style={{
+                        borderColor: validationAttempted && phenotypeMissing ? 'var(--error)' : 'var(--border-default)',
+                        background: 'var(--bg-input)',
+                        color: 'var(--text-primary)',
+                      }}
+                      placeholder="Describe the phenotype or clinical presentation…"
+                    />
+                    {validationAttempted && phenotypeMissing && (
+                      <p className="text-2xs mt-1" style={{ color: 'var(--error)' }}>
+                        Required for Germline analysis — used for Exomiser phenotype prioritization.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>

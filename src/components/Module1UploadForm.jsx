@@ -58,7 +58,37 @@ const SAMPLE_SOURCE_OPTIONS = [
   { value: 'Other', label: 'Other' },
 ];
 
-const EMPTY_SAMPLE_METADATA = { sampleSex: '', analysisType: '', sampleSource: '', phenotype: '' };
+const SAMPLE_ROLE_OPTIONS = [
+  { value: 'proband', label: 'Proband' },
+  { value: 'mother', label: 'Mother' },
+  { value: 'father', label: 'Father' },
+  { value: 'sibling', label: 'Sibling' },
+  { value: 'other', label: 'Other' },
+];
+
+const AFFECTED_STATUS_OPTIONS = [
+  { value: 'affected', label: 'Affected' },
+  { value: 'unaffected', label: 'Unaffected' },
+];
+
+const INHERITANCE_MODEL_OPTIONS = [
+  { value: 'Autosomal Dominant', label: 'Autosomal Dominant' },
+  { value: 'Autosomal Recessive', label: 'Autosomal Recessive' },
+  { value: 'X-linked', label: 'X-linked' },
+  { value: 'De novo', label: 'De novo' },
+  { value: 'Unknown', label: 'Unknown' },
+];
+
+const EMPTY_SAMPLE_METADATA = {
+  sampleSex: '',
+  analysisType: '',
+  sampleSource: '',
+  // Germline only
+  sampleRole: '',
+  affectedStatus: '',
+  inheritanceModel: '',
+  phenotype: '',
+};
 
 /**
  * Select whose unavailable options render as greyed-out rows that toast their reason on
@@ -397,7 +427,15 @@ const Module1UploadForm = ({
         sampleSex: sampleMetadata.sampleSex,
         analysisType: sampleMetadata.analysisType,
         sampleSource: sampleMetadata.sampleSource,
-        phenotype: isGermline ? sampleMetadata.phenotype.trim() : '',
+        // Dropped unless Germline, so a type switch cannot leave stale pedigree fields behind.
+        ...(isGermline
+          ? {
+              sampleRole: sampleMetadata.sampleRole,
+              affectedStatus: sampleMetadata.affectedStatus,
+              inheritanceModel: sampleMetadata.inheritanceModel,
+              phenotype: sampleMetadata.phenotype.trim(),
+            }
+          : {}),
       },
       sourceMode,
       ...(isUrlMode
@@ -522,31 +560,75 @@ const Module1UploadForm = ({
                   />
                 </div>
 
-                {isGermline && (
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                      Phenotype <span style={{ color: 'var(--error)' }}>*</span>
-                    </label>
-                    <textarea
-                      value={sampleMetadata.phenotype}
-                      onChange={(e) => setSampleMetadata((prev) => ({ ...prev, phenotype: e.target.value }))}
-                      rows={3}
-                      className="w-full px-3 py-2 border rounded-lg text-sm resize-none"
-                      style={{
-                        borderColor: validationAttempted && phenotypeMissing ? 'var(--error)' : 'var(--border-default)',
-                        background: 'var(--bg-input)',
-                        color: 'var(--text-primary)',
-                      }}
-                      placeholder="Describe the phenotype or clinical presentation…"
-                    />
-                    {validationAttempted && phenotypeMissing && (
-                      <p className="text-2xs mt-1" style={{ color: 'var(--error)' }}>
-                        Required for Germline analysis — used for Exomiser phenotype prioritization.
-                      </p>
-                    )}
-                  </div>
-                )}
               </div>
+
+              {isGermline && (
+                <div className="disclosure-enter border-t pt-4" style={{ borderColor: 'var(--border-default)' }}>
+                  <h4 className="text-xs font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
+                    Germline analysis fields
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                        Sample role
+                      </label>
+                      <SelectWithDisabledOptions
+                        value={sampleMetadata.sampleRole}
+                        onChange={(val) => setSampleMetadata((prev) => ({ ...prev, sampleRole: val }))}
+                        placeholder="Choose one"
+                        options={SAMPLE_ROLE_OPTIONS}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                        Affected status
+                      </label>
+                      <SelectWithDisabledOptions
+                        value={sampleMetadata.affectedStatus}
+                        onChange={(val) => setSampleMetadata((prev) => ({ ...prev, affectedStatus: val }))}
+                        placeholder="Choose one"
+                        options={AFFECTED_STATUS_OPTIONS}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                        Inheritance model
+                      </label>
+                      <SelectWithDisabledOptions
+                        value={sampleMetadata.inheritanceModel}
+                        onChange={(val) => setSampleMetadata((prev) => ({ ...prev, inheritanceModel: val }))}
+                        placeholder="Choose one"
+                        options={INHERITANCE_MODEL_OPTIONS}
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                        Phenotype <span style={{ color: 'var(--error)' }}>*</span>
+                      </label>
+                      <textarea
+                        value={sampleMetadata.phenotype}
+                        onChange={(e) => setSampleMetadata((prev) => ({ ...prev, phenotype: e.target.value }))}
+                        rows={3}
+                        className="w-full px-3 py-2 border rounded-lg text-sm resize-none"
+                        style={{
+                          borderColor: validationAttempted && phenotypeMissing ? 'var(--error)' : 'var(--border-default)',
+                          background: 'var(--bg-input)',
+                          color: 'var(--text-primary)',
+                        }}
+                        placeholder="Describe the phenotype or clinical presentation…"
+                      />
+                      {validationAttempted && phenotypeMissing && (
+                        <p className="text-2xs mt-1" style={{ color: 'var(--error)' }}>
+                          Required for Germline analysis — used for Exomiser phenotype prioritization.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>

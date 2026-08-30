@@ -176,12 +176,20 @@ function formatBytes(bytes) {
  */
 function UrlPickerRow({ label, required = true, placeholder, state, onChange, onValidate }) {
   const size = formatBytes(state.meta?.content_length);
+  const resolved = !state.checking && !state.error && !!state.meta;
   return (
     <div>
-      {label && (
-        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-          {label} {required && <span style={{ color: 'var(--error)' }}>*</span>}
-        </label>
+      {(label || resolved) && (
+        <div className="flex items-baseline justify-between gap-2 mb-1.5">
+          <label className="text-xs font-medium shrink-0" style={{ color: 'var(--text-secondary)' }}>
+            {label} {required && <span style={{ color: 'var(--error)' }}>*</span>}
+          </label>
+          {resolved && (
+            <span className="flex items-center gap-1 min-w-0 text-2xs" style={{ color: 'var(--text-secondary)' }}>
+              <span className="truncate">{state.meta.file_name}{size ? `  (${size})` : ''}</span>
+            </span>
+          )}
+        </div>
       )}
       <input
         type="url"
@@ -213,14 +221,6 @@ function UrlPickerRow({ label, required = true, placeholder, state, onChange, on
         <div className="flex items-start gap-1.5 mt-1.5">
           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: 'var(--error)' }} />
           <span className="text-2xs" style={{ color: 'var(--error)' }}>{state.error}</span>
-        </div>
-      )}
-      {!state.checking && !state.error && state.meta && (
-        <div className="flex items-start gap-1.5 mt-1.5">
-          <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: 'var(--success)' }} />
-          <span className="text-2xs truncate" style={{ color: 'var(--text-secondary)' }}>
-            {state.meta.file_name}{size ? ` · ${size}` : ''}
-          </span>
         </div>
       )}
     </div>

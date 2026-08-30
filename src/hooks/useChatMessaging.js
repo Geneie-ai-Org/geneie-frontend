@@ -324,7 +324,7 @@ export function useChatMessaging({
             // planning / verifying -> a plain step line, in-order
             if (evt.label) pushTrace('step', evt.label);
           }
-        }, ac.signal);
+        }, ac.signal, activeConversationId || 'guest-session');  // enables multi-turn memory
       } catch (e) {
         patch((m) => ({ ...m, streaming: false, text: m.text || `Error: ${e.message}` }));
       }

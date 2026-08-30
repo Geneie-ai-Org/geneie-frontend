@@ -1802,8 +1802,7 @@ export function useVariantPipeline({
   const fetchExomiserEligibility = useCallback(async () => {
     if (!activeConversationId || userTier === 'guest') return null;
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const token = await optionalIdToken();
       if (!token) return null;
       const res = await fetch(apiUrl(`/api/exomiser-eligibility/${encodeURIComponent(activeConversationId)}`), {
         headers: { Authorization: `Bearer ${token}` },
@@ -1822,9 +1821,7 @@ export function useVariantPipeline({
     exomiserPollAbortRef.current = abort;
 
     const pollOnce = async () => {
-      const auth = getAuth();
-      const t = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      if (!t) throw new Error('Authentication required');
+      const t = await requiredIdToken();
       const sres = await fetch(apiUrl(`/api/exomiser-status/${encodeURIComponent(conversationId)}`), {
         headers: { Authorization: `Bearer ${t}` },
       });
@@ -1894,9 +1891,7 @@ export function useVariantPipeline({
     setExomiserStatus({ status: 'running', phase: 'queued', message: 'Starting Exomiser…', progress_percent: 0 });
 
     try {
-      const auth = getAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      if (!token) throw new Error('Authentication required');
+      const token = await requiredIdToken();
 
       const res = await fetch(apiUrl('/api/run-exomiser'), {
         method: 'POST',

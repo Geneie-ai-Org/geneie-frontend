@@ -240,7 +240,9 @@ const Module1UploadForm = ({
   preflightModule1Url,
   uploadAndValidateCustomBed,
   startModule1Run,
+  cancelModule1Import,
   gate,
+  gateMeterDetail,
 }) => {
   const [sampleName, setSampleName] = useState('');
   const [genome, setGenome] = useState('hg38');

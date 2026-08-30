@@ -123,9 +123,9 @@ const ConversationSidebar = ({
                     <div className={`flex items-center h-12 overflow-hidden shrink-0 ${isOpen ? 'px-3' : 'justify-center'}`}>
                         {isOpen ? (
                             <img
-                                src={isDark ? '/Final logo dark.svg' : '/Final logo light.svg'}
+                                src={isDark ? '/logo/Final gene dark.svg' : '/logo/Final gene light.svg'}
                                 alt="Geneie"
-                                className="ml-3 h-6 w-auto shrink-0"
+                                className="ml-3 h-8 w-auto shrink-0"
                             />
                         ) : (
                             <img src="/geneie-g.svg" alt="Geneie" className="h-6 w-auto shrink-0" />

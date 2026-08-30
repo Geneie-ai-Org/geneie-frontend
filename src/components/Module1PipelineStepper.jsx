@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertCircle, Check, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, ChevronUp, Dna, Loader2 } from 'lucide-react';
 import { MODULE1_STAGE_GROUPS, getModule1PhaseMessage, getModule1StageGroup } from '@/lib/module1PipelinePhases';
 
 function nodeStatus(groupId, activeGroupId, failed, groupOrder) {
@@ -45,7 +45,7 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
           {failed ? (
             <AlertCircle className="w-4 h-4" style={{ color: 'var(--error)' }} />
           ) : (
-            <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--accent-teal)' }} />
+            <Dna className="w-4 h-4" style={{ color: 'var(--accent-teal)' }} />
           )}
         </div>
         <div className="flex-1 min-w-0">

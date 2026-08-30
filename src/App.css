@@ -90,10 +90,12 @@
   --drawer-inset: clamp(0.75rem, 2.25%, 1.75rem);
 }
 
-/* Dark theme — the shipped look. Values are the pre-light-mode originals, unchanged. */
+/* Dark theme — the shipped look. Values are the pre-light-mode originals, except
+ * --bg-surface-sunken, which was raised off the page background so the pipeline
+ * drawer (its only consumer) reads as a distinct surface without a border. */
 .dark {
   /* Surface hierarchy */
-  --bg-surface-sunken: #131313;
+  --bg-surface-sunken: #181818;
   --bg-surface-raised: #242424;
   --bg-surface-hover: #2A2A2A;
   --bg-input: #1C1C1C;

@@ -12,6 +12,10 @@ function viteVar(name) {
 function readApiOrigin() {
   const raw = viteVar('API_URL');
   if (!raw) return DEFAULT_API_ORIGIN;
+  // 'same-origin' sentinel -> empty origin so apiUrl() yields relative '/api/...' paths
+  // that go through the Vite dev proxy. Lets ONE ngrok tunnel (on the FE) serve remote
+  // teammates with no separate backend tunnel.
+  if (raw.trim() === 'same-origin') return '';
   return raw.replace(/\/api\/chat\/?$/, '').replace(/\/$/, '') || DEFAULT_API_ORIGIN;
 }
 

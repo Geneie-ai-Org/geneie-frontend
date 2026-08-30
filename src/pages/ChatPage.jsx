@@ -4,6 +4,7 @@ import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, B
 import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
 import { toast } from 'sonner';
+import ExploratoryModeToggle from '../components/ExploratoryModeToggle';
 
 import { useStickToBottom } from 'use-stick-to-bottom';
 import { Markdown } from '../components/chat/ChatMarkdown';
@@ -1473,19 +1474,54 @@ const ChatPage = () => {
                 <div ref={chatContentRef} className="chat-column-inner space-y-8 pt-5 pb-4">
                   <div className="space-y-8 pb-4 w-full">
                     {messages.map((msg, index) => (
-                      <ChatMessage
-                        key={msg.id}
-                        role={msg.role}
-                        text={msg.text}
-                        sources={msg.sources}
-                        showRegenerate={
-                          !isCurrentlyActive &&
-                          index === messages.length - 1 &&
-                          msg.role === 'ai'
-                        }
-                        onRegenerate={regenerateLastResponse}
-                        regenerateDisabled={!isAuthReady}
-                      />
+                      <div key={msg.id}>
+                        {/* Exploratory-mode RAW trace: a plain streaming line log (no cards).
+                            One line per event, in stream order, all readable (it's the audit
+                            trail). Hierarchy by glyph + weight, not boxes. Live line pulses. */}
+                        {Array.isArray(msg.trace) && msg.trace.length > 0 && (
+                          <div style={{
+                            margin: '0 0 8px', paddingLeft: 4,
+                            fontSize: 12.5, lineHeight: 1.65,
+                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                            color: 'hsl(var(--muted-foreground))',
+                          }}>
+                            {msg.trace.map((t, i) => {
+                              const isLast = i === msg.trace.length - 1;
+                              const live = msg.streaming && isLast;
+                              if (t.kind === 'toolcall') {
+                                return <div key={i} style={{ color: 'hsl(var(--card-foreground))', marginTop: 4 }}>
+                                  {live ? '▸' : '✓'} query: <span style={{ opacity: 0.85 }}>{t.text}</span>
+                                </div>;
+                              }
+                              if (t.kind === 'toolresult') {
+                                return <div key={i} style={{ color: '#4ea1a1' }}>  └ {t.text}</div>;
+                              }
+                              if (t.kind === 'fact') {
+                                return <div key={i} style={{ paddingLeft: 14, opacity: 0.9 }}>• {t.text}</div>;
+                              }
+                              if (t.kind === 'think') {
+                                return <div key={i} style={{ fontStyle: 'italic', opacity: 0.8, margin: '2px 0' }}>
+                                  {t.text}{live ? <span className="ex-cursor">▍</span> : null}
+                                </div>;
+                              }
+                              // plain step (planning / verifying)
+                              return <div key={i}>{live ? '▸' : '✓'} {t.text}</div>;
+                            })}
+                          </div>
+                        )}
+                        <ChatMessage
+                          role={msg.role}
+                          text={msg.text}
+                          sources={msg.sources}
+                          showRegenerate={
+                            !isCurrentlyActive &&
+                            index === messages.length - 1 &&
+                            msg.role === 'ai'
+                          }
+                          onRegenerate={regenerateLastResponse}
+                          regenerateDisabled={!isAuthReady}
+                        />
+                      </div>
                     ))}
 
                     {isCurrentlyActive && (
@@ -1921,6 +1957,8 @@ const ChatPage = () => {
         onClose={() => setUpgradeModal(null)}
         userId={userId}
       />
+
+      <ExploratoryModeToggle />
     </div>
   );
 };

@@ -6,6 +6,7 @@ import { getDeviceId } from '@/lib/deviceId';
 import { DEFAULT_GUEST_CHAT_LIMIT } from '@/services/backendApi';
 import { useAuth } from '@/hooks/useAuth';
 import { describeLimitError, isLimitCode } from '@/services/limitErrors';
+import { streamExploratory } from '@/services/streamExploratory';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const MAX_RETRIES = 3;
@@ -177,6 +178,8 @@ export function useChatMessaging({
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         if (signal.aborted) return { data: null, lastError: null, aborted: true };
         try {
+          // Note: exploratory mode is handled in an earlier branch (streams directly to the
+          // exploratory service); this requestBody is the normal PROD chat path only.
           const requestBody = {
             message: userMessageText,
             history: historyPayload,
@@ -277,6 +280,59 @@ export function useChatMessaging({
       ...messages.map((msg) => ({ role: msg.role, text: msg.text })),
       { role: 'user', text: userMessageText },
     ];
+
+    // --- Exploratory (Strands) mode: stream steps + live answer via SSE, then return.
+    // Isolated branch; the normal PROD path below is untouched.
+    const exploratoryOn = typeof window !== 'undefined'
+      && window.localStorage?.getItem('geneie_exploratory_mode') === 'on';
+    if (exploratoryOn) {
+      const aiId = userLocalId + 1;
+      setMessages((prev) => [...prev, { role: 'ai', text: '', id: aiId, streaming: true, trace: [] }]);
+      const patch = (fn) => setMessages((prev) => prev.map((m) => (m.id === aiId ? fn(m) : m)));
+      // append an item to the ordered trace; coalesce consecutive 'think' deltas into one item
+      const pushTrace = (kind, text) => patch((m) => {
+        const tr = [...(m.trace || [])];
+        if (kind === 'think' && tr.length && tr[tr.length - 1].kind === 'think') {
+          tr[tr.length - 1] = { kind, text: tr[tr.length - 1].text + text };
+        } else {
+          tr.push({ kind, text });
+        }
+        return { ...m, trace: tr };
+      });
+      try {
+        await streamExploratory(userMessageText, (evt) => {
+          if (evt.type === 'answer_delta') {
+            patch((m) => ({ ...m, text: m.text + (evt.data?.text || '') }));
+          } else if (evt.type === 'thinking') {
+            pushTrace('think', evt.data?.text || '');            // real reasoning, in-order
+          } else if (evt.type === 'narration') {
+            pushTrace('fact', evt.data?.fact || evt.label);      // grounded fact, in-order
+          } else if (evt.type === 'refused') {
+            patch((m) => ({ ...m, text: '⚠️ ' + (evt.label || 'Answer withheld (not grounded).') }));
+          } else if (evt.type === 'error') {
+            patch((m) => ({ ...m, text: 'Error: ' + (evt.data?.error || 'stream failed') }));
+          } else if (evt.type === 'done') {
+            patch((m) => ({ ...m, streaming: false }));
+          } else if (evt.type === 'tool_call') {
+            pushTrace('toolcall', evt.data?.query || evt.label);  // starts a new timeline turn
+          } else if (evt.type === 'tool_result') {
+            pushTrace('toolresult', evt.label);                   // row count for the current turn
+          } else {
+            // planning / verifying -> a plain step line, in-order
+            if (evt.label) pushTrace('step', evt.label);
+          }
+        }, ac.signal, activeConversationId || 'guest-session',
+           { ...(token && { Authorization: `Bearer ${token}` }), 'X-Device-Id': getDeviceId() });
+      } catch (e) {
+        patch((m) => ({ ...m, streaming: false, text: m.text || `Error: ${e.message}` }));
+      }
+      chatAbortControllerRef.current = null;
+      setIsLoading(false);
+      if (wasFirstInConversation && updateConversationTitle) {
+        updateConversationTitle(userMessageText);
+      }
+      return;
+    }
 
     const { data, lastError, aborted } = await runChatCompletion(userMessageText, historyPayload, ac.signal);
     chatAbortControllerRef.current = null;

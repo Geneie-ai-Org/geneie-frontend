@@ -11,11 +11,12 @@
 
 const STREAM_URL = '/exploratory/stream'; // same-origin -> Vite proxy -> :8100
 
-export async function streamExploratory(question, onEvent, signal, conversationId) {
+export async function streamExploratory(question, onEvent, signal, conversationId, authHeaders = {}) {
   const res = await fetch(STREAM_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    // conversation_id enables native multi-turn memory (server threads it to the agent's session)
+    // forward auth so the backend can enforce ownership + scope data to this conversation
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    // conversation_id enables native multi-turn memory + the per-conversation data path
     body: JSON.stringify({ question, conversation_id: conversationId }),
     signal,
   });

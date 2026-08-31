@@ -178,16 +178,13 @@ export function useChatMessaging({
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         if (signal.aborted) return { data: null, lastError: null, aborted: true };
         try {
+          // Note: exploratory mode is handled in an earlier branch (streams directly to the
+          // exploratory service); this requestBody is the normal PROD chat path only.
           const requestBody = {
             message: userMessageText,
             history: historyPayload,
             conversationId: activeConversationId || (userTier === 'guest' ? 'guest-session' : null),
             hasUploadedFile: userTier === 'guest' && currentDocument !== null,
-            // Exploratory (Strands agentic) mode toggle. Read from localStorage so the
-            // switch is trivial for the teammate trial; backend falls back to PROD if unset.
-            mode: (typeof window !== 'undefined'
-              && window.localStorage?.getItem('geneie_exploratory_mode') === 'on')
-              ? 'exploratory' : undefined,
           };
           const token = userTier === 'guest' ? null : await optionalIdToken();
 
@@ -324,7 +321,8 @@ export function useChatMessaging({
             // planning / verifying -> a plain step line, in-order
             if (evt.label) pushTrace('step', evt.label);
           }
-        }, ac.signal, activeConversationId || 'guest-session');  // enables multi-turn memory
+        }, ac.signal, activeConversationId || 'guest-session',
+           { ...(token && { Authorization: `Bearer ${token}` }), 'X-Device-Id': getDeviceId() });
       } catch (e) {
         patch((m) => ({ ...m, streaming: false, text: m.text || `Error: ${e.message}` }));
       }

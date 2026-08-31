@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 
 /**
- * Floating toggle for Strands exploratory (agentic) mode.
- * Self-contained: stores the flag in localStorage under 'geneie_exploratory_mode'
- * ('on' | absent), which useChatMessaging reads when building the chat request.
- * Intentionally minimal + isolated so it's easy to remove after the teammate trial.
+ * Chat mode switch: Standard (reproducible pipeline) vs Explore (agentic, multi-step).
+ * Stores the choice in localStorage under 'geneie_exploratory_mode' ('on' | absent), which
+ * useChatMessaging reads when routing a turn.
+ *
+ * Deliberately quiet + self-contained: a small segmented control that reads as a product
+ * feature, not a debug affordance. Themed to the app (uses the shared CSS vars).
  */
 const KEY = 'geneie_exploratory_mode';
 
@@ -15,33 +17,35 @@ export default function ExploratoryModeToggle() {
     setOn(window.localStorage?.getItem(KEY) === 'on');
   }, []);
 
-  const toggle = () => {
-    const next = !on;
+  const set = (next) => {
     setOn(next);
     if (next) window.localStorage.setItem(KEY, 'on');
     else window.localStorage.removeItem(KEY);
   };
 
+  const seg = (active) => ({
+    padding: '4px 10px',
+    borderRadius: 6,
+    border: 'none',
+    cursor: 'pointer',
+    font: '500 12px -apple-system, system-ui, sans-serif',
+    background: active ? 'hsl(var(--background))' : 'transparent',
+    color: active ? 'hsl(var(--foreground, var(--card-foreground)))' : 'hsl(var(--muted-foreground))',
+    boxShadow: active ? '0 1px 2px rgba(0,0,0,0.15)' : 'none',
+    transition: 'background .15s',
+  });
+
   return (
-    <button
-      onClick={toggle}
-      title="Toggle exploratory (agentic) mode. Off = standard reproducible pipeline."
+    <div
+      title="Standard: fast, reproducible answers. Explore: an agent reasons across your data in multiple steps (slower, shows its work)."
       style={{
-        position: 'fixed', bottom: 16, right: 16, zIndex: 9999,
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '8px 14px', borderRadius: 999,
-        border: '1px solid rgba(0,0,0,0.12)',
-        background: on ? '#2b6cb0' : '#f4f4f6',
-        color: on ? '#fff' : '#5c5c66',
-        font: '600 12px -apple-system, system-ui, sans-serif',
-        cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+        position: 'fixed', bottom: 14, right: 14, zIndex: 9999,
+        display: 'inline-flex', gap: 2, padding: 3, borderRadius: 8,
+        background: 'hsl(var(--muted))', border: '1px solid hsl(var(--border))',
       }}
     >
-      <span style={{
-        width: 8, height: 8, borderRadius: 999,
-        background: on ? '#8fce9b' : '#b8b8c0',
-      }} />
-      {on ? 'Exploratory mode: ON' : 'Exploratory mode: off'}
-    </button>
+      <button style={seg(!on)} onClick={() => set(false)}>Standard</button>
+      <button style={seg(on)} onClick={() => set(true)}>Explore</button>
+    </div>
   );
 }

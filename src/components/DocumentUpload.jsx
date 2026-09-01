@@ -456,7 +456,7 @@ const DocumentUpload = ({
       if (!sampleMetadata.sequencingType) { setError('Please select a Sequencing Type (required)'); return; }
       if (!sampleMetadata.analysisType) { setError('Please select an Analysis Type (required)'); return; }
       if (sampleMetadata.analysisType === 'Germline' && !sampleMetadata.phenotype?.trim()) {
-        setError('Phenotype is required for Germline analysis (needed for Exomiser prioritization).');
+        setError('Phenotype is required for Germline analysis (needed for phenotype-driven prioritization).');
         return;
       }
 
@@ -513,7 +513,7 @@ const DocumentUpload = ({
       return;
     }
     if (sampleMetadata.analysisType === 'Germline' && !sampleMetadata.phenotype?.trim()) {
-      setError('Phenotype is required for Germline analysis (needed for Exomiser prioritization).');
+      setError('Phenotype is required for Germline analysis (needed for phenotype-driven prioritization).');
       return;
     }
 
@@ -1520,7 +1520,7 @@ const DocumentUpload = ({
                         />
                         {phenotypeInvalid && (
                           <p className="mt-1 text-xs" style={{ color: 'var(--error)' }}>
-                            Required for Germline analysis — used for Exomiser phenotype prioritization.
+                            Required for Germline analysis — used for phenotype-driven prioritization.
                           </p>
                         )}
                       </div>

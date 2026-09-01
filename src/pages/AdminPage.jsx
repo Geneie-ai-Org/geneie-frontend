@@ -58,7 +58,7 @@ const QUOTA_FIELDS = [
   { key: 'module2RunsRemaining', label: 'ANNOVAR runs left' },
   { key: 'chatExchangesUsed', label: 'Chat used' },
   { key: 'chatExchangesLimit', label: 'Chat limit' },
-  { key: 'filterAppliesRemaining', label: 'ACMG/Exomiser left' },
+  { key: 'filterAppliesRemaining', label: 'ACMG/Phenotype left' },
 ];
 
 const PLAN_COLORS = {

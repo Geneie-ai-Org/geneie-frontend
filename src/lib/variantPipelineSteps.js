@@ -1,3 +1,5 @@
+import { PHENOTYPE_RUNNING_MESSAGE } from '@/lib/filterDisplayNames';
+
 export const PIPELINE_STEP_DEFS = [
   { id: 'upload', label: 'Upload', shortLabel: 'Upload' },
   { id: 'interpret', label: 'Interpretation', shortLabel: 'Interpret' },
@@ -226,7 +228,7 @@ export function getPipelineStatusLine(props, steps) {
     return filterJob?.message || 'Prioritizing variants in the background.';
   }
   if (isRunningExomiser || exomiserStatus?.status === 'running' || exomiserStatus?.status === 'queued') {
-    return exomiserStatus?.message || 'Exomiser is running in the background.';
+    return exomiserStatus?.message || PHENOTYPE_RUNNING_MESSAGE;
   }
   if (chatEligibility?.allowed) {
     const n = variantsUnderConsideration ?? filteredVariantCount;

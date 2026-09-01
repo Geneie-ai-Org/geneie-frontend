@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AlertCircle, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
-import PerimeterProgress from '@/components/ui/PerimeterProgress';
+import { PHENOTYPE_RUNNING_MESSAGE } from '@/lib/filterDisplayNames';
 import {
   PIPELINE_STEP_DEFS,
   computePipelineSteps,
@@ -274,7 +274,7 @@ const PipelineDrawer = ({
     if (steps.annovar === 'failed') return settled('Annotation failed');
     if (steps.reduce === 'failed') return settled('Prioritization failed');
     if (isRunningAnnovar || annovarJob?.status === 'running') return working('Annotating…');
-    if (isRunningExomiser || exomiserStatus?.status === 'running') return working('Running Exomiser…');
+    if (isRunningExomiser || exomiserStatus?.status === 'running') return working(PHENOTYPE_RUNNING_MESSAGE);
     if (isApplyingProprietaryFilter || filterJob?.status === 'running') return working('Applying filter…');
     if (chatReady) {
       return settled(

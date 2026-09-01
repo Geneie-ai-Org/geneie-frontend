@@ -31,6 +31,15 @@ import qiagenLogo from '../Qiagen.svg.png';
 import { toast } from 'sonner';
 import { apiErrorDetailToMessage as sharedApiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
 import { groupColumns } from '@/lib/variantColumnGroups';
+import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
+import {
+  PHENOTYPE_FILTER_DISPLAY_NAME,
+  PHENOTYPE_FILTER_DESCRIPTION,
+  formatAcmgPhenotypeMeterLabel,
+  PHENOTYPE_STARTING_MESSAGE,
+  PHENOTYPE_FAILED_TITLE,
+  PHENOTYPE_FAILED_FALLBACK,
+} from '@/lib/filterDisplayNames';
 
 /**
  * Backwards-compatible replacement for the old in-panel notification overlay.
@@ -55,9 +64,9 @@ function notify(payload) {
 
 // Proprietary filter descriptions (for tooltips - no exact parameters)
 export const ACMG_FILTER_DISPLAY_NAME = 'ACMG filter';
+export { PHENOTYPE_FILTER_DISPLAY_NAME };
 
 const PROPRIETARY_FILTER_1_DESCRIPTION = "ClinVar and/or InterVar pathogenic classes, with rare gnomAD frequency (<1%) or missing frequency retained.";
-const EXOMISER_FILTER_DESCRIPTION = "Phenotype-driven variant prioritization for Germline cases using HPO terms and Exomiser gene/variant scoring. Requires ANNOVAR annotation and a phenotype description.";
 
 const apiErrorDetailToMessage = sharedApiErrorDetailToMessage;
 
@@ -508,7 +517,7 @@ const VariantFilterSidebar = ({
   const acmgQuotaBlocked = acmgExomiserGate?.allowed === false;
   const acmgQuotaMeter = acmgExomiserGate?.meter;
   const acmgMeterLabel = acmgQuotaMeter?.tracked && !acmgQuotaMeter.unlimited && acmgQuotaMeter.remaining != null
-    ? `${acmgQuotaMeter.remaining} of ${acmgQuotaMeter.limit} ACMG / Exomiser applies left`
+    ? formatAcmgPhenotypeMeterLabel(acmgQuotaMeter.remaining, acmgQuotaMeter.limit)
     : null;
   const annovarQuotaMeter = annovarGate?.meter;
   const annovarMeterLabel = annovarQuotaMeter?.tracked && !annovarQuotaMeter.unlimited && annovarQuotaMeter.remaining != null
@@ -1590,7 +1599,7 @@ const VariantFilterSidebar = ({
 
   const currentActiveFilterLabel = useMemo(() => {
     if (activeProprietaryFilter === 'filter_1') return 'ACMG filter';
-    if (activeProprietaryFilter === 'filter_3') return 'Exomiser';
+    if (activeProprietaryFilter === 'filter_3') return PHENOTYPE_FILTER_DISPLAY_NAME;
     if (hasAppliedManualFilters) {
       const cols = Object.keys(normalizeAppliedFiltersForCompare(appliedFilters)).filter(k => k !== '_numeric_logic');
       if (cols.length === 0) return null;
@@ -1711,7 +1720,7 @@ const VariantFilterSidebar = ({
               const TABS = [
                 { key: 'manual', label: 'Manual', filterKey: null },
                 { key: 'acmg', label: 'ACMG', filterKey: 'filter_1' },
-                { key: 'exomiser', label: 'Exomiser', filterKey: 'filter_3' },
+                { key: 'exomiser', label: PHENOTYPE_FILTER_DISPLAY_NAME, filterKey: 'filter_3', usePhenotypeAi: true },
               ];
               const activeIndex = TABS.findIndex((t) => t.key === filterMode);
               const focusTab = (i) => {
@@ -1768,7 +1777,7 @@ const VariantFilterSidebar = ({
                             : 'font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                         }`}
                       >
-                        {t.label}
+                        {t.usePhenotypeAi ? <PhenotypeAiLabel variant="tab" /> : t.label}
                       </button>
                     );
                   })}
@@ -1895,10 +1904,10 @@ const VariantFilterSidebar = ({
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>
-                  Switch to {pendingTabSwitch === 'manual' ? 'Manual' : pendingTabSwitch === 'acmg' ? 'ACMG' : 'Exomiser'}?
+                  Switch to {pendingTabSwitch === 'manual' ? 'Manual' : pendingTabSwitch === 'acmg' ? 'ACMG' : PHENOTYPE_FILTER_DISPLAY_NAME}?
                 </AlertDialogTitle>
                 <AlertDialogDescription>
-                  Your current {getCurrentActiveMode() === 'manual' ? 'manual filters' : getCurrentActiveMode() === 'acmg' ? 'ACMG filter' : 'Exomiser prioritization'} will be cleared. You can re-apply after switching.
+                  Your current {getCurrentActiveMode() === 'manual' ? 'manual filters' : getCurrentActiveMode() === 'acmg' ? 'ACMG filter' : 'phenotype prioritization'} will be cleared. You can re-apply after switching.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -2181,27 +2190,27 @@ const VariantFilterSidebar = ({
               const failureDetail = failed
                 ? (/no valid hpo/i.test(rawFailure)
                     ? 'Could not derive valid HPO terms from the phenotype description. Edit the sample metadata with a clearer clinical phenotype (specific symptoms or HPO terms), then retry.'
-                    : (rawFailure || 'Exomiser did not complete successfully.'))
+                    : (rawFailure || PHENOTYPE_FAILED_FALLBACK))
                 : null;
               const REASON_LABELS = {
                 germline_only: 'Analysis type must be Germline.',
                 phenotype_required: 'Add a phenotype description to the sample metadata (edit the file pill).',
-                annovar_required: 'Run ANNOVAR first — Exomiser requires an annotated file.',
+                annovar_required: 'Run ANNOVAR first — phenotype prioritization requires an annotated file.',
                 proprietary_filter_active: 'Another proprietary filter is active. Remove it first.',
                 manual_filter_active: 'Manual filters are active. Reset them first.',
                 manual_filters_active: 'Manual filters are active. Reset them first.',
-                variant_limit_exceeded: 'File exceeds the Exomiser variant limit.',
-                not_configured: 'Exomiser service is not configured on the server.',
+                variant_limit_exceeded: 'File exceeds the phenotype prioritization variant limit.',
+                not_configured: 'Phenotype prioritization is not configured on the server.',
                 genome_build_mismatch: 'Genome build mismatch — resolve in sample metadata.',
-                job_running: 'An Exomiser job is already running on this conversation.',
+                job_running: 'Phenotype prioritization is already running on this conversation.',
               };
               return (
                 <div className="sidebar-card rounded-lg shadow-sm">
-                  <label className="block text-sm font-bold text-[var(--text-primary)] mb-2">
-                    Exomiser
+                  <label className="block mb-2">
+                    <PhenotypeAiLabel variant="heading" className="items-start" />
                   </label>
                   <p className="text-xs text-[var(--text-secondary)] mb-3 leading-relaxed">
-                    {EXOMISER_FILTER_DESCRIPTION}
+                    {PHENOTYPE_FILTER_DESCRIPTION}
                   </p>
 
                   {/* Progress area while running */}
@@ -2213,7 +2222,7 @@ const VariantFilterSidebar = ({
                         radius={8}
                       />
                       <span className="text-xs font-medium text-[var(--text-primary)]">
-                        {exomiserStatus?.message || 'Starting Exomiser…'}
+                        {exomiserStatus?.message || PHENOTYPE_STARTING_MESSAGE}
                       </span>
                       <p className="text-2xs text-[var(--text-tertiary)] mt-1.5">
                         This can take several minutes. You can leave this tab open or come back later.
@@ -2224,7 +2233,7 @@ const VariantFilterSidebar = ({
                   {/* Failure banner */}
                   {failed && failureDetail && (
                     <div className="mb-3 p-3 rounded-lg border text-xs" style={{ borderColor: 'var(--error)', backgroundColor: 'var(--error-soft)', color: 'var(--error)' }}>
-                      <div className="font-medium mb-0.5">Exomiser failed</div>
+                      <div className="font-medium mb-0.5">{PHENOTYPE_FAILED_TITLE}</div>
                       <div className="leading-relaxed">{failureDetail}</div>
                     </div>
                   )}
@@ -2232,7 +2241,7 @@ const VariantFilterSidebar = ({
                   {/* Eligibility issues (only if not running and not active) */}
                   {!running && !failed && !isActive && !canRun && reasons.length > 0 && (
                     <div className="mb-3 p-3 rounded-lg sidebar-warning-banner border text-xs space-y-1">
-                      <div className="font-medium mb-1">Cannot run Exomiser yet:</div>
+                      <div className="font-medium mb-1">Cannot run phenotype prioritization yet:</div>
                       <ul className="list-disc pl-4 space-y-0.5">
                         {reasons.map((r) => (
                           <li key={r}>{REASON_LABELS[r] || r}</li>
@@ -2263,7 +2272,7 @@ const VariantFilterSidebar = ({
                           Removing…
                         </span>
                       ) : (
-                        'Remove Exomiser'
+                        `Remove ${PHENOTYPE_FILTER_DISPLAY_NAME}`
                       )}
                     </button>
                   ) : (
@@ -2272,10 +2281,18 @@ const VariantFilterSidebar = ({
                       onClick={() => runExomiser && runExomiser()}
                       disabled={!canRun || running || !runExomiser || acmgQuotaBlocked}
                       title={acmgQuotaBlocked ? acmgExomiserGate.reason : undefined}
-                      className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       style={{ backgroundColor: 'var(--accent-teal)' }}
                     >
-                      {running ? 'Running…' : failed ? 'Retry Exomiser' : 'Run Exomiser'}
+                      {running ? (
+                        'Running…'
+                      ) : failed ? (
+                        <>Retry <PhenotypeAiLabel variant="inline" /></>
+                      ) : (
+                        <>
+                          Run <PhenotypeAiLabel variant="inline" />
+                        </>
+                      )}
                     </button>
                   )}
                   {!isActive && (acmgQuotaBlocked || acmgMeterLabel) && (

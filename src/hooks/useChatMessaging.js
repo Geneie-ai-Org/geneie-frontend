@@ -286,6 +286,10 @@ export function useChatMessaging({
     const exploratoryOn = typeof window !== 'undefined'
       && window.localStorage?.getItem('geneie_exploratory_mode') === 'on';
     if (exploratoryOn) {
+      // Auth for the exploratory stream: same as the PROD branch. Signed-in users send a
+      // Firebase bearer so the backend resolves ownership; guests use their device id only.
+      // (Previously referenced `token` from the PROD branch's scope -> "token is not defined".)
+      const token = userTier === 'guest' ? null : await optionalIdToken();
       const aiId = userLocalId + 1;
       setMessages((prev) => [...prev, { role: 'ai', text: '', id: aiId, streaming: true, trace: [] }]);
       const patch = (fn) => setMessages((prev) => prev.map((m) => (m.id === aiId ? fn(m) : m)));

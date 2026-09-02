@@ -113,7 +113,7 @@ const FALLBACK_MESSAGES = {
   module1RequiresPro: 'Running Module 1 requires Pro. You can stage your files now and run once you upgrade.',
   module2: 'ANNOVAR limit reached for this account. Upgrade to Pro to continue.',
   chat: 'Chat limit reached for this account. Upgrade to Pro to continue.',
-  filterApplies: 'ACMG / Exomiser apply limit reached. Manual filters are still available.',
+  filterApplies: 'ACMG / Phenotype apply limit reached. Manual filters are still available.',
   annovarAlreadyRun: 'ANNOVAR has already been run on this conversation. Start a new conversation to annotate another file.',
   guestChat: 'Guest chat limit reached. Sign up to continue.',
   legacyFreeLimit: 'You have reached your free tier limit. Upgrade to Pro to continue.',

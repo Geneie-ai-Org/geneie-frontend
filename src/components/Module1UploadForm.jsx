@@ -640,7 +640,7 @@ const Module1UploadForm = ({
                       />
                       {validationAttempted && phenotypeMissing && (
                         <p className="text-2xs mt-1" style={{ color: 'var(--error)' }}>
-                          Required for Germline analysis — used for Exomiser phenotype prioritization.
+                          Required for Germline analysis — used for phenotype-driven prioritization.
                         </p>
                       )}
                     </div>

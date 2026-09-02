@@ -19,6 +19,14 @@ import {
   normalizeChatEligibilityMessage,
   resolveVariantsUnderConsideration,
 } from '@/lib/variantPipelineUtils';
+import {
+  PHENOTYPE_FILTER_DISPLAY_NAME,
+  PHENOTYPE_STARTING_MESSAGE,
+  PHENOTYPE_RUNNING_MESSAGE,
+  PHENOTYPE_COMPLETE_MESSAGE,
+  PHENOTYPE_FAILED_TITLE,
+  PHENOTYPE_FAILED_FALLBACK,
+} from '@/lib/filterDisplayNames';
 
 /**
  * Phase F variant pipeline: chat eligibility, ANNOVAR/ACMG async jobs, background polling.
@@ -1579,7 +1587,7 @@ export function useVariantPipeline({
 
   const FILTER_DISPLAY_NAMES = {
     filter_1: 'ACMG filter',
-    filter_3: 'Exomiser',
+    filter_3: PHENOTYPE_FILTER_DISPLAY_NAME,
   };
 
   const runProprietaryFilter = useCallback(async (filterType) => {
@@ -1871,13 +1879,13 @@ export function useVariantPipeline({
             payload?.error ||
             payload?.exomiser_job?.message ||
             payload?.message ||
-            'Exomiser did not complete successfully.';
+            PHENOTYPE_FAILED_FALLBACK;
           const friendly =
             /no valid hpo/i.test(detail)
               ? 'Could not derive any valid HPO terms from the phenotype description. Edit the sample metadata and provide a clearer clinical phenotype (e.g. specific symptoms or HPO terms), then try again.'
               : humanizeError(detail) || detail;
           setAnnovarMessageModal({
-            title: 'Exomiser failed',
+            title: PHENOTYPE_FAILED_TITLE,
             message: friendly,
             variant: 'error',
           });
@@ -1899,7 +1907,7 @@ export function useVariantPipeline({
 
     beginPipelineWork();
     setIsRunningExomiser(true);
-    setExomiserStatus({ status: 'running', phase: 'queued', message: 'Starting Exomiser…', progress_percent: 0 });
+    setExomiserStatus({ status: 'running', phase: 'queued', message: PHENOTYPE_STARTING_MESSAGE, progress_percent: 0 });
 
     try {
       const token = await requiredIdToken();
@@ -1916,15 +1924,15 @@ export function useVariantPipeline({
 
       if (!res.ok && res.status !== 202) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(apiErrorDetailToMessage(err.detail) || 'Failed to start Exomiser');
+        throw new Error(apiErrorDetailToMessage(err.detail) || `Failed to start ${PHENOTYPE_FILTER_DISPLAY_NAME} prioritization`);
       }
 
       await pollExomiserUntilDone(activeConversationId);
     } catch (error) {
       console.error('[useVariantPipeline] runExomiser error:', error);
       setAnnovarMessageModal({
-        title: 'Exomiser',
-        message: humanizeError(error.message) || 'Failed to start Exomiser.',
+        title: PHENOTYPE_FILTER_DISPLAY_NAME,
+        message: humanizeError(error.message) || `Failed to start ${PHENOTYPE_FILTER_DISPLAY_NAME} prioritization.`,
         variant: 'error',
       });
       setIsRunningExomiser(false);
@@ -1990,7 +1998,7 @@ export function useVariantPipeline({
       setExomiserStatus({
         status: exoStatus,
         phase: convData.exomiser_job?.phase || '',
-        message: convData.exomiser_job?.message || 'Exomiser is running…',
+        message: convData.exomiser_job?.message || PHENOTYPE_RUNNING_MESSAGE,
         error: '',
         progress_percent: convData.exomiser_job?.progress_percent ?? 0,
         matched_count: convData.exomiser_job?.matched_count ?? null,
@@ -2003,7 +2011,7 @@ export function useVariantPipeline({
         setExomiserStatus({
           status: 'completed',
           phase: convData.exomiser_job?.phase || 'complete',
-          message: convData.exomiser_job?.message || 'Exomiser complete.',
+          message: convData.exomiser_job?.message || PHENOTYPE_COMPLETE_MESSAGE,
           error: '',
           progress_percent: 100,
           matched_count: convData.exomiser_job?.matched_count ?? null,

@@ -276,7 +276,7 @@ const ChatPage = () => {
     ? null
     : (conversationWarning
       || (needsFilterForChat
-        ? `${variantWorkingSet.toLocaleString()} variants in play — chat needs ACMG or Exomiser applied, `
+        ? `${variantWorkingSet.toLocaleString()} variants in play — chat needs ACMG or Phenotype applied, `
           + `or a working set of ${variantCap.toLocaleString()} or fewer.`
         : null)
       || (chatRunningLow ? `${chatMeter.remaining} chat exchanges left on your plan.` : null));
@@ -1127,7 +1127,7 @@ const ChatPage = () => {
     } else if (indexingState.active) {
       inputPlaceholder = 'Indexing variants for chat…';
     } else if (chatEligibility.reason === 'FILTER_JOB_RUNNING') {
-      inputPlaceholder = isRunningExomiser ? 'Running Exomiser…' : 'Applying filter…';
+      inputPlaceholder = isRunningExomiser ? 'Running phenotype prioritization…' : 'Applying filter…';
     } else if (chatEligibility.reason === 'CHAT_REQUIRES_FILTER') {
       inputPlaceholder = 'Apply a filter to enable chat';
     } else if (chatEligibility.allowed === null) {

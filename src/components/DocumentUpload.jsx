@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 /** Tabular + VCF (.vcf and .vcf.gz). Uses suffix checks so .vcf.gz is not mistaken for .gz-only. */
 function isAllowedVariantFilename(fileName) {
@@ -69,11 +70,30 @@ const CustomSelect = ({ value, onChange, placeholder, options, error, className 
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent className="p-1.5">
-        {(options || []).map((opt) => (
-          <SelectItem key={opt.value} value={opt.value}>
-            {opt.label}
-          </SelectItem>
-        ))}
+        {(options || []).map((opt) =>
+          opt.disabled ? (
+            <div
+              key={opt.value}
+              role="option"
+              aria-disabled="true"
+              aria-selected="false"
+              className="relative flex w-full cursor-not-allowed items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm select-none"
+              style={{ color: 'var(--text-tertiary)' }}
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toast.info(opt.disabledReason);
+              }}
+            >
+              {opt.label}
+            </div>
+          ) : (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          )
+        )}
       </SelectContent>
     </Select>
   );
@@ -456,7 +476,7 @@ const DocumentUpload = ({
       if (!sampleMetadata.sequencingType) { setError('Please select a Sequencing Type (required)'); return; }
       if (!sampleMetadata.analysisType) { setError('Please select an Analysis Type (required)'); return; }
       if (sampleMetadata.analysisType === 'Germline' && !sampleMetadata.phenotype?.trim()) {
-        setError('Phenotype is required for Germline analysis (needed for Exomiser prioritization).');
+        setError('Phenotype is required for Germline analysis (needed for phenotype-driven prioritization).');
         return;
       }
 
@@ -513,7 +533,7 @@ const DocumentUpload = ({
       return;
     }
     if (sampleMetadata.analysisType === 'Germline' && !sampleMetadata.phenotype?.trim()) {
-      setError('Phenotype is required for Germline analysis (needed for Exomiser prioritization).');
+      setError('Phenotype is required for Germline analysis (needed for phenotype-driven prioritization).');
       return;
     }
 
@@ -1406,9 +1426,9 @@ const DocumentUpload = ({
                       { value: 'Somatic', label: 'Somatic' },
                       { value: 'Tumor-Normal Paired', label: 'Tumor-Normal Paired' },
                       { value: 'Tumor-Only', label: 'Tumor-Only' },
-                      { value: 'IVF', label: 'IVF' },
-                      { value: 'PGT', label: 'PGT' },
-                      { value: 'Unknown', label: 'Unknown' },
+                      { value: 'IVF', label: 'IVF', disabled: true, disabledReason: 'IVF analysis is coming soon.' },
+                      { value: 'PGT', label: 'PGT', disabled: true, disabledReason: 'PGT analysis is coming soon.' },
+                      { value: 'Unknown', label: 'Unknown', disabled: true, disabledReason: 'Unknown analysis type is not supported yet.' },
                     ]}
                     error={validationAttempted && !sampleMetadata.analysisType}
                   />
@@ -1520,7 +1540,7 @@ const DocumentUpload = ({
                         />
                         {phenotypeInvalid && (
                           <p className="mt-1 text-xs" style={{ color: 'var(--error)' }}>
-                            Required for Germline analysis — used for Exomiser phenotype prioritization.
+                            Required for Germline analysis — used for phenotype-driven prioritization.
                           </p>
                         )}
                       </div>

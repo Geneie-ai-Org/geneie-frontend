@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2, Check, Filter, Stethoscope, X } from 'lucide-react';
 import qiagenLogo from '../Qiagen.svg.png';
 import { ACMG_FILTER_DISPLAY_NAME } from './VariantFilterSidebar';
+import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
+import { formatAcmgPhenotypeMeterLabel } from '@/lib/filterDisplayNames';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Accordion,
@@ -97,7 +99,7 @@ const ColumnInterpretationResults = ({
   const acmgQuotaBlocked = acmgExomiserGate?.allowed === false;
   const acmgMeter = acmgExomiserGate?.meter;
   const acmgMeterLabel = acmgMeter?.tracked && !acmgMeter.unlimited && acmgMeter.remaining != null
-    ? `${acmgMeter.remaining} of ${acmgMeter.limit} ACMG / Exomiser applies left`
+    ? formatAcmgPhenotypeMeterLabel(acmgMeter.remaining, acmgMeter.limit)
     : null;
 
   // Determine status for each step
@@ -758,7 +760,7 @@ const ColumnInterpretationResults = ({
                 >
                   <div>
                     <span className="font-semibold" style={{ color: C.error }}>Genome mismatch</span>
-                    <span className="ml-1">{gbc.message || `You selected ${(gbc.declared || '').toUpperCase()}, but coordinates match ${(gbc.likely || '').toUpperCase()}. ANNOVAR and Exomiser cannot run until this is resolved — update the genome in sample information or re-upload.`}</span>
+                    <span className="ml-1">{gbc.message || `You selected ${(gbc.declared || '').toUpperCase()}, but coordinates match ${(gbc.likely || '').toUpperCase()}. ANNOVAR and phenotype prioritization cannot run until this is resolved — update the genome in sample information or re-upload.`}</span>
                   </div>
                 </div>
               );
@@ -996,7 +998,7 @@ const ColumnInterpretationResults = ({
                   <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '250px', whiteSpace: 'normal', textAlign: 'left' }}>
                     <div className="flex items-center gap-2">
                       <AlertCircle className="w-3 h-3 flex-shrink-0" style={{ color: C.error }} />
-                      <span>ANNOVAR and Exomiser require a matching genome build. Please fix the mismatch first.</span>
+                      <span>ANNOVAR and phenotype prioritization require a matching genome build. Please fix the mismatch first.</span>
                     </div>
                     <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
                   </div>
@@ -1087,13 +1089,15 @@ const ColumnInterpretationResults = ({
                       onMouseEnter={(e) => { if (exomiserEnabled) e.currentTarget.style.backgroundColor = C.surfaceHover; }}
                       onMouseLeave={(e) => { if (exomiserEnabled) e.currentTarget.style.backgroundColor = C.surfaceCard; }}
                     >
-                      Prioritize with Exomiser
+                      <span className="flex items-center gap-1.5">
+                        Prioritize with <PhenotypeAiLabel variant="inline" />
+                      </span>
                     </button>
                     {!exomiserEnabled && step1?.passed && (
                       <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '280px', whiteSpace: 'normal', textAlign: 'left' }}>
                         {genomeMismatch
-                          ? 'ANNOVAR and Exomiser require a matching genome build. Please fix the mismatch first.'
-                          : 'Run ANNOVAR first — Exomiser requires an annotated file.'}
+                          ? 'ANNOVAR and phenotype prioritization require a matching genome build. Please fix the mismatch first.'
+                          : 'Run ANNOVAR first — phenotype prioritization requires an annotated file.'}
                         <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
                       </div>
                     )}

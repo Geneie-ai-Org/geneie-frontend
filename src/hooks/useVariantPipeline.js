@@ -667,6 +667,13 @@ export function useVariantPipeline({
         ...prev,
         filterJob: null,
       }));
+      // exomiserStatus is polled into local state, not re-derived from the conversation on
+      // this path, so a terminal run would otherwise keep the Filter step red after the
+      // user cleared the filter. Only terminal states are dropped; a live run keeps polling.
+      setExomiserStatus((prev) => {
+        const status = (prev?.status || '').toLowerCase();
+        return status === 'running' || status === 'queued' ? prev : null;
+      });
       if (userTierRef.current === 'guest') {
         try {
           const filterRes = await fetch(

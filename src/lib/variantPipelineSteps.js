@@ -123,7 +123,9 @@ export function computePipelineSteps({
     isRunningExomiser ||
     exomiserStatus?.status === 'running' ||
     exomiserStatus?.status === 'queued';
-  const filterFailed = filterJob?.status === 'failed' || exomiserStatus?.status === 'failed';
+    
+  const filterFailed =
+    filterJob?.status === 'failed' || (exomiserStatus?.status === 'failed' && !hasReduction);
 
   const { status: reduce } = computeReduceStep({
     hasReduction,

@@ -46,9 +46,9 @@ const ANALYSIS_TYPE_OPTIONS = [
   { value: 'Somatic', label: 'Somatic' },
   { value: 'Tumor-Normal Paired', label: 'Tumor-Normal Paired' },
   { value: 'Tumor-Only', label: 'Tumor-Only' },
-  { value: 'IVF', label: 'IVF' },
-  { value: 'PGT', label: 'PGT' },
-  { value: 'Unknown', label: 'Unknown' },
+  { value: 'IVF', label: 'IVF', disabled: true, disabledReason: 'IVF analysis is coming soon.' },
+  { value: 'PGT', label: 'PGT', disabled: true, disabledReason: 'PGT analysis is coming soon.' },
+  { value: 'Unknown', label: 'Unknown', disabled: true, disabledReason: 'Unknown analysis type is not supported yet.' },
 ];
 
 const SAMPLE_SOURCE_OPTIONS = [
@@ -169,6 +169,16 @@ function formatBytes(bytes) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
+function basenameFromUrl(fileUrl) {
+  if (!fileUrl) return '';
+  try {
+    const { pathname } = new URL(fileUrl);
+    return decodeURIComponent(pathname.split('/').filter(Boolean).pop() || '');
+  } catch {
+    return '';
+  }
+}
+
 /**
  * URL field for one Module 1 role. Validates on blur/Enter rather than behind a button —
  * the resolved `file_url` + `file_name` from preflight are what the import call needs,
@@ -177,16 +187,22 @@ function formatBytes(bytes) {
 function UrlPickerRow({ label, required = true, placeholder, state, onChange, onValidate }) {
   const size = formatBytes(state.meta?.content_length);
   const resolved = !state.checking && !state.error && !!state.meta;
+  const resolvedName = resolved ? (state.meta.file_name || basenameFromUrl(state.meta.file_url) || 'Linked file') : '';
+  const resolvedLabel = resolved ? `${resolvedName}${size ? ` · ${size}` : ''}` : '';
   return (
     <div>
       {(label || resolved) && (
         <div className="flex items-baseline justify-between gap-2 mb-1.5">
-          <label className="text-xs font-medium shrink-0" style={{ color: 'var(--text-secondary)' }}>
-            {label} {required && <span style={{ color: 'var(--error)' }}>*</span>}
-          </label>
+          {label ? (
+            <label className="text-xs font-medium shrink-0" style={{ color: 'var(--text-secondary)' }}>
+              {label} {required && <span style={{ color: 'var(--error)' }}>*</span>}
+            </label>
+          ) : (
+            <span aria-hidden="true" />
+          )}
           {resolved && (
             <span className="flex items-center gap-1 min-w-0 text-2xs" style={{ color: 'var(--text-secondary)' }}>
-              <span className="truncate">{state.meta.file_name}{size ? `  (${size})` : ''}</span>
+              <span className="truncate">{resolvedLabel}</span>
             </span>
           )}
         </div>

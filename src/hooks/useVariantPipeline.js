@@ -657,7 +657,7 @@ export function useVariantPipeline({
    * the manual-clear path passes nothing and lets eligibility alone decide.
    */
   const refreshAfterFilterChange = useCallback(
-    async (conversationId, { enrichmentWillRequeue, totalCount } = {}) => {
+    async (conversationId, { enrichmentWillRequeue, totalCount, clearExomiserStatus = false } = {}) => {
       if (!conversationId) return null;
       // A completed or removed filter can leave filter_job stuck at "running" in local
       // snapshot state, which blocks re-apply via pipelineBusy with no network call.
@@ -669,11 +669,15 @@ export function useVariantPipeline({
       }));
       // exomiserStatus is polled into local state, not re-derived from the conversation on
       // this path, so a terminal run would otherwise keep the Filter step red after the
-      // user cleared the filter. Only terminal states are dropped; a live run keeps polling.
-      setExomiserStatus((prev) => {
-        const status = (prev?.status || '').toLowerCase();
-        return status === 'running' || status === 'queued' ? prev : null;
-      });
+      // user removed the filter. Only the remove path opts in (`clearExomiserStatus`) —
+      // an unrelated filter apply/clear must not wipe an unacknowledged Exomiser failure
+      // banner. Only terminal states are dropped; a live run keeps polling.
+      if (clearExomiserStatus) {
+        setExomiserStatus((prev) => {
+          const status = (prev?.status || '').toLowerCase();
+          return status === 'running' || status === 'queued' ? prev : null;
+        });
+      }
       if (userTierRef.current === 'guest') {
         try {
           const filterRes = await fetch(

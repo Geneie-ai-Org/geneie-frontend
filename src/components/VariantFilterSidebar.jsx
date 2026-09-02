@@ -1565,6 +1565,7 @@ const VariantFilterSidebar = ({
       await refreshAfterFilterChange?.(conversationId, {
         enrichmentWillRequeue: isGuest ? false : enrichmentWillRequeue,
         totalCount: restoredTotalCount,
+        clearExomiserStatus: true,
       });
     }
   };

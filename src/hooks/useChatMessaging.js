@@ -303,16 +303,20 @@ export function useChatMessaging({
         }
         return { ...m, trace: tr };
       });
+      let finalAnswer = '';   // accumulate so we can PERSIST the turn after the stream
       try {
         await streamExploratory(userMessageText, (evt) => {
           if (evt.type === 'answer_delta') {
-            patch((m) => ({ ...m, text: m.text + (evt.data?.text || '') }));
+            const t = evt.data?.text || '';
+            finalAnswer += t;
+            patch((m) => ({ ...m, text: m.text + t }));
           } else if (evt.type === 'thinking') {
             pushTrace('think', evt.data?.text || '');            // real reasoning, in-order
           } else if (evt.type === 'narration') {
             pushTrace('fact', evt.data?.fact || evt.label);      // grounded fact, in-order
           } else if (evt.type === 'refused') {
-            patch((m) => ({ ...m, text: '⚠️ ' + (evt.label || 'Answer withheld (not grounded).') }));
+            finalAnswer = '⚠️ ' + (evt.label || 'Answer withheld (not grounded).');
+            patch((m) => ({ ...m, text: finalAnswer }));
           } else if (evt.type === 'error') {
             patch((m) => ({ ...m, text: 'Error: ' + (evt.data?.error || 'stream failed') }));
           } else if (evt.type === 'done') {
@@ -327,13 +331,27 @@ export function useChatMessaging({
           }
         }, ac.signal, activeConversationId || 'guest-session',
            { ...(token && { Authorization: `Bearer ${token}` }), 'X-Device-Id': getDeviceId() });
+
+        // PERSIST the exploratory turn so it survives reload (Standard persists; this branch didn't).
+        // Best-effort — a save failure must never break the live UI.
+        if (userId && activeConversationId && finalAnswer.trim()) {
+          try {
+            await mongodbApi.createMessage(activeConversationId, 'user', userMessageText, []);
+            await mongodbApi.createMessage(activeConversationId, 'ai', finalAnswer, []);
+          } catch (persistErr) {
+            console.error('Exploratory persist error:', persistErr);
+          }
+        }
       } catch (e) {
         patch((m) => ({ ...m, streaming: false, text: m.text || `Error: ${e.message}` }));
       }
       chatAbortControllerRef.current = null;
       setIsLoading(false);
-      if (wasFirstInConversation && updateConversationTitle) {
-        updateConversationTitle(userMessageText);
+      // updateConversationTitle expects (conversationId, firstMessage) — the exploratory branch
+      // was calling it with just (userMessageText), so firstMessage was undefined -> the title
+      // endpoint 422'd. Pass both, and only when we have a real conversation.
+      if (wasFirstInConversation && updateConversationTitle && activeConversationId) {
+        updateConversationTitle(activeConversationId, userMessageText);
       }
       return;
     }

@@ -235,8 +235,9 @@ const DocumentUpload = ({
       }
 
       try {
-        const auth = getAuth();
-        const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+        // getAuth() was never imported (ReferenceError). Use the existing safeAuth helper -
+        // same token, no direct firebase/auth import, matches the rest of this file.
+        const token = await optionalIdToken();
 
         if (!token) {
           console.log('[DocumentUpload] No auth token, skipping project fetch');

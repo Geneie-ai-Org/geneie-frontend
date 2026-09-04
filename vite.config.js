@@ -28,6 +28,19 @@ export default defineConfig({
       '/exploratory': {
         target: process.env.DEV_EXPLORATORY_URL || 'http://localhost:8100',
         changeOrigin: true,
+        // If the upstream is unreachable (e.g. a dead SSH tunnel behind a
+        // host.docker.internal target), the proxy would otherwise return a bare empty 502
+        // and the FE would show a stuck cursor with no clue why. Surface it as a real SSE
+        // error frame so the failure is VISIBLE, not a silent hang, and logged loudly.
+        configure: (proxy) => {
+          proxy.on('error', (err, _req, res) => {
+            try {
+              if (res.writableEnded || res.headersSent) return;
+              res.writeHead(502, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
+              res.end(`data: ${JSON.stringify({ type: 'error', label: `exploratory upstream unreachable: ${err.code || err.message}`, data: {} })}\n\n`);
+            } catch { /* response already gone */ }
+          });
+        },
       },
     },
   },

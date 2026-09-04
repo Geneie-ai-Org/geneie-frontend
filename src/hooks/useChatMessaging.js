@@ -186,7 +186,11 @@ export function useChatMessaging({
             conversationId: activeConversationId || (userTier === 'guest' ? 'guest-session' : null),
             hasUploadedFile: userTier === 'guest' && currentDocument !== null,
           };
-          const token = userTier === 'guest' ? null : await optionalIdToken();
+          // Always attempt a fresh token: optionalIdToken() returns null iff genuinely not signed in
+      // (no currentUser). Gating on userTier==='guest' wrongly nulled a valid token when the tier
+      // state hadn't resolved yet -> request went out as guest -> backend 400 on the user's own
+      // conversation. currentUser is the source of truth, not the tier snapshot.
+      const token = await optionalIdToken();
 
           const response = await fetch(getChatApiUrl(), {
             method: 'POST',
@@ -289,17 +293,23 @@ export function useChatMessaging({
       // Auth for the exploratory stream: same as the PROD branch. Signed-in users send a
       // Firebase bearer so the backend resolves ownership; guests use their device id only.
       // (Previously referenced `token` from the PROD branch's scope -> "token is not defined".)
-      const token = userTier === 'guest' ? null : await optionalIdToken();
+      // Always attempt a fresh token: optionalIdToken() returns null iff genuinely not signed in
+      // (no currentUser). Gating on userTier==='guest' wrongly nulled a valid token when the tier
+      // state hadn't resolved yet -> request went out as guest -> backend 400 on the user's own
+      // conversation. currentUser is the source of truth, not the tier snapshot.
+      const token = await optionalIdToken();
       const aiId = userLocalId + 1;
       setMessages((prev) => [...prev, { role: 'ai', text: '', id: aiId, streaming: true, trace: [] }]);
       const patch = (fn) => setMessages((prev) => prev.map((m) => (m.id === aiId ? fn(m) : m)));
-      // append an item to the ordered trace; coalesce consecutive 'think' deltas into one item
-      const pushTrace = (kind, text) => patch((m) => {
+      // append an item to the ordered trace; coalesce consecutive 'think' deltas into one item.
+      // data carries structured detail for kinds the FE renders richly (e.g. 'routed' -> the
+      // multi-agent panel: which agent, why, considered, tools, curated knowledge).
+      const pushTrace = (kind, text, data) => patch((m) => {
         const tr = [...(m.trace || [])];
         if (kind === 'think' && tr.length && tr[tr.length - 1].kind === 'think') {
           tr[tr.length - 1] = { kind, text: tr[tr.length - 1].text + text };
         } else {
-          tr.push({ kind, text });
+          tr.push(data ? { kind, text, data } : { kind, text });
         }
         return { ...m, trace: tr };
       });
@@ -310,6 +320,16 @@ export function useChatMessaging({
             const t = evt.data?.text || '';
             finalAnswer += t;
             patch((m) => ({ ...m, text: m.text + t }));
+          } else if (evt.type === 'routed') {
+            // the orchestrator picked a specialised agent -> render the multi-agent panel inline,
+            // in stream order, from the structured data (agent / why / considered / tools / packs)
+            pushTrace('routed', evt.data?.agent || evt.label, evt.data || {});
+          } else if (evt.type === 'critique') {
+            // adversarial critic round -> render the objections (or concede) inline
+            pushTrace('critique', evt.label, evt.data || {});
+          } else if (evt.type === 'revision') {
+            // worker's revision/defense for that round
+            pushTrace('revision', evt.label, evt.data || {});
           } else if (evt.type === 'thinking') {
             pushTrace('think', evt.data?.text || '');            // real reasoning, in-order
           } else if (evt.type === 'narration') {

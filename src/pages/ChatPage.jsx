@@ -1488,6 +1488,52 @@ const ChatPage = () => {
                             {msg.trace.map((t, i) => {
                               const isLast = i === msg.trace.length - 1;
                               const live = msg.streaming && isLast;
+                              if (t.kind === 'routed') {
+                                // multi-agent panel — same RAW line-log theme (monospace, monotone,
+                                // no card/modal). Shows which agent the orchestrator chose, why, who
+                                // else was considered, and the agent's tools + curated knowledge.
+                                const d = t.data || {};
+                                const considered = Array.isArray(d.considered) ? d.considered : [];
+                                return <div key={i} style={{ margin: '6px 0 2px', paddingLeft: 2 }}>
+                                  <div style={{ color: 'hsl(var(--card-foreground))', fontWeight: 600 }}>
+                                    {live ? '▸' : '✓'} routed → <span style={{ color: '#4ea1a1' }}>{d.agent || t.text}</span>
+                                  </div>
+                                  {d.reason ? <div style={{ paddingLeft: 14, opacity: 0.75 }}>why: {d.reason}</div> : null}
+                                  {d.capability ? <div style={{ paddingLeft: 14, opacity: 0.6 }}>does: {d.capability}</div> : null}
+                                  {(d.tools && d.tools.length) ? <div style={{ paddingLeft: 14, opacity: 0.6 }}>tools: {d.tools.join(', ')}</div> : null}
+                                  {(d.knowledge && d.knowledge.length) ? <div style={{ paddingLeft: 14, opacity: 0.6 }}>knowledge: {d.knowledge.join(', ')}</div> : null}
+                                  {considered.length > 1 ? (
+                                    <div style={{ paddingLeft: 14, opacity: 0.45, marginTop: 1 }}>
+                                      considered: {considered.map((c) => c.name === (d.agent) ? `[${c.name}]` : c.name).join('  ·  ')}
+                                    </div>
+                                  ) : null}
+                                </div>;
+                              }
+                              if (t.kind === 'critique') {
+                                // adversarial critic round - same raw theme. amber-ish for the
+                                // counter guy; lists grounded objections or 'concede'.
+                                const d = t.data || {};
+                                const objs = Array.isArray(d.objections) ? d.objections : [];
+                                return <div key={i} style={{ margin: '6px 0 2px', paddingLeft: 2 }}>
+                                  <div style={{ color: d.concede ? '#4ea1a1' : '#c9a227', fontWeight: 600 }}>
+                                    {live ? '▸' : '✓'} ⚖ critic (round {d.round ?? '?'}): {d.concede ? 'no objection — concede' : `${objs.length} objection(s)`}
+                                  </div>
+                                  {objs.map((o, k) => (
+                                    <div key={k} style={{ paddingLeft: 14, opacity: 0.8 }}>
+                                      • <span style={{ opacity: 0.95 }}>{o.claim}</span>
+                                      {o.row_evidence ? <span style={{ opacity: 0.6 }}> — vs {o.row_evidence}</span> : null}
+                                      {o.severity ? <span style={{ opacity: 0.45 }}> [{o.severity}]</span> : null}
+                                    </div>
+                                  ))}
+                                </div>;
+                              }
+                              if (t.kind === 'revision') {
+                                const d = t.data || {};
+                                return <div key={i} style={{ paddingLeft: 2, opacity: 0.9 }}>
+                                  {live ? '▸' : '✓'} ↩ {d.changed ? 'worker revises' : 'worker holds'} (round {d.round ?? '?'})
+                                  {d.response ? <span style={{ opacity: 0.6 }}>: {d.response}</span> : null}
+                                </div>;
+                              }
                               if (t.kind === 'toolcall') {
                                 return <div key={i} style={{ color: 'hsl(var(--card-foreground))', marginTop: 4 }}>
                                   {live ? '▸' : '✓'} query: <span style={{ opacity: 0.85 }}>{t.text}</span>

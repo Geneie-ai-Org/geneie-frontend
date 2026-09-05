@@ -1162,7 +1162,7 @@ const DocumentUpload = ({
                   onClick={handleUrlContinue}
                   disabled={isPreflighting || !fileUrl.trim()}
                   className="h-9 px-5 rounded-lg text-xs font-medium inline-flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
+                  style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
                   onMouseEnter={(e) => { if (!isPreflighting && fileUrl.trim()) e.currentTarget.style.backgroundColor = 'var(--accent-teal-hover)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal)'; }}
                 >
@@ -1597,7 +1597,7 @@ const DocumentUpload = ({
                 type="submit"
                 disabled={isUploading}
                 className="h-10 px-5 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface-raised)]"
-                style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
+                style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
                 onMouseEnter={(e) => { if (!isUploading) e.currentTarget.style.opacity = '0.9'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
               >
@@ -1627,7 +1627,7 @@ const DocumentUpload = ({
           <AlertDialogFooter>
             <AlertDialogCancel>Go Back</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-[var(--accent-teal)] text-[#0F0F0F] hover:bg-[var(--accent-teal-hover)]"
+              className="bg-[var(--accent-teal)] text-[var(--accent-teal-contrast)] hover:bg-[var(--accent-teal-hover)]"
               onClick={async () => {
                 setShowOptionalFieldsWarning(false);
                 notifyUploadStarting(importMode === 'url' ? { name: importUrlMeta.file_name } : selectedFile);
@@ -1689,7 +1689,7 @@ const DocumentUpload = ({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-[var(--accent-teal)] text-[#0F0F0F] hover:bg-[var(--accent-teal-hover)]"
+              className="bg-[var(--accent-teal)] text-[var(--accent-teal-contrast)] hover:bg-[var(--accent-teal-hover)]"
               onClick={async () => {
                 setShowReplaceConfirm(false);
                 const file = pendingFile;

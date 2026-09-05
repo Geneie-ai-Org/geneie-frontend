@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2, Check, Filter, Stethoscope, X } from 'lucide-react';
 import qiagenLogo from '../Qiagen.svg.png';
-import { ACMG_FILTER_DISPLAY_NAME } from './VariantFilterSidebar';
 import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
 import { formatAcmgPhenotypeMeterLabel } from '@/lib/filterDisplayNames';
 import { Card, CardContent } from '@/components/ui/card';
@@ -29,7 +28,7 @@ const C = {
   info: 'var(--info)',
   infoSoft: 'var(--info-soft)',
   teal: 'var(--accent-teal)',
-  onAccent: '#0F0F0F',
+  onAccent: 'var(--accent-teal-contrast)',
   tealSoft: 'var(--accent-teal-soft)',
   tealHover: 'var(--accent-teal-hover)',
   error: 'var(--error)',
@@ -689,7 +688,7 @@ const ColumnInterpretationResults = ({
                   onAnnovarClick?.();
                 }}
                 className="px-6 py-2 text-sm font-semibold rounded-xl transition-colors"
-                style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
+                style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
               >
                 Run ANNOVAR
               </button>
@@ -962,29 +961,34 @@ const ColumnInterpretationResults = ({
                 </div>
               )}
 
-              {/* Run ANNOVAR — shown when step2 has missing columns */}
-              {!hasAnnotatedFile && !step2?.passed && (
+              {/* Run ANNOVAR — stays on screen once the file is annotated, disabled, so the
+                * step keeps the same shape before and after the run instead of the button
+                * vanishing and leaving only a line of green text. */}
+              {(() => {
+                const annovarAlreadyRun = hasAnnotatedFile || step2?.passed;
+                const annovarActionable = annovarEnabled && !annovarAlreadyRun;
+                return (
               <div className="relative group">
                 <button
-                  onClick={annovarEnabled ? () => {
+                  onClick={annovarActionable ? () => {
                     const allComplete = step1?.passed && step2?.passed && step3?.passed;
                     if (allComplete) { setShowAnnovarConfirm(true); } else { onAnnovarClick?.(); }
                   } : undefined}
-                  disabled={!annovarEnabled}
-                  title={annovarQuotaBlocked ? annovarGate.reason : undefined}
+                  disabled={!annovarActionable}
+                  title={annovarAlreadyRun ? 'Already run on this file' : annovarQuotaBlocked ? annovarGate.reason : undefined}
                   className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${
-                    annovarEnabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+                    annovarActionable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
                   }`}
                   style={{
-                    backgroundColor: annovarEnabled ? C.surfaceCard : C.surfaceHover,
+                    backgroundColor: annovarActionable ? C.surfaceCard : C.surfaceHover,
                     border: `1px solid ${genomeMismatch ? C.error : C.border}`,
-                    color: annovarEnabled ? C.textMuted : C.textDim,
+                    color: annovarActionable ? C.textMuted : C.textDim,
                   }}
-                  onMouseEnter={(e) => { if (annovarEnabled) { e.target.style.backgroundColor = C.surfaceHover; e.target.style.color = C.text; } }}
-                  onMouseLeave={(e) => { if (annovarEnabled) { e.target.style.backgroundColor = C.surfaceCard; e.target.style.color = C.textMuted; } }}
+                  onMouseEnter={(e) => { if (annovarActionable) { e.target.style.backgroundColor = C.surfaceHover; e.target.style.color = C.text; } }}
+                  onMouseLeave={(e) => { if (annovarActionable) { e.target.style.backgroundColor = C.surfaceCard; e.target.style.color = C.textMuted; } }}
                 >
-                  <img src={qiagenLogo} alt="Qiagen" className="w-5 h-5 object-contain" style={{ filter: annovarEnabled ? 'none' : 'grayscale(100%) opacity(0.5)' }} />
-                  Run ANNOVAR
+                  <img src={qiagenLogo} alt="Qiagen" className="w-5 h-5 object-contain" style={{ filter: annovarActionable ? 'none' : 'grayscale(100%) opacity(0.5)' }} />
+                  {annovarAlreadyRun ? 'ANNOVAR complete' : 'Run ANNOVAR'}
                 </button>
                 {annovarMeterLabel && (
                   <p className="text-2xs mt-1" style={{ color: annovarQuotaBlocked ? C.error : C.textDim }}>
@@ -1019,7 +1023,8 @@ const ColumnInterpretationResults = ({
                   </div>
                 )}
               </div>
-              )}
+                );
+              })()}
 
               {/* Step 2 all passed, no ANNOVAR needed */}
               {!hasAnnotatedFile && step2?.passed && (
@@ -1049,7 +1054,7 @@ const ColumnInterpretationResults = ({
                   onMouseEnter={(e) => { if (acmgFilterCanApply && !acmgFilterActive && !isApplyingProprietaryFilter) { e.target.style.backgroundColor = C.surfaceHover; } }}
                   onMouseLeave={(e) => { if (acmgFilterCanApply && !acmgFilterActive && !isApplyingProprietaryFilter) { e.target.style.backgroundColor = C.surfaceCard; } }}
                 >
-                  {isApplyingProprietaryFilter ? 'Applying…' : acmgFilterActive ? `${ACMG_FILTER_DISPLAY_NAME} applied` : `Apply ${ACMG_FILTER_DISPLAY_NAME}`}
+                  {isApplyingProprietaryFilter ? 'Applying…' : acmgFilterActive ? 'ACMG applied' : 'ACMG'}
                 </button>
                 {/* Quota and readiness are different problems, so they get different copy. */}
                 {!acmgFilterCanApply && !acmgFilterActive && step1?.passed && !acmgQuotaBlocked && (
@@ -1089,9 +1094,7 @@ const ColumnInterpretationResults = ({
                       onMouseEnter={(e) => { if (exomiserEnabled) e.currentTarget.style.backgroundColor = C.surfaceHover; }}
                       onMouseLeave={(e) => { if (exomiserEnabled) e.currentTarget.style.backgroundColor = C.surfaceCard; }}
                     >
-                      <span className="flex items-center gap-1.5">
-                        Prioritize with <PhenotypeAiLabel variant="inline" />
-                      </span>
+                      <PhenotypeAiLabel variant="inline" />
                     </button>
                     {!exomiserEnabled && step1?.passed && (
                       <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '280px', whiteSpace: 'normal', textAlign: 'left' }}>
@@ -1144,7 +1147,7 @@ const ColumnInterpretationResults = ({
                 type="button"
                 onClick={handleDismiss}
                 className="px-4 py-2 text-sm font-semibold rounded-xl transition-colors"
-                style={{ backgroundColor: 'var(--accent-teal)', border: 'none', color: '#0F0F0F' }}
+                style={{ backgroundColor: 'var(--accent-teal)', border: 'none', color: 'var(--accent-teal-contrast)' }}
                 onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal-hover)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal)'; }}
               >

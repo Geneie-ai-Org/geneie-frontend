@@ -1772,7 +1772,7 @@ const VariantFilterSidebar = ({
                         tabIndex={selected ? 0 : -1}
                         onClick={() => handleTabSwitch(t.key)}
                         data-state={selected ? 'active' : 'inactive'}
-                        className={`flex-1 px-3 py-1 text-sm rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${
+                        className={`flex-1 inline-flex h-7 items-center justify-center px-2 text-xs rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${
                           selected
                             ? 'font-semibold text-[var(--text-primary)] bg-[var(--segment-thumb)] shadow-[var(--shadow-sm)]'
                             : 'font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]'

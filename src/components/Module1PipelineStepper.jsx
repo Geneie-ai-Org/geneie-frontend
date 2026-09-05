@@ -110,7 +110,7 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
                             backgroundColor: status === 'done' ? 'var(--accent-teal)' : 'transparent',
                           }}
                         >
-                          {status === 'done' && <Check className="w-3 h-3" style={{ color: '#0F0F0F' }} />}
+                          {status === 'done' && <Check className="w-3 h-3" style={{ color: 'var(--accent-teal-contrast)' }} />}
                           {status === 'running' && <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--accent-teal)' }} />}
                           {status === 'failed' && <AlertCircle className="w-3 h-3" style={{ color: 'var(--error)' }} />}
                         </div>

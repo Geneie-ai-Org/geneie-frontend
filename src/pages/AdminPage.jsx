@@ -353,7 +353,7 @@ const AdminPage = () => {
                               disabled={busy}
                               onClick={() => saveQuotas(u.uid)}
                               className="px-3 py-1.5 text-xs font-semibold rounded-lg disabled:opacity-50"
-                              style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
+                              style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
                             >
                               Save quotas
                             </button>

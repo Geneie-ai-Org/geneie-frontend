@@ -130,7 +130,7 @@ const SubscriptionManager = ({ isInputGated, userId }) => {
                     <button
                         onClick={content.action}
                         className="mt-6 w-full py-3 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 active:scale-98"
-                        style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
+                        style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
                         onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
                         onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                     >

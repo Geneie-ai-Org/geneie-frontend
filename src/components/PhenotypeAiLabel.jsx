@@ -1,7 +1,10 @@
 import React from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import AiDnaIcon from '@hugeicons/core-free-icons/AiDnaIcon';
 
 /**
- * "Phenotype" with a small animated AI badge above — used in tabs, headings, and buttons.
+ * "Phenotype" marked as AI-driven — a leading DNA/AI glyph in tabs and inline button
+ * labels, a stacked AI badge in headings.
  */
 export default function PhenotypeAiLabel({
   variant = 'tab',
@@ -13,24 +16,52 @@ export default function PhenotypeAiLabel({
   const isHeading = variant === 'heading';
   const isInline = variant === 'inline';
 
-  const textSize = isHeading
-    ? 'text-sm font-bold'
-    : isInline
-      ? 'text-sm font-medium'
-      : 'text-sm font-semibold';
+  // Tab labels inherit size and weight from the tab button so the Phenotype tab
+  // tracks the active/inactive state like the plain-text tabs beside it.
+  const textSize = isHeading ? 'text-sm font-bold' : '';
 
-  if (isInline) {
+  // The tab carries a leading glyph rather than an "AI" chip: at 340px the chip
+  // collided with the word and pushed past the pill. The DNA-with-AI mark says what
+  // this tab actually does, where a generic sparkle would only say "AI something".
+  if (isTab) {
     return (
-      <span className={`relative inline-flex items-end leading-none ${className}`} aria-label="Phenotype AI">
+      <span
+        className={`inline-flex items-center gap-1 leading-none ${className}`}
+        aria-label="Phenotype AI"
+      >
         {showAi && (
-          <span
-            className="phenotype-ai-badge absolute -top-2.5 left-1/2 -translate-x-1/2 rounded px-1 py-px text-[8px] font-bold uppercase tracking-wider text-[var(--accent-teal)]"
+          <HugeiconsIcon
+            icon={AiDnaIcon}
+            size={14}
+            strokeWidth={2}
+            className="shrink-0 text-[var(--accent-teal)]"
             aria-hidden
-          >
-            AI
-          </span>
+          />
         )}
         <span className={`${textSize} ${textClassName}`}>Phenotype</span>
+      </span>
+    );
+  }
+
+  // Inline sits inside a sentence on a button ("Prioritize with Phenotype"). The old
+  // floating badge broke out of the button's line box and split the baselines, so it
+  // uses the same leading glyph as the tab and inherits the sentence's size/weight.
+  if (isInline) {
+    return (
+      <span
+        className={`inline-flex items-center gap-1 align-middle leading-none ${className}`}
+        aria-label="Phenotype AI"
+      >
+        {showAi && (
+          <HugeiconsIcon
+            icon={AiDnaIcon}
+            size={14}
+            strokeWidth={2}
+            className="shrink-0"
+            aria-hidden
+          />
+        )}
+        <span className={textClassName}>Phenotype</span>
       </span>
     );
   }
@@ -42,9 +73,7 @@ export default function PhenotypeAiLabel({
     >
       {showAi && (
         <span
-          className={`phenotype-ai-badge mb-0.5 rounded px-1 py-px font-bold uppercase tracking-wider text-[var(--accent-teal)] ${
-            isTab ? 'text-[8px]' : 'text-[9px]'
-          }`}
+          className="phenotype-ai-badge mb-0.5 rounded px-1 py-px text-[9px] font-bold uppercase tracking-wider text-[var(--accent-teal)]"
           aria-hidden
         >
           AI

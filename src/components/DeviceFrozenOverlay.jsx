@@ -53,7 +53,7 @@ const DeviceFrozenOverlay = ({ descriptor, devices, onRetry }) => {
             type="button"
             onClick={onRetry}
             className="px-4 py-2 text-sm font-semibold rounded-lg"
-            style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
+            style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
           >
             Retry
           </button>

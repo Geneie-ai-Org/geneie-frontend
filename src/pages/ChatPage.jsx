@@ -1119,7 +1119,9 @@ const ChatPage = () => {
   } else if (variantUploadInProgress) {
     inputPlaceholder = 'Upload in progress — chat will resume when your file is ready…';
   } else if (isCurrentlyActive) {
-    inputPlaceholder = "Geneie is thinking...";
+    // The composer stays typable while a response streams, so the placeholder invites
+    // the next message instead of only reporting that Geneie is busy.
+    inputPlaceholder = 'Geneie is thinking… type your next message';
   } else if (isChatPipelineGated) {
     if (enrichmentState.active) {
       const pct = enrichmentState.progress != null ? ` (${Math.round(enrichmentState.progress)}%)` : '';

@@ -95,29 +95,33 @@ const ChatComposer = ({
   pipelineDrawer = null,
 }) => {
   const isStacked = layout === 'stacked';
+  // Two separate gates. Typing is only blocked by the hard gates (no auth, quota
+  // exhausted, upload or annotation in flight); an in-flight response blocks sending
+  // but not typing, so the user can draft their next message while Geneie answers.
+  const canType = !isInputDisabled || isCurrentlyActive;
   const sendDisabled = isInputDisabled || !input.trim();
 
   const textareaRef = useRef(null);
   useAutosizeTextarea(textareaRef, input);
 
-  const wasDisabledRef = useRef(isInputDisabled);
+  const wasDisabledRef = useRef(!canType);
   useEffect(() => {
-    const reopened = wasDisabledRef.current && !isInputDisabled;
-    wasDisabledRef.current = isInputDisabled;
+    const reopened = wasDisabledRef.current && canType;
+    wasDisabledRef.current = !canType;
     if (!reopened) return;
 
     if (window.matchMedia?.('(pointer: coarse)').matches) return;
     textareaRef.current?.focus();
-  }, [isInputDisabled]);
+  }, [canType]);
 
   const handleContainerClick = () => {
-    if (!isInputDisabled) textareaRef.current?.focus();
+    if (canType) textareaRef.current?.focus();
   };
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      onSend?.();
+      if (!sendDisabled) onSend?.();
     }
   };
 
@@ -161,7 +165,7 @@ const ChatComposer = ({
       value={input}
       onChange={(e) => onInputChange(e.target.value)}
       onKeyDown={handleKeyDown}
-      disabled={isInputDisabled}
+      disabled={!canType}
       rows={1}
       placeholder={placeholder}
       className={`${TEXTAREA_BASE} text-sm py-1.5 ${

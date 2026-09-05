@@ -170,7 +170,7 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations })
                 <button
                   onClick={() => setShowSubscriptionPage(true)}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-colors"
-                  style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
+                  style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
                   onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.85'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
                 >

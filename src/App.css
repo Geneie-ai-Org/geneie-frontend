@@ -32,13 +32,13 @@
   --accent-teal: hsl(var(--primary));
   --accent-teal-soft: hsl(var(--primary) / 0.12);
   --accent-teal-hover: color-mix(in srgb, hsl(var(--primary)) 85%, #000);
+  --accent-teal-contrast: #FFFFFF;
+  --code-inline: #111827;
+  --code-inline-bg: #F3F4F6;
 
-  /* Inline code in chat markdown — blue by intent, not brand */
-  --code-inline: #1A73E8;
-
-  /* Semantic */
-  --info: #1A73E8;
-  --info-soft: rgba(26,115,232,0.10);
+  /* Semantic. --info is the primary: one blue, not two a few degrees apart. */
+  --info: hsl(var(--primary));
+  --info-soft: hsl(var(--primary) / 0.10);
   --success: #188038;
   --success-soft: rgba(24,128,56,0.12);
   --error: #D93025;
@@ -78,7 +78,7 @@
   /* Chat layout (3-column shell) */
   --sidebar-left-width: 260px;
   --sidebar-left-collapsed: 56px;
-  --sidebar-right-width: 300px;
+  --sidebar-right-width: 340px;
   --chat-max-width: 48rem;
   --chat-gutter-x: clamp(1rem, 3vw, 2.5rem);
   --chat-gutter-x-tight: clamp(0.75rem, 1.5vw, 1.25rem);
@@ -120,9 +120,10 @@
   --accent-teal: #4DB6AC;
   --accent-teal-soft: rgba(77,182,172,0.10);
   --accent-teal-hover: #80CBC4;
+  --accent-teal-contrast: #0F0F0F;
 
-  /* Inline code in chat markdown */
   --code-inline: #8AB4F8;
+  --code-inline-bg: var(--bg-app);
 
   /* Semantic */
   --info: #8AB4F8;

@@ -139,7 +139,7 @@ function SelectWithDisabledOptions({ value, onChange, placeholder, options, clas
   );
 }
 
-function FilePickerRow({ label, file, onSelect, progress, accept }) {
+function FilePickerRow({ label, file, onSelect, progress, accept, placeholder }) {
   return (
     <div>
       <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
@@ -150,7 +150,7 @@ function FilePickerRow({ label, file, onSelect, progress, accept }) {
         style={{ borderColor: 'var(--border-default)', background: 'var(--bg-input)', color: file ? 'var(--text-primary)' : 'var(--text-tertiary)' }}
       >
         <FileText className="w-4 h-4 shrink-0" style={{ color: 'var(--accent-teal)' }} />
-        <span className="truncate">{file?.name || `Choose ${label} file…`}</span>
+        <span className="truncate">{file?.name || placeholder || `Choose ${label} file…`}</span>
         <input type="file" accept={accept} className="hidden" onChange={(e) => onSelect(e.target.files?.[0] || null)} />
       </label>
       {progress != null && (
@@ -665,14 +665,14 @@ const Module1UploadForm = ({
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
                       <UrlPickerRow
-                        label="R1 link"
+                        label="Forward read (R1) link"
                         placeholder="https://…/sample_R1_001.fastq.gz"
                         state={urlState.r1}
                         onChange={(v) => setUrlValue('r1', v)}
                         onValidate={() => validateUrlRow('r1')}
                       />
                       <UrlPickerRow
-                        label="R2 link"
+                        label="Reverse read (R2) link"
                         placeholder="https://…/sample_R2_001.fastq.gz"
                         state={urlState.r2}
                         onChange={(v) => setUrlValue('r2', v)}
@@ -688,14 +688,16 @@ const Module1UploadForm = ({
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
                     <FilePickerRow
-                      label="R1"
+                      label="Forward read (R1)"
+                      placeholder="Choose R1 file…"
                       file={r1File}
                       onSelect={setR1File}
                       progress={module1UploadProgress?.r1}
                       accept=".fastq.gz,.fastq,.fq.gz,.fq"
                     />
                     <FilePickerRow
-                      label="R2"
+                      label="Reverse read (R2)"
+                      placeholder="Choose R2 file…"
                       file={r2File}
                       onSelect={setR2File}
                       progress={module1UploadProgress?.r2}
@@ -820,7 +822,7 @@ const Module1UploadForm = ({
                 disabled={!canSubmit}
                 title={quotaBlocked ? gate.reason : undefined}
                 className="px-4 py-2 text-sm font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
+                style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
               >
                 {module1Submitting ? (isUrlMode ? 'Importing…' : 'Starting…') : submitLabel}
               </button>

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AlertCircle, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
 import { PHENOTYPE_RUNNING_MESSAGE } from '@/lib/filterDisplayNames';
+import PerimeterProgress from '@/components/ui/PerimeterProgress';
 import {
   PIPELINE_STEP_DEFS,
   computePipelineSteps,

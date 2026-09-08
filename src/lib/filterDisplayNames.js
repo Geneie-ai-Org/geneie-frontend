@@ -3,7 +3,7 @@
 export const PHENOTYPE_FILTER_DISPLAY_NAME = 'Phenotype';
 
 export const PHENOTYPE_FILTER_DESCRIPTION =
-  'Phenotype-driven variant prioritization for Germline cases using HPO terms and AI gene/variant scoring. Requires ANNOVAR annotation and a phenotype description.';
+  'Phenotype-driven variant prioritization for Germline cases using HPO terms and AI gene/variant scoring. Requires annotation and a phenotype description.';
 
 export const ACMG_PHENOTYPE_APPLIES_LABEL = 'ACMG / Phenotype applies';
 

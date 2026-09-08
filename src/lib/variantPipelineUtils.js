@@ -145,7 +145,7 @@ export function buildGuestChatEligibility({
     return {
       ...GUEST_ELIGIBILITY_DEFAULTS,
       allowed: false,
-      message: 'ANNOVAR did not complete. Open details to retry.',
+      message: 'Annotation did not complete. Open details to retry.',
       reason: 'ANNOVAR_FAILED',
       requires_annovar: true,
       requires_filter: false,
@@ -201,7 +201,7 @@ export function buildGuestChatEligibility({
   return {
     ...GUEST_ELIGIBILITY_DEFAULTS,
     allowed: false,
-    message: 'Run ANNOVAR to annotate your variants, then chat or apply filters.',
+    message: 'Run Annotation to annotate your variants, then chat or apply filters.',
     reason: 'CHAT_REQUIRES_ANNOVAR',
     requires_annovar: true,
     requires_filter: false,
@@ -265,7 +265,7 @@ export function getGuestPipelineCta({
   }
 
   return {
-    message: 'Guest preview includes one ANNOVAR run and 5 chat exchanges on this device.',
+    message: 'Guest preview includes one Annotation run and 5 chat exchanges on this device.',
     action: onSignUp ? { label: 'Sign up for full analysis', onClick: onSignUp } : null,
   };
 }

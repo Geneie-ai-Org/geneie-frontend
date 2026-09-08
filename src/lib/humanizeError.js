@@ -14,14 +14,14 @@ const FRIENDLY_ERROR_MAP = [
         .map((s) => s.trim().replace(/^['"]|['"]$/g, ''))
         .filter(Boolean);
       if (cols.length === 0) {
-        return "This filter needs annotations we couldn't find in your file. Run ANNOVAR first.";
+        return "This filter needs annotations we couldn't find in your file. Run Annotation first.";
       }
       const list = cols.length === 1
         ? cols[0]
         : cols.length === 2
           ? `${cols[0]} and ${cols[1]}`
           : `${cols.slice(0, -1).join(', ')}, and ${cols[cols.length - 1]}`;
-      return `This filter needs annotations we couldn't find in your file: ${list}. Run ANNOVAR first, then try again.`;
+      return `This filter needs annotations we couldn't find in your file: ${list}. Run Annotation first, then try again.`;
     },
   },
 ];

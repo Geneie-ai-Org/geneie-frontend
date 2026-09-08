@@ -3,7 +3,7 @@ import { PHENOTYPE_RUNNING_MESSAGE } from '@/lib/filterDisplayNames';
 export const PIPELINE_STEP_DEFS = [
   { id: 'upload', label: 'Upload', shortLabel: 'Upload' },
   { id: 'interpret', label: 'Interpretation', shortLabel: 'Interpret' },
-  { id: 'annovar', label: 'ANNOVAR', shortLabel: 'ANNOVAR' },
+  { id: 'annovar', label: 'Annotation', shortLabel: 'Annotation' },
   { id: 'reduce', label: 'Reduce variants', shortLabel: 'Filter' },
   { id: 'chat', label: 'Chat ready', shortLabel: 'Chat' },
 ];
@@ -221,7 +221,7 @@ export function getPipelineStatusLine(props, steps) {
     return 'Counting variant rows in your file on the server…';
   }
   if (lineCountInProgress && interpretationReady) {
-    return 'Counting rows in the background. You can run ANNOVAR or apply filters while this finishes.';
+    return 'Counting rows in the background. You can run Annotation or apply filters while this finishes.';
   }
   if (isRunningAnnovar || annovarJob?.status === 'running') {
     return annovarJob?.message || 'Annotation is running in the background.';
@@ -242,7 +242,7 @@ export function getPipelineStatusLine(props, steps) {
     return chatEligibility.message;
   }
   if (steps?.annovar === 'failed') {
-    return 'ANNOVAR did not complete. Open details to retry.';
+    return 'Annotation did not complete. Open details to retry.';
   }
   if (steps?.reduce === 'failed') {
     return 'Variant prioritization failed. Open filters to try again.';

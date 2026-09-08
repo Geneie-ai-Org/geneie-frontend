@@ -97,7 +97,7 @@ function ctaFor(family, limits) {
 const TITLES = {
   module1: 'Module 1 limit reached',
   module1RequiresPro: 'Module 1 requires Pro',
-  module2: 'ANNOVAR limit reached',
+  module2: 'Annotation limit reached',
   chat: 'Chat limit reached',
   filterApplies: 'Filter limit reached',
   annovarAlreadyRun: 'Already annotated',
@@ -111,10 +111,10 @@ const TITLES = {
 const FALLBACK_MESSAGES = {
   module1: 'Module 1 limit reached. Upgrade to Pro for more runs.',
   module1RequiresPro: 'Running Module 1 requires Pro. You can stage your files now and run once you upgrade.',
-  module2: 'ANNOVAR limit reached for this account. Upgrade to Pro to continue.',
+  module2: 'Annotation limit reached for this account. Upgrade to Pro to continue.',
   chat: 'Chat limit reached for this account. Upgrade to Pro to continue.',
   filterApplies: 'ACMG / Phenotype apply limit reached. Manual filters are still available.',
-  annovarAlreadyRun: 'ANNOVAR has already been run on this conversation. Start a new conversation to annotate another file.',
+  annovarAlreadyRun: 'Annotation has already been run on this conversation. Start a new conversation to annotate another file.',
   guestChat: 'Guest chat limit reached. Sign up to continue.',
   legacyFreeLimit: 'You have reached your free tier limit. Upgrade to Pro to continue.',
   deviceFrozen: 'Another session is active on a different device. Close it or sign out there to continue here.',

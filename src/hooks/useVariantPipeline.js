@@ -1361,7 +1361,7 @@ export function useVariantPipeline({
         title: 'Annotation is running',
         message:
           pipelineSnapshot.annovarJob?.message ||
-          'ANNOVAR is annotating your variants. Chat will unlock automatically when it finishes.',
+          'Clinical Annotation is running on your variants. Chat will unlock automatically when it finishes.',
         variant: 'info',
       });
       return true;
@@ -1383,13 +1383,13 @@ export function useVariantPipeline({
     }
     if (isRunningAnnovar) return;
     if (pipelineSnapshot.hasAnnotatedFile) {
-      setAnnovarMessageModal({ title: 'Already annotated', message: 'ANNOVAR has already been run on this file. Edit sample metadata to re-run annotation.', variant: 'info' });
+      setAnnovarMessageModal({ title: 'Already annotated', message: 'Annotation has already been run on this file. Edit sample metadata to re-run annotation.', variant: 'info' });
       return;
     }
     if (pipelineSnapshot.vcfAnnotated) {
       setAnnovarMessageModal({
         title: 'File already annotated',
-        message: 'Your uploaded VCF already contains ANNOVAR annotations. Running ANNOVAR again is not needed.',
+        message: 'Your uploaded VCF already contains annotations. Running Annotation again is not needed.',
         variant: 'info',
       });
       return;
@@ -1400,7 +1400,7 @@ export function useVariantPipeline({
     const annovarQuotaGate = actionGate(limits, 'annovar');
     if (!annovarQuotaGate.allowed) {
       setAnnovarMessageModal({
-        title: 'ANNOVAR limit reached',
+        title: 'Annotation limit reached',
         message: annovarQuotaGate.reason,
         variant: 'info',
         ...(annovarQuotaGate.cta && annovarQuotaGate.cta.kind !== 'none'
@@ -1422,7 +1422,7 @@ export function useVariantPipeline({
         } catch {
           setAnnovarMessageModal({
             title: 'Sign in required',
-            message: 'Please log in to run ANNOVAR annotation.',
+            message: 'Please log in to run Annotation.',
             variant: 'info',
           });
           return;
@@ -1543,7 +1543,7 @@ export function useVariantPipeline({
         setIsAnnovarRecommended(false);
       }
     } catch (error) {
-      console.error('[useVariantPipeline] Run ANNOVAR error:', error);
+      console.error('[useVariantPipeline] Run Annotation error:', error);
       setAnnovarMessageModal({
         title: 'Error',
         message: humanizeError(error.message) || 'Annotation failed. Please try again.',
@@ -1648,9 +1648,9 @@ export function useVariantPipeline({
       const guestAnnotated = userTier === 'guest' && pipelineSnapshot.hasAnnotatedFile;
       if (!step2Ready && !guestAnnotated && chatEligibility.requires_annovar) {
         setAnnovarMessageModal({
-          title: 'Run ANNOVAR first',
+          title: 'Run Annotation first',
           message:
-            'The ACMG filter needs ClinVar or InterVar annotations and population frequency from ANNOVAR. Run ANNOVAR, then apply the ACMG filter.',
+            'The ACMG filter needs ClinVar or InterVar annotations and population frequency from Annotation. Run Annotation, then apply the ACMG filter.',
           variant: 'info',
         });
         return;
@@ -1766,7 +1766,7 @@ export function useVariantPipeline({
         title: displayName,
         message:
           humanizeError(error.message) ||
-          `Failed to apply ${displayName}. Run ANNOVAR first if your file is not annotated yet.`,
+          `Failed to apply ${displayName}. Run Annotation first if your file is not annotated yet.`,
         variant: 'error',
       });
       // Resolve the optimistic "unknown" state set by beginPipelineWork().

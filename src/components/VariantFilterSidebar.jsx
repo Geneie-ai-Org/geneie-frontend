@@ -521,7 +521,7 @@ const VariantFilterSidebar = ({
     : null;
   const annovarQuotaMeter = annovarGate?.meter;
   const annovarMeterLabel = annovarQuotaMeter?.tracked && !annovarQuotaMeter.unlimited && annovarQuotaMeter.remaining != null
-    ? `${annovarQuotaMeter.remaining} of ${annovarQuotaMeter.limit} ANNOVAR runs left`
+    ? `${annovarQuotaMeter.remaining} of ${annovarQuotaMeter.limit} Annotation runs left`
     : null;
 
   const [filters, setFilters] = useState({});
@@ -1835,12 +1835,12 @@ const VariantFilterSidebar = ({
                             </>
                           ) : (
                             <>
-                              Full file on cloud storage ({annotatedRowBaseline.toLocaleString()} data rows). Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only — not loaded into the database yet. Run ANNOVAR, then apply the ACMG filter (or apply sidebar filters once) to load a working set. Use Reset to clear filters and start over from the full file.
+                              Full file on cloud storage ({annotatedRowBaseline.toLocaleString()} data rows). Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only — not loaded into the database yet. Run Annotation, then apply the ACMG filter (or apply sidebar filters once) to load a working set. Use Reset to clear filters and start over from the full file.
                             </>
                           )
                         ) : (
                           <>
-                            Full file on cloud storage. Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only. Run ANNOVAR, then apply the ACMG filter. Use Reset to reload the full file row count.
+                            Full file on cloud storage. Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only. Run Annotation, then apply the ACMG filter. Use Reset to reload the full file row count.
                           </>
                         )}
                       </PopoverContent>
@@ -2196,7 +2196,7 @@ const VariantFilterSidebar = ({
               const REASON_LABELS = {
                 germline_only: 'Analysis type must be Germline.',
                 phenotype_required: 'Add a phenotype description to the sample metadata (edit the file pill).',
-                annovar_required: 'Run ANNOVAR first — phenotype prioritization requires an annotated file.',
+                annovar_required: 'Run Annotation first — phenotype prioritization requires an annotated file.',
                 proprietary_filter_active: 'Another proprietary filter is active. Remove it first.',
                 manual_filter_active: 'Manual filters are active. Reset them first.',
                 manual_filters_active: 'Manual filters are active. Reset them first.',
@@ -2883,7 +2883,7 @@ const VariantFilterSidebar = ({
                             className="mt-1 inline-flex items-center gap-1 text-2xs font-medium underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
                           >
                             <img src={qiagenLogo} alt="" className="w-3 h-3 object-contain" />
-                            {isRunningAnnovar ? 'Running ANNOVAR...' : 'Try ANNOVAR'}
+                            {isRunningAnnovar ? 'Running Annotation...' : 'Try Annotation'}
                           </button>
                           {(annovarQuotaBlocked || annovarMeterLabel) && (
                             <div className="mt-1 text-2xs" style={{ color: annovarQuotaBlocked ? 'var(--error)' : 'var(--text-tertiary)' }}>

@@ -35,7 +35,7 @@ const LandingPage = () => {
   useSeo({
     title: 'Geneie — Chat with Your Genomic Data | AI Variant Analysis',
     description:
-      'Upload a VCF and explore your variants in plain language. Geneie pairs ANNOVAR annotation, ACMG classification and phenotype-driven AI prioritization with chat.',
+      'Upload a VCF and explore your variants in plain language. Geneie pairs clinical annotation, ACMG classification and phenotype-driven AI prioritization with chat.',
     path: '/',
   });
   const navigate = useNavigate();

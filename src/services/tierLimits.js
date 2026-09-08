@@ -26,7 +26,7 @@ export const METER_KEYS = ['module1', 'module2', 'chat', 'filterApplies'];
 
 const METER_LABELS = {
   module1: 'Module 1 runs',
-  module2: 'ANNOVAR runs',
+  module2: 'Annotation runs',
   chat: 'Chat exchanges',
   filterApplies: 'ACMG / Phenotype applies',
 };
@@ -546,8 +546,8 @@ function ctaFor(limits) {
 const GUEST_REASONS = {
   module1: 'Sign up to analyze raw sequencing data.',
   module1Stage: 'Sign up to analyze raw sequencing data.',
-  module2: 'Sign up to run ANNOVAR annotation.',
-  annovar: 'Sign up to run ANNOVAR annotation.',
+  module2: 'Sign up to run Annotation.',
+  annovar: 'Sign up to run Annotation.',
   acmgExomiser: 'Sign up to apply ACMG and Phenotype filters.',
   chat: 'Sign up to keep chatting.',
 };
@@ -568,7 +568,7 @@ function exhaustedReason(action, limits, meter) {
       return `You have used all ${total} Module 1 runs${suffix}.`;
     case 'module2':
     case 'annovar':
-      return `You have used all ${total} ANNOVAR runs${suffix}.`;
+      return `You have used all ${total} Annotation runs${suffix}.`;
     case 'acmgExomiser':
       return `You have used all ${total} ACMG / Phenotype filter applies${suffix}. Manual filters are still available.`;
     case 'chat':
@@ -590,7 +590,7 @@ function blockedReason(action, limits) {
       return 'Module 1 is not available on your plan.';
     case 'module2':
     case 'annovar':
-      return 'ANNOVAR is not available on your plan.';
+      return 'Annotation is not available on your plan.';
     case 'acmgExomiser':
       return 'ACMG and Phenotype filters are not available on your plan. Manual filters are still available.';
     case 'chat':

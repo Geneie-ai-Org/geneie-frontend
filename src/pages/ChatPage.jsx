@@ -951,6 +951,25 @@ const ChatPage = () => {
     module1.openModule1Form();
   };
 
+  // Escape closes the variant upload modal, same as clicking the backdrop.
+  useEffect(() => {
+    if (!showUploadModal || metadataFormOpen) return;
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      setShowUploadModal(false);
+      setPreSelectedFile(null);
+      if (uploadSessionConversationId === activeConversationId) {
+        toast.info('Upload in progress', {
+          description:
+            'Your file is still uploading. Please wait — chat will resume when processing finishes.',
+        });
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showUploadModal, metadataFormOpen, uploadSessionConversationId, activeConversationId]);
+
   useEffect(() => {
     if (!columnInterpretationResult) {
       setIsAnnovarRecommended(false);
@@ -1115,7 +1134,7 @@ const ChatPage = () => {
 
   let inputPlaceholder = "Ask anything about bioinformatics...";
   if (annovarRunning) {
-    inputPlaceholder = 'ANNOVAR is running — chat will resume when annotation is complete…';
+    inputPlaceholder = 'Clinical Annotation is running — chat will resume when annotation is complete…';
   } else if (variantUploadInProgress) {
     inputPlaceholder = 'Upload in progress — chat will resume when your file is ready…';
   } else if (isCurrentlyActive) {
@@ -1885,7 +1904,7 @@ const ChatPage = () => {
                 // Explain what just happened before the pipeline kicks off silently.
                 toast.info(
                   backendMessage ||
-                    'Genome build changed. Previous ANNOVAR results were cleared — re-running now.',
+                    'Genome build changed. Previous Annotation results were cleared — re-running now.',
                   { duration: 6000 }
                 );
                 setTimeout(() => runAnnovarForCurrentConversation(), 300);

@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { PHENOTYPE_FILTER_DISPLAY_NAME } from '@/lib/filterDisplayNames';
 
 const JOB_TYPE_CONFIG = {
-  annovar: { label: 'ANNOVAR', color: 'var(--accent-teal)' },
+  annovar: { label: 'Annotation', color: 'var(--accent-teal)' },
   acmg: { label: 'ACMG', color: 'var(--accent-purple, #7c3aed)' },
   exomiser: { label: PHENOTYPE_FILTER_DISPLAY_NAME, color: 'var(--warning)' },
 };

@@ -513,8 +513,8 @@ const PipelineDrawer = ({
                       style={{ backgroundColor: 'var(--accent-teal-soft)', color: 'var(--accent-teal)' }}
                       title={
                         hasAnnotatedFile
-                          ? 'ANNOVAR annotations added by Geneie'
-                          : 'This VCF already contains ANNOVAR annotations'
+                          ? 'Annotations added by Geneie'
+                          : 'This VCF already contains annotations'
                       }
                     >
                       Annotated

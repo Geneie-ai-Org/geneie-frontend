@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useChatSimulation } from '@/hooks/useChatSimulation';
 import { Link, useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { BetaSeatsBadge, BetaApplyForm } from '@/components/BetaSeats';
+import { useBetaSeats } from '@/hooks/useBetaSeats';
 
 import CardSwap, { Card } from '@/components/ui/CardSwap';
 import Carousel from '@/components/ui/Carousel';
@@ -39,6 +40,10 @@ const LandingPage = () => {
     path: '/',
   });
   const navigate = useNavigate();
+  /* Closed beta: nobody self-serves an account. The CTA is an application form; a seat is
+   * granted from /admin-haha. The seat count is shown as context when it is known, and
+   * simply omitted when the call is slow or fails. */
+  const { seats } = useBetaSeats();
   const [isNavSolid, setIsNavSolid] = useState(false);
   const [activeWord, setActiveWord] = useState(0);
   const workflowWords = ["Upload.", "Annotate.", "Filter.", "Ask.", "Discover."];
@@ -281,25 +286,16 @@ const LandingPage = () => {
                 Explore your variants, ask complex questions, and receive instant insights backed by peer-reviewed research.
               </p>
 
-              {/* CTA */}
-              <div className="hero-reveal mb-10 sm:mb-14 flex flex-col sm:flex-row items-center gap-3" style={{ '--reveal-delay': '1500ms' }}>
-                <Button
-                  size="lg"
-                  className="bg-white text-black hover:bg-zinc-200 text-base px-8 py-6 font-medium transition-all hover:scale-105 active:scale-95"
-                  onClick={() => navigate('/auth')}
-                >
-                  Get Started
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="border-zinc-400 text-zinc-500 text-base px-8 py-6 font-medium cursor-not-allowed hover:bg-transparent hover:text-zinc-500"
-                  onClick={() =>
-                    toast.info("Coming soon!")
-                  }
-                >
-                  Try demo
-                </Button>
+              {/* Beta seats */}
+              <BetaSeatsBadge seats={seats} className="hero-reveal mb-6" style={{ '--reveal-delay': '1400ms' }} />
+
+              {/* CTA — closed beta, so this is an application rather than a signup */}
+              <div className="hero-reveal mb-10 sm:mb-14 flex flex-col items-center gap-4" style={{ '--reveal-delay': '1500ms' }}>
+                <BetaApplyForm
+                  seats={seats}
+                  source="landing-hero"
+                  onSignIn={() => navigate('/auth')}
+                />
               </div>
 
               {/* Professional cards — compact inline on mobile */}
@@ -767,9 +763,13 @@ const LandingPage = () => {
 
                   {/* TODO: Change label to "Start Free Trial" and link to pricing/checkout when subscription breakdown is done (Dodo payment) */}
                   <div className="flex flex-col items-center lg:items-start gap-3">
-                    <Button size="lg" className="bg-white text-black hover:bg-zinc-200 px-6 py-6 rounded-md font-semibold text-base transition-colors w-full sm:w-auto sm:min-w-[280px]" onClick={() => navigate('/auth')}>
-                      Get Started
-                    </Button>
+                    <BetaSeatsBadge seats={seats} className="lg:items-start" />
+                    <BetaApplyForm
+                      seats={seats}
+                      source="landing-pricing"
+                      className="lg:items-start"
+                      onSignIn={() => navigate('/auth')}
+                    />
                   </div>
                 </div>
 

@@ -107,6 +107,101 @@ export async function adminResetDevices(uid) {
   return data.user;
 }
 
+/* --- Closed beta: seats and waitlist ------------------------------------------------ */
+
+/**
+ * Seats left in the closed beta. Public — the landing page calls this before anyone has
+ * signed in, so no Authorization header (same shape as fetchGuestStatus).
+ */
+export async function fetchBetaSeats() {
+  const response = await fetch(apiUrl('/api/beta/seats'));
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load beta seats');
+  }
+  return data;
+}
+
+/** Join the waitlist once the seats are gone. Public, device-keyed, idempotent on email. */
+export async function joinWaitlist({ email, source } = {}) {
+  const response = await fetch(apiUrl('/api/waitlist'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Device-Id': getDeviceId() },
+    body: JSON.stringify({ email, source }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Could not add you to the waitlist');
+  }
+  return data;
+}
+
+export async function adminGetBetaSeats() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl('/api/admin/beta/seats'), { headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load beta seats');
+  }
+  return data;
+}
+
+export async function adminSetBetaSeats(total) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(apiUrl('/api/admin/beta/seats'), {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ total }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to update seats');
+  }
+  return data.seats;
+}
+
+export async function adminListWaitlist({ status, limit = 100, cursor } = {}) {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (limit) params.set('limit', String(limit));
+  if (cursor) params.set('cursor', cursor);
+
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/admin/waitlist?${params.toString()}`), { headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load waitlist');
+  }
+  return data;
+}
+
+export async function adminSetWaitlistStatus(entryId, status) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(apiUrl(`/api/admin/waitlist/${encodeURIComponent(entryId)}`), {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ status }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to update entry');
+  }
+  return data.entry;
+}
+
+export async function adminDeleteWaitlistEntry(entryId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/admin/waitlist/${encodeURIComponent(entryId)}`), {
+    method: 'DELETE',
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to delete entry');
+  }
+  return true;
+}
+
 /**
  * Guest usage, keyed on X-Device-Id. No auth — guests have no token.
  *

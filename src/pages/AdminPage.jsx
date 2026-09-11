@@ -1,8 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { getAuth } from 'firebase/auth';
 import { useAuth } from '@/hooks/useAuth';
-import { env } from '@/config/env';
 import { useSeo } from '@/hooks/useSeo';
 import {
   adminDeleteWaitlistEntry,
@@ -14,6 +12,7 @@ import {
   adminSetCounters,
   adminSetPlan,
   adminSetWaitlistStatus,
+  adminWhoAmI,
 } from '@/services/backendApi';
 
 /**
@@ -21,8 +20,9 @@ import {
  *
  * Talks to /api/admin/*, NOT to Firestore. The user document now lives in MongoDB behind
  * the API — writing Firestore from here would silently do nothing, because the backend
- * stopped reading it. Authorisation is enforced server-side (signed custom claim or env
- * allowlist); the VITE_ADMIN_EMAILS check below only avoids rendering a page that 403s.
+ * stopped reading it. Authorisation is enforced server-side by an env allowlist
+ * (ADMIN_EMAILS), and this page asks the API whether the caller is an admin rather than
+ * keeping a copy of that list in the bundle.
  *
  * Closed beta: signup never grants beta. People apply from the landing page, which fills
  * the waitlist below; setting someone to `beta` here writes the full quota block and
@@ -30,10 +30,6 @@ import {
  *
  * There is no nav entry to this page by design — it is reached by typing the URL, and the
  * real access control is the server-side admin check, not this component's gate.
- *
- * Every read and write here targets ANOTHER user's `users/{uid}` document, which Firestore rules
- * must explicitly permit. If they don't, the list fails with `permission-denied` and the seed
- * field list below is still usable as a Firebase Console reference.
  */
 
 /** `admin` is deliberately absent — this page should not be able to mint more admins. */
@@ -92,15 +88,26 @@ const cellStyle = { borderColor: 'var(--border-subtle)' };
 const AdminPage = () => {
   useSeo({ title: 'Admin · Geneie', description: 'Internal tool', path: '/admin-haha', noindex: true });
 
-  const { userProfile, isAuthReady, userLoading } = useAuth();
+  const { userId, isAuthReady, userLoading } = useAuth();
 
-  /* Either an allow-listed email (VITE_ADMIN_EMAILS) or the raw planStatus. The raw plan is used
-   * because useAuth collapses 'admin' into 'pro' for feature checks, so userTier is never 'admin'.
-   * This is a UI gate only — Firestore rules are the real boundary. Computed before the loader so
-   * a non-admin never issues the query at all. */
-  const signedInEmail = getAuth().currentUser?.email?.toLowerCase() || '';
-  const isAllowed = userProfile?.planStatus === 'admin'
-    || (signedInEmail !== '' && env.adminEmails.includes(signedInEmail));
+  /* The server decides; a list in the bundle would be decoration. null = answer not in
+   * yet, so nothing renders instead of flashing the wrong state. */
+  const [isAllowed, setIsAllowed] = useState(null);
+
+  useEffect(() => {
+    if (!isAuthReady) return;
+    if (!userId) {
+      setIsAllowed(false);
+      return;
+    }
+    let active = true;
+    adminWhoAmI()
+      .then(() => active && setIsAllowed(true))
+      .catch(() => active && setIsAllowed(false));
+    return () => {
+      active = false;
+    };
+  }, [isAuthReady, userId]);
 
   const [users, setUsers] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -158,7 +165,7 @@ const AdminPage = () => {
   }, []);
 
   useEffect(() => {
-    if (!isAuthReady || !isAllowed) return;
+    if (isAllowed !== true) return;
     loadUsers();
     loadSeats();
     loadWaitlist();
@@ -296,7 +303,7 @@ const AdminPage = () => {
     return acc;
   }, [users]);
 
-  if (!isAuthReady || userLoading) return null;
+  if (!isAuthReady || userLoading || isAllowed === null) return null;
   if (!isAllowed) return <Navigate to="/app" replace />;
 
   return (

@@ -13,15 +13,14 @@ import { joinWaitlist } from '@/services/backendApi';
 
 const BRAND_TEAL = '#2F7F7A';
 
-/** "7 of 10 beta seats left" plus a fill bar. Renders nothing until the count is known. */
+/** "7 of 10 beta seats left". Renders nothing until the count is known. */
 export function BetaSeatsBadge({ seats, className = '', style }) {
   if (!seats || !seats.total) return null;
 
-  const { total, claimed, remaining } = seats;
-  const takenPercent = Math.min(100, Math.round((claimed / total) * 100));
+  const { total, remaining } = seats;
 
   return (
-    <div className={`flex flex-col items-center gap-2 ${className}`} style={style}>
+    <div className={`flex flex-col items-center ${className}`} style={style}>
       <div className="flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900/70 px-4 py-1.5">
         <span
           className="h-2 w-2 shrink-0 rounded-full"
@@ -34,34 +33,28 @@ export function BetaSeatsBadge({ seats, className = '', style }) {
             : `All ${total} beta seats taken`}
         </span>
       </div>
-      <div
-        className="h-1 w-48 overflow-hidden rounded-full bg-zinc-800"
-        role="progressbar"
-        aria-valuenow={claimed}
-        aria-valuemin={0}
-        aria-valuemax={total}
-        aria-label="Beta seats claimed"
-      >
-        <div
-          className="h-full rounded-full transition-[width] duration-500"
-          style={{ width: `${takenPercent}%`, backgroundColor: BRAND_TEAL }}
-        />
-      </div>
     </div>
   );
 }
 
 /**
- * Email capture shown in place of the signup CTA once the seats are gone.
+ * Beta application form — the landing page's only call to action.
+ *
+ * Geneie is a closed beta: nobody self-serves an account. Everyone applies here, and a
+ * seat is granted deliberately from /admin-haha. The copy shifts once the seats are gone,
+ * but the mechanism is identical either way, which is why this is one component and not
+ * two: an "apply" and a "waitlist" that behaved differently would drift.
  *
  * The backend treats a repeat email as a success rather than an error, so a second submit
  * shows the same confirmation instead of leaking whether an address is already listed.
  */
-export function WaitlistForm({ source = 'landing-hero', className = '' }) {
+export function BetaApplyForm({ seats, source = 'landing-hero', className = '', onSignIn }) {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [joined, setJoined] = useState(false);
+  const [joined, setJoined] = useState(null); // null | { alreadyApplied, status }
   const [trap, setTrap] = useState(''); // honeypot; humans never see it
+
+  const isFull = Boolean(seats) && !seats.open;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -78,11 +71,19 @@ export function WaitlistForm({ source = 'landing-hero', className = '' }) {
 
     setSubmitting(true);
     try {
-      await joinWaitlist({ email: email.trim(), source });
-      setJoined(true);
-      toast.success("You're on the waitlist. We'll email you when a seat opens.");
+      const result = await joinWaitlist({ email: email.trim(), source });
+      setJoined(result);
+      if (result.alreadyApplied) {
+        toast.success("You're already on the list, we have your request.");
+      } else {
+        toast.success(
+          isFull
+            ? "You're on the waitlist. We'll be in touch when a seat opens."
+            : "Request received. We'll be in touch once your seat is ready.",
+        );
+      }
     } catch (error) {
-      toast.error(error.message || 'Could not add you to the waitlist.');
+      toast.error(error.message || 'Could not submit your request.');
     } finally {
       setSubmitting(false);
     }
@@ -90,9 +91,10 @@ export function WaitlistForm({ source = 'landing-hero', className = '' }) {
 
   if (joined) {
     return (
-      <p className={`text-base text-zinc-300 ${className}`}>
-        You&apos;re on the waitlist — we&apos;ll email you as soon as a seat opens.
-      </p>
+      <div className={`flex flex-col items-center gap-2 ${className}`}>
+        <p className="text-base text-zinc-200">{confirmationFor(joined, isFull)}</p>
+        <SignInHint onSignIn={onSignIn} />
+      </div>
     );
   }
 
@@ -102,7 +104,9 @@ export function WaitlistForm({ source = 'landing-hero', className = '' }) {
       className={`flex w-full max-w-md flex-col items-center gap-3 ${className}`}
     >
       <p className="text-sm text-zinc-400">
-        The beta is full for now. Leave your email and we&apos;ll get in touch when a seat opens.
+        {isFull
+          ? 'All beta seats are taken right now. Leave your email and we\u2019ll get in touch when one opens.'
+          : 'Geneie is in closed beta. Leave your email to enrol, we\u2019ll set up your seat and let you know.'}
       </p>
       <div className="flex w-full flex-col gap-2 sm:flex-row">
         <input
@@ -130,9 +134,43 @@ export function WaitlistForm({ source = 'landing-hero', className = '' }) {
           disabled={submitting}
           className="h-12 bg-white px-8 text-base font-medium text-black transition-all hover:bg-zinc-200 active:scale-95"
         >
-          {submitting ? 'Joining…' : 'Join waitlist'}
+          {submitting ? 'Sending\u2026' : isFull ? 'Join waitlist' : 'Apply for beta'}
         </Button>
       </div>
+      <SignInHint onSignIn={onSignIn} />
     </form>
+  );
+}
+
+/**
+ * What to tell someone after they submit.
+ *
+ * A repeat submit gets its own line rather than the first-time one: telling a person
+ * "request received" for the third time reads as though the first two vanished, which is
+ * exactly when people start emailing support.
+ */
+function confirmationFor(result, isFull) {
+  if (result.alreadyApplied) {
+    if (result.status === 'invited' || result.status === 'contacted') {
+      return "You've already requested a seat and we've been in touch — check your inbox, including spam.";
+    }
+    return "You've already requested a seat with this email. You're on the list, and we'll come back to you.";
+  }
+  return isFull
+    ? "You're on the waitlist — we'll be in touch as soon as a seat opens."
+    : "You're on the list, we'll be in touch once your beta seat is ready.";
+}
+
+/** Existing testers still need a way in; the form is not a wall for them. */
+function SignInHint({ onSignIn }) {
+  if (!onSignIn) return null;
+  return (
+    <button
+      type="button"
+      onClick={onSignIn}
+      className="text-sm text-zinc-400 underline-offset-4 transition-colors hover:text-zinc-200 hover:underline"
+    >
+      Already have an account? Sign in
+    </button>
   );
 }

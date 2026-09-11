@@ -24,10 +24,12 @@ import {
  * stopped reading it. Authorisation is enforced server-side (signed custom claim or env
  * allowlist); the VITE_ADMIN_EMAILS check below only avoids rendering a page that 403s.
  *
- * Closed beta: signup claims a seat while seats remain and is provisioned straight into
- * `beta` with the full quota block; once the seats run out a signup lands on `free` and
- * the landing page offers the waitlist instead. Seats and waitlist are managed here. There is no nav entry to this page by design — it is reached by typing
- * the URL, and the real access control is the Firestore rule, not this component's gate.
+ * Closed beta: signup never grants beta. People apply from the landing page, which fills
+ * the waitlist below; setting someone to `beta` here writes the full quota block and
+ * claims one of the configured seats. Demoting them releases it.
+ *
+ * There is no nav entry to this page by design — it is reached by typing the URL, and the
+ * real access control is the server-side admin check, not this component's gate.
  *
  * Every read and write here targets ANOTHER user's `users/{uid}` document, which Firestore rules
  * must explicitly permit. If they don't, the list fails with `permission-denied` and the seed
@@ -315,8 +317,9 @@ const AdminPage = () => {
           </button>
         </div>
         <p className="text-xs mb-5" style={{ color: 'var(--text-tertiary)' }}>
-          Signup always creates <code>planStatus: "free"</code>. A tester only gets beta quotas once
-          the seed fields are written. Changes take effect on that user&apos;s next API request.
+          Signup always creates <code>planStatus: "free"</code> — seats are never handed out
+          automatically. People apply from the landing page; you grant a seat by setting them
+          to <code>beta</code> here, which claims one. Takes effect on their next API request.
         </p>
 
         <div

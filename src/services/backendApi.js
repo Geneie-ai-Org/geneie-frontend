@@ -50,6 +50,17 @@ export function parseApiErrorDetail(detail) {
  * VITE_ADMIN_EMAILS gate in the UI is only there to avoid showing a page that would 403.
  */
 
+/** Whether the signed-in user may use the admin tool. Throws for everyone else. */
+export async function adminWhoAmI() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl('/api/admin/whoami'), { headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Admin access required');
+  }
+  return data;
+}
+
 export async function adminListUsers({ plan, email, limit = 100, cursor } = {}) {
   const params = new URLSearchParams();
   if (plan) params.set('plan', plan);

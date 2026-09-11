@@ -32,6 +32,8 @@ export function initAnalytics() {
       // Opts into current PostHog defaults, incl. SPA pageview capture on history
       // changes — without this, react-router navigations are never recorded.
       defaults: '2025-05-24',
+      // Heatmaps + scroll maps for the PostHog toolbar.
+      enable_heatmaps: true,
     });
     posthog = loaded;
     for (const [method, args] of pending.splice(0)) {

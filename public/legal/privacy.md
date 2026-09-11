@@ -112,6 +112,3 @@ We may update this Policy. Material changes will bump the version shown in-produ
 
 **support@geneie.chat**
 
----
-
-*Draft for closed beta — counsel review required before public GA or regulated clinical production use.*

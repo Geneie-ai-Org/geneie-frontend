@@ -2208,7 +2208,7 @@ const VariantFilterSidebar = ({
               return (
                 <div className="sidebar-card rounded-lg shadow-sm">
                   <label className="block mb-2">
-                    <PhenotypeAiLabel variant="heading" className="items-start" />
+                    <PhenotypeAiLabel variant="heading" />
                   </label>
                   <p className="text-xs text-[var(--text-secondary)] mb-3 leading-relaxed">
                     {PHENOTYPE_FILTER_DESCRIPTION}

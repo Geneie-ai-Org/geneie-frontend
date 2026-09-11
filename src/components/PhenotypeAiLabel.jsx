@@ -66,18 +66,21 @@ export default function PhenotypeAiLabel({
     );
   }
 
+  // Heading uses the same leading glyph as the tab and inline variants — one mark for
+  // Phenotype everywhere, instead of a stacked "AI" chip that read as a second logo.
   return (
     <span
-      className={`inline-flex flex-col items-center justify-center leading-none ${className}`}
+      className={`inline-flex items-center gap-1.5 leading-none ${className}`}
       aria-label="Phenotype AI"
     >
       {showAi && (
-        <span
-          className="phenotype-ai-badge mb-0.5 rounded px-1 py-px text-[9px] font-bold uppercase tracking-wider text-[var(--accent-teal)]"
+        <HugeiconsIcon
+          icon={AiDnaIcon}
+          size={16}
+          strokeWidth={2}
+          className="shrink-0 text-[var(--accent-teal)]"
           aria-hidden
-        >
-          AI
-        </span>
+        />
       )}
       <span className={`${textSize} ${textClassName}`}>Phenotype</span>
     </span>

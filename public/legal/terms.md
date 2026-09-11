@@ -95,6 +95,3 @@ We may update these Terms. Material changes for beta users will be shown in-prod
 
 Questions: **support@geneie.chat** (or the support channel provided in your beta invite).
 
----
-
-*Draft for closed beta — have counsel review before public launch or processing of regulated clinical data at scale.*

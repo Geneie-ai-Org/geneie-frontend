@@ -94,15 +94,6 @@
   animation: subtle-breathe 3.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
 }
 
-.phenotype-ai-badge {
-  background: linear-gradient(
-    135deg,
-    rgba(47, 127, 122, 0.18) 0%,
-    rgba(47, 127, 122, 0.08) 100%
-  );
-  border: 1px solid rgba(47, 127, 122, 0.35);
-}
-
 @keyframes gradient-shift {
   0% {
     background-position: 0% 50%;

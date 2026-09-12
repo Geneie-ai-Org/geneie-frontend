@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
 
 const GENOME_OPTIONS = [
   { value: 'hg38', label: 'hg38 (GRCh38)' },
-  { value: 'hg19', label: 'hg19 (GRCh37)', disabled: true, disabledReason: 'hg19 (GRCh37) references are coming soon.' },
+  { value: 'hg19', label: 'hg19 (GRCh37)' },
 ];
 
 const EMPTY_URL_ROW = { url: '', meta: null, error: null, checking: false };

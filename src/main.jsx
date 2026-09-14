@@ -16,6 +16,7 @@ initAnalytics();
 
 const LandingPage = React.lazy(() => import('./pages/LandingPage'));
 const AuthPage = React.lazy(() => import('./pages/AuthPage'));
+const AuthActionPage = React.lazy(() => import('./pages/AuthActionPage'));
 const ChatPage = React.lazy(() => import('./pages/ChatPage'));
 const AdminPage = React.lazy(() => import('./pages/AdminPage'));
 const LegalDocPage = React.lazy(() => import('./pages/LegalDocPage'));
@@ -64,6 +65,11 @@ root.render(
               </PublicRoute>
             }
           />
+
+          {/* Firebase account links (password reset, email verification). Deliberately not
+              wrapped in PublicRoute: that redirects signed-in users to /app, which would
+              discard the oobCode for anyone resetting on a device they are signed in on. */}
+          <Route path="/auth/action" element={<AuthActionPage />} />
 
           {/* Chat — guests and authenticated users; legal gate first */}
           <Route

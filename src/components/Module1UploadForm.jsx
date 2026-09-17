@@ -414,9 +414,18 @@ const Module1UploadForm = ({
   const submitLabel = gate?.staging ? 'Stage files' : 'Start pipeline';
   const oversizedRead = [r1File, r2File].find((f) => f && f.size > MODULE1_FASTQ_MAX_BYTES) || null;
 
+  // Honor backend MODULE1_GENOMES_READY via bed-catalog.genome_ready (hg38 + hg19).
+  // Require catalog payload to match the selected genome so a stale hg38 response
+  // cannot unlock submit while hg19 is still loading.
+  const genomeReady =
+    !bedCatalogLoading &&
+    !!bedCatalog &&
+    bedCatalog.genome === genome &&
+    bedCatalog.genome_ready === true;
+
   const canSubmit =
     !!sampleName.trim() &&
-    genome === 'hg38' &&
+    genomeReady &&
     sequencingType === 'WES' &&
     readsResolved &&
     bedResolved &&

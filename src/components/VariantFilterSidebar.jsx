@@ -5,6 +5,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { optionalIdToken } from '@/lib/safeAuth';
 import DocumentUpload from './DocumentUpload';
 import ExportVariantsButton from './ExportVariantsButton';
+import CaseReportDownloadButton from './CaseReportDownloadButton';
 import PerimeterProgress from '@/components/ui/PerimeterProgress';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
@@ -2701,9 +2702,9 @@ const VariantFilterSidebar = ({
           </div>
         </div>
 
-        {/* Sticky footer: primary export action, always visible */}
+        {/* Sticky footer: export + case report, always visible */}
         {!isGuest && variantData && (
-          <div className="shrink-0 px-3.5 py-2 bg-[var(--bg-sidebar)]">
+          <div className="shrink-0 px-3.5 py-2 bg-[var(--bg-sidebar)] space-y-2">
             <ExportVariantsButton
               conversationId={conversationId}
               variantData={variantData}
@@ -2711,6 +2712,12 @@ const VariantFilterSidebar = ({
               isGuest={isGuest}
               downloadGate={downloadGate}
               uiCount={underConsiderationCount}
+            />
+            <CaseReportDownloadButton
+              conversationId={conversationId}
+              variantData={variantData}
+              isGuest={isGuest}
+              downloadGate={downloadGate}
             />
           </div>
         )}

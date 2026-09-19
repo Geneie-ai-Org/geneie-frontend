@@ -43,6 +43,12 @@ export function useChatMessaging({
   const chatAbortControllerRef = useRef(null);
   const pendingTurnRef = useRef(null);
 
+  // Live mirror of the active conversation so async callbacks compare against the CURRENT
+  // conversation, not a stale closure. Fixes cross-conversation leak: an in-flight reply
+  // must render only if the user is still on the conversation it was asked in.
+  const activeConversationIdRef = useRef(activeConversationId);
+  activeConversationIdRef.current = activeConversationId;
+
   const typeMessage = useCallback((fullText, onComplete, sources) => {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     setTypingText('');
@@ -88,9 +94,14 @@ export function useChatMessaging({
   }, []);
 
   const appendAssistantAndPersist = useCallback(
-    async (wasFirstInConversation, userTextForTitle, aiText, sources, mode = 'full') => {
+    async (wasFirstInConversation, userTextForTitle, aiText, sources, mode = 'full', originConversationId = null) => {
       const src = sources || [];
       const optimisticId = `temp-ai-${Date.now()}`;
+      // The answer belongs to the conversation it was asked in. Persist to that origin
+      // unconditionally; only RENDER it if the user is still viewing that conversation
+      // (else it lands only in the DB and reloads when they switch back).
+      const convId = originConversationId || activeConversationIdRef.current;
+      const stillActive = () => activeConversationIdRef.current === convId;
 
       const addAssistantMessage = (id, messageId = undefined) => {
         setMessages((prev) => [
@@ -115,23 +126,24 @@ export function useChatMessaging({
         }
         return;
       }
-      if (!userId || !activeConversationId) {
-        addAssistantMessage(Date.now());
+      if (!userId || !convId) {
+        if (stillActive()) addAssistantMessage(Date.now());
         return;
       }
 
-      addAssistantMessage(optimisticId);
+      // Render into the view only if we're still on the origin conversation.
+      if (stillActive()) addAssistantMessage(optimisticId);
 
       try {
         if (mode === 'full') {
-          await mongodbApi.createMessage(activeConversationId, 'user', userTextForTitle, []);
+          await mongodbApi.createMessage(convId, 'user', userTextForTitle, []);
           if (wasFirstInConversation) {
-            await updateConversationTitle(activeConversationId, userTextForTitle);
+            await updateConversationTitle(convId, userTextForTitle);
           }
         }
-        const created = await mongodbApi.createMessage(activeConversationId, 'ai', aiText, src);
+        const created = await mongodbApi.createMessage(convId, 'ai', aiText, src);
         const mid = created?.message_id;
-        if (mid) {
+        if (mid && stillActive()) {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === optimisticId ? { ...m, id: mid, message_id: mid } : m
@@ -142,7 +154,7 @@ export function useChatMessaging({
         console.error('MongoDB Save Error:', error);
       }
     },
-    [userId, userTier, guestExchangesUsed, activeConversationId, updateConversationTitle, setGuestExchangesUsed, setGuestLimitExceeded]
+    [userId, userTier, guestExchangesUsed, updateConversationTitle, setGuestExchangesUsed, setGuestLimitExceeded]
   );
 
   const persistFailureTurn = useCallback(
@@ -264,6 +276,10 @@ export function useChatMessaging({
 
     const userMessageText = input.trim();
     setInput('');
+    // Pin the conversation this turn belongs to. If the user switches conversations while
+    // the reply is in flight, we still persist to (and title) THIS conversation, and skip
+    // rendering into whatever conversation is open now (cross-conversation leak fix).
+    const originConversationId = activeConversationId;
     const wasFirstInConversation = messages.length === 0;
     const userLocalId = Date.now();
     setMessages((prev) => [...prev, { role: 'user', text: userMessageText, id: userLocalId }]);
@@ -295,10 +311,19 @@ export function useChatMessaging({
             || 'This conversation is getting long.'
         );
       }
-      typeMessage(data.response, async (finalText, finalSources) => {
+      if (activeConversationIdRef.current === originConversationId) {
+        // Still on the origin conversation: animate the reply in, then persist.
+        typeMessage(data.response, async (finalText, finalSources) => {
+          pendingTurnRef.current = null;
+          await appendAssistantAndPersist(wasFirstInConversation, userMessageText, finalText, finalSources || [], 'full', originConversationId);
+        }, data.sources || []);
+      } else {
+        // User navigated away mid-reply: skip the typing animation entirely and persist
+        // straight to the origin conversation (it reloads from the DB on switch-back).
         pendingTurnRef.current = null;
-        await appendAssistantAndPersist(wasFirstInConversation, userMessageText, finalText, finalSources || [], 'full');
-      }, data.sources || []);
+        setIsLoading(false);
+        await appendAssistantAndPersist(wasFirstInConversation, userMessageText, data.response, data.sources || [], 'full', originConversationId);
+      }
     } else {
       pendingTurnRef.current = null;
       setIsLoading(false);
@@ -372,12 +397,13 @@ export function useChatMessaging({
     const historyPayload = messages.slice(0, -1).map((m) => ({ role: m.role, text: m.text }));
     const userMessageText = prev.text;
     const aiMessageId = last.message_id;
+    const originConversationId = activeConversationId;
 
     setMessages((prevMsgs) => prevMsgs.slice(0, -1));
 
-    if (userTier !== 'guest' && activeConversationId && aiMessageId) {
+    if (userTier !== 'guest' && originConversationId && aiMessageId) {
       try {
-        await mongodbApi.deleteMessage(activeConversationId, aiMessageId);
+        await mongodbApi.deleteMessage(originConversationId, aiMessageId);
       } catch (e) {
         console.error('[Regenerate] Failed to delete assistant message:', e);
       }
@@ -404,9 +430,14 @@ export function useChatMessaging({
             || 'This conversation is getting long.'
         );
       }
-      typeMessage(data.response, async (finalText, finalSources) => {
-        await appendAssistantAndPersist(false, userMessageText, finalText, finalSources || [], 'assistant-only');
-      }, data.sources || []);
+      if (activeConversationIdRef.current === originConversationId) {
+        typeMessage(data.response, async (finalText, finalSources) => {
+          await appendAssistantAndPersist(false, userMessageText, finalText, finalSources || [], 'assistant-only', originConversationId);
+        }, data.sources || []);
+      } else {
+        setIsLoading(false);
+        await appendAssistantAndPersist(false, userMessageText, data.response, data.sources || [], 'assistant-only', originConversationId);
+      }
     } else {
       setIsLoading(false);
       typingGenerationIdRef.current += 1;

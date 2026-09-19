@@ -1009,10 +1009,10 @@ const DocumentUpload = ({
           {!compact && !existingDocument && (
             <div className="mb-3">
               <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-                Add an annotated variant file
+                Add a variants file (VCF/TSV)
               </h3>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-                VCF, TSV or CSV with variant calls already annotated.
+                VCF, TSV or CSV with variant calls. Annotated or not.
               </p>
             </div>
           )}

@@ -201,7 +201,16 @@ const ColumnInterpretationResults = ({
   //     - If Step 1 fails: Essential VCF columns missing → recommend raw data upload (no ANNOVAR).
   // - Any source:
   //     - If Step 1 passes but Step 2/3 fails: "Run ANNOVAR to add missing columns."
-  const allRecommendations = recommendations || [];
+  // Recommendations come from the backend, which still names the ANNOVAR tool.
+  // The UI only ever says "Annotation", so strip the tool name before display.
+  const allRecommendations = (recommendations || []).map((r) =>
+    typeof r === 'string'
+      ? r
+          .replace(/\bANNOVAR annotation\b/gi, 'annotation')
+          .replace(/\bRun ANNOVAR\b/g, 'Run Annotation')
+          .replace(/\bANNOVAR\b/g, 'Annotation')
+      : r
+  );
   
   // Get primary recommendation (first one, usually most important)
   const primaryRecommendation = allRecommendations.length > 0 ? allRecommendations[0] : null;

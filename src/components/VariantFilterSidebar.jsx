@@ -512,6 +512,7 @@ const VariantFilterSidebar = ({
   onProprietaryFilterClick = null,
   onGuestRefreshMetadata = null,
   chatEligibility = null,
+  onEditSampleInfo = null,
 }) => {
   /* Quota is orthogonal to filter readiness. `=== false` (rather than a falsy check) so a missing
    * gate — degraded limits, still loading — never disables anything. */
@@ -1618,8 +1619,13 @@ const VariantFilterSidebar = ({
     return null;
   }, [activeProprietaryFilter, hasAppliedManualFilters]);
 
+  const samplePhenotype = String(currentDocument?.sample_metadata?.phenotype || '').trim();
+  const phenotypeMissing = !samplePhenotype;
+
   const handleTabSwitch = (targetMode) => {
     if (targetMode === filterMode) return;
+    // The phenotype-driven column cannot do anything without a phenotype.
+    if (targetMode === 'exomiser' && phenotypeMissing) return;
     const currentMode = getCurrentActiveMode();
     if (!currentMode || targetMode === currentMode) {
       setFilterMode(targetMode);
@@ -1723,7 +1729,14 @@ const VariantFilterSidebar = ({
               const TABS = [
                 { key: 'manual', label: 'Manual', filterKey: null },
                 { key: 'acmg', label: 'ACMG', filterKey: 'filter_1' },
-                { key: 'exomiser', label: PHENOTYPE_FILTER_DISPLAY_NAME, filterKey: 'filter_3', usePhenotypeAi: true },
+                {
+                  key: 'exomiser',
+                  label: PHENOTYPE_FILTER_DISPLAY_NAME,
+                  filterKey: 'filter_3',
+                  usePhenotypeAi: true,
+                  disabled: phenotypeMissing,
+                  disabledHint: `${PHENOTYPE_FILTER_DISPLAY_NAME} needs a phenotype description — add one in sample info.`,
+                },
               ];
               const activeIndex = TABS.findIndex((t) => t.key === filterMode);
               const focusTab = (i) => {
@@ -1763,6 +1776,7 @@ const VariantFilterSidebar = ({
                 >
                   {TABS.map((t) => {
                     const selected = filterMode === t.key;
+                    const disabled = Boolean(t.disabled) && !selected;
                     return (
                       <button
                         key={t.key}
@@ -1771,13 +1785,18 @@ const VariantFilterSidebar = ({
                         role="tab"
                         aria-selected={selected}
                         aria-controls="filter-tabpanel"
+                        aria-disabled={disabled || undefined}
+                        disabled={disabled}
+                        title={disabled ? t.disabledHint : undefined}
                         tabIndex={selected ? 0 : -1}
                         onClick={() => handleTabSwitch(t.key)}
                         data-state={selected ? 'active' : 'inactive'}
                         className={`flex-1 inline-flex h-7 items-center justify-center px-2 text-xs rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${
                           selected
                             ? 'font-semibold text-[var(--text-primary)] bg-[var(--segment-thumb)] shadow-[var(--shadow-sm)]'
-                            : 'font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                            : disabled
+                              ? 'font-medium text-[var(--text-disabled)] cursor-not-allowed'
+                              : 'font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                         }`}
                       >
                         {t.usePhenotypeAi ? <PhenotypeAiLabel variant="tab" /> : t.label}
@@ -2182,7 +2201,38 @@ const VariantFilterSidebar = ({
               </div>
             )}
 
-            {filterMode === 'exomiser' && (() => {
+            {filterMode === 'exomiser' && phenotypeMissing && (
+              <div className="sidebar-card rounded-lg shadow-sm">
+                <div className="opacity-50 pointer-events-none select-none" aria-hidden>
+                  <label className="block mb-2">
+                    <PhenotypeAiLabel variant="heading" />
+                  </label>
+                  <p className="text-xs text-[var(--text-secondary)] mb-3 leading-relaxed">
+                    {PHENOTYPE_FILTER_DESCRIPTION}
+                  </p>
+                  <div className="w-full px-4 py-2 rounded-lg text-sm font-medium text-center border border-[var(--border-default)] text-[var(--text-disabled)]">
+                    Run {PHENOTYPE_FILTER_DISPLAY_NAME}
+                  </div>
+                </div>
+                <div className="mt-3 p-3 rounded-lg sidebar-warning-banner border text-xs">
+                  <p className="leading-relaxed">
+                    This filter needs a phenotype description. The rest of the pipeline —
+                    annotation, ACMG filtering and chat — runs without one.
+                  </p>
+                  {onEditSampleInfo && (
+                    <button
+                      type="button"
+                      onClick={onEditSampleInfo}
+                      className="mt-2 inline-flex items-center text-2xs font-medium underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] rounded"
+                    >
+                      Add a phenotype in sample info
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {filterMode === 'exomiser' && !phenotypeMissing && (() => {
               const isActive = activeProprietaryFilter === 'filter_3';
               const canRun = exomiserEligibility?.can_run === true;
               const reasons = exomiserEligibility?.reasons || [];

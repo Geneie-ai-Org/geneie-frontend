@@ -20,6 +20,7 @@ const BUCKETS = {
 /**
  * Assign working-set variants to Clinical result summary vs Additional Findings,
  * then generate the clinical PDF (bioinfo two-bucket contract).
+ * Multi-primary clinical results and unrestricted additional findings are supported.
  */
 export default function ClinicalReportAssignModal({
   open,
@@ -51,16 +52,6 @@ export default function ClinicalReportAssignModal({
           next[row.id] = BUCKETS.exclude;
         }
       });
-      // Enforce single clinical_result: keep first suggested, demote others.
-      let sawClinical = false;
-      rows.forEach((row) => {
-        if (next[row.id] !== BUCKETS.clinical_result) return;
-        if (!sawClinical) {
-          sawClinical = true;
-          return;
-        }
-        next[row.id] = BUCKETS.additional_finding;
-      });
       setAssignments(next);
     } catch (err) {
       setError(err.message || 'Failed to load report candidates');
@@ -91,25 +82,11 @@ export default function ClinicalReportAssignModal({
   );
 
   const setBucket = (id, bucket) => {
-    setAssignments((prev) => {
-      const next = { ...prev };
-      if (bucket === BUCKETS.clinical_result) {
-        Object.keys(next).forEach((key) => {
-          if (next[key] === BUCKETS.clinical_result && key !== id) {
-            next[key] = BUCKETS.additional_finding;
-          }
-        });
-      }
-      next[id] = bucket;
-      return next;
-    });
+    setAssignments((prev) => ({ ...prev, [id]: bucket }));
   };
 
   const canProceed =
-    clinicalIds.length === 1 &&
-    additionalIds.length <= 7 &&
-    !generating &&
-    !loading;
+    clinicalIds.length >= 1 && !generating && !loading;
 
   const handleProceed = async () => {
     if (!canProceed || !conversationId) return;
@@ -139,7 +116,7 @@ export default function ClinicalReportAssignModal({
             Generate clinical report
           </DialogTitle>
           <DialogDescription className="text-xs text-[var(--text-secondary)] mt-1">
-            Assign variants to Clinical result summary (one) or Additional Findings (up to 7).
+            Assign one or more variants to Clinical result summary, and optionally to Additional Findings.
             {meta?.workflow_display_name
               ? ` Workflow: ${meta.workflow_display_name}.`
               : ''}
@@ -213,7 +190,8 @@ export default function ClinicalReportAssignModal({
           )}
           <div className="flex items-center justify-between gap-3">
             <p className="text-2xs text-[var(--text-tertiary)]">
-              Clinical: {clinicalIds.length}/1 · Additional: {additionalIds.length}/7
+              Clinical: {clinicalIds.length} · Additional: {additionalIds.length}
+              {clinicalIds.length < 1 ? ' · Need ≥1 clinical result' : ''}
             </p>
             <div className="flex gap-2">
               <button

@@ -170,6 +170,29 @@ export const resolveHpoTerms = async ({ text, forceMode } = {}) => {
 };
 
 /**
+ * HPO typeahead for Findings chip basket.
+ */
+export const suggestHpoTerms = async ({ text, limit = 20 } = {}) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const response = await fetch(`${API_BASE_URL}/api/phenotype/suggest-hpo`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      text: text || '',
+      limit,
+    }),
+  });
+
+  if (!response.ok) await handleResponseError(response);
+  return response.json();
+};
+
+/**
  * AI phrase suggestions for Findings tab (no HPO IDs from the model).
  */
 export const suggestPhenotypePhrases = async ({ text } = {}) => {

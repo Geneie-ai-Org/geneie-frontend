@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CheckCircle2, Copy, RotateCw } from 'lucide-react';
+import { formatDuration } from '@/lib/formatDuration';
 import { Markdown } from './ChatMarkdown';
 import { Source, SourceTrigger, SourceContent } from './Source';
 import { Button } from '@/components/ui/button';
@@ -245,7 +246,7 @@ const MarkdownWithReferences = React.memo(({ content, placeholders, scrollToSour
   );
 });
 
-const ChatMessage = React.memo(({ role, text, sources, showRegenerate, onRegenerate, regenerateDisabled }) => {
+const ChatMessage = React.memo(({ role, text, sources, durationMs = null, showRegenerate, onRegenerate, regenerateDisabled }) => {
   const isUser = role === 'user';
   const messageRef = useRef(null);
   const [copied, setCopied] = useState(false);
@@ -292,6 +293,7 @@ const ChatMessage = React.memo(({ role, text, sources, showRegenerate, onRegener
   }, [text, sources]);
 
   const markdownComponents = { ...CHAT_TABLE_COMPONENTS };
+  const thinkingTime = formatDuration(durationMs);
 
   if (isUser) {
     return (
@@ -351,6 +353,16 @@ const ChatMessage = React.memo(({ role, text, sources, showRegenerate, onRegener
               ))}
             </div>
           </div>
+        )}
+
+        {thinkingTime && (
+          <p
+            className="mt-1.5 text-2xs tabular-nums"
+            style={{ color: 'var(--text-tertiary)' }}
+            title="Time taken to produce this answer"
+          >
+            Thought for {thinkingTime}
+          </p>
         )}
 
         <TooltipProvider>

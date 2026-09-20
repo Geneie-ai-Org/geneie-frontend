@@ -37,6 +37,9 @@ export function useChatMessaging({
   const [typingText, setTypingText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [input, setInput] = useState('');
+  // When the in-flight turn was asked. Drives the live "thinking for…" reading, and
+  // becomes the answer's recorded duration once the reply lands.
+  const [turnStartedAt, setTurnStartedAt] = useState(null);
 
   const typingTimeoutRef = useRef(null);
   const typingGenerationIdRef = useRef(0);
@@ -113,6 +116,7 @@ export function useChatMessaging({
     }
     setTypingText('');
     setIsLoading(false);
+    setTurnStartedAt(null);
     inFlightOriginRef.current = null;
     const pending = pendingTurnRef.current;
     pendingTurnRef.current = null;
@@ -124,7 +128,7 @@ export function useChatMessaging({
   }, []);
 
   const appendAssistantAndPersist = useCallback(
-    async (wasFirstInConversation, userTextForTitle, aiText, sources, mode = 'full', originConversationId = null) => {
+    async (wasFirstInConversation, userTextForTitle, aiText, sources, mode = 'full', originConversationId = null, durationMs = null) => {
       const src = sources || [];
       const optimisticId = `temp-ai-${Date.now()}`;
       // The answer belongs to the conversation it was asked in. Persist to that origin
@@ -141,6 +145,7 @@ export function useChatMessaging({
             text: aiText,
             sources: src,
             id,
+            ...(durationMs != null ? { durationMs } : {}),
             ...(messageId ? { message_id: messageId } : {}),
           },
         ]);
@@ -171,7 +176,7 @@ export function useChatMessaging({
             await updateConversationTitle(convId, userTextForTitle);
           }
         }
-        const created = await mongodbApi.createMessage(convId, 'ai', aiText, src);
+        const created = await mongodbApi.createMessage(convId, 'ai', aiText, src, { durationMs });
         const mid = created?.message_id;
         if (mid && stillActive()) {
           setMessages((prev) =>
@@ -315,6 +320,8 @@ export function useChatMessaging({
     const userLocalId = Date.now();
     setMessages((prev) => [...prev, { role: 'user', text: userMessageText, id: userLocalId }]);
     pendingTurnRef.current = { userText: userMessageText, userLocalId };
+    const turnStart = Date.now();
+    setTurnStartedAt(turnStart);
     setIsLoading(true);
 
     const ac = new AbortController();
@@ -327,6 +334,11 @@ export function useChatMessaging({
 
     const { data, lastError, aborted } = await runChatCompletion(userMessageText, historyPayload, ac.signal);
     chatAbortControllerRef.current = null;
+
+    // Thinking is over the moment the answer exists; the typing animation that follows
+    // is presentation, not work, so it stays out of the recorded duration.
+    const thinkingMs = Date.now() - turnStart;
+    setTurnStartedAt(null);
 
     if (aborted) return;
 
@@ -348,7 +360,7 @@ export function useChatMessaging({
         // switches conversations mid-animation, instead of leaking the stream into the new one.
         typeMessage(data.response, async (finalText, finalSources) => {
           pendingTurnRef.current = null;
-          await appendAssistantAndPersist(wasFirstInConversation, userMessageText, finalText, finalSources || [], 'full', originConversationId);
+          await appendAssistantAndPersist(wasFirstInConversation, userMessageText, finalText, finalSources || [], 'full', originConversationId, thinkingMs);
         }, data.sources || [], originConversationId);
       } else {
         // User navigated away mid-reply: skip the typing animation entirely and persist
@@ -356,7 +368,7 @@ export function useChatMessaging({
         pendingTurnRef.current = null;
         inFlightOriginRef.current = null;
         setIsLoading(false);
-        await appendAssistantAndPersist(wasFirstInConversation, userMessageText, data.response, data.sources || [], 'full', originConversationId);
+        await appendAssistantAndPersist(wasFirstInConversation, userMessageText, data.response, data.sources || [], 'full', originConversationId, thinkingMs);
       }
     } else {
       pendingTurnRef.current = null;
@@ -445,12 +457,17 @@ export function useChatMessaging({
       }
     }
 
+    const turnStart = Date.now();
+    setTurnStartedAt(turnStart);
     setIsLoading(true);
     const ac = new AbortController();
     chatAbortControllerRef.current = ac;
 
     const { data, lastError, aborted } = await runChatCompletion(userMessageText, historyPayload, ac.signal);
     chatAbortControllerRef.current = null;
+
+    const thinkingMs = Date.now() - turnStart;
+    setTurnStartedAt(null);
 
     if (aborted) return;
 
@@ -468,12 +485,12 @@ export function useChatMessaging({
       }
       if (activeConversationIdRef.current === originConversationId) {
         typeMessage(data.response, async (finalText, finalSources) => {
-          await appendAssistantAndPersist(false, userMessageText, finalText, finalSources || [], 'assistant-only', originConversationId);
+          await appendAssistantAndPersist(false, userMessageText, finalText, finalSources || [], 'assistant-only', originConversationId, thinkingMs);
         }, data.sources || [], originConversationId);
       } else {
         inFlightOriginRef.current = null;
         setIsLoading(false);
-        await appendAssistantAndPersist(false, userMessageText, data.response, data.sources || [], 'assistant-only', originConversationId);
+        await appendAssistantAndPersist(false, userMessageText, data.response, data.sources || [], 'assistant-only', originConversationId, thinkingMs);
       }
     } else {
       inFlightOriginRef.current = null;
@@ -509,6 +526,8 @@ export function useChatMessaging({
     // so an in-flight reply never bleeds into another conversation (cross-conversation leak fix).
     typingText: visibleTypingText,
     isLoading: visibleIsLoading,
+    // Gated the same way: another conversation must not show this turn's stopwatch.
+    turnStartedAt: onOrigin ? turnStartedAt : null,
     input,
     setInput,
     sendMessage,

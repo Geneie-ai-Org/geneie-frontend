@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AlertCircle, Check, ChevronDown, Dna, Loader2 } from 'lucide-react';
 import { MODULE1_STAGE_GROUPS, getModule1PhaseMessage, getModule1StageGroup } from '@/lib/module1PipelinePhases';
+import RunTimer from '@/components/ui/RunTimer';
+import { useRunTimer } from '@/hooks/useRunTimer';
 
 const EASE = [0.23, 1, 0.32, 1];
 
@@ -22,6 +24,17 @@ function nodeStatus(groupId, activeGroupId, failed, groupOrder) {
 const Module1PipelineStepper = ({ job, onStartOver }) => {
   const [expanded, setExpanded] = useState(true);
   const reduceMotion = useReducedMotion();
+  // This is the long one — hours, not minutes — so it carries its own clock: ticking
+  // while the pipeline runs, total once it lands.
+  const timer = useRunTimer(
+    job?.jobId ? `module1:${job.jobId}` : null,
+    job?.status === 'queued' || job?.status === 'running',
+    {
+      startedAt: job?.startedAt ?? null,
+      completedAt: job?.completedAt ?? null,
+      durationSeconds: job?.durationSeconds ?? null,
+    }
+  );
   if (!job) return null;
 
   const groupOrder = MODULE1_STAGE_GROUPS.map((g) => g.id);
@@ -59,6 +72,13 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
           <p className="text-2xs truncate" style={{ color: failed ? 'var(--error)' : 'var(--text-tertiary)' }}>
             {failed ? job.error || job.message || 'The pipeline did not complete.' : phaseMessage}
             {pct != null && !failed ? ` · ${pct}%` : ''}
+            <RunTimer
+              running={timer.running}
+              elapsedMs={timer.elapsedMs}
+              durationMs={timer.durationMs}
+              startMs={timer.startMs}
+              prefix=" · "
+            />
           </p>
         </div>
         {/* One rotating chevron rather than two swapped glyphs — the rotation is the

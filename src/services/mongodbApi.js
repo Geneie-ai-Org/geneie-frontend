@@ -191,7 +191,7 @@ export const getMessages = async (conversationId) => {
 /**
  * Create a new message
  */
-export const createMessage = async (conversationId, role, text, sources = []) => {
+export const createMessage = async (conversationId, role, text, sources = [], { durationMs = null } = {}) => {
   const token = await getAuthToken();
   if (!token) throw new Error('Not authenticated');
 
@@ -204,7 +204,9 @@ export const createMessage = async (conversationId, role, text, sources = []) =>
     body: JSON.stringify({
       role,
       text,
-      sources
+      sources,
+      // How long the answer took to produce, so the reading survives a reload.
+      ...(durationMs != null ? { duration_ms: Math.round(durationMs) } : {})
     })
   });
 

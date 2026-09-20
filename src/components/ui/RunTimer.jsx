@@ -15,7 +15,11 @@ export default function RunTimer({
   className = '',
   style = undefined,
 }) {
-  const text = formatDuration(running ? elapsedMs : durationMs);
+  const ms = running ? elapsedMs : durationMs;
+  // Under a second there is nothing worth reporting: "0s" next to a step reads as a
+  // measurement that failed rather than one that was fast.
+  if (ms == null || ms < 1000) return null;
+  const text = formatDuration(ms);
   if (!text) return null;
 
   const started = formatClockTime(startMs);

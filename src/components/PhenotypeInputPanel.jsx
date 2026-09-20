@@ -3,8 +3,8 @@
  * Confirmed HPO IDs are what Exomiser prefers when saved on sample_metadata.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Sparkles } from 'lucide-react';
-import { resolveHpoTerms, suggestPhenotypePhrases } from '@/services/mongodbApi';
+import { Loader2, Sparkles, X } from 'lucide-react';
+import { resolveHpoTerms, suggestHpoTerms, suggestPhenotypePhrases } from '@/services/mongodbApi';
 
 export const PHENOTYPE_MODE_FINDINGS = 'findings';
 export const PHENOTYPE_MODE_DISEASE = 'disease';
@@ -61,12 +61,16 @@ export function buildPhenotypeFieldsForSave({
   propagatedFromRelated = [],
 }) {
   const isDisease = mode === PHENOTYPE_MODE_DISEASE;
-  // Keep raw draft text (do NOT trim) so trailing spaces while typing are preserved.
-  const findings = isDisease ? '' : String(findingsText ?? '');
-  const disease = isDisease ? String(diseaseText ?? '') : '';
-  const phenotype = (isDisease ? disease : findings).trim();
   const selected = (candidates || []).filter((c) => c.selected);
   const confirmed_ids = selected.map((c) => c.hpo_id).filter(Boolean);
+  // Findings chip basket: persist selected term labels (not the live search draft).
+  const chipLabel = selected
+    .map((c) => c.hpo_name || c.matched_phrase || c.hpo_id)
+    .filter(Boolean)
+    .join(', ');
+  const findings = isDisease ? '' : chipLabel || String(findingsText ?? '');
+  const disease = isDisease ? String(diseaseText ?? '') : '';
+  const phenotype = (isDisease ? disease : findings).trim();
   return {
     phenotype_mode: isDisease ? PHENOTYPE_MODE_DISEASE : PHENOTYPE_MODE_FINDINGS,
     phenotype_findings: findings,
@@ -137,6 +141,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
   const [resolveError, setResolveError] = useState('');
   const [suggesting, setSuggesting] = useState(false);
   const [suggestions, setSuggestions] = useState({ suggested_phrases: [], ambiguous: [], too_vague: [] });
+  const [typeahead, setTypeahead] = useState([]);
   const [showInheritance, setShowInheritance] = useState(false);
 
   const resolveSeq = useRef(0);
@@ -151,10 +156,11 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
   }, [onChange]);
 
   // Sync draft from parent only when not focused (external load / mode switch).
+  // Findings search box is independent of pinned chip labels in phenotype_findings.
   useEffect(() => {
-    if (!focusedRef.current) {
-      setDraft(parentText || '');
-    }
+    if (focusedRef.current) return;
+    if (mode === PHENOTYPE_MODE_FINDINGS) return;
+    setDraft(parentText || '');
   }, [parentText, mode]);
 
   useEffect(() => {
@@ -234,6 +240,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
   const switchMode = (nextMode) => {
     if (nextMode === mode || disabled) return;
     setSuggestions({ suggested_phrases: [], ambiguous: [], too_vague: [] });
+    setTypeahead([]);
     setResolveError('');
     lastResolvedKey.current = '';
     focusedRef.current = false;
@@ -251,7 +258,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     });
   };
 
-  // Debounced HPO resolve from draft — does not block typing.
+  // Disease: live resolve. Findings: HPO typeahead (pinned chips stay when search clears).
   useEffect(() => {
     if (disabled) return undefined;
     const text = String(draft || '');
@@ -259,6 +266,49 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     const key = `${mode}::${trimmed}`;
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
+    if (mode === PHENOTYPE_MODE_FINDINGS) {
+      if (trimmed.length < 2) {
+        setTypeahead([]);
+        setResolving(false);
+        setResolveError('');
+        return undefined;
+      }
+      if (key === lastResolvedKey.current) return undefined;
+
+      debounceRef.current = setTimeout(async () => {
+        const seq = ++resolveSeq.current;
+        setResolving(true);
+        setResolveError('');
+        try {
+          const payload = await suggestHpoTerms({ text: trimmed, limit: 15 });
+          if (seq !== resolveSeq.current) return;
+          if (String(stateRef.current.draft || '').trim() !== trimmed) return;
+          lastResolvedKey.current = key;
+          const selectedIds = new Set(
+            (stateRef.current.candidates || [])
+              .filter((c) => c.selected)
+              .map((c) => String(c.hpo_id || '').toUpperCase())
+          );
+          setTypeahead(
+            (payload.suggestions || []).filter(
+              (s) => !selectedIds.has(String(s.hpo_id || '').toUpperCase())
+            )
+          );
+        } catch (err) {
+          if (seq !== resolveSeq.current) return;
+          setResolveError(err?.message || 'Could not suggest HPO terms');
+          setTypeahead([]);
+        } finally {
+          if (seq === resolveSeq.current) setResolving(false);
+        }
+      }, 250);
+
+      return () => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+      };
+    }
+
+    // Disease mode — existing resolve behavior
     if (!trimmed) {
       if (lastResolvedKey.current !== key) {
         lastResolvedKey.current = key;
@@ -272,6 +322,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       }
       setResolveError('');
       setResolving(false);
+      setTypeahead([]);
       return undefined;
     }
 
@@ -284,10 +335,8 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       try {
         const payload = await resolveHpoTerms({ text: trimmed, forceMode: mode });
         if (seq !== resolveSeq.current) return;
-        // Ignore stale responses if user kept typing.
         if (String(stateRef.current.draft || '').trim() !== trimmed) return;
-        const defaultSelected = mode !== PHENOTYPE_MODE_DISEASE;
-        const nextCandidates = mapResolveToCandidates(payload, { defaultSelected });
+        const nextCandidates = mapResolveToCandidates(payload, { defaultSelected: false });
         lastResolvedKey.current = key;
         emit({
           candidates: nextCandidates,
@@ -302,18 +351,98 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       } finally {
         if (seq === resolveSeq.current) setResolving(false);
       }
-    }, 550);
+    }, 300);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [draft, mode, disabled, emit]);
 
+  const pickTypeahead = (suggestion) => {
+    const hid = String(suggestion?.hpo_id || '').trim().toUpperCase();
+    if (!hid.startsWith('HP:')) return;
+    const existing = candidates || [];
+    const already = existing.find((c) => String(c.hpo_id || '').toUpperCase() === hid);
+    let next;
+    if (already) {
+      next = existing.map((c) =>
+        String(c.hpo_id || '').toUpperCase() === hid ? { ...c, selected: true } : c
+      );
+    } else {
+      next = [
+        ...existing,
+        {
+          hpo_id: hid,
+          hpo_name: suggestion.hpo_name || '',
+          matched_phrase: suggestion.matched_phrase || '',
+          match_score: suggestion.match_score,
+          match_type: 'typeahead',
+          selected: true,
+        },
+      ];
+    }
+    lastResolvedKey.current = '';
+    setDraft('');
+    setTypeahead([]);
+    emit({
+      candidates: next,
+      phenotype_findings: next
+        .filter((c) => c.selected)
+        .map((c) => c.hpo_name || c.matched_phrase || c.hpo_id)
+        .join(', '),
+      phenotype_disease: '',
+    });
+  };
+
+  const clearSearch = () => {
+    lastResolvedKey.current = '';
+    setDraft('');
+    setTypeahead([]);
+    setResolveError('');
+    if (mode === PHENOTYPE_MODE_DISEASE) {
+      emit({
+        phenotype_disease: '',
+        candidates: [],
+        disease_match: null,
+        top_candidates: [],
+        hpo_resolution_method: null,
+        propagated_from_related_records: [],
+      });
+    }
+  };
+
   const toggleCandidate = (hpoId) => {
     const next = candidates.map((c) =>
       c.hpo_id === hpoId ? { ...c, selected: !c.selected } : c
     );
-    emit({ candidates: next });
+    emit({
+      candidates: next,
+      ...(mode === PHENOTYPE_MODE_FINDINGS
+        ? {
+            phenotype_findings: next
+              .filter((c) => c.selected)
+              .map((c) => c.hpo_name || c.matched_phrase || c.hpo_id)
+              .join(', '),
+          }
+        : {}),
+    });
+  };
+
+  const removeCandidate = (hpoId) => {
+    const next = (candidates || []).filter(
+      (c) => String(c.hpo_id || '').toUpperCase() !== String(hpoId || '').toUpperCase()
+    );
+    emit({
+      candidates: next,
+      ...(mode === PHENOTYPE_MODE_FINDINGS
+        ? {
+            phenotype_findings: next
+              .filter((c) => c.selected)
+              .map((c) => c.hpo_name || c.matched_phrase || c.hpo_id)
+              .join(', '),
+          }
+        : {}),
+    });
   };
 
   const setGroupSelected = (group, selected) => {
@@ -417,13 +546,9 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
   };
 
   const renderChip = (c) => (
-    <button
+    <div
       key={c.hpo_id}
-      type="button"
-      disabled={disabled}
-      onClick={() => toggleCandidate(c.hpo_id)}
-      title={c.matched_phrase ? `Matched: ${c.matched_phrase}` : c.hpo_id}
-      className="px-2 py-1 text-2xs rounded-md border text-left transition-all"
+      className="inline-flex items-center gap-1 px-2 py-1 text-2xs rounded-md border text-left"
       style={{
         borderColor: c.selected ? 'var(--accent-teal)' : 'var(--border-default)',
         background: c.selected
@@ -433,14 +558,34 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         opacity: c.selected ? 1 : 0.75,
       }}
     >
-      <span className="font-medium">
-        {c.selected ? '✓ ' : ''}
-        {c.hpo_id}
-      </span>
-      {c.hpo_name ? (
-        <span style={{ color: 'var(--text-secondary)' }}> — {c.hpo_name}</span>
-      ) : null}
-    </button>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => toggleCandidate(c.hpo_id)}
+        title={c.matched_phrase ? `Matched: ${c.matched_phrase}` : c.hpo_id}
+        className="text-left"
+      >
+        <span className="font-medium">
+          {c.selected ? '✓ ' : ''}
+          {c.hpo_id}
+        </span>
+        {c.hpo_name ? (
+          <span style={{ color: 'var(--text-secondary)' }}> — {c.hpo_name}</span>
+        ) : null}
+      </button>
+      {mode === PHENOTYPE_MODE_FINDINGS && (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => removeCandidate(c.hpo_id)}
+          title="Remove"
+          className="ml-0.5 p-0.5"
+          style={{ color: 'var(--text-tertiary)' }}
+        >
+          <X className="w-3 h-3" />
+        </button>
+      )}
+    </div>
   );
 
   const altDiseases = (topCandidates || [])
@@ -468,28 +613,66 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
         {mode === PHENOTYPE_MODE_DISEASE
           ? 'Type a disease name or ORPHA/OMIM/MONDO ID. Confirm the matched disease, then select findings this patient actually has.'
-          : 'Enter short clinical findings (e.g. ptosis, proximal muscle weakness). Switching tabs clears the other.'}
+          : 'Search and add findings one by one (e.g. renal → Renal dysplasia). Selected chips stay when you clear the search.'}
       </p>
 
-      <textarea
-        value={draft}
-        onChange={(e) => onTextChange(e.target.value)}
-        onFocus={() => {
-          focusedRef.current = true;
-        }}
-        onBlur={() => {
-          focusedRef.current = false;
-        }}
-        disabled={disabled}
-        placeholder={
-          mode === PHENOTYPE_MODE_DISEASE
-            ? 'Disease name or ID (e.g. Epidermolysis bullosa, ORPHA:648)…'
-            : 'Describe clinical findings…'
-        }
-        rows={3}
-        className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all"
-        style={inputStyle}
-      />
+      <div className="relative">
+        <textarea
+          value={draft}
+          onChange={(e) => onTextChange(e.target.value)}
+          onFocus={() => {
+            focusedRef.current = true;
+          }}
+          onBlur={() => {
+            // Delay so typeahead click can register before list unmounts.
+            setTimeout(() => {
+              focusedRef.current = false;
+            }, 150);
+          }}
+          disabled={disabled}
+          placeholder={
+            mode === PHENOTYPE_MODE_DISEASE
+              ? 'Disease name or ID (e.g. Epidermolysis bullosa, ORPHA:648)…'
+              : 'Search a finding (e.g. seizure, renal, ptosis)…'
+          }
+          rows={mode === PHENOTYPE_MODE_FINDINGS ? 2 : 3}
+          className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all pr-9"
+          style={inputStyle}
+        />
+        {draft.trim() && !disabled && (
+          <button
+            type="button"
+            onClick={clearSearch}
+            className="absolute top-2 right-2 p-1 rounded-md"
+            title="Clear search"
+            style={{ color: 'var(--text-tertiary)' }}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {mode === PHENOTYPE_MODE_FINDINGS && typeahead.length > 0 && (
+        <div
+          className="rounded-lg border max-h-44 overflow-y-auto divide-y"
+          style={{ borderColor: 'var(--border-default)', background: 'var(--bg-surface-raised)' }}
+        >
+          {typeahead.map((s) => (
+            <button
+              key={`${s.hpo_id}-${s.matched_phrase}`}
+              type="button"
+              disabled={disabled}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => pickTypeahead(s)}
+              className="w-full text-left px-2.5 py-1.5 text-2xs hover:opacity-90 transition-opacity"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              <span className="font-medium">{s.hpo_name || s.matched_phrase}</span>
+              <span style={{ color: 'var(--text-tertiary)' }}> · {s.hpo_id}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {mode === PHENOTYPE_MODE_FINDINGS && (
         <div className="flex items-center gap-2">
@@ -626,7 +809,10 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         <div className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
           {resolving ? (
             <span className="inline-flex items-center gap-1">
-              <Loader2 className="w-3 h-3 animate-spin" /> Looking up HPO terms… (keep typing)
+              <Loader2 className="w-3 h-3 animate-spin" />{' '}
+              {mode === PHENOTYPE_MODE_FINDINGS
+                ? 'Searching HPO terms…'
+                : 'Looking up HPO terms… (keep typing)'}
             </span>
           ) : candidates.length > 0 ? (
             <span>
@@ -636,29 +822,37 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
                 ? ` · ${inheritanceCandidates.length} inheritance terms hidden`
                 : ''}
             </span>
-          ) : draft.trim() ? (
+          ) : mode === PHENOTYPE_MODE_FINDINGS && draft.trim().length >= 2 && typeahead.length === 0 ? (
+            <span>No matching HPO terms — try another word</span>
+          ) : mode === PHENOTYPE_MODE_DISEASE && draft.trim() ? (
             <span>No HPO terms detected yet</span>
           ) : null}
         </div>
         {clinicalCandidates.length > 0 && (
           <div className="flex gap-2 text-2xs">
+            {mode === PHENOTYPE_MODE_DISEASE && (
+              <button
+                type="button"
+                className="underline"
+                style={{ color: 'var(--text-secondary)' }}
+                onClick={() => setGroupSelected(clinicalCandidates, true)}
+                disabled={disabled}
+              >
+                Select clinical
+              </button>
+            )}
             <button
               type="button"
               className="underline"
               style={{ color: 'var(--text-secondary)' }}
-              onClick={() => setGroupSelected(clinicalCandidates, true)}
+              onClick={() =>
+                mode === PHENOTYPE_MODE_FINDINGS
+                  ? emit({ candidates: [], phenotype_findings: '' })
+                  : setGroupSelected(clinicalCandidates, false)
+              }
               disabled={disabled}
             >
-              Select clinical
-            </button>
-            <button
-              type="button"
-              className="underline"
-              style={{ color: 'var(--text-secondary)' }}
-              onClick={() => setGroupSelected(clinicalCandidates, false)}
-              disabled={disabled}
-            >
-              Clear
+              {mode === PHENOTYPE_MODE_FINDINGS ? 'Clear chips' : 'Clear'}
             </button>
           </div>
         )}

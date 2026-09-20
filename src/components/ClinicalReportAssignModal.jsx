@@ -11,16 +11,12 @@ import {
   generateClinicalReport,
 } from '@/services/backendApi';
 
-const BUCKETS = {
-  clinical_result: 'clinical_result',
-  additional_finding: 'additional_finding',
-  exclude: 'exclude',
-};
+const INCLUDE = 'clinical_result';
+const ADDITIONAL = 'additional_finding';
 
 /**
- * Assign working-set variants to Clinical result summary vs Additional Findings,
- * then generate the clinical PDF (bioinfo two-bucket contract).
- * Multi-primary clinical results and unrestricted additional findings are supported.
+ * Slim assignment modal: variant id + Include / Additional only.
+ * Unselected rows are excluded by default. Sorted by BE (persona workflow rules).
  */
 export default function ClinicalReportAssignModal({
   open,
@@ -43,20 +39,12 @@ export default function ClinicalReportAssignModal({
       setMeta(data);
       const rows = Array.isArray(data.candidates) ? data.candidates : [];
       setCandidates(rows);
-      const next = {};
-      rows.forEach((row) => {
-        const suggested = row.suggested_bucket;
-        if (suggested === 'clinical_result' || suggested === 'additional_finding') {
-          next[row.id] = suggested;
-        } else {
-          next[row.id] = BUCKETS.exclude;
-        }
-      });
-      setAssignments(next);
+      setAssignments({});
     } catch (err) {
       setError(err.message || 'Failed to load report candidates');
       setCandidates([]);
       setMeta(null);
+      setAssignments({});
     } finally {
       setLoading(false);
     }
@@ -69,20 +57,28 @@ export default function ClinicalReportAssignModal({
   const clinicalIds = useMemo(
     () =>
       candidates
-        .filter((c) => assignments[c.id] === BUCKETS.clinical_result)
+        .filter((c) => assignments[c.id] === INCLUDE)
         .map((c) => c.id),
     [candidates, assignments],
   );
   const additionalIds = useMemo(
     () =>
       candidates
-        .filter((c) => assignments[c.id] === BUCKETS.additional_finding)
+        .filter((c) => assignments[c.id] === ADDITIONAL)
         .map((c) => c.id),
     [candidates, assignments],
   );
 
   const setBucket = (id, bucket) => {
-    setAssignments((prev) => ({ ...prev, [id]: bucket }));
+    setAssignments((prev) => {
+      // Clicking the active choice again clears it (back to default exclude).
+      if (prev[id] === bucket) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return { ...prev, [id]: bucket };
+    });
   };
 
   const canProceed =
@@ -105,28 +101,35 @@ export default function ClinicalReportAssignModal({
     }
   };
 
+  const rowLabel = (row) =>
+    row.display_id ||
+    (row.gene && row.hgvs ? `${row.gene} ${row.hgvs}` : null) ||
+    row.hgvs ||
+    row.gene ||
+    row.id;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="!max-w-3xl w-full max-h-[min(90vh,820px)] flex flex-col p-0 gap-0 overflow-hidden"
+        className="!max-w-2xl w-full max-h-[min(90vh,820px)] flex flex-col p-0 gap-0 overflow-hidden"
         style={{ backgroundColor: 'var(--bg-surface-raised)', borderColor: 'var(--border-default)' }}
       >
-        <div className="flex-shrink-0 px-5 py-4 border-b border-[var(--border-subtle)]">
+        <div className="flex-shrink-0 px-5 py-3 border-b border-[var(--border-subtle)]">
           <DialogTitle className="text-base font-semibold text-[var(--text-primary)]">
             Generate clinical report
           </DialogTitle>
           <DialogDescription className="text-xs text-[var(--text-secondary)] mt-1">
-            Assign one or more variants to Clinical result summary, and optionally to Additional Findings.
+            Select Include and/or Additional. Unselected variants are left out.
             {meta?.workflow_display_name
-              ? ` Workflow: ${meta.workflow_display_name}.`
+              ? ` · ${meta.workflow_display_name}`
               : ''}
             {typeof meta?.working_set_count === 'number'
-              ? ` Working set: ${meta.working_set_count.toLocaleString()}.`
+              ? ` · ${meta.working_set_count.toLocaleString()} under consideration`
               : ''}
           </DialogDescription>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+        <div className="flex-1 overflow-y-auto px-4 py-2">
           {loading && (
             <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)] py-8 justify-center">
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -138,48 +141,56 @@ export default function ClinicalReportAssignModal({
               No variants available in the current working set.
             </p>
           )}
-          {!loading &&
-            candidates.map((row) => (
-              <div
-                key={row.id}
-                className="rounded-lg border border-[var(--border-subtle)] px-3 py-2.5 space-y-2"
-              >
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <span className="text-sm font-semibold text-[var(--text-primary)]">
-                    {row.gene || '—'}
-                  </span>
-                  <span className="text-xs text-[var(--text-secondary)] font-mono">
-                    {row.hgvs || row.id}
-                  </span>
-                </div>
-                <div className="text-2xs text-[var(--text-tertiary)] flex flex-wrap gap-x-3 gap-y-0.5">
-                  <span>{row.classification || 'Classification n/a'}</span>
-                  {row.disease ? <span>{row.disease}</span> : null}
-                  {row.tier ? <span>{row.tier}</span> : null}
-                </div>
-                <div className="flex flex-wrap gap-3 text-xs">
-                  {[
-                    [BUCKETS.clinical_result, 'Clinical result'],
-                    [BUCKETS.additional_finding, 'Additional findings'],
-                    [BUCKETS.exclude, 'Exclude'],
-                  ].map(([value, label]) => (
-                    <label
-                      key={value}
-                      className="inline-flex items-center gap-1.5 cursor-pointer text-[var(--text-secondary)]"
+          {!loading && candidates.length > 0 && (
+            <ul className="divide-y divide-[var(--border-subtle)]">
+              {candidates.map((row) => {
+                const selected = assignments[row.id];
+                return (
+                  <li
+                    key={row.id}
+                    className="flex items-center gap-3 py-1.5 min-h-[2rem]"
+                  >
+                    <span
+                      className="flex-1 min-w-0 text-xs font-mono text-[var(--text-primary)] truncate"
+                      title={rowLabel(row)}
                     >
-                      <input
-                        type="radio"
-                        name={`bucket-${row.id}`}
-                        checked={assignments[row.id] === value}
-                        onChange={() => setBucket(row.id, value)}
-                        className="accent-[var(--accent-teal)]"
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
+                      {rowLabel(row)}
+                    </span>
+                    <div className="flex-shrink-0 flex items-center gap-3 text-xs">
+                      <label className="inline-flex items-center gap-1 cursor-pointer text-[var(--text-secondary)]">
+                        <input
+                          type="radio"
+                          name={`bucket-${row.id}`}
+                          checked={selected === INCLUDE}
+                          onChange={() => {}}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setBucket(row.id, INCLUDE);
+                          }}
+                          className="accent-[var(--accent-teal)]"
+                        />
+                        Include
+                      </label>
+                      <label className="inline-flex items-center gap-1 cursor-pointer text-[var(--text-secondary)]">
+                        <input
+                          type="radio"
+                          name={`bucket-${row.id}`}
+                          checked={selected === ADDITIONAL}
+                          onChange={() => {}}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setBucket(row.id, ADDITIONAL);
+                          }}
+                          className="accent-[var(--accent-teal)]"
+                        />
+                        Additional
+                      </label>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
 
         <div className="flex-shrink-0 px-5 py-3 border-t border-[var(--border-subtle)] space-y-2">
@@ -190,8 +201,8 @@ export default function ClinicalReportAssignModal({
           )}
           <div className="flex items-center justify-between gap-3">
             <p className="text-2xs text-[var(--text-tertiary)]">
-              Clinical: {clinicalIds.length} · Additional: {additionalIds.length}
-              {clinicalIds.length < 1 ? ' · Need ≥1 clinical result' : ''}
+              Include: {clinicalIds.length} · Additional: {additionalIds.length}
+              {clinicalIds.length < 1 ? ' · select ≥1 Include' : ''}
             </p>
             <div className="flex gap-2">
               <button

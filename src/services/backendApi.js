@@ -740,6 +740,38 @@ export async function exportVariants(conversationId) {
 }
 
 /**
+ * Download Geneie case report PDF for a conversation.
+ * GET /api/case-report/{conversationId}.pdf
+ */
+export async function downloadCaseReport(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(
+    apiUrl(`/api/case-report/${encodeURIComponent(conversationId)}.pdf`),
+    { headers },
+  );
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(parseApiErrorDetail(data.detail) || 'Case report download failed');
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const filenameMatch = disposition.match(/filename="(.+?)"/);
+  const filename = filenameMatch?.[1] || `Geneie_CaseReport_${conversationId}.pdf`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return {
+    variantRows: response.headers.get('X-Case-Report-Variant-Rows'),
+    variantsShown: response.headers.get('X-Case-Report-Variants-Shown'),
+  };
+}
+
+/**
  * Validate an import URL before showing the metadata form.
  * POST /api/upload-variant-file/url-preflight
  */

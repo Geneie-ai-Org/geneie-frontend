@@ -449,7 +449,7 @@ const PipelineDrawer = ({
             className="overflow-hidden"
           >
             <div className="px-3.5 pt-0.5">
-              <ol className="flex flex-wrap items-center gap-x-1 gap-y-2 pb-1.5 w-full sm:grid sm:grid-cols-[repeat(5,minmax(0,1fr))] sm:gap-x-0">
+              <ol className="flex flex-wrap items-center gap-x-2 gap-y-2 pb-1.5 w-full">
                 {PIPELINE_STEP_DEFS.map((def, index) => {
                   const status = steps[def.id];
                   const isLast = index === PIPELINE_STEP_DEFS.length - 1;
@@ -465,15 +465,13 @@ const PipelineDrawer = ({
                   return (
                     <li
                       key={def.id}
-                      className={`flex items-center min-w-0 ${
-                        isLast ? 'sm:justify-end' : 'flex-1 sm:flex-none'
-                      }`}
+                      className={`flex items-center${isLast ? '' : ' flex-1'}`}
                     >
                       <button
                         type="button"
                         disabled={guestLocked}
                         onClick={() => handleStepClick(def.id)}
-                        className={`flex items-center gap-1.5 px-2 py-1 rounded-[10px] text-2xs sm:text-xs shrink-0 min-w-0 transition-colors ${
+                        className={`flex items-center gap-1.5 px-2 py-1 rounded-[10px] text-2xs sm:text-xs shrink-0 transition-colors ${
                           clickable ? 'hover:bg-black/[0.04] dark:hover:bg-white/[0.05] cursor-pointer' : 'cursor-default opacity-60'
                         }`}
                         style={{
@@ -483,21 +481,21 @@ const PipelineDrawer = ({
                         title={guestLocked ? 'Sign in for full analysis' : `View ${def.label}`}
                       >
                         <StepGlyph status={status} locked={guestLocked} />
-                        <span className="truncate">{def.shortLabel || def.label}</span>
+                        <span>{def.shortLabel || def.label}</span>
                         {stepTimers[def.id] && !guestLocked && (
                           <RunTimer
                             running={status === 'running'}
                             elapsedMs={stepTimers[def.id].elapsedMs}
                             durationMs={status === 'running' ? null : stepTimers[def.id].durationMs}
                             startMs={stepTimers[def.id].startMs}
-                            className="text-2xs font-normal -ml-0.5"
+                            className="text-2xs font-normal whitespace-nowrap"
                             style={{ color: 'var(--text-tertiary)' }}
                           />
                         )}
                       </button>
                       {!isLast && (
                         <span
-                          className="h-px flex-1 min-w-[0.75rem] mx-2"
+                          className="h-px flex-1 min-w-[0.75rem] mx-2 shrink-0"
                           style={{
                             backgroundColor: isStepPassed(status)
                               ? 'var(--text-disabled)'

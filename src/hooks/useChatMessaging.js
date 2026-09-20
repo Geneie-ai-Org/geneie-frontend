@@ -43,30 +43,59 @@ export function useChatMessaging({
   const chatAbortControllerRef = useRef(null);
   const pendingTurnRef = useRef(null);
 
+  // The conversation the currently in-flight turn belongs to (loading + typing animation).
+  // Used to GATE what the UI renders: typingText/isLoading only belong to the origin
+  // conversation. Set when a turn starts, cleared when it finishes/aborts.
+  const inFlightOriginRef = useRef(null);
+
   // Live mirror of the active conversation so async callbacks compare against the CURRENT
   // conversation, not a stale closure. Fixes cross-conversation leak: an in-flight reply
   // must render only if the user is still on the conversation it was asked in.
   const activeConversationIdRef = useRef(activeConversationId);
   activeConversationIdRef.current = activeConversationId;
 
-  const typeMessage = useCallback((fullText, onComplete, sources) => {
+  // Read-side gate: even if an async writer sets typingText/isLoading, the UI must only see
+  // them while viewing the origin conversation. This is the durable guarantee — it scopes what
+  // the OTHER conversation is allowed to render, independent of catching every async write path.
+  const onOrigin = inFlightOriginRef.current == null
+    || inFlightOriginRef.current === activeConversationId;
+  const visibleTypingText = onOrigin ? typingText : '';
+  const visibleIsLoading = onOrigin ? isLoading : false;
+
+  // originConversationId: the conversation this answer was asked in. The typing animation
+  // runs for seconds; if the user switches conversations mid-animation we must STOP writing
+  // into the shared typingText state (else the reply visibly leaks into the other conversation),
+  // but we must NOT just drop the answer — persistence happens in onComplete. So on a
+  // conversation switch we fast-forward: fire onComplete once (persists to the origin) and stop.
+  const typeMessage = useCallback((fullText, onComplete, sources, originConversationId = null) => {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     setTypingText('');
     const myGen = typingGenerationIdRef.current + 1;
     typingGenerationIdRef.current = myGen;
+    // If we never pinned an origin, treat the current conversation as origin (back-compat).
+    const origin = originConversationId ?? activeConversationIdRef.current;
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      typingTimeoutRef.current = null;
+      setTypingText('');
+      setIsLoading(false);
+      inFlightOriginRef.current = null;   // turn done — stop gating
+      if (onComplete) onComplete(fullText, sources);
+    };
     let i = 0;
     const typeNextChar = () => {
-      if (typingGenerationIdRef.current !== myGen) return;
+      if (typingGenerationIdRef.current !== myGen) return;   // superseded by a newer turn/cancel
+      // Conversation switched away mid-animation → stop animating, but persist to origin.
+      if (activeConversationIdRef.current !== origin) { finish(); return; }
       if (i < fullText.length) {
         setTypingText(fullText.substring(0, i + 1));
         i++;
         typingTimeoutRef.current = setTimeout(typeNextChar, 1);
       } else {
         if (typingGenerationIdRef.current !== myGen) return;
-        typingTimeoutRef.current = null;
-        if (onComplete) onComplete(fullText, sources);
-        setTypingText('');
-        setIsLoading(false);
+        finish();
       }
     };
     typeNextChar();
@@ -84,6 +113,7 @@ export function useChatMessaging({
     }
     setTypingText('');
     setIsLoading(false);
+    inFlightOriginRef.current = null;
     const pending = pendingTurnRef.current;
     pendingTurnRef.current = null;
     if (pending?.userLocalId != null) {
@@ -280,6 +310,7 @@ export function useChatMessaging({
     // the reply is in flight, we still persist to (and title) THIS conversation, and skip
     // rendering into whatever conversation is open now (cross-conversation leak fix).
     const originConversationId = activeConversationId;
+    inFlightOriginRef.current = originConversationId;   // gate loading/typing to this conversation
     const wasFirstInConversation = messages.length === 0;
     const userLocalId = Date.now();
     setMessages((prev) => [...prev, { role: 'user', text: userMessageText, id: userLocalId }]);
@@ -313,19 +344,23 @@ export function useChatMessaging({
       }
       if (activeConversationIdRef.current === originConversationId) {
         // Still on the origin conversation: animate the reply in, then persist.
+        // Pass origin so the animation stops (and fast-forwards to persist) if the user
+        // switches conversations mid-animation, instead of leaking the stream into the new one.
         typeMessage(data.response, async (finalText, finalSources) => {
           pendingTurnRef.current = null;
           await appendAssistantAndPersist(wasFirstInConversation, userMessageText, finalText, finalSources || [], 'full', originConversationId);
-        }, data.sources || []);
+        }, data.sources || [], originConversationId);
       } else {
         // User navigated away mid-reply: skip the typing animation entirely and persist
         // straight to the origin conversation (it reloads from the DB on switch-back).
         pendingTurnRef.current = null;
+        inFlightOriginRef.current = null;
         setIsLoading(false);
         await appendAssistantAndPersist(wasFirstInConversation, userMessageText, data.response, data.sources || [], 'full', originConversationId);
       }
     } else {
       pendingTurnRef.current = null;
+      inFlightOriginRef.current = null;
       setIsLoading(false);
       typingGenerationIdRef.current += 1;
 
@@ -398,6 +433,7 @@ export function useChatMessaging({
     const userMessageText = prev.text;
     const aiMessageId = last.message_id;
     const originConversationId = activeConversationId;
+    inFlightOriginRef.current = originConversationId;   // gate loading/typing to this conversation
 
     setMessages((prevMsgs) => prevMsgs.slice(0, -1));
 
@@ -433,12 +469,14 @@ export function useChatMessaging({
       if (activeConversationIdRef.current === originConversationId) {
         typeMessage(data.response, async (finalText, finalSources) => {
           await appendAssistantAndPersist(false, userMessageText, finalText, finalSources || [], 'assistant-only', originConversationId);
-        }, data.sources || []);
+        }, data.sources || [], originConversationId);
       } else {
+        inFlightOriginRef.current = null;
         setIsLoading(false);
         await appendAssistantAndPersist(false, userMessageText, data.response, data.sources || [], 'assistant-only', originConversationId);
       }
     } else {
+      inFlightOriginRef.current = null;
       setIsLoading(false);
       typingGenerationIdRef.current += 1;
       const errorText = `The server failed after ${MAX_RETRIES} attempts. Please try again later. Error: ${lastError?.message || 'Unknown network error'}`;
@@ -467,8 +505,10 @@ export function useChatMessaging({
   return {
     messages,
     setMessages,
-    typingText,
-    isLoading,
+    // Gated: typing/loading only surface while viewing the conversation the turn belongs to,
+    // so an in-flight reply never bleeds into another conversation (cross-conversation leak fix).
+    typingText: visibleTypingText,
+    isLoading: visibleIsLoading,
     input,
     setInput,
     sendMessage,

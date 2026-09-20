@@ -147,6 +147,49 @@ export const patchSampleMetadata = async (conversationId, sampleMetadata) => {
 };
 
 /**
+ * Live HPO resolution preview (Findings / Disease).
+ */
+export const resolveHpoTerms = async ({ text, forceMode } = {}) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const response = await fetch(`${API_BASE_URL}/api/phenotype/resolve-hpo`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      text: text || '',
+      force_mode: forceMode || undefined,
+    }),
+  });
+
+  if (!response.ok) await handleResponseError(response);
+  return response.json();
+};
+
+/**
+ * AI phrase suggestions for Findings tab (no HPO IDs from the model).
+ */
+export const suggestPhenotypePhrases = async ({ text } = {}) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const response = await fetch(`${API_BASE_URL}/api/phenotype/suggest-phrases`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ text: text || '' }),
+  });
+
+  if (!response.ok) await handleResponseError(response);
+  return response.json();
+};
+
+/**
  * Delete a conversation
  */
 export const deleteConversation = async (conversationId) => {

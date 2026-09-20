@@ -17,6 +17,10 @@ import {
   isRecognizedImportUrl,
 } from '@/services/backendApi';
 import { patchSampleMetadata } from '@/services/mongodbApi';
+import PhenotypeInputPanel, {
+  PHENOTYPE_MODE_FINDINGS,
+  sampleHasPhenotype,
+} from '@/components/PhenotypeInputPanel';
 import { PillToggle } from '@/components/ui/pill-toggle';
 import {
   Dialog,
@@ -140,7 +144,11 @@ const DocumentUpload = ({
     sampleRole: '', // proband / mother / father / sibling / other
     affectedStatus: '', // affected / unaffected
     inheritanceModel: '', // Autosomal Dominant / Autosomal Recessive / X-linked / De novo / Unknown
-    phenotype: '', // Free text (only for Germline)
+    phenotype: '', // Canonical active-tab text (only for Germline)
+    phenotype_mode: PHENOTYPE_MODE_FINDINGS,
+    phenotype_findings: '',
+    phenotype_disease: '',
+    phenotype_hpo: null,
     tumorType: '' // Free text (only for Somatic/Tumor-Normal Paired/Tumor-Only)
   });
   const [existingProjects, setExistingProjects] = useState([]); // Will be fetched from backend later
@@ -177,6 +185,10 @@ const DocumentUpload = ({
         affectedStatus: initialMetadata.affectedStatus || '',
         inheritanceModel: initialMetadata.inheritanceModel || '',
         phenotype: initialMetadata.phenotype || '',
+        phenotype_mode: initialMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+        phenotype_findings: initialMetadata.phenotype_findings || (initialMetadata.phenotype_mode === 'disease' ? '' : (initialMetadata.phenotype || '')),
+        phenotype_disease: initialMetadata.phenotype_disease || (initialMetadata.phenotype_mode === 'disease' ? (initialMetadata.phenotype || '') : ''),
+        phenotype_hpo: initialMetadata.phenotype_hpo || null,
         tumorType: initialMetadata.tumorType || '',
       });
       setEditImpact(null);
@@ -486,7 +498,15 @@ const DocumentUpload = ({
           projectName: sampleMetadata.project,
           patientSex: sampleMetadata.sampleSex,
           patientAge: initialMetadata?.patientAge || '',
-          phenotype: sampleMetadata.analysisType === 'Germline' ? sampleMetadata.phenotype : '',
+          ...(sampleMetadata.analysisType === 'Germline'
+            ? {
+                phenotype: sampleMetadata.phenotype || '',
+                phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+                phenotype_findings: sampleMetadata.phenotype_findings || '',
+                phenotype_disease: sampleMetadata.phenotype_disease || '',
+                phenotype_hpo: sampleMetadata.phenotype_hpo || null,
+              }
+            : { phenotype: '', phenotype_mode: PHENOTYPE_MODE_FINDINGS, phenotype_findings: '', phenotype_disease: '', phenotype_hpo: null }),
           tumorType: (sampleMetadata.analysisType === 'Somatic' || sampleMetadata.analysisType === 'Tumor-Normal Paired' || sampleMetadata.analysisType === 'Tumor-Only') ? sampleMetadata.tumorType : '',
         });
         onEditSaved?.(result);
@@ -539,7 +559,7 @@ const DocumentUpload = ({
       if (!sampleMetadata.inheritanceModel) emptyOptionalFields.push('Inheritance Model');
       // Optional, but the phenotype-driven filter cannot run without it, so it is worth
       // naming before the upload starts.
-      if (!sampleMetadata.phenotype?.trim()) emptyOptionalFields.push('Phenotype');
+      if (!sampleHasPhenotype(sampleMetadata)) emptyOptionalFields.push('Phenotype');
     }
 
     // If optional fields are empty, show custom warning modal
@@ -587,6 +607,10 @@ const DocumentUpload = ({
       affectedStatus: '',
       inheritanceModel: '',
       phenotype: '',
+      phenotype_mode: PHENOTYPE_MODE_FINDINGS,
+      phenotype_findings: '',
+      phenotype_disease: '',
+      phenotype_hpo: null,
       tumorType: ''
     });
     setShowCreateProject(false);
@@ -1513,28 +1537,21 @@ const DocumentUpload = ({
 
                   {/* Phenotype - Full width. Optional: the pipeline runs without it, and
                     * only the phenotype-driven filter needs it. */}
-                  <div>
-                    <label className="flex items-baseline gap-1.5 text-xs font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                      Phenotype
-                      <span className="text-2xs font-normal" style={{ color: 'var(--text-tertiary)' }}>
-                        (enables phenotype-driven prioritization)
-                      </span>
-                    </label>
-                    <textarea
-                      value={sampleMetadata.phenotype}
-                      onChange={(e) => setSampleMetadata({ ...sampleMetadata, phenotype: e.target.value })}
-                      placeholder="Describe the phenotype or clinical presentation..."
-                      rows={3}
-                      className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all"
-                      style={{
-                        borderColor: 'var(--border-default)',
-                        background: 'var(--bg-input)',
-                        backdropFilter: 'blur(10px)',
-                        WebkitBackdropFilter: 'blur(10px)',
-                        color: 'var(--text-primary)'
-                      }}
-                    />
-                  </div>
+                  <PhenotypeInputPanel
+                    value={{
+                      phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+                      phenotype_findings: sampleMetadata.phenotype_findings || '',
+                      phenotype_disease: sampleMetadata.phenotype_disease || '',
+                      phenotype: sampleMetadata.phenotype || '',
+                      phenotype_hpo: sampleMetadata.phenotype_hpo,
+                    }}
+                    onChange={(fields) =>
+                      setSampleMetadata((prev) => ({
+                        ...prev,
+                        ...fields,
+                      }))
+                    }
+                  />
                 </div>
               )}
 

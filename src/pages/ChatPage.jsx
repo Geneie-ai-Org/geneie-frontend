@@ -11,6 +11,7 @@ import { Markdown } from '../components/chat/ChatMarkdown';
 import { useAuth } from '../hooks/useAuth';
 import { useChatMessaging } from '../hooks/useChatMessaging';
 import { useDocumentUpload } from '../hooks/useDocumentUpload';
+import { sampleHasPhenotype } from '../components/PhenotypeInputPanel';
 import AuthForm from '../components/AuthForm';
 import ChatMessage, { GlobalTypingStyles } from '../components/chat/ChatMessage';
 import AuthPageLayout from '../components/chat/AuthPageLayout';
@@ -1867,7 +1868,7 @@ const ChatPage = () => {
           annovarMeterDetail={formatMeterDetail(limits, annovarGate?.meter)}
           acmgMeterDetail={formatMeterDetail(limits, acmgExomiserGate?.meter)}
           exomiserCanApply={pipelineSnapshot.hasAnnotatedFile || !chatEligibility.requires_annovar}
-          phenotypeMissing={!String(currentDocument?.sample_metadata?.phenotype || '').trim()}
+          phenotypeMissing={!sampleHasPhenotype(currentDocument?.sample_metadata)}
           showVcfTabHighlight={columnInterpretationResult?.step1?.passed === false}
           onDeleteDocument={() => handleDocumentUpload(null)}
         />

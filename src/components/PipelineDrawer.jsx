@@ -414,7 +414,9 @@ const PipelineDrawer = ({
         >
           {stateText}
         </span>
-        {activeTimer && (
+        {/* Only while collapsed: expanded, the running step's own clock is right below
+          * this line, and two readings of the same number is noise. */}
+        {!expanded && activeTimer && (
           <RunTimer
             running
             elapsedMs={activeTimer.elapsedMs}

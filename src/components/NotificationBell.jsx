@@ -49,6 +49,7 @@ export default function NotificationBell({ onNavigateToConversation, triggerClas
     dropdownOpen,
     toggleDropdown,
     closeDropdown,
+    markAllRead,
     handleNotificationClick,
   } = useNotifications();
 
@@ -96,11 +97,22 @@ export default function NotificationBell({ onNavigateToConversation, triggerClas
             Notifications
           </span>
           {unreadCount > 0 && (
-            <span
-              className="text-2xs px-1.5 h-[18px] inline-flex items-center rounded-full font-semibold tabular-nums bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]"
-            >
-              {unreadCount} new
-            </span>
+            <div className="flex items-center gap-2">
+              <span
+                className="text-2xs px-1.5 h-[18px] inline-flex items-center rounded-full font-semibold tabular-nums bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]"
+              >
+                {unreadCount} new
+              </span>
+              {/* Clicking one notification only clears that conversation's, so reading
+                * everything needed a way out that isn't "open every conversation". */}
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); markAllRead(); }}
+                className="text-2xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] rounded"
+              >
+                Mark all read
+              </button>
+            </div>
           )}
         </div>
 

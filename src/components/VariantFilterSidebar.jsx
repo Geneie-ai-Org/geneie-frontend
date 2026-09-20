@@ -6,6 +6,7 @@ import { optionalIdToken } from '@/lib/safeAuth';
 import DocumentUpload from './DocumentUpload';
 import ExportVariantsButton from './ExportVariantsButton';
 import CaseReportDownloadButton from './CaseReportDownloadButton';
+import TypewriterText from '@/components/ui/TypewriterText';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -2219,14 +2220,17 @@ const VariantFilterSidebar = ({
                     {PHENOTYPE_FILTER_DESCRIPTION}
                   </p>
 
-                  {/* Progress area while running. The status line carries the progress on
-                    * its own — the pipeline drawer already runs a travelling stroke for this
-                    * same job, and a second one here just competes with it. */}
+                  {/* Progress area while running. The status line types itself out and keeps
+                    * its dots moving, which is liveness enough — the pipeline drawer already
+                    * runs a travelling stroke for this same job, and a second one here just
+                    * competed with it. */}
                   {running && (
                     <div className="mb-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
-                      <span className="text-xs font-medium text-[var(--text-primary)]">
-                        {runningStatusMessage}
-                      </span>
+                      <TypewriterText
+                        key={runningStatusMessage}
+                        text={runningStatusMessage}
+                        className="text-xs font-medium text-[var(--text-primary)]"
+                      />
                       <p className="text-2xs text-[var(--text-tertiary)] mt-1.5">
                         This can take several minutes. You can leave this tab open or come back later.
                       </p>

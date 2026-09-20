@@ -32,6 +32,7 @@ import { toast } from 'sonner';
 import { apiErrorDetailToMessage as sharedApiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
 import { groupColumns } from '@/lib/variantColumnGroups';
 import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
+import { sampleHasPhenotype } from '@/components/PhenotypeInputPanel';
 import {
   PHENOTYPE_FILTER_DISPLAY_NAME,
   PHENOTYPE_FILTER_DESCRIPTION,
@@ -1619,8 +1620,8 @@ const VariantFilterSidebar = ({
     return null;
   }, [activeProprietaryFilter, hasAppliedManualFilters]);
 
-  const samplePhenotype = String(currentDocument?.sample_metadata?.phenotype || '').trim();
-  const phenotypeMissing = !samplePhenotype;
+  const samplePhenotypePresent = sampleHasPhenotype(currentDocument?.sample_metadata);
+  const phenotypeMissing = !samplePhenotypePresent;
 
   const handleTabSwitch = (targetMode) => {
     if (targetMode === filterMode) return;
@@ -2252,6 +2253,8 @@ const VariantFilterSidebar = ({
               const REASON_LABELS = {
                 germline_only: 'Analysis type must be Germline.',
                 phenotype_required: 'Add a phenotype description to the sample metadata (edit the file pill).',
+                hpo_selection_required:
+                  'On the Disease tab, select at least one HPO finding present in this patient.',
                 annovar_required: 'Run Annotation first — phenotype prioritization requires an annotated file.',
                 proprietary_filter_active: 'Another proprietary filter is active. Remove it first.',
                 manual_filter_active: 'Manual filters are active. Reset them first.',

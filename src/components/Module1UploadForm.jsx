@@ -20,6 +20,7 @@ import { PillToggle } from '@/components/ui/pill-toggle';
 import { MODULE1_BED_MAX_BYTES, MODULE1_FASTQ_MAX_BYTES } from '@/services/backendApi';
 import { isRecognizedImportUrl, module1UrlErrorMessage, precheckBedChromStyle } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
+import PhenotypeInputPanel, { PHENOTYPE_MODE_FINDINGS } from '@/components/PhenotypeInputPanel';
 
 const GENOME_OPTIONS = [
   { value: 'hg38', label: 'hg38 (GRCh38)' },
@@ -88,6 +89,10 @@ const EMPTY_SAMPLE_METADATA = {
   affectedStatus: '',
   inheritanceModel: '',
   phenotype: '',
+  phenotype_mode: PHENOTYPE_MODE_FINDINGS,
+  phenotype_findings: '',
+  phenotype_disease: '',
+  phenotype_hpo: null,
 };
 
 /**
@@ -460,6 +465,10 @@ const Module1UploadForm = ({
               affectedStatus: sampleMetadata.affectedStatus,
               inheritanceModel: sampleMetadata.inheritanceModel,
               phenotype: sampleMetadata.phenotype.trim(),
+              phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+              phenotype_findings: sampleMetadata.phenotype_findings || '',
+              phenotype_disease: sampleMetadata.phenotype_disease || '',
+              phenotype_hpo: sampleMetadata.phenotype_hpo || null,
             }
           : {}),
       },
@@ -631,23 +640,20 @@ const Module1UploadForm = ({
                     </div>
 
                     <div className="md:col-span-2">
-                      <label className="flex items-baseline gap-1.5 text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                        Phenotype
-                        <span className="text-2xs font-normal" style={{ color: 'var(--text-tertiary)' }}>
-                          (enables phenotype-driven prioritization)
-                        </span>
-                      </label>
-                      <textarea
-                        value={sampleMetadata.phenotype}
-                        onChange={(e) => setSampleMetadata((prev) => ({ ...prev, phenotype: e.target.value }))}
-                        rows={3}
-                        className="w-full px-3 py-2 border rounded-lg text-sm resize-none"
-                        style={{
-                          borderColor: 'var(--border-default)',
-                          background: 'var(--bg-input)',
-                          color: 'var(--text-primary)',
+                      <PhenotypeInputPanel
+                        value={{
+                          phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+                          phenotype_findings: sampleMetadata.phenotype_findings || '',
+                          phenotype_disease: sampleMetadata.phenotype_disease || '',
+                          phenotype: sampleMetadata.phenotype || '',
+                          phenotype_hpo: sampleMetadata.phenotype_hpo,
                         }}
-                        placeholder="Describe the phenotype or clinical presentation…"
+                        onChange={(fields) =>
+                          setSampleMetadata((prev) => ({
+                            ...prev,
+                            ...fields,
+                          }))
+                        }
                       />
                     </div>
                   </div>

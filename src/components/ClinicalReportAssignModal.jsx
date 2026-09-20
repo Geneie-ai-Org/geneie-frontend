@@ -156,10 +156,11 @@ export default function ClinicalReportAssignModal({
               {candidates.map((row, index) => {
                 const key = rowKeyOf(row, index);
                 const selected = assignments[key];
+                const badge = (row.badge || '').trim();
                 return (
                   <li
                     key={key}
-                    className="flex items-center gap-3 py-1.5 min-h-[2rem]"
+                    className="flex items-center gap-2 py-1.5 min-h-[2rem]"
                   >
                     <span
                       className="flex-1 min-w-0 text-xs font-mono text-[var(--text-primary)] truncate"
@@ -167,6 +168,16 @@ export default function ClinicalReportAssignModal({
                     >
                       {rowLabel(row)}
                     </span>
+                    {badge ? (
+                      <span
+                        className="flex-shrink-0 text-2xs font-medium text-[var(--text-tertiary)] tabular-nums min-w-[3.25rem] text-right"
+                        title={badge}
+                      >
+                        {badge}
+                      </span>
+                    ) : (
+                      <span className="flex-shrink-0 min-w-[3.25rem]" />
+                    )}
                     <div className="flex-shrink-0 flex items-center gap-1.5 text-xs">
                       <button
                         type="button"

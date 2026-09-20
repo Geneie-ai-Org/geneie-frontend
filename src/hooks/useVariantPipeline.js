@@ -1871,6 +1871,12 @@ export function useVariantPipeline({
         error: payload?.exomiser_job?.error || payload?.error || '',
         progress_percent: payload?.progress_percent ?? payload?.exomiser_job?.progress_percent ?? null,
         matched_count: payload?.matched_count ?? payload?.exomiser_job?.matched_count ?? null,
+        // Carried so the pipeline drawer can time this run even when it started in
+        // another tab or before this one was opened.
+        started_at: payload?.started_at ?? payload?.exomiser_job?.started_at ?? null,
+        completed_at: payload?.completed_at ?? payload?.exomiser_job?.completed_at ?? null,
+        duration_seconds:
+          payload?.duration_seconds ?? payload?.exomiser_job?.duration_seconds ?? null,
       });
       if (terminal.has(status)) {
         if (status === 'failed') {

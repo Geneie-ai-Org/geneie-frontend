@@ -82,6 +82,25 @@ export function useNotifications() {
     }
   }, [getHeaders]);
 
+  const markAllRead = useCallback(async () => {
+    try {
+      const headers = await getHeaders();
+      const base = getApiOrigin();
+      const res = await fetch(`${base}/api/notifications/mark-all-read`, {
+        method: 'POST',
+        headers,
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (mountedRef.current) {
+        setUnreadCount(data.unread_count ?? 0);
+        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      }
+    } catch (_) {
+      // Silently ignore
+    }
+  }, [getHeaders]);
+
   useEffect(() => {
     mountedRef.current = true;
     fetchUnreadCount();
@@ -121,6 +140,7 @@ export function useNotifications() {
     toggleDropdown,
     closeDropdown,
     markRead,
+    markAllRead,
     handleNotificationClick,
   };
 }

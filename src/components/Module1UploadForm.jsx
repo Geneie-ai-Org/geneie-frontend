@@ -20,6 +20,7 @@ import { PillToggle } from '@/components/ui/pill-toggle';
 import { MODULE1_BED_MAX_BYTES, MODULE1_FASTQ_MAX_BYTES } from '@/services/backendApi';
 import { isRecognizedImportUrl, module1UrlErrorMessage, precheckBedChromStyle } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
+import PhenotypeInputPanel, { PHENOTYPE_MODE_FINDINGS } from '@/components/PhenotypeInputPanel';
 
 const GENOME_OPTIONS = [
   { value: 'hg38', label: 'hg38 (GRCh38)' },
@@ -88,6 +89,10 @@ const EMPTY_SAMPLE_METADATA = {
   affectedStatus: '',
   inheritanceModel: '',
   phenotype: '',
+  phenotype_mode: PHENOTYPE_MODE_FINDINGS,
+  phenotype_findings: '',
+  phenotype_disease: '',
+  phenotype_hpo: null,
 };
 
 /**
@@ -437,14 +442,13 @@ const Module1UploadForm = ({
 
   const isGermline = sampleMetadata.analysisType === 'Germline';
   const analysisTypeMissing = !sampleMetadata.analysisType;
-  const phenotypeMissing = isGermline && !sampleMetadata.phenotype.trim();
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!canSubmit) return;
 
     setValidationAttempted(true);
-    if (analysisTypeMissing || phenotypeMissing) return;
+    if (analysisTypeMissing) return;
     const useCustomBed = bedMode === 'custom';
     startModule1Run({
       sampleName: sampleName.trim(),
@@ -461,6 +465,10 @@ const Module1UploadForm = ({
               affectedStatus: sampleMetadata.affectedStatus,
               inheritanceModel: sampleMetadata.inheritanceModel,
               phenotype: sampleMetadata.phenotype.trim(),
+              phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+              phenotype_findings: sampleMetadata.phenotype_findings || '',
+              phenotype_disease: sampleMetadata.phenotype_disease || '',
+              phenotype_hpo: sampleMetadata.phenotype_hpo || null,
             }
           : {}),
       },
@@ -632,26 +640,21 @@ const Module1UploadForm = ({
                     </div>
 
                     <div className="md:col-span-2">
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                        Phenotype <span style={{ color: 'var(--error)' }}>*</span>
-                      </label>
-                      <textarea
-                        value={sampleMetadata.phenotype}
-                        onChange={(e) => setSampleMetadata((prev) => ({ ...prev, phenotype: e.target.value }))}
-                        rows={3}
-                        className="w-full px-3 py-2 border rounded-lg text-sm resize-none"
-                        style={{
-                          borderColor: validationAttempted && phenotypeMissing ? 'var(--error)' : 'var(--border-default)',
-                          background: 'var(--bg-input)',
-                          color: 'var(--text-primary)',
+                      <PhenotypeInputPanel
+                        value={{
+                          phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+                          phenotype_findings: sampleMetadata.phenotype_findings || '',
+                          phenotype_disease: sampleMetadata.phenotype_disease || '',
+                          phenotype: sampleMetadata.phenotype || '',
+                          phenotype_hpo: sampleMetadata.phenotype_hpo,
                         }}
-                        placeholder="Describe the phenotype or clinical presentation…"
+                        onChange={(fields) =>
+                          setSampleMetadata((prev) => ({
+                            ...prev,
+                            ...fields,
+                          }))
+                        }
                       />
-                      {validationAttempted && phenotypeMissing && (
-                        <p className="text-2xs mt-1" style={{ color: 'var(--error)' }}>
-                          Required for Germline analysis — used for phenotype-driven prioritization.
-                        </p>
-                      )}
                     </div>
                   </div>
                 </div>

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { FileText, X, RotateCcw, CheckCircle, Upload, Trash2, Info, Zap, Search, Sprout, PencilLine, ChevronDown, PanelRightClose } from 'lucide-react';
+import { FileText, X, RotateCcw, CheckCircle, Upload, Trash2, Info, Zap, Search, Sprout, PencilLine, ChevronDown, PanelRightClose, Tags } from 'lucide-react';
 import { getDeviceId } from '@/lib/deviceId';
 import { doc, getDoc } from 'firebase/firestore';
 import { optionalIdToken } from '@/lib/safeAuth';
 import DocumentUpload from './DocumentUpload';
 import ExportVariantsButton from './ExportVariantsButton';
 import CaseReportDownloadButton from './CaseReportDownloadButton';
-import PerimeterProgress from '@/components/ui/PerimeterProgress';
+import TypewriterText from '@/components/ui/TypewriterText';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -28,11 +28,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { apiUrl, getApiOrigin } from '@/config/api';
-import qiagenLogo from '../Qiagen.svg.png';
 import { toast } from 'sonner';
 import { apiErrorDetailToMessage as sharedApiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
 import { groupColumns } from '@/lib/variantColumnGroups';
 import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
+import { sampleHasPhenotype } from '@/components/PhenotypeInputPanel';
 import {
   PHENOTYPE_FILTER_DISPLAY_NAME,
   PHENOTYPE_FILTER_DESCRIPTION,
@@ -40,6 +40,7 @@ import {
   PHENOTYPE_STARTING_MESSAGE,
   PHENOTYPE_FAILED_TITLE,
   PHENOTYPE_FAILED_FALLBACK,
+  sanitizePhenotypeStatusMessage,
 } from '@/lib/filterDisplayNames';
 
 /**
@@ -511,6 +512,8 @@ const VariantFilterSidebar = ({
   downloadGate = null,
   onProprietaryFilterClick = null,
   onGuestRefreshMetadata = null,
+  chatEligibility = null,
+  onEditSampleInfo = null,
 }) => {
   /* Quota is orthogonal to filter readiness. `=== false` (rather than a falsy check) so a missing
    * gate — degraded limits, still loading — never disables anything. */
@@ -1617,8 +1620,13 @@ const VariantFilterSidebar = ({
     return null;
   }, [activeProprietaryFilter, hasAppliedManualFilters]);
 
+  const samplePhenotypePresent = sampleHasPhenotype(currentDocument?.sample_metadata);
+  const phenotypeMissing = !samplePhenotypePresent;
+
   const handleTabSwitch = (targetMode) => {
     if (targetMode === filterMode) return;
+    // The phenotype-driven column cannot do anything without a phenotype.
+    if (targetMode === 'exomiser' && phenotypeMissing) return;
     const currentMode = getCurrentActiveMode();
     if (!currentMode || targetMode === currentMode) {
       setFilterMode(targetMode);
@@ -1722,7 +1730,14 @@ const VariantFilterSidebar = ({
               const TABS = [
                 { key: 'manual', label: 'Manual', filterKey: null },
                 { key: 'acmg', label: 'ACMG', filterKey: 'filter_1' },
-                { key: 'exomiser', label: PHENOTYPE_FILTER_DISPLAY_NAME, filterKey: 'filter_3', usePhenotypeAi: true },
+                {
+                  key: 'exomiser',
+                  label: PHENOTYPE_FILTER_DISPLAY_NAME,
+                  filterKey: 'filter_3',
+                  usePhenotypeAi: true,
+                  disabled: phenotypeMissing,
+                  disabledHint: `${PHENOTYPE_FILTER_DISPLAY_NAME} needs a phenotype description — add one in sample info.`,
+                },
               ];
               const activeIndex = TABS.findIndex((t) => t.key === filterMode);
               const focusTab = (i) => {
@@ -1762,6 +1777,7 @@ const VariantFilterSidebar = ({
                 >
                   {TABS.map((t) => {
                     const selected = filterMode === t.key;
+                    const disabled = Boolean(t.disabled) && !selected;
                     return (
                       <button
                         key={t.key}
@@ -1770,13 +1786,18 @@ const VariantFilterSidebar = ({
                         role="tab"
                         aria-selected={selected}
                         aria-controls="filter-tabpanel"
+                        aria-disabled={disabled || undefined}
+                        disabled={disabled}
+                        title={disabled ? t.disabledHint : undefined}
                         tabIndex={selected ? 0 : -1}
                         onClick={() => handleTabSwitch(t.key)}
                         data-state={selected ? 'active' : 'inactive'}
                         className={`flex-1 inline-flex h-7 items-center justify-center px-2 text-xs rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${
                           selected
                             ? 'font-semibold text-[var(--text-primary)] bg-[var(--segment-thumb)] shadow-[var(--shadow-sm)]'
-                            : 'font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                            : disabled
+                              ? 'font-medium text-[var(--text-disabled)] cursor-not-allowed'
+                              : 'font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                         }`}
                       >
                         {t.usePhenotypeAi ? <PhenotypeAiLabel variant="tab" /> : t.label}
@@ -2181,7 +2202,38 @@ const VariantFilterSidebar = ({
               </div>
             )}
 
-            {filterMode === 'exomiser' && (() => {
+            {filterMode === 'exomiser' && phenotypeMissing && (
+              <div className="sidebar-card rounded-lg shadow-sm">
+                <div className="opacity-50 pointer-events-none select-none" aria-hidden>
+                  <label className="block mb-2">
+                    <PhenotypeAiLabel variant="heading" />
+                  </label>
+                  <p className="text-xs text-[var(--text-secondary)] mb-3 leading-relaxed">
+                    {PHENOTYPE_FILTER_DESCRIPTION}
+                  </p>
+                  <div className="w-full px-4 py-2 rounded-lg text-sm font-medium text-center border border-[var(--border-default)] text-[var(--text-disabled)]">
+                    Run {PHENOTYPE_FILTER_DISPLAY_NAME}
+                  </div>
+                </div>
+                <div className="mt-3 p-3 rounded-lg sidebar-warning-banner border text-xs">
+                  <p className="leading-relaxed">
+                    This filter needs a phenotype description. The rest of the pipeline —
+                    annotation, ACMG filtering and chat — runs without one.
+                  </p>
+                  {onEditSampleInfo && (
+                    <button
+                      type="button"
+                      onClick={onEditSampleInfo}
+                      className="mt-2 inline-flex items-center text-2xs font-medium underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] rounded"
+                    >
+                      Add a phenotype in sample info
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {filterMode === 'exomiser' && !phenotypeMissing && (() => {
               const isActive = activeProprietaryFilter === 'filter_3';
               const canRun = exomiserEligibility?.can_run === true;
               const reasons = exomiserEligibility?.reasons || [];
@@ -2192,11 +2244,17 @@ const VariantFilterSidebar = ({
               const failureDetail = failed
                 ? (/no valid hpo/i.test(rawFailure)
                     ? 'Could not derive valid HPO terms from the phenotype description. Edit the sample metadata with a clearer clinical phenotype (specific symptoms or HPO terms), then retry.'
-                    : (rawFailure || PHENOTYPE_FAILED_FALLBACK))
+                    : sanitizePhenotypeStatusMessage(rawFailure, PHENOTYPE_FAILED_FALLBACK))
                 : null;
+              const runningStatusMessage = sanitizePhenotypeStatusMessage(
+                exomiserStatus?.message,
+                PHENOTYPE_STARTING_MESSAGE,
+              );
               const REASON_LABELS = {
                 germline_only: 'Analysis type must be Germline.',
                 phenotype_required: 'Add a phenotype description to the sample metadata (edit the file pill).',
+                hpo_selection_required:
+                  'On the Disease tab, select at least one HPO finding present in this patient.',
                 annovar_required: 'Run Annotation first — phenotype prioritization requires an annotated file.',
                 proprietary_filter_active: 'Another proprietary filter is active. Remove it first.',
                 manual_filter_active: 'Manual filters are active. Reset them first.',
@@ -2215,17 +2273,17 @@ const VariantFilterSidebar = ({
                     {PHENOTYPE_FILTER_DESCRIPTION}
                   </p>
 
-                  {/* Progress area while running */}
+                  {/* Progress area while running. The status line types itself out and keeps
+                    * its dots moving, which is liveness enough — the pipeline drawer already
+                    * runs a travelling stroke for this same job, and a second one here just
+                    * competed with it. */}
                   {running && (
-                    <div className="relative mb-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
-                      {/* Progress wraps the card, same travel as everywhere else. */}
-                      <PerimeterProgress
-                        progress={exomiserStatus?.progress_percent ?? null}
-                        radius={8}
+                    <div className="mb-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                      <TypewriterText
+                        key={runningStatusMessage}
+                        text={runningStatusMessage}
+                        className="text-xs font-medium text-[var(--text-primary)]"
                       />
-                      <span className="text-xs font-medium text-[var(--text-primary)]">
-                        {exomiserStatus?.message || PHENOTYPE_STARTING_MESSAGE}
-                      </span>
                       <p className="text-2xs text-[var(--text-tertiary)] mt-1.5">
                         This can take several minutes. You can leave this tab open or come back later.
                       </p>
@@ -2718,6 +2776,7 @@ const VariantFilterSidebar = ({
               variantData={variantData}
               isGuest={isGuest}
               downloadGate={downloadGate}
+              chatEligibility={chatEligibility}
             />
           </div>
         )}
@@ -2889,7 +2948,7 @@ const VariantFilterSidebar = ({
                             title={annovarQuotaBlocked ? annovarGate.reason : undefined}
                             className="mt-1 inline-flex items-center gap-1 text-2xs font-medium underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
                           >
-                            <img src={qiagenLogo} alt="" className="w-3 h-3 object-contain" />
+                            <Tags className="w-3 h-3 shrink-0" aria-hidden />
                             {isRunningAnnovar ? 'Running Annotation...' : 'Try Annotation'}
                           </button>
                           {(annovarQuotaBlocked || annovarMeterLabel) && (

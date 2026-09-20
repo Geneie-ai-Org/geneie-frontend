@@ -17,6 +17,10 @@ import {
   isRecognizedImportUrl,
 } from '@/services/backendApi';
 import { patchSampleMetadata } from '@/services/mongodbApi';
+import PhenotypeInputPanel, {
+  PHENOTYPE_MODE_FINDINGS,
+  sampleHasPhenotype,
+} from '@/components/PhenotypeInputPanel';
 import { PillToggle } from '@/components/ui/pill-toggle';
 import {
   Dialog,
@@ -140,7 +144,11 @@ const DocumentUpload = ({
     sampleRole: '', // proband / mother / father / sibling / other
     affectedStatus: '', // affected / unaffected
     inheritanceModel: '', // Autosomal Dominant / Autosomal Recessive / X-linked / De novo / Unknown
-    phenotype: '', // Free text (only for Germline)
+    phenotype: '', // Canonical active-tab text (only for Germline)
+    phenotype_mode: PHENOTYPE_MODE_FINDINGS,
+    phenotype_findings: '',
+    phenotype_disease: '',
+    phenotype_hpo: null,
     tumorType: '' // Free text (only for Somatic/Tumor-Normal Paired/Tumor-Only)
   });
   const [existingProjects, setExistingProjects] = useState([]); // Will be fetched from backend later
@@ -177,6 +185,10 @@ const DocumentUpload = ({
         affectedStatus: initialMetadata.affectedStatus || '',
         inheritanceModel: initialMetadata.inheritanceModel || '',
         phenotype: initialMetadata.phenotype || '',
+        phenotype_mode: initialMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+        phenotype_findings: initialMetadata.phenotype_findings || (initialMetadata.phenotype_mode === 'disease' ? '' : (initialMetadata.phenotype || '')),
+        phenotype_disease: initialMetadata.phenotype_disease || (initialMetadata.phenotype_mode === 'disease' ? (initialMetadata.phenotype || '') : ''),
+        phenotype_hpo: initialMetadata.phenotype_hpo || null,
         tumorType: initialMetadata.tumorType || '',
       });
       setEditImpact(null);
@@ -475,10 +487,6 @@ const DocumentUpload = ({
       if (!sampleMetadata.genome) { setError('Please select a Genome (required)'); return; }
       if (!sampleMetadata.sequencingType) { setError('Please select a Sequencing Type (required)'); return; }
       if (!sampleMetadata.analysisType) { setError('Please select an Analysis Type (required)'); return; }
-      if (sampleMetadata.analysisType === 'Germline' && !sampleMetadata.phenotype?.trim()) {
-        setError('Phenotype is required for Germline analysis (needed for phenotype-driven prioritization).');
-        return;
-      }
 
       setIsUploading(true);
       try {
@@ -490,7 +498,15 @@ const DocumentUpload = ({
           projectName: sampleMetadata.project,
           patientSex: sampleMetadata.sampleSex,
           patientAge: initialMetadata?.patientAge || '',
-          phenotype: sampleMetadata.analysisType === 'Germline' ? sampleMetadata.phenotype : '',
+          ...(sampleMetadata.analysisType === 'Germline'
+            ? {
+                phenotype: sampleMetadata.phenotype || '',
+                phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+                phenotype_findings: sampleMetadata.phenotype_findings || '',
+                phenotype_disease: sampleMetadata.phenotype_disease || '',
+                phenotype_hpo: sampleMetadata.phenotype_hpo || null,
+              }
+            : { phenotype: '', phenotype_mode: PHENOTYPE_MODE_FINDINGS, phenotype_findings: '', phenotype_disease: '', phenotype_hpo: null }),
           tumorType: (sampleMetadata.analysisType === 'Somatic' || sampleMetadata.analysisType === 'Tumor-Normal Paired' || sampleMetadata.analysisType === 'Tumor-Only') ? sampleMetadata.tumorType : '',
         });
         onEditSaved?.(result);
@@ -532,10 +548,6 @@ const DocumentUpload = ({
       setError('Please select an Analysis Type (required)');
       return;
     }
-    if (sampleMetadata.analysisType === 'Germline' && !sampleMetadata.phenotype?.trim()) {
-      setError('Phenotype is required for Germline analysis (needed for phenotype-driven prioritization).');
-      return;
-    }
 
     // Check for optional fields that are empty - show encouragement but allow proceeding
     const emptyOptionalFields = [];
@@ -545,6 +557,9 @@ const DocumentUpload = ({
       if (!sampleMetadata.sampleRole) emptyOptionalFields.push('Sample Role');
       if (!sampleMetadata.affectedStatus) emptyOptionalFields.push('Affected Status');
       if (!sampleMetadata.inheritanceModel) emptyOptionalFields.push('Inheritance Model');
+      // Optional, but the phenotype-driven filter cannot run without it, so it is worth
+      // naming before the upload starts.
+      if (!sampleHasPhenotype(sampleMetadata)) emptyOptionalFields.push('Phenotype');
     }
 
     // If optional fields are empty, show custom warning modal
@@ -592,6 +607,10 @@ const DocumentUpload = ({
       affectedStatus: '',
       inheritanceModel: '',
       phenotype: '',
+      phenotype_mode: PHENOTYPE_MODE_FINDINGS,
+      phenotype_findings: '',
+      phenotype_disease: '',
+      phenotype_hpo: null,
       tumorType: ''
     });
     setShowCreateProject(false);
@@ -1009,10 +1028,10 @@ const DocumentUpload = ({
           {!compact && !existingDocument && (
             <div className="mb-3">
               <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-                Add an annotated variant file
+                Add a variants file (VCF/TSV)
               </h3>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-                VCF, TSV or CSV with variant calls already annotated.
+                VCF, TSV or CSV with variant calls. Annotated or not.
               </p>
             </div>
           )}
@@ -1516,36 +1535,23 @@ const DocumentUpload = ({
 
                   </div>
 
-                  {/* Phenotype - Full width — required for Germline */}
-                  {(() => {
-                    const phenotypeInvalid = validationAttempted && !sampleMetadata.phenotype?.trim();
-                    return (
-                      <div>
-                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                          Phenotype <span style={{ color: 'var(--error)' }}>*</span>
-                        </label>
-                        <textarea
-                          value={sampleMetadata.phenotype}
-                          onChange={(e) => setSampleMetadata({ ...sampleMetadata, phenotype: e.target.value })}
-                          placeholder="Describe the phenotype or clinical presentation..."
-                          rows={3}
-                          className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all"
-                          style={{
-                            borderColor: phenotypeInvalid ? 'var(--error)' : 'var(--border-default)',
-                            background: 'var(--bg-input)',
-                            backdropFilter: 'blur(10px)',
-                            WebkitBackdropFilter: 'blur(10px)',
-                            color: 'var(--text-primary)'
-                          }}
-                        />
-                        {phenotypeInvalid && (
-                          <p className="mt-1 text-xs" style={{ color: 'var(--error)' }}>
-                            Required for Germline analysis — used for phenotype-driven prioritization.
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  {/* Phenotype - Full width. Optional: the pipeline runs without it, and
+                    * only the phenotype-driven filter needs it. */}
+                  <PhenotypeInputPanel
+                    value={{
+                      phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+                      phenotype_findings: sampleMetadata.phenotype_findings || '',
+                      phenotype_disease: sampleMetadata.phenotype_disease || '',
+                      phenotype: sampleMetadata.phenotype || '',
+                      phenotype_hpo: sampleMetadata.phenotype_hpo,
+                    }}
+                    onChange={(fields) =>
+                      setSampleMetadata((prev) => ({
+                        ...prev,
+                        ...fields,
+                      }))
+                    }
+                  />
                 </div>
               )}
 

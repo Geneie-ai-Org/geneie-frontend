@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2, Check, Filter, Stethoscope, X } from 'lucide-react';
-import qiagenLogo from '../Qiagen.svg.png';
+import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2, Check, Filter, Stethoscope, Tags, X } from 'lucide-react';
 import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
 import { formatAcmgPhenotypeMeterLabel } from '@/lib/filterDisplayNames';
 import { Card, CardContent } from '@/components/ui/card';
@@ -53,6 +52,7 @@ const ColumnInterpretationResults = ({
   acmgFilterActive = false,
   acmgFilterCanApply = false,
   exomiserCanApply = false,
+  phenotypeMissing = false,
   showVcfTabHighlight,
   onDeleteDocument,
   onTryVcfUpload,
@@ -201,7 +201,16 @@ const ColumnInterpretationResults = ({
   //     - If Step 1 fails: Essential VCF columns missing → recommend raw data upload (no ANNOVAR).
   // - Any source:
   //     - If Step 1 passes but Step 2/3 fails: "Run ANNOVAR to add missing columns."
-  const allRecommendations = recommendations || [];
+  // Recommendations come from the backend, which still names the ANNOVAR tool.
+  // The UI only ever says "Annotation", so strip the tool name before display.
+  const allRecommendations = (recommendations || []).map((r) =>
+    typeof r === 'string'
+      ? r
+          .replace(/\bANNOVAR annotation\b/gi, 'annotation')
+          .replace(/\bRun ANNOVAR\b/g, 'Run Annotation')
+          .replace(/\bANNOVAR\b/g, 'Annotation')
+      : r
+  );
   
   // Get primary recommendation (first one, usually most important)
   const primaryRecommendation = allRecommendations.length > 0 ? allRecommendations[0] : null;
@@ -987,7 +996,7 @@ const ColumnInterpretationResults = ({
                   onMouseEnter={(e) => { if (annovarActionable) { e.target.style.backgroundColor = C.surfaceHover; e.target.style.color = C.text; } }}
                   onMouseLeave={(e) => { if (annovarActionable) { e.target.style.backgroundColor = C.surfaceCard; e.target.style.color = C.textMuted; } }}
                 >
-                  <img src={qiagenLogo} alt="Qiagen" className="w-5 h-5 object-contain" style={{ filter: annovarActionable ? 'none' : 'grayscale(100%) opacity(0.5)' }} />
+                  <Tags className="w-4 h-4 shrink-0" aria-hidden style={{ color: annovarActionable ? 'var(--accent-teal)' : 'var(--text-disabled)' }} />
                   {annovarAlreadyRun ? 'Annotation complete' : 'Run Annotation'}
                 </button>
                 {annovarMeterLabel && (
@@ -1076,7 +1085,8 @@ const ColumnInterpretationResults = ({
               {/* Exomiser — needs an annotated file; remaining eligibility (phenotype, germline) is checked in the sidebar tab */}
               {onOpenExomiser && (() => {
                 // Exomiser applies draw on the same metered budget as ACMG.
-                const exomiserEnabled = exomiserCanApply && !genomeMismatch && !acmgQuotaBlocked;
+                const exomiserEnabled =
+                  exomiserCanApply && !genomeMismatch && !acmgQuotaBlocked && !phenotypeMissing;
                 return (
                   <div className="relative group">
                     <button
@@ -1100,7 +1110,9 @@ const ColumnInterpretationResults = ({
                       <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '280px', whiteSpace: 'normal', textAlign: 'left' }}>
                         {genomeMismatch
                           ? 'Annotation and phenotype prioritization require a matching genome build. Please fix the mismatch first.'
-                          : 'Run Annotation first — phenotype prioritization requires an annotated file.'}
+                          : phenotypeMissing
+                            ? 'Add a phenotype description in sample info to enable phenotype-driven prioritization. Everything else runs without one.'
+                            : 'Run Annotation first — phenotype prioritization requires an annotated file.'}
                         <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
                       </div>
                     )}

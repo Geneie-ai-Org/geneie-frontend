@@ -38,7 +38,7 @@ const FileTypeDropdown = ({ showFileTypeDropdown, onSelectVariantFile, onSelectF
         style={{ color: 'var(--text-primary)' }}
       >
         <FileText className="w-3.5 h-3.5" style={{ color: 'var(--accent-teal)' }} />
-        Annotated variant file
+        Variants file (VCF/TSV)
       </button>
       {onSelectFastq && (
         <>

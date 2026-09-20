@@ -11,6 +11,7 @@ import { Markdown } from '../components/chat/ChatMarkdown';
 import { useAuth } from '../hooks/useAuth';
 import { useChatMessaging } from '../hooks/useChatMessaging';
 import { useDocumentUpload } from '../hooks/useDocumentUpload';
+import { sampleHasPhenotype } from '../components/PhenotypeInputPanel';
 import AuthForm from '../components/AuthForm';
 import ChatMessage, { GlobalTypingStyles } from '../components/chat/ChatMessage';
 import AuthPageLayout from '../components/chat/AuthPageLayout';
@@ -340,6 +341,7 @@ const ChatPage = () => {
   const {
     messages,
     setMessages,
+    turnStartedAt,
     typingText,
     isLoading,
     input,
@@ -759,6 +761,7 @@ const ChatPage = () => {
             text: msg.text,
             sources: msg.sources || [],
             createdAt: msg.created_at,
+            durationMs: msg.duration_ms ?? null,
           }))
         );
 
@@ -1205,6 +1208,7 @@ const ChatPage = () => {
   const pipelineDrawer = showAnalysisPipeline ? (
     <PipelineDrawer
       fileName={currentDocument?.name ?? currentDocument?.file_name}
+      conversationId={activeConversationId}
       expanded={pipelineExpanded}
       onExpandedChange={setPipelineExpanded}
       isGuest={userTier === 'guest'}
@@ -1499,6 +1503,7 @@ const ChatPage = () => {
                         role={msg.role}
                         text={msg.text}
                         sources={msg.sources}
+                        durationMs={msg.durationMs}
                         showRegenerate={
                           !isCurrentlyActive &&
                           index === messages.length - 1 &&
@@ -1518,7 +1523,7 @@ const ChatPage = () => {
                                 {typingText}
                               </Markdown>
                             ) : (
-                              <ThinkingIndicator />
+                              <ThinkingIndicator startedAt={turnStartedAt} />
                             )}
                           </div>
                         </div>
@@ -1581,6 +1586,7 @@ const ChatPage = () => {
             userId={userId || 'guest'}
             variantData={variantData}
             currentDocument={currentDocument}
+            onEditSampleInfo={userTier === 'guest' ? null : () => setIsEditSampleModalOpen(true)}
             onUploadSuccess={handleDocumentUpload}
             isOpen={isVariantSidebarOpen}
             onToggle={() => setIsVariantSidebarOpen(!isVariantSidebarOpen)}
@@ -1656,6 +1662,7 @@ const ChatPage = () => {
             beginPipelineWork={beginPipelineWork}
             refreshAfterFilterChange={refreshAfterFilterChange}
             downloadGate={downloadGate}
+            chatEligibility={chatEligibility}
             onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
             onGuestRefreshMetadata={handleGuestRefreshMetadata}
           />
@@ -1861,6 +1868,7 @@ const ChatPage = () => {
           annovarMeterDetail={formatMeterDetail(limits, annovarGate?.meter)}
           acmgMeterDetail={formatMeterDetail(limits, acmgExomiserGate?.meter)}
           exomiserCanApply={pipelineSnapshot.hasAnnotatedFile || !chatEligibility.requires_annovar}
+          phenotypeMissing={!sampleHasPhenotype(currentDocument?.sample_metadata)}
           showVcfTabHighlight={columnInterpretationResult?.step1?.passed === false}
           onDeleteDocument={() => handleDocumentUpload(null)}
         />

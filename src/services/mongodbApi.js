@@ -147,6 +147,72 @@ export const patchSampleMetadata = async (conversationId, sampleMetadata) => {
 };
 
 /**
+ * Live HPO resolution preview (Findings / Disease).
+ */
+export const resolveHpoTerms = async ({ text, forceMode } = {}) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const response = await fetch(`${API_BASE_URL}/api/phenotype/resolve-hpo`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      text: text || '',
+      force_mode: forceMode || undefined,
+    }),
+  });
+
+  if (!response.ok) await handleResponseError(response);
+  return response.json();
+};
+
+/**
+ * HPO typeahead for Findings chip basket.
+ */
+export const suggestHpoTerms = async ({ text, limit = 20 } = {}) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const response = await fetch(`${API_BASE_URL}/api/phenotype/suggest-hpo`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      text: text || '',
+      limit,
+    }),
+  });
+
+  if (!response.ok) await handleResponseError(response);
+  return response.json();
+};
+
+/**
+ * AI phrase suggestions for Findings tab (no HPO IDs from the model).
+ */
+export const suggestPhenotypePhrases = async ({ text } = {}) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const response = await fetch(`${API_BASE_URL}/api/phenotype/suggest-phrases`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ text: text || '' }),
+  });
+
+  if (!response.ok) await handleResponseError(response);
+  return response.json();
+};
+
+/**
  * Delete a conversation
  */
 export const deleteConversation = async (conversationId) => {
@@ -191,7 +257,7 @@ export const getMessages = async (conversationId) => {
 /**
  * Create a new message
  */
-export const createMessage = async (conversationId, role, text, sources = []) => {
+export const createMessage = async (conversationId, role, text, sources = [], { durationMs = null } = {}) => {
   const token = await getAuthToken();
   if (!token) throw new Error('Not authenticated');
 
@@ -204,7 +270,9 @@ export const createMessage = async (conversationId, role, text, sources = []) =>
     body: JSON.stringify({
       role,
       text,
-      sources
+      sources,
+      // How long the answer took to produce, so the reading survives a reload.
+      ...(durationMs != null ? { duration_ms: Math.round(durationMs) } : {})
     })
   });
 

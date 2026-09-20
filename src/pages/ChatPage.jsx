@@ -340,6 +340,7 @@ const ChatPage = () => {
   const {
     messages,
     setMessages,
+    turnStartedAt,
     typingText,
     isLoading,
     input,
@@ -759,6 +760,7 @@ const ChatPage = () => {
             text: msg.text,
             sources: msg.sources || [],
             createdAt: msg.created_at,
+            durationMs: msg.duration_ms ?? null,
           }))
         );
 
@@ -1205,6 +1207,7 @@ const ChatPage = () => {
   const pipelineDrawer = showAnalysisPipeline ? (
     <PipelineDrawer
       fileName={currentDocument?.name ?? currentDocument?.file_name}
+      conversationId={activeConversationId}
       expanded={pipelineExpanded}
       onExpandedChange={setPipelineExpanded}
       isGuest={userTier === 'guest'}
@@ -1499,6 +1502,7 @@ const ChatPage = () => {
                         role={msg.role}
                         text={msg.text}
                         sources={msg.sources}
+                        durationMs={msg.durationMs}
                         showRegenerate={
                           !isCurrentlyActive &&
                           index === messages.length - 1 &&
@@ -1518,7 +1522,7 @@ const ChatPage = () => {
                                 {typingText}
                               </Markdown>
                             ) : (
-                              <ThinkingIndicator />
+                              <ThinkingIndicator startedAt={turnStartedAt} />
                             )}
                           </div>
                         </div>

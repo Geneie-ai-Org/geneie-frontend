@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { FileText, X, RotateCcw, CheckCircle, Upload, Trash2, Info, Zap, Search, Sprout, PencilLine, ChevronDown, PanelRightClose } from 'lucide-react';
+import { FileText, X, RotateCcw, CheckCircle, Upload, Trash2, Info, Zap, Search, Sprout, PencilLine, ChevronDown, PanelRightClose, Tags } from 'lucide-react';
 import { getDeviceId } from '@/lib/deviceId';
 import { doc, getDoc } from 'firebase/firestore';
 import { optionalIdToken } from '@/lib/safeAuth';
@@ -28,7 +28,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { apiUrl, getApiOrigin } from '@/config/api';
-import qiagenLogo from '../Qiagen.svg.png';
 import { toast } from 'sonner';
 import { apiErrorDetailToMessage as sharedApiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
 import { groupColumns } from '@/lib/variantColumnGroups';
@@ -2891,7 +2890,7 @@ const VariantFilterSidebar = ({
                             title={annovarQuotaBlocked ? annovarGate.reason : undefined}
                             className="mt-1 inline-flex items-center gap-1 text-2xs font-medium underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
                           >
-                            <img src={qiagenLogo} alt="" className="w-3 h-3 object-contain" />
+                            <Tags className="w-3 h-3 shrink-0" aria-hidden />
                             {isRunningAnnovar ? 'Running Annotation...' : 'Try Annotation'}
                           </button>
                           {(annovarQuotaBlocked || annovarMeterLabel) && (

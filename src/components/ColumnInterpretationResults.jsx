@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2, Check, Filter, Stethoscope, X } from 'lucide-react';
-import qiagenLogo from '../Qiagen.svg.png';
+import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2, Check, Filter, Stethoscope, Tags, X } from 'lucide-react';
 import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
 import { formatAcmgPhenotypeMeterLabel } from '@/lib/filterDisplayNames';
 import { Card, CardContent } from '@/components/ui/card';
@@ -996,7 +995,7 @@ const ColumnInterpretationResults = ({
                   onMouseEnter={(e) => { if (annovarActionable) { e.target.style.backgroundColor = C.surfaceHover; e.target.style.color = C.text; } }}
                   onMouseLeave={(e) => { if (annovarActionable) { e.target.style.backgroundColor = C.surfaceCard; e.target.style.color = C.textMuted; } }}
                 >
-                  <img src={qiagenLogo} alt="Qiagen" className="w-5 h-5 object-contain" style={{ filter: annovarActionable ? 'none' : 'grayscale(100%) opacity(0.5)' }} />
+                  <Tags className="w-4 h-4 shrink-0" aria-hidden style={{ color: annovarActionable ? 'var(--accent-teal)' : 'var(--text-disabled)' }} />
                   {annovarAlreadyRun ? 'Annotation complete' : 'Run Annotation'}
                 </button>
                 {annovarMeterLabel && (

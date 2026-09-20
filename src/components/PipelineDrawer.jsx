@@ -3,6 +3,8 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AlertCircle, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
 import { PHENOTYPE_RUNNING_MESSAGE } from '@/lib/filterDisplayNames';
 import PerimeterProgress from '@/components/ui/PerimeterProgress';
+import RunTimer from '@/components/ui/RunTimer';
+import { useRunTimer } from '@/hooks/useRunTimer';
 import {
   PIPELINE_STEP_DEFS,
   computePipelineSteps,
@@ -143,6 +145,7 @@ function SegmentMeter({ steps }) {
  */
 const PipelineDrawer = ({
   fileName,
+  conversationId = null,
   expanded,
   onExpandedChange,
   isGuest = false,
@@ -199,6 +202,37 @@ const PipelineDrawer = ({
   };
 
   const steps = computePipelineSteps(pipelineProps);
+
+  /* ── Per-step timing ─────────────────────────────────────────────────────────────
+   * Server-reported start/finish times where the job has them (annotation, filter,
+   * phenotype prioritization); observed client-side for the steps that run in this
+   * tab (upload, interpretation). Keyed per conversation so two open analyses don't
+   * share one stopwatch.
+   */
+  const timerKey = (stepId) => (conversationId ? `${conversationId}:${stepId}` : null);
+  // Phenotype prioritization and the ACMG filter are the same pipeline step; whichever
+  // one is live owns the step's clock.
+  const reduceJob =
+    isRunningExomiser || exomiserStatus?.status ? exomiserStatus : filterJob;
+  const jobTiming = (job) => ({
+    startedAt: job?.started_at ?? null,
+    completedAt: job?.completed_at ?? null,
+    durationSeconds: job?.duration_seconds ?? null,
+  });
+
+  const stepTimers = {
+    upload: useRunTimer(timerKey('upload'), steps.upload === 'running'),
+    interpret: useRunTimer(timerKey('interpret'), steps.interpret === 'running'),
+    annovar: useRunTimer(timerKey('annovar'), steps.annovar === 'running', jobTiming(annovarJob)),
+    reduce: useRunTimer(timerKey('reduce'), steps.reduce === 'running', jobTiming(reduceJob)),
+    chat: null,
+  };
+  // The collapsed line carries one clock: the step actually in flight.
+  const activeTimer =
+    ['upload', 'annovar', 'reduce', 'interpret']
+      .map((id) => stepTimers[id])
+      .find((t) => t?.running && t.elapsedMs != null) || null;
+
   const backgroundActive = getPipelineBackgroundActive(pipelineProps);
   const statusLine = getPipelineStatusLine(pipelineProps, steps);
   const summary = getPipelineChipSummary(steps, hasUploadedFile);
@@ -359,6 +393,15 @@ const PipelineDrawer = ({
         >
           {stateText}
         </span>
+        {activeTimer && (
+          <RunTimer
+            running
+            elapsedMs={activeTimer.elapsedMs}
+            startMs={activeTimer.startMs}
+            className="text-2xs shrink-0"
+            prefix="· "
+          />
+        )}
         <span className="ml-auto shrink-0 flex items-center" style={{ color: 'var(--text-tertiary)' }}>
           {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
         </span>
@@ -418,6 +461,16 @@ const PipelineDrawer = ({
                       >
                         <StepGlyph status={status} locked={guestLocked} />
                         <span>{def.shortLabel || def.label}</span>
+                        {stepTimers[def.id] && !guestLocked && (
+                          <RunTimer
+                            running={status === 'running'}
+                            elapsedMs={stepTimers[def.id].elapsedMs}
+                            durationMs={status === 'running' ? null : stepTimers[def.id].durationMs}
+                            startMs={stepTimers[def.id].startMs}
+                            className="text-2xs font-normal"
+                            style={{ color: 'var(--text-tertiary)' }}
+                          />
+                        )}
                       </button>
                       {!isLast && (
                         <span

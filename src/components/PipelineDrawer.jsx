@@ -449,7 +449,7 @@ const PipelineDrawer = ({
             className="overflow-hidden"
           >
             <div className="px-3.5 pt-0.5">
-              <ol className="flex flex-wrap items-center gap-x-0.5 gap-y-1.5 pb-1 w-full">
+              <ol className="flex flex-wrap items-center gap-y-2 pb-1.5 w-full">
                 {PIPELINE_STEP_DEFS.map((def, index) => {
                   const status = steps[def.id];
                   const isLast = index === PIPELINE_STEP_DEFS.length - 1;
@@ -471,7 +471,7 @@ const PipelineDrawer = ({
                         type="button"
                         disabled={guestLocked}
                         onClick={() => handleStepClick(def.id)}
-                        className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded-[10px] text-2xs sm:text-xs shrink-0 transition-colors ${
+                        className={`flex items-center gap-1.5 px-2 py-1 rounded-[10px] text-2xs sm:text-xs shrink-0 transition-colors ${
                           clickable ? 'hover:bg-black/[0.04] dark:hover:bg-white/[0.05] cursor-pointer' : 'cursor-default opacity-60'
                         }`}
                         style={{
@@ -490,7 +490,7 @@ const PipelineDrawer = ({
                             elapsedMs={stepTimers[def.id].elapsedMs}
                             durationMs={status === 'running' ? null : stepTimers[def.id].durationMs}
                             startMs={stepTimers[def.id].startMs}
-                            className="text-2xs font-normal"
+                            className="text-2xs font-normal -ml-0.5"
                             style={{ color: 'var(--text-tertiary)' }}
                           />
                         )}
@@ -500,7 +500,7 @@ const PipelineDrawer = ({
                           // Grows to fill the drawer: the connectors absorb the spare
                           // width, so the row spans it and the labels land on an even
                           // pitch instead of huddling at the left edge.
-                          className="h-px flex-1 min-w-[0.875rem]"
+                          className="h-px flex-1 min-w-[0.75rem] mx-2"
                           style={{
                             backgroundColor: isStepPassed(status)
                               ? 'var(--text-disabled)'

@@ -740,7 +740,7 @@ export async function exportVariants(conversationId) {
 }
 
 /**
- * Download Geneie case report PDF for a conversation.
+ * Download Geneie case report PDF for a conversation (legacy MVP; no section assignment).
  * GET /api/case-report/{conversationId}.pdf
  */
 export async function downloadCaseReport(conversationId) {
@@ -769,6 +769,58 @@ export async function downloadCaseReport(conversationId) {
     variantRows: response.headers.get('X-Case-Report-Variant-Rows'),
     variantsShown: response.headers.get('X-Case-Report-Variants-Shown'),
   };
+}
+
+/**
+ * Ranked working-set candidates for the clinical report assignment modal.
+ * GET /api/conversations/{id}/clinical-report/candidates
+ */
+export async function fetchClinicalReportCandidates(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(
+    apiUrl(`/api/conversations/${encodeURIComponent(conversationId)}/clinical-report/candidates`),
+    { headers },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load report candidates');
+  }
+  return data;
+}
+
+/**
+ * Generate clinical report PDF from section assignments.
+ * POST /api/conversations/{id}/clinical-report
+ */
+export async function generateClinicalReport(conversationId, body) {
+  const headers = await getAuthHeaders();
+  headers['Content-Type'] = 'application/json';
+  const response = await fetch(
+    apiUrl(`/api/conversations/${encodeURIComponent(conversationId)}/clinical-report`),
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    },
+  );
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(parseApiErrorDetail(data.detail) || 'Clinical report generation failed');
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const filenameMatch = disposition.match(/filename="(.+?)"/);
+  const filename =
+    filenameMatch?.[1] || `Geneie_Clinical_Report_${conversationId}.pdf`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return true;
 }
 
 /**

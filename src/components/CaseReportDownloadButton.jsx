@@ -1,34 +1,25 @@
-import React, { useState, useCallback } from 'react';
-import { FileText, Loader2 } from 'lucide-react';
-import { downloadCaseReport } from '@/services/backendApi';
+import React, { useState } from 'react';
+import { FileText } from 'lucide-react';
+import ClinicalReportAssignModal from './ClinicalReportAssignModal';
 
 /**
- * Download a branded Geneie case report PDF for the active conversation.
- * Uses GET /api/case-report/{conversationId}.pdf (Bearer).
+ * Opens the clinical-report assignment modal (replaces one-click PDF download).
+ * Gated on chat eligibility (same unlock as variant chat) plus job downloadGate.
  */
 export default function CaseReportDownloadButton({
   conversationId,
   variantData,
   isGuest,
   downloadGate = null,
+  chatEligibility = null,
 }) {
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [error, setError] = useState(null);
+  const [open, setOpen] = useState(false);
 
   const gateBlocked = downloadGate?.blocked === true;
-
-  const handleDownload = useCallback(async () => {
-    if (!conversationId || isDownloading || gateBlocked) return;
-    setIsDownloading(true);
-    setError(null);
-    try {
-      await downloadCaseReport(conversationId);
-    } catch (err) {
-      setError(err.message || 'Case report download failed');
-    } finally {
-      setIsDownloading(false);
-    }
-  }, [conversationId, isDownloading, gateBlocked]);
+  const chatReady = chatEligibility?.allowed === true;
+  const chatPending = chatEligibility?.allowed == null;
+  const chatBlocked = !chatReady;
+  const blocked = gateBlocked || chatBlocked;
 
   if (isGuest) return null;
   if (!conversationId || !variantData) return null;
@@ -40,41 +31,50 @@ export default function CaseReportDownloadButton({
     return 'Report unavailable while a job runs';
   };
 
-  const label = isDownloading
-    ? 'Preparing report…'
-    : gateBlocked
-      ? gateLabel()
-      : 'Download report';
+  const chatLabel = () => {
+    if (chatPending) return 'Checking chat eligibility…';
+    if (chatEligibility?.reason === 'CHAT_REQUIRES_FILTER') {
+      return 'Report unlocks when chat unlocks (apply a filter)…';
+    }
+    if (chatEligibility?.reason === 'S3_LINE_COUNT_PENDING') {
+      return 'Counting variants…';
+    }
+    if (chatEligibility?.reason === 'FILTER_JOB_RUNNING') {
+      return 'Waiting for filter job…';
+    }
+    return chatEligibility?.message || 'Report unlocks when chat is enabled';
+  };
 
+  const label = gateBlocked ? gateLabel() : chatBlocked ? chatLabel() : 'Generate report';
   const title = gateBlocked
     ? downloadGate?.message || 'A job is still running'
-    : 'Download Geneie case report PDF';
+    : chatBlocked
+      ? chatEligibility?.message || 'Chat must be enabled before generating a report'
+      : 'Assign variants and generate Geneie clinical report PDF';
 
   return (
     <div className="space-y-1">
       <button
         type="button"
-        onClick={handleDownload}
-        disabled={gateBlocked || isDownloading}
+        onClick={() => {
+          if (!blocked) setOpen(true);
+        }}
+        disabled={blocked}
         title={title}
         className={`w-full h-9 rounded-lg flex items-center justify-center gap-2 text-xs font-medium whitespace-nowrap border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${
-          !gateBlocked && !isDownloading
+          !blocked
             ? 'border-[var(--border-subtle)] bg-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]'
             : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] cursor-not-allowed'
         }`}
       >
-        {isDownloading ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        ) : (
-          <FileText className="w-3.5 h-3.5" />
-        )}
+        <FileText className="w-3.5 h-3.5" />
         {label}
       </button>
-      {error && (
-        <p className="text-2xs text-[var(--error)] truncate" title={error}>
-          {error}
-        </p>
-      )}
+      <ClinicalReportAssignModal
+        open={open}
+        onOpenChange={setOpen}
+        conversationId={conversationId}
+      />
     </div>
   );
 }

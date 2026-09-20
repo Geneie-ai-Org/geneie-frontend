@@ -1656,6 +1656,7 @@ const ChatPage = () => {
             beginPipelineWork={beginPipelineWork}
             refreshAfterFilterChange={refreshAfterFilterChange}
             downloadGate={downloadGate}
+            chatEligibility={chatEligibility}
             onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
             onGuestRefreshMetadata={handleGuestRefreshMetadata}
           />

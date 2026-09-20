@@ -511,6 +511,7 @@ const VariantFilterSidebar = ({
   downloadGate = null,
   onProprietaryFilterClick = null,
   onGuestRefreshMetadata = null,
+  chatEligibility = null,
 }) => {
   /* Quota is orthogonal to filter readiness. `=== false` (rather than a falsy check) so a missing
    * gate — degraded limits, still loading — never disables anything. */
@@ -2718,6 +2719,7 @@ const VariantFilterSidebar = ({
               variantData={variantData}
               isGuest={isGuest}
               downloadGate={downloadGate}
+              chatEligibility={chatEligibility}
             />
           </div>
         )}

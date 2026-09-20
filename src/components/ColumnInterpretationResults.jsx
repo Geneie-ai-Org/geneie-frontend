@@ -52,6 +52,7 @@ const ColumnInterpretationResults = ({
   acmgFilterActive = false,
   acmgFilterCanApply = false,
   exomiserCanApply = false,
+  phenotypeMissing = false,
   showVcfTabHighlight,
   onDeleteDocument,
   onTryVcfUpload,
@@ -1084,7 +1085,8 @@ const ColumnInterpretationResults = ({
               {/* Exomiser — needs an annotated file; remaining eligibility (phenotype, germline) is checked in the sidebar tab */}
               {onOpenExomiser && (() => {
                 // Exomiser applies draw on the same metered budget as ACMG.
-                const exomiserEnabled = exomiserCanApply && !genomeMismatch && !acmgQuotaBlocked;
+                const exomiserEnabled =
+                  exomiserCanApply && !genomeMismatch && !acmgQuotaBlocked && !phenotypeMissing;
                 return (
                   <div className="relative group">
                     <button
@@ -1108,7 +1110,9 @@ const ColumnInterpretationResults = ({
                       <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '280px', whiteSpace: 'normal', textAlign: 'left' }}>
                         {genomeMismatch
                           ? 'Annotation and phenotype prioritization require a matching genome build. Please fix the mismatch first.'
-                          : 'Run Annotation first — phenotype prioritization requires an annotated file.'}
+                          : phenotypeMissing
+                            ? 'Add a phenotype description in sample info to enable phenotype-driven prioritization. Everything else runs without one.'
+                            : 'Run Annotation first — phenotype prioritization requires an annotated file.'}
                         <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
                       </div>
                     )}

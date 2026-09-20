@@ -475,10 +475,6 @@ const DocumentUpload = ({
       if (!sampleMetadata.genome) { setError('Please select a Genome (required)'); return; }
       if (!sampleMetadata.sequencingType) { setError('Please select a Sequencing Type (required)'); return; }
       if (!sampleMetadata.analysisType) { setError('Please select an Analysis Type (required)'); return; }
-      if (sampleMetadata.analysisType === 'Germline' && !sampleMetadata.phenotype?.trim()) {
-        setError('Phenotype is required for Germline analysis (needed for phenotype-driven prioritization).');
-        return;
-      }
 
       setIsUploading(true);
       try {
@@ -532,10 +528,6 @@ const DocumentUpload = ({
       setError('Please select an Analysis Type (required)');
       return;
     }
-    if (sampleMetadata.analysisType === 'Germline' && !sampleMetadata.phenotype?.trim()) {
-      setError('Phenotype is required for Germline analysis (needed for phenotype-driven prioritization).');
-      return;
-    }
 
     // Check for optional fields that are empty - show encouragement but allow proceeding
     const emptyOptionalFields = [];
@@ -545,6 +537,9 @@ const DocumentUpload = ({
       if (!sampleMetadata.sampleRole) emptyOptionalFields.push('Sample Role');
       if (!sampleMetadata.affectedStatus) emptyOptionalFields.push('Affected Status');
       if (!sampleMetadata.inheritanceModel) emptyOptionalFields.push('Inheritance Model');
+      // Optional, but the phenotype-driven filter cannot run without it, so it is worth
+      // naming before the upload starts.
+      if (!sampleMetadata.phenotype?.trim()) emptyOptionalFields.push('Phenotype');
     }
 
     // If optional fields are empty, show custom warning modal
@@ -1516,36 +1511,30 @@ const DocumentUpload = ({
 
                   </div>
 
-                  {/* Phenotype - Full width — required for Germline */}
-                  {(() => {
-                    const phenotypeInvalid = validationAttempted && !sampleMetadata.phenotype?.trim();
-                    return (
-                      <div>
-                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                          Phenotype <span style={{ color: 'var(--error)' }}>*</span>
-                        </label>
-                        <textarea
-                          value={sampleMetadata.phenotype}
-                          onChange={(e) => setSampleMetadata({ ...sampleMetadata, phenotype: e.target.value })}
-                          placeholder="Describe the phenotype or clinical presentation..."
-                          rows={3}
-                          className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all"
-                          style={{
-                            borderColor: phenotypeInvalid ? 'var(--error)' : 'var(--border-default)',
-                            background: 'var(--bg-input)',
-                            backdropFilter: 'blur(10px)',
-                            WebkitBackdropFilter: 'blur(10px)',
-                            color: 'var(--text-primary)'
-                          }}
-                        />
-                        {phenotypeInvalid && (
-                          <p className="mt-1 text-xs" style={{ color: 'var(--error)' }}>
-                            Required for Germline analysis — used for phenotype-driven prioritization.
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  {/* Phenotype - Full width. Optional: the pipeline runs without it, and
+                    * only the phenotype-driven filter needs it. */}
+                  <div>
+                    <label className="flex items-baseline gap-1.5 text-xs font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                      Phenotype
+                      <span className="text-2xs font-normal" style={{ color: 'var(--text-tertiary)' }}>
+                        (enables phenotype-driven prioritization)
+                      </span>
+                    </label>
+                    <textarea
+                      value={sampleMetadata.phenotype}
+                      onChange={(e) => setSampleMetadata({ ...sampleMetadata, phenotype: e.target.value })}
+                      placeholder="Describe the phenotype or clinical presentation..."
+                      rows={3}
+                      className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all"
+                      style={{
+                        borderColor: 'var(--border-default)',
+                        background: 'var(--bg-input)',
+                        backdropFilter: 'blur(10px)',
+                        WebkitBackdropFilter: 'blur(10px)',
+                        color: 'var(--text-primary)'
+                      }}
+                    />
+                  </div>
                 </div>
               )}
 

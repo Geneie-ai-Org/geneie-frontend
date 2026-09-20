@@ -437,14 +437,13 @@ const Module1UploadForm = ({
 
   const isGermline = sampleMetadata.analysisType === 'Germline';
   const analysisTypeMissing = !sampleMetadata.analysisType;
-  const phenotypeMissing = isGermline && !sampleMetadata.phenotype.trim();
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!canSubmit) return;
 
     setValidationAttempted(true);
-    if (analysisTypeMissing || phenotypeMissing) return;
+    if (analysisTypeMissing) return;
     const useCustomBed = bedMode === 'custom';
     startModule1Run({
       sampleName: sampleName.trim(),
@@ -632,8 +631,11 @@ const Module1UploadForm = ({
                     </div>
 
                     <div className="md:col-span-2">
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                        Phenotype <span style={{ color: 'var(--error)' }}>*</span>
+                      <label className="flex items-baseline gap-1.5 text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                        Phenotype
+                        <span className="text-2xs font-normal" style={{ color: 'var(--text-tertiary)' }}>
+                          (enables phenotype-driven prioritization)
+                        </span>
                       </label>
                       <textarea
                         value={sampleMetadata.phenotype}
@@ -641,17 +643,12 @@ const Module1UploadForm = ({
                         rows={3}
                         className="w-full px-3 py-2 border rounded-lg text-sm resize-none"
                         style={{
-                          borderColor: validationAttempted && phenotypeMissing ? 'var(--error)' : 'var(--border-default)',
+                          borderColor: 'var(--border-default)',
                           background: 'var(--bg-input)',
                           color: 'var(--text-primary)',
                         }}
                         placeholder="Describe the phenotype or clinical presentation…"
                       />
-                      {validationAttempted && phenotypeMissing && (
-                        <p className="text-2xs mt-1" style={{ color: 'var(--error)' }}>
-                          Required for Germline analysis — used for phenotype-driven prioritization.
-                        </p>
-                      )}
                     </div>
                   </div>
                 </div>

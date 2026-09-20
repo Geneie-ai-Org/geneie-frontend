@@ -1585,6 +1585,7 @@ const ChatPage = () => {
             userId={userId || 'guest'}
             variantData={variantData}
             currentDocument={currentDocument}
+            onEditSampleInfo={userTier === 'guest' ? null : () => setIsEditSampleModalOpen(true)}
             onUploadSuccess={handleDocumentUpload}
             isOpen={isVariantSidebarOpen}
             onToggle={() => setIsVariantSidebarOpen(!isVariantSidebarOpen)}
@@ -1866,6 +1867,7 @@ const ChatPage = () => {
           annovarMeterDetail={formatMeterDetail(limits, annovarGate?.meter)}
           acmgMeterDetail={formatMeterDetail(limits, acmgExomiserGate?.meter)}
           exomiserCanApply={pipelineSnapshot.hasAnnotatedFile || !chatEligibility.requires_annovar}
+          phenotypeMissing={!String(currentDocument?.sample_metadata?.phenotype || '').trim()}
           showVcfTabHighlight={columnInterpretationResult?.step1?.passed === false}
           onDeleteDocument={() => handleDocumentUpload(null)}
         />

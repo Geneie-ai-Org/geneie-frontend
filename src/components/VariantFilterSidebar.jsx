@@ -40,6 +40,7 @@ import {
   PHENOTYPE_STARTING_MESSAGE,
   PHENOTYPE_FAILED_TITLE,
   PHENOTYPE_FAILED_FALLBACK,
+  sanitizePhenotypeStatusMessage,
 } from '@/lib/filterDisplayNames';
 
 /**
@@ -2193,8 +2194,12 @@ const VariantFilterSidebar = ({
               const failureDetail = failed
                 ? (/no valid hpo/i.test(rawFailure)
                     ? 'Could not derive valid HPO terms from the phenotype description. Edit the sample metadata with a clearer clinical phenotype (specific symptoms or HPO terms), then retry.'
-                    : (rawFailure || PHENOTYPE_FAILED_FALLBACK))
+                    : sanitizePhenotypeStatusMessage(rawFailure, PHENOTYPE_FAILED_FALLBACK))
                 : null;
+              const runningStatusMessage = sanitizePhenotypeStatusMessage(
+                exomiserStatus?.message,
+                PHENOTYPE_STARTING_MESSAGE,
+              );
               const REASON_LABELS = {
                 germline_only: 'Analysis type must be Germline.',
                 phenotype_required: 'Add a phenotype description to the sample metadata (edit the file pill).',
@@ -2225,7 +2230,7 @@ const VariantFilterSidebar = ({
                         radius={8}
                       />
                       <span className="text-xs font-medium text-[var(--text-primary)]">
-                        {exomiserStatus?.message || PHENOTYPE_STARTING_MESSAGE}
+                        {runningStatusMessage}
                       </span>
                       <p className="text-2xs text-[var(--text-tertiary)] mt-1.5">
                         This can take several minutes. You can leave this tab open or come back later.

@@ -14,9 +14,14 @@ import {
 const INCLUDE = 'clinical_result';
 const ADDITIONAL = 'additional_finding';
 
+function rowKeyOf(row, index) {
+  return row.row_key || `${row.id || 'row'}__${index}`;
+}
+
 /**
  * Slim assignment modal: variant id + Include / Additional only.
  * Unselected rows are excluded by default. Sorted by BE (persona workflow rules).
+ * Assignments are keyed by unique row_key so duplicate variant ids don't steal clicks.
  */
 export default function ClinicalReportAssignModal({
   open,
@@ -54,35 +59,40 @@ export default function ClinicalReportAssignModal({
     if (open) load();
   }, [open, load]);
 
-  const clinicalIds = useMemo(
-    () =>
-      candidates
-        .filter((c) => assignments[c.id] === INCLUDE)
-        .map((c) => c.id),
-    [candidates, assignments],
-  );
-  const additionalIds = useMemo(
-    () =>
-      candidates
-        .filter((c) => assignments[c.id] === ADDITIONAL)
-        .map((c) => c.id),
-    [candidates, assignments],
-  );
+  const selectedIds = useMemo(() => {
+    const clinical = [];
+    const additional = [];
+    const seenClinical = new Set();
+    const seenAdditional = new Set();
+    candidates.forEach((row, index) => {
+      const key = rowKeyOf(row, index);
+      const bucket = assignments[key];
+      const vid = row.id;
+      if (!vid) return;
+      if (bucket === INCLUDE && !seenClinical.has(vid)) {
+        seenClinical.add(vid);
+        clinical.push(vid);
+      } else if (bucket === ADDITIONAL && !seenAdditional.has(vid) && !seenClinical.has(vid)) {
+        seenAdditional.add(vid);
+        additional.push(vid);
+      }
+    });
+    return { clinical, additional };
+  }, [candidates, assignments]);
 
-  const setBucket = (id, bucket) => {
+  const setBucket = (key, bucket) => {
     setAssignments((prev) => {
-      // Clicking the active choice again clears it (back to default exclude).
-      if (prev[id] === bucket) {
+      if (prev[key] === bucket) {
         const next = { ...prev };
-        delete next[id];
+        delete next[key];
         return next;
       }
-      return { ...prev, [id]: bucket };
+      return { ...prev, [key]: bucket };
     });
   };
 
   const canProceed =
-    clinicalIds.length >= 1 && !generating && !loading;
+    selectedIds.clinical.length >= 1 && !generating && !loading;
 
   const handleProceed = async () => {
     if (!canProceed || !conversationId) return;
@@ -90,8 +100,8 @@ export default function ClinicalReportAssignModal({
     setError(null);
     try {
       await generateClinicalReport(conversationId, {
-        clinical_result_variant_ids: clinicalIds,
-        additional_finding_variant_ids: additionalIds,
+        clinical_result_variant_ids: selectedIds.clinical,
+        additional_finding_variant_ids: selectedIds.additional,
       });
       onOpenChange(false);
     } catch (err) {
@@ -143,11 +153,12 @@ export default function ClinicalReportAssignModal({
           )}
           {!loading && candidates.length > 0 && (
             <ul className="divide-y divide-[var(--border-subtle)]">
-              {candidates.map((row) => {
-                const selected = assignments[row.id];
+              {candidates.map((row, index) => {
+                const key = rowKeyOf(row, index);
+                const selected = assignments[key];
                 return (
                   <li
-                    key={row.id}
+                    key={key}
                     className="flex items-center gap-3 py-1.5 min-h-[2rem]"
                   >
                     <span
@@ -156,35 +167,29 @@ export default function ClinicalReportAssignModal({
                     >
                       {rowLabel(row)}
                     </span>
-                    <div className="flex-shrink-0 flex items-center gap-3 text-xs">
-                      <label className="inline-flex items-center gap-1 cursor-pointer text-[var(--text-secondary)]">
-                        <input
-                          type="radio"
-                          name={`bucket-${row.id}`}
-                          checked={selected === INCLUDE}
-                          onChange={() => {}}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setBucket(row.id, INCLUDE);
-                          }}
-                          className="accent-[var(--accent-teal)]"
-                        />
+                    <div className="flex-shrink-0 flex items-center gap-1.5 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setBucket(key, INCLUDE)}
+                        className={`h-7 px-2 rounded-md border transition-colors ${
+                          selected === INCLUDE
+                            ? 'border-[var(--accent-teal)] bg-[var(--accent-teal)]/15 text-[var(--accent-teal)]'
+                            : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]'
+                        }`}
+                      >
                         Include
-                      </label>
-                      <label className="inline-flex items-center gap-1 cursor-pointer text-[var(--text-secondary)]">
-                        <input
-                          type="radio"
-                          name={`bucket-${row.id}`}
-                          checked={selected === ADDITIONAL}
-                          onChange={() => {}}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setBucket(row.id, ADDITIONAL);
-                          }}
-                          className="accent-[var(--accent-teal)]"
-                        />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBucket(key, ADDITIONAL)}
+                        className={`h-7 px-2 rounded-md border transition-colors ${
+                          selected === ADDITIONAL
+                            ? 'border-[var(--accent-teal)] bg-[var(--accent-teal)]/15 text-[var(--accent-teal)]'
+                            : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]'
+                        }`}
+                      >
                         Additional
-                      </label>
+                      </button>
                     </div>
                   </li>
                 );
@@ -201,8 +206,8 @@ export default function ClinicalReportAssignModal({
           )}
           <div className="flex items-center justify-between gap-3">
             <p className="text-2xs text-[var(--text-tertiary)]">
-              Include: {clinicalIds.length} · Additional: {additionalIds.length}
-              {clinicalIds.length < 1 ? ' · select ≥1 Include' : ''}
+              Include: {selectedIds.clinical.length} · Additional: {selectedIds.additional.length}
+              {selectedIds.clinical.length < 1 ? ' · select ≥1 Include' : ''}
             </p>
             <div className="flex gap-2">
               <button

@@ -210,15 +210,24 @@ const PipelineDrawer = ({
    * share one stopwatch.
    */
   const timerKey = (stepId) => (conversationId ? `${conversationId}:${stepId}` : null);
-  // Phenotype prioritization and the ACMG filter are the same pipeline step; whichever
-  // one is live owns the step's clock.
-  const reduceJob =
-    isRunningExomiser || exomiserStatus?.status ? exomiserStatus : filterJob;
   const jobTiming = (job) => ({
     startedAt: job?.started_at ?? null,
     completedAt: job?.completed_at ?? null,
     durationSeconds: job?.duration_seconds ?? null,
   });
+
+  /* Phenotype prioritization and the ACMG filter are the same pipeline step, so one of
+   * the two owns its clock: whichever is live, else whichever finished last. Picking
+   * "exomiser if it has any status" instead would report a stale Exomiser total while
+   * the ACMG filter is the run actually in flight. */
+  const reduceJob = (() => {
+    const live = (status, flag) =>
+      flag || ['running', 'queued', 'pending'].includes((status || '').trim().toLowerCase());
+    if (live(exomiserStatus?.status, isRunningExomiser)) return exomiserStatus;
+    if (live(filterJob?.status, isApplyingProprietaryFilter)) return filterJob;
+    const finishedAt = (job) => Date.parse(job?.completed_at || '') || 0;
+    return finishedAt(exomiserStatus) >= finishedAt(filterJob) ? exomiserStatus : filterJob;
+  })();
 
   const stepTimers = {
     upload: useRunTimer(timerKey('upload'), steps.upload === 'running'),
@@ -227,11 +236,23 @@ const PipelineDrawer = ({
     reduce: useRunTimer(timerKey('reduce'), steps.reduce === 'running', jobTiming(reduceJob)),
     chat: null,
   };
-  // The collapsed line carries one clock: the step actually in flight.
+  /* Enrichment and indexing are the two waits the five-step model doesn't own, and they
+   * are the last thing between a filter and a usable chat — so they get a clock too.
+   * Neither is timestamped server-side, so these are observed in this tab. */
+  const enrichmentTimer = useRunTimer(timerKey('enrichment'), Boolean(enrichmentState?.active));
+  const indexingTimer = useRunTimer(timerKey('indexing'), Boolean(indexingState?.active));
+
+  // The collapsed line carries one clock: whatever is actually in flight. Order matches
+  // the wording above it, so the reading always belongs to the named wait.
   const activeTimer =
-    ['upload', 'annovar', 'reduce', 'interpret']
-      .map((id) => stepTimers[id])
-      .find((t) => t?.running && t.elapsedMs != null) || null;
+    [
+      enrichmentState?.active ? enrichmentTimer : null,
+      indexingState?.active ? indexingTimer : null,
+      stepTimers.upload,
+      stepTimers.annovar,
+      stepTimers.reduce,
+      stepTimers.interpret,
+    ].find((t) => t?.running && t.elapsedMs != null) || null;
 
   const backgroundActive = getPipelineBackgroundActive(pipelineProps);
   const statusLine = getPipelineStatusLine(pipelineProps, steps);

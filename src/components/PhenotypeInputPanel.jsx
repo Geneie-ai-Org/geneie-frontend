@@ -560,7 +560,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     setResolveError('');
     try {
       const data = await interpretPhenotypeNarrative({ text: draft.trim() });
-      const findingCandidates = (data.finding_candidates || []).map((c) => ({
+      let findingCandidates = (data.finding_candidates || []).map((c) => ({
         hpo_id: c.hpo_id,
         hpo_name: c.hpo_name || '',
         matched_phrase: c.matched_phrase || c.source_phrase || '',
@@ -568,6 +568,50 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         match_type: c.match_type || '',
         selected: Boolean(c.selected),
       }));
+
+      // Fallback: if phrase grounding returned nothing, load disease-annotation
+      // HPOs the same way the Disease tab does so chips are always selectable.
+      if (findingCandidates.length === 0) {
+        const fromPayload = mapResolveToCandidates(data, { defaultSelected: false });
+        if (fromPayload.length > 0) {
+          findingCandidates = fromPayload;
+        } else {
+          const diseaseName =
+            data.disease_match?.name ||
+            data.disease_candidates?.[0]?.name ||
+            '';
+          if (diseaseName) {
+            try {
+              const resolved = await resolveHpoTerms({
+                text: diseaseName,
+                forceMode: PHENOTYPE_MODE_DISEASE,
+              });
+              findingCandidates = mapResolveToCandidates(resolved, {
+                defaultSelected: false,
+              });
+              if (!data.disease_match && resolved.disease_match) {
+                data.disease_match = resolved.disease_match;
+              }
+              if (!data.hpo_resolution_method && resolved.hpo_resolution_method) {
+                data.hpo_resolution_method = resolved.hpo_resolution_method;
+              }
+              if (
+                !(data.propagated_from_related_records || []).length &&
+                (resolved.propagated_from_related_records || []).length
+              ) {
+                data.propagated_from_related_records =
+                  resolved.propagated_from_related_records;
+              }
+              if (!(data.top_candidates || []).length && (resolved.top_candidates || []).length) {
+                data.top_candidates = resolved.top_candidates;
+              }
+            } catch (resolveErr) {
+              console.warn('[Phenotype] disease-annotation fallback failed', resolveErr);
+            }
+          }
+        }
+      }
+
       setNotePreview(data);
       setNoteUnmapped(data.unmapped || []);
       setNoteAmbiguous(data.ambiguous || []);
@@ -591,6 +635,11 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         propagated_from_related_records: data.propagated_from_related_records || [],
         ...(data.patient?.sex ? { sampleSex: data.patient.sex } : {}),
       });
+      if (findingCandidates.length === 0) {
+        setResolveError(
+          'No HPO findings to select. Try the Disease tab with the disease name, or add findings manually.'
+        );
+      }
     } catch (err) {
       setNotePreview(null);
       setResolveError(err?.message || 'Could not interpret clinical note');

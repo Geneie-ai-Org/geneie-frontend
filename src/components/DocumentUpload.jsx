@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2, Link2, Info, Plus } from 'lucide-react';
+import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2, Link2, Info, Plus, ChevronLeft } from 'lucide-react';
 import { optionalIdToken, requiredIdToken } from '@/lib/safeAuth';
 import { apiUrl as buildApiUrl } from '@/config/api';
 import { useAuth } from '@/hooks/useAuth';
@@ -130,6 +130,8 @@ const DocumentUpload = ({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showInfoForm, setShowInfoForm] = useState(false);
+  /** Sample Metadata wizard: basics first, then analysis-type-specific fields. */
+  const [metadataStep, setMetadataStep] = useState('sample'); // 'sample' | 'analysis'
   const [selectedFile, setSelectedFile] = useState(null);
   const [sampleMetadata, setSampleMetadata] = useState({
     name: '', // Auto-generated from filename
@@ -195,6 +197,7 @@ const DocumentUpload = ({
       });
       setEditImpact(null);
       setError('');
+      setMetadataStep('sample');
       setShowInfoForm(true);
     }
   }, [editMode, initialMetadata]);
@@ -390,6 +393,7 @@ const DocumentUpload = ({
       setValidationAttempted(false);
       setError('');
       setGenomeDetection(null);
+      setMetadataStep('sample');
       setShowInfoForm(true);
       runGenomeDetection(file);
     } else {
@@ -478,17 +482,50 @@ const DocumentUpload = ({
   };
 
 
+  const analysisTypeHasDetailStep = (analysisType) =>
+    analysisType === 'Germline' ||
+    analysisType === 'Somatic' ||
+    analysisType === 'Tumor-Normal Paired' ||
+    analysisType === 'Tumor-Only';
+
+  const validateSampleMetadataBasics = () => {
+    setValidationAttempted(true);
+    if (!sampleMetadata.genome) {
+      setError('Please select a Genome (required)');
+      return false;
+    }
+    if (!sampleMetadata.sequencingType) {
+      setError('Please select a Sequencing Type (required)');
+      return false;
+    }
+    if (!sampleMetadata.analysisType) {
+      setError('Please select an Analysis Type (required)');
+      return false;
+    }
+    setError('');
+    return true;
+  };
+
+  const handleMetadataContinue = () => {
+    if (!validateSampleMetadataBasics()) return;
+    setMetadataStep('analysis');
+  };
+
   const handleInfoFormSubmit = async (e) => {
     e.preventDefault();
+
+    // Step 1: Enter / primary action advances to analysis-type fields.
+    if (metadataStep === 'sample') {
+      handleMetadataContinue();
+      return;
+    }
 
     // --- Edit mode: PATCH sample metadata ---
     if (editMode && conversationId) {
       setError('');
       setValidationAttempted(true);
 
-      if (!sampleMetadata.genome) { setError('Please select a Genome (required)'); return; }
-      if (!sampleMetadata.sequencingType) { setError('Please select a Sequencing Type (required)'); return; }
-      if (!sampleMetadata.analysisType) { setError('Please select an Analysis Type (required)'); return; }
+      if (!validateSampleMetadataBasics()) return;
 
       setIsUploading(true);
       try {
@@ -521,6 +558,7 @@ const DocumentUpload = ({
         });
         onEditSaved?.(result);
         setShowInfoForm(false);
+        setMetadataStep('sample');
         setEditImpact(null);
       } catch (err) {
         setError(err.message || 'Failed to update sample metadata');
@@ -542,22 +580,7 @@ const DocumentUpload = ({
       return;
     }
 
-    // Mark validation as attempted
-    setValidationAttempted(true);
-
-    // Validate mandatory fields
-    if (!sampleMetadata.genome) {
-      setError('Please select a Genome (required)');
-      return;
-    }
-    if (!sampleMetadata.sequencingType) {
-      setError('Please select a Sequencing Type (required)');
-      return;
-    }
-    if (!sampleMetadata.analysisType) {
-      setError('Please select an Analysis Type (required)');
-      return;
-    }
+    if (!validateSampleMetadataBasics()) return;
 
     // Check for optional fields that are empty - show encouragement but allow proceeding
     const emptyOptionalFields = [];
@@ -591,12 +614,14 @@ const DocumentUpload = ({
   const handleInfoFormCancel = () => {
     if (editMode) {
       setShowInfoForm(false);
+      setMetadataStep('sample');
       setEditImpact(null);
       setError('');
       onCancel?.();
       return;
     }
     setShowInfoForm(false);
+    setMetadataStep('sample');
     setSelectedFile(null);
     setImportUrlMeta(null);
     setFileUrl('');
@@ -902,6 +927,7 @@ const DocumentUpload = ({
       }));
       setValidationAttempted(false);
       setError('');
+      setMetadataStep('sample');
       setShowInfoForm(true);
     } catch (err) {
       setError(err.message || 'Failed to validate URL');
@@ -1307,8 +1333,27 @@ const DocumentUpload = ({
               {editMode ? 'Edit Sample Information' : 'Sample Metadata'}
             </h3>
             <p className="text-xs mb-0" style={{ color: 'var(--text-tertiary)' }}>
-              {editMode ? 'Update metadata for this variant file. Changes may require re-running analysis steps.' : 'Provide details about your variant file for better analysis.'}
+              {metadataStep === 'sample'
+                ? (editMode
+                  ? 'Step 1 of 2 — sample basics and analysis type.'
+                  : 'Step 1 of 2 — sample basics and analysis type.')
+                : `Step 2 of 2 — ${sampleMetadata.analysisType || 'analysis'} details.`}
             </p>
+            <div className="flex items-center gap-1.5 mt-3" aria-hidden="true">
+              <span
+                className="h-1 flex-1 rounded-full"
+                style={{ backgroundColor: 'var(--accent-teal)' }}
+              />
+              <span
+                className="h-1 flex-1 rounded-full"
+                style={{
+                  backgroundColor:
+                    metadataStep === 'analysis'
+                      ? 'var(--accent-teal)'
+                      : 'var(--border-default)',
+                }}
+              />
+            </div>
             {!editMode && (selectedFile || importUrlMeta) && (
               <div className="inline-flex items-center gap-2 mt-4 max-w-full pl-2.5 pr-3 py-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]" title={selectedFile ? selectedFile.name : importUrlMeta?.file_name}>
                 <FileText className="w-3.5 h-3.5 shrink-0 text-[var(--accent-teal)]" />
@@ -1327,6 +1372,7 @@ const DocumentUpload = ({
 
           <form onSubmit={handleInfoFormSubmit} className="flex flex-col flex-1 min-h-0">
             <div className="flex-1 overflow-y-auto px-7 pb-4 space-y-5">
+              {metadataStep === 'sample' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
                 {/* Name - Editable */}
                 <div>
@@ -1482,10 +1528,10 @@ const DocumentUpload = ({
                   />
                 </div>
               </div>
+              )}
 
-              {/* Conditional Fields - Only shown if Analysis Type = Germline */}
-              {sampleMetadata.analysisType === 'Germline' && (
-                <div className="disclosure-enter border-t border-[var(--border-default)] pt-4 mt-4">
+              {metadataStep === 'analysis' && sampleMetadata.analysisType === 'Germline' && (
+                <div className="disclosure-enter">
                   <h4 className="text-md font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
                     Germline Analysis Fields
                   </h4>
@@ -1567,11 +1613,11 @@ const DocumentUpload = ({
                 </div>
               )}
 
-              {/* Tumor Type - Only shown for Somatic/Tumor analyses (NOT Germline) */}
-              {(sampleMetadata.analysisType === 'Somatic' ||
-                sampleMetadata.analysisType === 'Tumor-Normal Paired' ||
-                sampleMetadata.analysisType === 'Tumor-Only') && (
-                  <div className="disclosure-enter border-t border-[var(--border-default)] pt-4 mt-4">
+              {metadataStep === 'analysis' &&
+                (sampleMetadata.analysisType === 'Somatic' ||
+                  sampleMetadata.analysisType === 'Tumor-Normal Paired' ||
+                  sampleMetadata.analysisType === 'Tumor-Only') && (
+                  <div className="disclosure-enter">
                     <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
                       Tumor Analysis Fields
                     </h4>
@@ -1596,38 +1642,74 @@ const DocumentUpload = ({
                   </div>
                 )}
 
+              {metadataStep === 'analysis' && !analysisTypeHasDetailStep(sampleMetadata.analysisType) && (
+                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  No extra fields for this analysis type. Continue to upload.
+                </p>
+              )}
+
             </div>
 
             {/* Form Actions — pinned footer */}
-            <div className="flex-shrink-0 flex gap-2 justify-end px-7 py-4 border-t border-[var(--border-subtle)]">
-              <button
-                type="button"
-                onClick={handleInfoFormCancel}
-                disabled={isUploading}
-                className="h-10 px-4 rounded-lg transition-colors text-sm font-medium disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
-                style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
-                onMouseEnter={(e) => { if (!isUploading) e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; }}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isUploading}
-                className="h-10 px-5 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface-raised)]"
-                style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
-                onMouseEnter={(e) => { if (!isUploading) e.currentTarget.style.opacity = '0.9'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
-              >
-                {isUploading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    {editMode ? 'Saving…' : 'Processing…'}
-                  </>
+            <div className="flex-shrink-0 flex gap-2 justify-between px-7 py-4 border-t border-[var(--border-subtle)]">
+              <div className="flex gap-2">
+                {metadataStep === 'analysis' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError('');
+                      setMetadataStep('sample');
+                    }}
+                    disabled={isUploading}
+                    className="h-10 px-3 rounded-lg transition-colors text-sm font-medium inline-flex items-center gap-1 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                    style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Back
+                  </button>
+                ) : null}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleInfoFormCancel}
+                  disabled={isUploading}
+                  className="h-10 px-4 rounded-lg transition-colors text-sm font-medium disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                  style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
+                  onMouseEnter={(e) => { if (!isUploading) e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; }}
+                >
+                  Cancel
+                </button>
+                {metadataStep === 'sample' ? (
+                  <button
+                    type="submit"
+                    disabled={isUploading}
+                    className="h-10 px-5 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface-raised)]"
+                    style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
+                  >
+                    Continue
+                  </button>
                 ) : (
-                  editMode ? 'Save Changes' : (importMode === 'url' ? 'Import File' : 'Upload File')
+                  <button
+                    type="submit"
+                    disabled={isUploading}
+                    className="h-10 px-5 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface-raised)]"
+                    style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
+                    onMouseEnter={(e) => { if (!isUploading) e.currentTarget.style.opacity = '0.9'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
+                  >
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {editMode ? 'Saving…' : 'Processing…'}
+                      </>
+                    ) : (
+                      editMode ? 'Save Changes' : (importMode === 'url' ? 'Import File' : 'Upload File')
+                    )}
+                  </button>
                 )}
-              </button>
+              </div>
             </div>
           </form>
         </DialogContent>
@@ -1736,6 +1818,7 @@ const DocumentUpload = ({
                     setValidationAttempted(false);
                     setError('');
                     setGenomeDetection(null);
+                    setMetadataStep('sample');
                     setShowInfoForm(true);
                     runGenomeDetection(file);
                   } else {

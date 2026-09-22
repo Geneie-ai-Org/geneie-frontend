@@ -4,7 +4,7 @@
  * Disease matches are a shortcut to load annotated findings for review.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Loader2, Sparkles, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Loader2, X } from 'lucide-react';
 import { interpretPhenotypeNarrative, resolveHpoTerms } from '@/services/mongodbApi';
 
 export const PHENOTYPE_MODE_FINDINGS = 'findings';
@@ -194,6 +194,57 @@ function diseaseKey(d) {
     .toLowerCase()}`;
 }
 
+function normalizeDiseaseOption(d) {
+  if (!d) return null;
+  const disease_name = String(d.disease_name || d.name || '').trim();
+  if (!disease_name) return null;
+  const scoreRaw = d.score;
+  let score = null;
+  if (typeof scoreRaw === 'number' && Number.isFinite(scoreRaw)) score = scoreRaw;
+  else if (scoreRaw != null && scoreRaw !== '') {
+    const n = Number(scoreRaw);
+    if (Number.isFinite(n)) score = n;
+  } else if (d.confidence === 'high') score = 1;
+  else if (d.confidence === 'medium') score = 0.7;
+  else if (d.confidence === 'low') score = 0.4;
+  return {
+    disease_id: d.disease_id || d.id || '',
+    disease_name,
+    score,
+    source: d.source || '',
+  };
+}
+
+/** Merge disease lists; keep highest score; sort score desc. Never drop prior entries. */
+function mergeDiseaseCatalog(existing, incoming) {
+  const byKey = new Map();
+  for (const raw of [...(existing || []), ...(incoming || [])]) {
+    const d = normalizeDiseaseOption(raw);
+    if (!d) continue;
+    const key = diseaseKey(d);
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, d);
+      continue;
+    }
+    const prevScore = prev.score == null ? -1 : prev.score;
+    const nextScore = d.score == null ? -1 : d.score;
+    byKey.set(key, {
+      ...prev,
+      ...d,
+      disease_id: d.disease_id || prev.disease_id,
+      source: d.source || prev.source,
+      score: Math.max(prevScore, nextScore) < 0 ? null : Math.max(prevScore, nextScore),
+    });
+  }
+  return Array.from(byKey.values()).sort((a, b) => {
+    const as = a.score == null ? -1 : a.score;
+    const bs = b.score == null ? -1 : b.score;
+    if (bs !== as) return bs - as;
+    return String(a.disease_name).localeCompare(String(b.disease_name));
+  });
+}
+
 /**
  * Clinical-note phenotype panel (pinned findings + optional disease shortcut).
  */
@@ -220,6 +271,8 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
   const onChangeRef = useRef(onChange);
   const stateRef = useRef({});
   const focusedRef = useRef(false);
+  const interpretSeq = useRef(0);
+  const interpretDebounceRef = useRef(null);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -313,39 +366,16 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
   }, [candidates]);
 
   const diseaseOptions = useMemo(() => {
-    const out = [];
-    const seen = new Set();
-    const push = (d) => {
-      if (!d) return;
-      const name = String(d.disease_name || d.name || '').trim();
-      if (!name) return;
-      const item = {
-        disease_id: d.disease_id || d.id || '',
-        disease_name: name,
-        score: d.score,
-        source: d.source,
-      };
-      const key = diseaseKey(item);
-      if (seen.has(key)) return;
-      seen.add(key);
-      out.push(item);
-    };
-    push(
-      diseaseMatch
-        ? {
-            disease_id: diseaseMatch.id,
-            disease_name: diseaseMatch.name,
-            score: diseaseMatch.score,
-            source: diseaseMatch.source,
-          }
-        : null
+    // Stable catalog from top_candidates (score-sorted). Selection never reorders/removes rows.
+    const fromTop = mergeDiseaseCatalog([], topCandidates || []);
+    const fromPreview = (notePreview?.disease_candidates || []).map((c) =>
+      normalizeDiseaseOption({
+        disease_name: c.name,
+        score: c.confidence === 'high' ? 1 : c.confidence === 'medium' ? 0.7 : 0.4,
+      })
     );
-    for (const c of topCandidates || []) push(c);
-    for (const c of notePreview?.disease_candidates || []) {
-      push({ disease_name: c.name, score: c.confidence === 'high' ? 1 : 0.5 });
-    }
-    return out;
-  }, [diseaseMatch, topCandidates, notePreview]);
+    return mergeDiseaseCatalog(fromTop, fromPreview);
+  }, [topCandidates, notePreview]);
 
   const primaryDisease = diseaseOptions[0] || null;
   const altDiseases = diseaseOptions.slice(1);
@@ -357,7 +387,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     setNoteUnmapped([]);
     setNoteAmbiguous([]);
     setResolveError('');
-    // Keep disease + selected findings pinned.
+    // Keep disease catalog + selected findings pinned.
   };
 
   const toggleCandidate = (hpoId) => {
@@ -399,7 +429,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     );
 
   const clearDisease = () => {
-    // Drop unselected disease-annotation proposals; keep pinned (selected) findings.
+    // Deselect only — keep catalog (top_candidates) and pinned findings.
     const pinned = (stateRef.current.candidates || []).filter((c) => c.selected);
     emit({
       phenotype_disease: '',
@@ -408,6 +438,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       hpo_resolution_method: null,
       propagated_from_related_records: [],
       phenotype_findings: findingsLabelFrom(pinned),
+      // top_candidates intentionally unchanged
     });
   };
 
@@ -429,7 +460,6 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         forceMode: PHENOTYPE_MODE_DISEASE,
       });
       const fromDisease = mapResolveToCandidates(resolved, { defaultSelected: false });
-      // Keep only pinned selections from before; replace unselected proposals with this disease's list.
       const pinned = (stateRef.current.candidates || []).filter((c) => c.selected);
       const merged = mergeCandidates(pinned, fromDisease);
       const match =
@@ -440,18 +470,20 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           score: disease.score,
           source: disease.source,
         };
+      const catalog = mergeDiseaseCatalog(stateRef.current.topCandidates, [
+        match,
+        ...(resolved.top_candidates || []),
+        disease,
+      ]);
       emit({
         phenotype_disease: name,
         candidates: merged,
         disease_match: match,
-        top_candidates: resolved.top_candidates?.length
-          ? resolved.top_candidates
-          : stateRef.current.topCandidates,
+        top_candidates: catalog,
         hpo_resolution_method: resolved.hpo_resolution_method || null,
         propagated_from_related_records: resolved.propagated_from_related_records || [],
         phenotype_findings: findingsLabelFrom(merged),
       });
-      setShowMoreDiseases(false);
     } catch (err) {
       setResolveError(err?.message || 'Could not load findings for that disease');
     } finally {
@@ -459,54 +491,105 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     }
   };
 
-  const runInterpretNote = async () => {
-    if (!draft.trim() || disabled) return;
+  const runInterpretNote = useCallback(async (text) => {
+    const trimmed = String(text || '').trim();
+    if (trimmed.length < 8 || disabled) return;
+    const seq = ++interpretSeq.current;
     setInterpreting(true);
     setResolveError('');
     try {
-      const data = await interpretPhenotypeNarrative({ text: draft.trim() });
-      // Phrase-grounded findings only — do not auto-dump disease annotations
-      // (that was loading wrong-disease HPOs for skin notes).
+      const data = await interpretPhenotypeNarrative({ text: trimmed });
+      if (seq !== interpretSeq.current) return;
+
       const phraseFindings = (data.finding_candidates || [])
         .map(normalizeCandidate)
         .filter(Boolean)
         .filter((c) => c.origin !== 'disease_annotation' && c.match_type !== 'disease_annotation');
 
       const pinned = (stateRef.current.candidates || []).filter((c) => c.selected);
-      const merged = mergeCandidates(pinned, phraseFindings);
+      const mergedFindings = mergeCandidates(pinned, phraseFindings);
+
+      const incomingDiseases = [
+        data.disease_match
+          ? {
+              disease_id: data.disease_match.id,
+              disease_name: data.disease_match.name,
+              score: data.disease_match.score,
+              source: data.disease_match.source,
+            }
+          : null,
+        ...(data.top_candidates || []),
+        ...((data.disease_candidates || []).map((c) => ({
+          disease_name: c.name,
+          score: c.confidence === 'high' ? 1 : c.confidence === 'medium' ? 0.7 : 0.4,
+        })) || []),
+      ];
+      const catalog = mergeDiseaseCatalog(stateRef.current.topCandidates, incomingDiseases);
+
+      // Keep user's disease selection if still in catalog; never auto-select a new best match.
+      const prev = stateRef.current.diseaseMatch;
+      let nextMatch = null;
+      if (prev?.name) {
+        nextMatch =
+          catalog.find(
+            (d) =>
+              (prev.id && d.disease_id && prev.id === d.disease_id) ||
+              String(d.disease_name || '').toLowerCase() === String(prev.name || '').toLowerCase()
+          ) || null;
+        if (nextMatch) {
+          nextMatch = {
+            id: nextMatch.disease_id || prev.id || '',
+            name: nextMatch.disease_name,
+            score: nextMatch.score ?? prev.score,
+            source: nextMatch.source || prev.source,
+          };
+        }
+      }
 
       setNotePreview(data);
       setNoteUnmapped(data.unmapped || []);
       setNoteAmbiguous(data.ambiguous || []);
-      setShowMoreDiseases(false);
-
-      const diseaseName =
-        data.disease_match?.name || data.disease_candidates?.[0]?.name || '';
 
       emit({
         phenotype_mode: PHENOTYPE_MODE_NOTE,
-        phenotype_note_clean: data.deidentified_text || noteCleanText || '',
-        phenotype_disease: diseaseName || diseaseText,
-        phenotype_findings: findingsLabelFrom(merged),
-        candidates: merged,
-        disease_match: data.disease_match || diseaseMatch,
-        top_candidates: data.top_candidates || [],
-        hpo_resolution_method: data.hpo_resolution_method || null,
-        propagated_from_related_records: data.propagated_from_related_records || [],
+        phenotype_note_clean: data.deidentified_text || stateRef.current.noteCleanText || '',
+        phenotype_disease: nextMatch?.name || '',
+        phenotype_findings: findingsLabelFrom(mergedFindings),
+        candidates: mergedFindings,
+        disease_match: nextMatch,
+        top_candidates: catalog,
+        hpo_resolution_method: nextMatch
+          ? stateRef.current.hpoResolutionMethod
+          : data.hpo_resolution_method || null,
+        propagated_from_related_records: nextMatch
+          ? stateRef.current.propagatedFromRelated
+          : data.propagated_from_related_records || [],
         ...(data.patient?.sex ? { sampleSex: data.patient.sex } : {}),
       });
-
-      if (phraseFindings.length === 0 && !data.disease_match && !(data.disease_candidates || []).length) {
-        setResolveError(
-          'No disease or HPO findings detected. Try a clearer note, or pick a disease below if one appears.'
-        );
-      }
     } catch (err) {
+      if (seq !== interpretSeq.current) return;
       setResolveError(err?.message || 'Could not interpret clinical note');
     } finally {
-      setInterpreting(false);
+      if (seq === interpretSeq.current) setInterpreting(false);
     }
-  };
+  }, [disabled, emit]);
+
+  // Live interpret while typing (debounced).
+  useEffect(() => {
+    if (disabled) return undefined;
+    if (interpretDebounceRef.current) clearTimeout(interpretDebounceRef.current);
+    const trimmed = String(draft || '').trim();
+    if (trimmed.length < 8) {
+      setInterpreting(false);
+      return undefined;
+    }
+    interpretDebounceRef.current = setTimeout(() => {
+      runInterpretNote(trimmed);
+    }, 700);
+    return () => {
+      if (interpretDebounceRef.current) clearTimeout(interpretDebounceRef.current);
+    };
+  }, [draft, disabled, runInterpretNote]);
 
   const inputStyle = {
     borderColor: 'var(--border-default)',
@@ -597,24 +680,24 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         )}
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <button
-          type="button"
-          disabled={disabled || interpreting || draft.trim().length < 8}
-          onClick={runInterpretNote}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-2xs font-medium rounded-md border transition-all"
-          style={{
-            borderColor: 'var(--accent-teal)',
-            color: 'var(--accent-teal)',
-            background: 'color-mix(in srgb, var(--accent-teal) 10%, transparent)',
-          }}
-        >
-          {interpreting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-          Interpret note
-        </button>
-        <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-          Patient names are removed before chat
-        </span>
+      <div className="flex items-center gap-2 flex-wrap min-h-[1.25rem]">
+        {interpreting ? (
+          <span className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
+            <Loader2 className="w-3 h-3 animate-spin" /> Updating matches…
+          </span>
+        ) : draft.trim().length >= 8 ? (
+          <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+            Patient names are removed before chat
+          </span>
+        ) : draft.trim().length > 0 ? (
+          <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+            Keep typing to search diseases and findings…
+          </span>
+        ) : (
+          <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+            Patient names are removed before chat
+          </span>
+        )}
       </div>
 
       {notePreview?.deidentified_text && (

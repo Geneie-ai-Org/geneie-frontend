@@ -302,6 +302,22 @@ const ChatPage = () => {
   const updateConversationTitle = useCallback(async (conversationId, firstMessage) => {
     if (!userId) return;
 
+    // Prefer uploaded file name over LLM conversation summaries in the sidebar.
+    const existing = conversations.find(
+      (c) => String(c.id) === String(conversationId) || String(c.conversation_id) === String(conversationId)
+    );
+    if (existing?.documentName) {
+      if (existing.title !== existing.documentName) {
+        try {
+          await mongodbApi.updateConversation(conversationId, { title: existing.documentName });
+          applyConversationTitle(conversationId, existing.documentName);
+        } catch (error) {
+          console.error('Error syncing file-name title:', error);
+        }
+      }
+      return;
+    }
+
     try {
       const auth = getAuth();
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
@@ -336,7 +352,7 @@ const ChatPage = () => {
         console.error('Error with fallback title update:', fallbackError);
       }
     }
-  }, [userId, applyConversationTitle]);
+  }, [userId, applyConversationTitle, conversations]);
 
   const {
     messages,
@@ -426,6 +442,19 @@ const ChatPage = () => {
     refreshSubscriptionStatus,
     syncPipelineFromConversationRef,
     setConversationFilterState,
+    onDocumentAttached: (conversationId, fileName) => {
+      if (!conversationId || !fileName) return;
+      setConversations((prev) =>
+        prev.map((c) =>
+          String(c.id) === String(conversationId) || String(c.conversation_id) === String(conversationId)
+            ? { ...c, documentName: fileName, title: fileName }
+            : c
+        )
+      );
+      mongodbApi.updateConversation(conversationId, { title: fileName }).catch((err) => {
+        console.warn('[App] Failed to persist file-name title:', err);
+      });
+    },
   });
 
   const handleUploadStarted = useCallback((fileName) => {
@@ -769,9 +798,20 @@ const ChatPage = () => {
         if (cancelled) return;
 
         if (convData) {
-          // Pick up any backend-side title change (e.g. auto-generated "Greeting and Initial Contact")
-          // so the sidebar entry and chat header reflect it.
-          applyConversationTitle(conversationId, convData.title);
+          // Prefer uploaded file name over any LLM-generated conversation summary.
+          const fileName = convData.document?.file_name || null;
+          if (fileName) {
+            applyConversationTitle(conversationId, fileName);
+            setConversations((prev) =>
+              prev.map((c) =>
+                String(c.id) === String(conversationId) || String(c.conversation_id) === String(conversationId)
+                  ? { ...c, documentName: fileName, title: fileName }
+                  : c
+              )
+            );
+          } else if (convData.title) {
+            applyConversationTitle(conversationId, convData.title);
+          }
 
           if (convData.document?.s3_url && convData.document?.file_name) {
             setCurrentDocument({
@@ -936,10 +976,17 @@ const ChatPage = () => {
 
   const conversationHeaderTitle = useMemo(() => {
     if (userTier === 'guest') return 'Guest session';
+    if (activeConversation?.documentName) return activeConversation.documentName;
     if (activeConversation?.title) return activeConversation.title;
     if (isConversationStarted || isCurrentlyActive) return 'New conversation';
     return 'Geneie';
-  }, [userTier, activeConversation?.title, isConversationStarted, isCurrentlyActive]);
+  }, [
+    userTier,
+    activeConversation?.documentName,
+    activeConversation?.title,
+    isConversationStarted,
+    isCurrentlyActive,
+  ]);
 
   // One row per data kind; the file-vs-URL choice is a toggle inside the modal.
   const onSelectVariantFile = () => {

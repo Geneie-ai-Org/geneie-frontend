@@ -389,9 +389,38 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     });
   };
 
+  const isActiveDisease = (d) =>
+    Boolean(
+      diseaseMatch &&
+        d &&
+        ((diseaseMatch.id && (d.disease_id || d.id) && diseaseMatch.id === (d.disease_id || d.id)) ||
+          String(diseaseMatch.name || '').toLowerCase() ===
+            String(d.disease_name || d.name || '').toLowerCase())
+    );
+
+  const clearDisease = () => {
+    // Drop unselected disease-annotation proposals; keep pinned (selected) findings.
+    const pinned = (stateRef.current.candidates || []).filter((c) => c.selected);
+    emit({
+      phenotype_disease: '',
+      candidates: pinned,
+      disease_match: null,
+      hpo_resolution_method: null,
+      propagated_from_related_records: [],
+      phenotype_findings: findingsLabelFrom(pinned),
+    });
+  };
+
   const applyDisease = async (disease) => {
     const name = String(disease?.disease_name || disease?.name || '').trim();
     if (!name || disabled) return;
+
+    // Toggle off if this disease is already selected.
+    if (isActiveDisease(disease)) {
+      clearDisease();
+      return;
+    }
+
     setResolving(true);
     setResolveError('');
     try {
@@ -528,11 +557,6 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     </div>
   );
 
-  const isActiveDisease = (d) =>
-    diseaseMatch &&
-    ((diseaseMatch.id && d.disease_id && diseaseMatch.id === d.disease_id) ||
-      String(diseaseMatch.name || '').toLowerCase() === String(d.disease_name || '').toLowerCase());
-
   return (
     <div className="space-y-2">
       <label className="flex items-baseline gap-1.5 text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -661,7 +685,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
                 primaryDisease.score != null
                   ? `score ${Number(primaryDisease.score).toFixed(2)}`
                   : null,
-                isActiveDisease(primaryDisease) ? 'selected — findings loaded below' : 'click to use',
+                isActiveDisease(primaryDisease) ? 'selected — click to deselect' : 'click to use',
               ]
                 .filter(Boolean)
                 .join(' · ')}
@@ -690,7 +714,11 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
               <span style={{ color: 'var(--text-tertiary)' }}>
                 {' '}
                 ·{' '}
-                {[c.disease_id, c.score != null ? `score ${Number(c.score).toFixed(2)}` : null]
+                {[
+                  c.disease_id,
+                  c.score != null ? `score ${Number(c.score).toFixed(2)}` : null,
+                  isActiveDisease(c) ? 'selected — click to deselect' : null,
+                ]
                   .filter(Boolean)
                   .join(' · ')}
               </span>

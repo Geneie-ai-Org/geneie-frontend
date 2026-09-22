@@ -273,6 +273,9 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
   const focusedRef = useRef(false);
   const interpretSeq = useRef(0);
   const interpretDebounceRef = useRef(null);
+  const diseaseSeq = useRef(0);
+  const diseaseDebounceRef = useRef(null);
+  const [searchingDiseases, setSearchingDiseases] = useState(false);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -574,7 +577,84 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     }
   }, [disabled, emit]);
 
-  // Live interpret while typing (debounced).
+  /** Fast disease catalog update — deterministic resolve, no LLM. */
+  const runFastDiseaseSearch = useCallback(async (text) => {
+    const trimmed = String(text || '').trim();
+    if (trimmed.length < 3 || disabled) return;
+    const seq = ++diseaseSeq.current;
+    setSearchingDiseases(true);
+    try {
+      const resolved = await resolveHpoTerms({
+        text: trimmed,
+        forceMode: PHENOTYPE_MODE_DISEASE,
+      });
+      if (seq !== diseaseSeq.current) return;
+
+      const incoming = [
+        resolved.disease_match
+          ? {
+              disease_id: resolved.disease_match.id,
+              disease_name: resolved.disease_match.name,
+              score: resolved.disease_match.score,
+              source: resolved.disease_match.source,
+            }
+          : null,
+        ...(resolved.top_candidates || []),
+      ];
+      const catalog = mergeDiseaseCatalog(stateRef.current.topCandidates, incoming);
+      if (catalog.length === 0) return;
+
+      // Preserve selection; only refresh the ranked disease list.
+      const prev = stateRef.current.diseaseMatch;
+      let nextMatch = null;
+      if (prev?.name) {
+        const found = catalog.find(
+          (d) =>
+            (prev.id && d.disease_id && prev.id === d.disease_id) ||
+            String(d.disease_name || '').toLowerCase() === String(prev.name || '').toLowerCase()
+        );
+        if (found) {
+          nextMatch = {
+            id: found.disease_id || prev.id || '',
+            name: found.disease_name,
+            score: found.score ?? prev.score,
+            source: found.source || prev.source,
+          };
+        }
+      }
+
+      emit({
+        top_candidates: catalog,
+        disease_match: nextMatch,
+        phenotype_disease: nextMatch?.name || '',
+      });
+    } catch (err) {
+      if (seq !== diseaseSeq.current) return;
+      // Soft-fail: interpret path may still populate diseases.
+      console.warn('[Phenotype] fast disease search failed', err);
+    } finally {
+      if (seq === diseaseSeq.current) setSearchingDiseases(false);
+    }
+  }, [disabled, emit]);
+
+  // Fast disease matches on every edit (short debounce).
+  useEffect(() => {
+    if (disabled) return undefined;
+    if (diseaseDebounceRef.current) clearTimeout(diseaseDebounceRef.current);
+    const trimmed = String(draft || '').trim();
+    if (trimmed.length < 3) {
+      setSearchingDiseases(false);
+      return undefined;
+    }
+    diseaseDebounceRef.current = setTimeout(() => {
+      runFastDiseaseSearch(trimmed);
+    }, 180);
+    return () => {
+      if (diseaseDebounceRef.current) clearTimeout(diseaseDebounceRef.current);
+    };
+  }, [draft, disabled, runFastDiseaseSearch]);
+
+  // Slower LLM interpret for cleaned note + phrase findings (does not block disease list).
   useEffect(() => {
     if (disabled) return undefined;
     if (interpretDebounceRef.current) clearTimeout(interpretDebounceRef.current);
@@ -585,7 +665,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     }
     interpretDebounceRef.current = setTimeout(() => {
       runInterpretNote(trimmed);
-    }, 700);
+    }, 500);
     return () => {
       if (interpretDebounceRef.current) clearTimeout(interpretDebounceRef.current);
     };
@@ -681,17 +761,18 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       </div>
 
       <div className="flex items-center gap-2 flex-wrap min-h-[1.25rem]">
-        {interpreting ? (
+        {searchingDiseases || interpreting ? (
           <span className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
-            <Loader2 className="w-3 h-3 animate-spin" /> Updating matches…
+            <Loader2 className="w-3 h-3 animate-spin" />
+            {searchingDiseases ? 'Updating disease matches…' : 'Updating findings…'}
           </span>
-        ) : draft.trim().length >= 8 ? (
+        ) : draft.trim().length >= 3 ? (
           <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
             Patient names are removed before chat
           </span>
         ) : draft.trim().length > 0 ? (
           <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-            Keep typing to search diseases and findings…
+            Keep typing to search…
           </span>
         ) : (
           <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>

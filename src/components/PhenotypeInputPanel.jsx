@@ -1,7 +1,7 @@
 /**
  * Germline phenotype entry via clinical note.
- * Exomiser uses selected HPO finding IDs (confirmed_ids). Disease matches are a
- * shortcut to load annotated findings — not an alternate Exomiser input.
+ * Selected HPO finding IDs (confirmed_ids) drive phenotype prioritization.
+ * Disease matches are a shortcut to load annotated findings for review.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Loader2, Sparkles, X } from 'lucide-react';
@@ -542,12 +542,6 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         </span>
       </label>
 
-      <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-        Paste a clinical note → Interpret. Exomiser uses the HPO findings you tick — not the disease
-        name. Selecting a disease only loads its annotated findings for you to review. Clear the note
-        anytime; selected findings stay pinned so you can paste another note and add more.
-      </p>
-
       <div className="relative">
         <textarea
           value={draft}
@@ -595,7 +589,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           Interpret note
         </button>
         <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-          Names are removed before chat / Exomiser text fallback
+          Patient names are removed before chat
         </span>
       </div>
 
@@ -638,10 +632,6 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           <div className="font-medium" style={{ color: 'var(--text-primary)' }}>
             Disease matches
           </div>
-          <p className="text-2xs" style={{ color: 'var(--text-secondary)' }}>
-            Pick a disease to load its annotated HPO findings. Only findings you tick go to Exomiser
-            ({selectedCount} selected).
-          </p>
 
           <button
             type="button"

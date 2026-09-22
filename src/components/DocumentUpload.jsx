@@ -18,7 +18,7 @@ import {
 } from '@/services/backendApi';
 import { patchSampleMetadata } from '@/services/mongodbApi';
 import PhenotypeInputPanel, {
-  PHENOTYPE_MODE_FINDINGS,
+  PHENOTYPE_MODE_NOTE,
   sampleHasPhenotype,
 } from '@/components/PhenotypeInputPanel';
 import { PillToggle } from '@/components/ui/pill-toggle';
@@ -147,7 +147,7 @@ const DocumentUpload = ({
     affectedStatus: '', // affected / unaffected
     inheritanceModel: '', // Autosomal Dominant / Autosomal Recessive / X-linked / De novo / Unknown
     phenotype: '', // Canonical active-tab text (only for Germline)
-    phenotype_mode: PHENOTYPE_MODE_FINDINGS,
+    phenotype_mode: PHENOTYPE_MODE_NOTE,
     phenotype_findings: '',
     phenotype_disease: '',
     phenotype_note_clean: '',
@@ -188,7 +188,7 @@ const DocumentUpload = ({
         affectedStatus: initialMetadata.affectedStatus || '',
         inheritanceModel: initialMetadata.inheritanceModel || '',
         phenotype: initialMetadata.phenotype || '',
-        phenotype_mode: initialMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+        phenotype_mode: initialMetadata.phenotype_mode || PHENOTYPE_MODE_NOTE,
         phenotype_findings: initialMetadata.phenotype_findings || (initialMetadata.phenotype_mode === 'disease' ? '' : (initialMetadata.phenotype || '')),
         phenotype_disease: initialMetadata.phenotype_disease || (initialMetadata.phenotype_mode === 'disease' ? (initialMetadata.phenotype || '') : ''),
         phenotype_note_clean: initialMetadata.phenotype_note_clean || '',
@@ -540,7 +540,7 @@ const DocumentUpload = ({
           ...(sampleMetadata.analysisType === 'Germline'
             ? {
                 phenotype: sampleMetadata.phenotype || '',
-                phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+                phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_NOTE,
                 phenotype_findings: sampleMetadata.phenotype_findings || '',
                 phenotype_disease: sampleMetadata.phenotype_disease || '',
                 phenotype_note_clean: sampleMetadata.phenotype_note_clean || '',
@@ -548,7 +548,7 @@ const DocumentUpload = ({
               }
             : {
                 phenotype: '',
-                phenotype_mode: PHENOTYPE_MODE_FINDINGS,
+                phenotype_mode: PHENOTYPE_MODE_NOTE,
                 phenotype_findings: '',
                 phenotype_disease: '',
                 phenotype_note_clean: '',
@@ -642,7 +642,7 @@ const DocumentUpload = ({
       affectedStatus: '',
       inheritanceModel: '',
       phenotype: '',
-      phenotype_mode: PHENOTYPE_MODE_FINDINGS,
+      phenotype_mode: PHENOTYPE_MODE_NOTE,
       phenotype_findings: '',
       phenotype_disease: '',
       phenotype_note_clean: '',
@@ -1596,7 +1596,7 @@ const DocumentUpload = ({
                     * only the phenotype-driven filter needs it. */}
                   <PhenotypeInputPanel
                     value={{
-                      phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+                      phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_NOTE,
                       phenotype_findings: sampleMetadata.phenotype_findings || '',
                       phenotype_disease: sampleMetadata.phenotype_disease || '',
                       phenotype_note_clean: sampleMetadata.phenotype_note_clean || '',

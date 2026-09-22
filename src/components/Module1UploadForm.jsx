@@ -20,7 +20,7 @@ import { PillToggle } from '@/components/ui/pill-toggle';
 import { MODULE1_BED_MAX_BYTES, MODULE1_FASTQ_MAX_BYTES } from '@/services/backendApi';
 import { isRecognizedImportUrl, module1UrlErrorMessage, precheckBedChromStyle } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
-import PhenotypeInputPanel, { PHENOTYPE_MODE_FINDINGS } from '@/components/PhenotypeInputPanel';
+import PhenotypeInputPanel, { PHENOTYPE_MODE_NOTE } from '@/components/PhenotypeInputPanel';
 
 const GENOME_OPTIONS = [
   { value: 'hg38', label: 'hg38 (GRCh38)' },
@@ -89,7 +89,7 @@ const EMPTY_SAMPLE_METADATA = {
   affectedStatus: '',
   inheritanceModel: '',
   phenotype: '',
-  phenotype_mode: PHENOTYPE_MODE_FINDINGS,
+  phenotype_mode: PHENOTYPE_MODE_NOTE,
   phenotype_findings: '',
   phenotype_disease: '',
   phenotype_note_clean: '',
@@ -466,7 +466,7 @@ const Module1UploadForm = ({
               affectedStatus: sampleMetadata.affectedStatus,
               inheritanceModel: sampleMetadata.inheritanceModel,
               phenotype: sampleMetadata.phenotype.trim(),
-              phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+              phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_NOTE,
               phenotype_findings: sampleMetadata.phenotype_findings || '',
               phenotype_disease: sampleMetadata.phenotype_disease || '',
               phenotype_note_clean: sampleMetadata.phenotype_note_clean || '',
@@ -644,7 +644,7 @@ const Module1UploadForm = ({
                     <div className="md:col-span-2">
                       <PhenotypeInputPanel
                         value={{
-                          phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+                          phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_NOTE,
                           phenotype_findings: sampleMetadata.phenotype_findings || '',
                           phenotype_disease: sampleMetadata.phenotype_disease || '',
                           phenotype_note_clean: sampleMetadata.phenotype_note_clean || '',

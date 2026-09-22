@@ -148,6 +148,7 @@ const DocumentUpload = ({
     phenotype_mode: PHENOTYPE_MODE_FINDINGS,
     phenotype_findings: '',
     phenotype_disease: '',
+    phenotype_note_clean: '',
     phenotype_hpo: null,
     tumorType: '' // Free text (only for Somatic/Tumor-Normal Paired/Tumor-Only)
   });
@@ -188,6 +189,7 @@ const DocumentUpload = ({
         phenotype_mode: initialMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
         phenotype_findings: initialMetadata.phenotype_findings || (initialMetadata.phenotype_mode === 'disease' ? '' : (initialMetadata.phenotype || '')),
         phenotype_disease: initialMetadata.phenotype_disease || (initialMetadata.phenotype_mode === 'disease' ? (initialMetadata.phenotype || '') : ''),
+        phenotype_note_clean: initialMetadata.phenotype_note_clean || '',
         phenotype_hpo: initialMetadata.phenotype_hpo || null,
         tumorType: initialMetadata.tumorType || '',
       });
@@ -504,9 +506,17 @@ const DocumentUpload = ({
                 phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
                 phenotype_findings: sampleMetadata.phenotype_findings || '',
                 phenotype_disease: sampleMetadata.phenotype_disease || '',
+                phenotype_note_clean: sampleMetadata.phenotype_note_clean || '',
                 phenotype_hpo: sampleMetadata.phenotype_hpo || null,
               }
-            : { phenotype: '', phenotype_mode: PHENOTYPE_MODE_FINDINGS, phenotype_findings: '', phenotype_disease: '', phenotype_hpo: null }),
+            : {
+                phenotype: '',
+                phenotype_mode: PHENOTYPE_MODE_FINDINGS,
+                phenotype_findings: '',
+                phenotype_disease: '',
+                phenotype_note_clean: '',
+                phenotype_hpo: null,
+              }),
           tumorType: (sampleMetadata.analysisType === 'Somatic' || sampleMetadata.analysisType === 'Tumor-Normal Paired' || sampleMetadata.analysisType === 'Tumor-Only') ? sampleMetadata.tumorType : '',
         });
         onEditSaved?.(result);
@@ -610,6 +620,7 @@ const DocumentUpload = ({
       phenotype_mode: PHENOTYPE_MODE_FINDINGS,
       phenotype_findings: '',
       phenotype_disease: '',
+      phenotype_note_clean: '',
       phenotype_hpo: null,
       tumorType: ''
     });
@@ -1542,6 +1553,7 @@ const DocumentUpload = ({
                       phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
                       phenotype_findings: sampleMetadata.phenotype_findings || '',
                       phenotype_disease: sampleMetadata.phenotype_disease || '',
+                      phenotype_note_clean: sampleMetadata.phenotype_note_clean || '',
                       phenotype: sampleMetadata.phenotype || '',
                       phenotype_hpo: sampleMetadata.phenotype_hpo,
                     }}

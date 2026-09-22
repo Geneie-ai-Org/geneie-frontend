@@ -1,13 +1,19 @@
 /**
- * Germline phenotype entry: Findings | Disease tabs + live HPO chips.
+ * Germline phenotype entry: Findings | Disease | Clinical note tabs + HPO chips.
  * Confirmed HPO IDs are what Exomiser prefers when saved on sample_metadata.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Sparkles, X } from 'lucide-react';
-import { resolveHpoTerms, suggestHpoTerms, suggestPhenotypePhrases } from '@/services/mongodbApi';
+import {
+  interpretPhenotypeNarrative,
+  resolveHpoTerms,
+  suggestHpoTerms,
+  suggestPhenotypePhrases,
+} from '@/services/mongodbApi';
 
 export const PHENOTYPE_MODE_FINDINGS = 'findings';
 export const PHENOTYPE_MODE_DISEASE = 'disease';
+export const PHENOTYPE_MODE_NOTE = 'note';
 
 /** Mode-of-inheritance / non-finding HPO IDs commonly dumped in disease annotations. */
 const INHERITANCE_HPO_IDS = new Set([
@@ -46,7 +52,8 @@ export function sampleHasPhenotype(sampleMetadata) {
   return Boolean(
     String(meta.phenotype || '').trim() ||
       String(meta.phenotype_findings || '').trim() ||
-      String(meta.phenotype_disease || '').trim()
+      String(meta.phenotype_disease || '').trim() ||
+      String(meta.phenotype_note_clean || '').trim()
   );
 }
 
@@ -59,27 +66,51 @@ export function buildPhenotypeFieldsForSave({
   topCandidates = [],
   hpoResolutionMethod = null,
   propagatedFromRelated = [],
+  noteClean = '',
 }) {
   const isDisease = mode === PHENOTYPE_MODE_DISEASE;
+  const isNote = mode === PHENOTYPE_MODE_NOTE;
   const selected = (candidates || []).filter((c) => c.selected);
   const confirmed_ids = selected.map((c) => c.hpo_id).filter(Boolean);
-  // Findings chip basket: persist selected term labels (not the live search draft).
   const chipLabel = selected
     .map((c) => c.hpo_name || c.matched_phrase || c.hpo_id)
     .filter(Boolean)
     .join(', ');
-  const findings = isDisease ? '' : chipLabel || String(findingsText ?? '');
-  const disease = isDisease ? String(diseaseText ?? '') : '';
-  const phenotype = (isDisease ? disease : findings).trim();
+
+  let findings = '';
+  let disease = '';
+  let phenotype = '';
+  let phenotype_note_clean = '';
+
+  if (isNote) {
+    findings = chipLabel || String(findingsText ?? '');
+    disease = String(diseaseText ?? '');
+    phenotype_note_clean = String(noteClean ?? '').trim();
+    phenotype = (phenotype_note_clean || findings || disease).trim();
+  } else if (isDisease) {
+    findings = '';
+    disease = String(diseaseText ?? '');
+    phenotype = disease.trim();
+  } else {
+    findings = chipLabel || String(findingsText ?? '');
+    disease = '';
+    phenotype = findings.trim();
+  }
+
   return {
-    phenotype_mode: isDisease ? PHENOTYPE_MODE_DISEASE : PHENOTYPE_MODE_FINDINGS,
+    phenotype_mode: isNote
+      ? PHENOTYPE_MODE_NOTE
+      : isDisease
+        ? PHENOTYPE_MODE_DISEASE
+        : PHENOTYPE_MODE_FINDINGS,
     phenotype_findings: findings,
     phenotype_disease: disease,
     phenotype,
+    phenotype_note_clean,
     phenotype_hpo: {
       confirmed_ids,
       candidates: candidates || [],
-      resolution_mode: isDisease ? 'somatic' : 'germline',
+      resolution_mode: isDisease ? 'somatic' : isNote ? 'note' : 'germline',
       disease_match: diseaseMatch || null,
       top_candidates: topCandidates || [],
       hpo_resolution_method: hpoResolutionMethod,
@@ -124,18 +155,37 @@ function mapResolveToCandidates(payload, { defaultSelected }) {
  * Controlled phenotype panel with local draft so resolve does not block typing.
  */
 export default function PhenotypeInputPanel({ value, onChange, disabled = false }) {
-  const mode = value?.phenotype_mode === PHENOTYPE_MODE_DISEASE
-    ? PHENOTYPE_MODE_DISEASE
-    : PHENOTYPE_MODE_FINDINGS;
-  const findingsText = value?.phenotype_findings ?? (mode === PHENOTYPE_MODE_FINDINGS ? (value?.phenotype || '') : '');
-  const diseaseText = value?.phenotype_disease ?? (mode === PHENOTYPE_MODE_DISEASE ? (value?.phenotype || '') : '');
+  const mode =
+    value?.phenotype_mode === PHENOTYPE_MODE_DISEASE
+      ? PHENOTYPE_MODE_DISEASE
+      : value?.phenotype_mode === PHENOTYPE_MODE_NOTE
+        ? PHENOTYPE_MODE_NOTE
+        : PHENOTYPE_MODE_FINDINGS;
+  const findingsText =
+    value?.phenotype_findings ??
+    (mode === PHENOTYPE_MODE_FINDINGS || mode === PHENOTYPE_MODE_NOTE
+      ? value?.phenotype || ''
+      : '');
+  const diseaseText =
+    value?.phenotype_disease ??
+    (mode === PHENOTYPE_MODE_DISEASE || mode === PHENOTYPE_MODE_NOTE
+      ? mode === PHENOTYPE_MODE_DISEASE
+        ? value?.phenotype || ''
+        : ''
+      : '');
+  const noteCleanText = value?.phenotype_note_clean || '';
   const candidates = value?.phenotype_hpo?.candidates || [];
   const diseaseMatch = value?.phenotype_hpo?.disease_match || null;
   const topCandidates = value?.phenotype_hpo?.top_candidates || [];
   const hpoResolutionMethod = value?.phenotype_hpo?.hpo_resolution_method || null;
   const propagatedFromRelated = value?.phenotype_hpo?.propagated_from_related_records || [];
 
-  const parentText = mode === PHENOTYPE_MODE_DISEASE ? diseaseText : findingsText;
+  const parentText =
+    mode === PHENOTYPE_MODE_DISEASE
+      ? diseaseText
+      : mode === PHENOTYPE_MODE_NOTE
+        ? noteCleanText || ''
+        : findingsText;
   const [draft, setDraft] = useState(parentText || '');
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState('');
@@ -143,6 +193,10 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
   const [suggestions, setSuggestions] = useState({ suggested_phrases: [], ambiguous: [], too_vague: [] });
   const [typeahead, setTypeahead] = useState([]);
   const [showInheritance, setShowInheritance] = useState(false);
+  const [interpreting, setInterpreting] = useState(false);
+  const [notePreview, setNotePreview] = useState(null);
+  const [noteUnmapped, setNoteUnmapped] = useState([]);
+  const [noteAmbiguous, setNoteAmbiguous] = useState([]);
 
   const resolveSeq = useRef(0);
   const debounceRef = useRef(null);
@@ -160,14 +214,16 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
   useEffect(() => {
     if (focusedRef.current) return;
     if (mode === PHENOTYPE_MODE_FINDINGS) return;
+    if (mode === PHENOTYPE_MODE_NOTE && notePreview) return;
     setDraft(parentText || '');
-  }, [parentText, mode]);
+  }, [parentText, mode, notePreview]);
 
   useEffect(() => {
     stateRef.current = {
       mode,
       findingsText,
       diseaseText,
+      noteCleanText,
       candidates,
       diseaseMatch,
       topCandidates,
@@ -179,6 +235,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     mode,
     findingsText,
     diseaseText,
+    noteCleanText,
     candidates,
     diseaseMatch,
     topCandidates,
@@ -209,6 +266,8 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       patch.phenotype_findings !== undefined ? patch.phenotype_findings : cur.findingsText;
     const nextDisease =
       patch.phenotype_disease !== undefined ? patch.phenotype_disease : cur.diseaseText;
+    const nextNoteClean =
+      patch.phenotype_note_clean !== undefined ? patch.phenotype_note_clean : cur.noteCleanText;
     const nextCandidates =
       patch.candidates !== undefined ? patch.candidates : cur.candidates;
     const nextDiseaseMatch =
@@ -233,7 +292,11 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       topCandidates: nextTop,
       hpoResolutionMethod: nextMethod,
       propagatedFromRelated: nextProp,
+      noteClean: nextNoteClean,
     });
+    if (patch.sampleSex !== undefined) {
+      fields.sampleSex = patch.sampleSex;
+    }
     onChangeRef.current?.(fields);
   }, []);
 
@@ -242,6 +305,9 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     setSuggestions({ suggested_phrases: [], ambiguous: [], too_vague: [] });
     setTypeahead([]);
     setResolveError('');
+    setNotePreview(null);
+    setNoteUnmapped([]);
+    setNoteAmbiguous([]);
     lastResolvedKey.current = '';
     focusedRef.current = false;
     setDraft('');
@@ -250,6 +316,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       phenotype_mode: nextMode,
       phenotype_findings: '',
       phenotype_disease: '',
+      phenotype_note_clean: '',
       candidates: [],
       disease_match: null,
       top_candidates: [],
@@ -258,9 +325,14 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     });
   };
 
-  // Disease: live resolve. Findings: HPO typeahead (pinned chips stay when search clears).
+  // Disease: live resolve. Findings: HPO typeahead. Note: interpret on button click only.
   useEffect(() => {
     if (disabled) return undefined;
+    if (mode === PHENOTYPE_MODE_NOTE) {
+      setTypeahead([]);
+      setResolving(false);
+      return undefined;
+    }
     const text = String(draft || '');
     const trimmed = text.trim();
     const key = `${mode}::${trimmed}`;
@@ -399,8 +471,22 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     setDraft('');
     setTypeahead([]);
     setResolveError('');
+    setNotePreview(null);
+    setNoteUnmapped([]);
+    setNoteAmbiguous([]);
     if (mode === PHENOTYPE_MODE_DISEASE) {
       emit({
+        phenotype_disease: '',
+        candidates: [],
+        disease_match: null,
+        top_candidates: [],
+        hpo_resolution_method: null,
+        propagated_from_related_records: [],
+      });
+    } else if (mode === PHENOTYPE_MODE_NOTE) {
+      emit({
+        phenotype_note_clean: '',
+        phenotype_findings: '',
         phenotype_disease: '',
         candidates: [],
         disease_match: null,
@@ -417,7 +503,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     );
     emit({
       candidates: next,
-      ...(mode === PHENOTYPE_MODE_FINDINGS
+      ...(mode === PHENOTYPE_MODE_FINDINGS || mode === PHENOTYPE_MODE_NOTE
         ? {
             phenotype_findings: next
               .filter((c) => c.selected)
@@ -434,7 +520,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     );
     emit({
       candidates: next,
-      ...(mode === PHENOTYPE_MODE_FINDINGS
+      ...(mode === PHENOTYPE_MODE_FINDINGS || mode === PHENOTYPE_MODE_NOTE
         ? {
             phenotype_findings: next
               .filter((c) => c.selected)
@@ -457,10 +543,59 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
   const onTextChange = (text) => {
     lastResolvedKey.current = '';
     setDraft(text);
+    if (mode === PHENOTYPE_MODE_NOTE) {
+      setNotePreview(null);
+      return;
+    }
     if (mode === PHENOTYPE_MODE_DISEASE) {
       emit({ phenotype_disease: text, phenotype_findings: '' });
     } else {
       emit({ phenotype_findings: text, phenotype_disease: '' });
+    }
+  };
+
+  const runInterpretNote = async () => {
+    if (mode !== PHENOTYPE_MODE_NOTE || !draft.trim() || disabled) return;
+    setInterpreting(true);
+    setResolveError('');
+    try {
+      const data = await interpretPhenotypeNarrative({ text: draft.trim() });
+      const findingCandidates = (data.finding_candidates || []).map((c) => ({
+        hpo_id: c.hpo_id,
+        hpo_name: c.hpo_name || '',
+        matched_phrase: c.matched_phrase || c.source_phrase || '',
+        match_score: c.match_score,
+        match_type: c.match_type || '',
+        selected: Boolean(c.selected),
+      }));
+      setNotePreview(data);
+      setNoteUnmapped(data.unmapped || []);
+      setNoteAmbiguous(data.ambiguous || []);
+      const diseaseName =
+        data.disease_match?.name ||
+        data.disease_candidates?.[0]?.name ||
+        '';
+      const findingsLabel = findingCandidates
+        .filter((c) => c.selected)
+        .map((c) => c.hpo_name || c.matched_phrase || c.hpo_id)
+        .join(', ');
+      emit({
+        phenotype_mode: PHENOTYPE_MODE_NOTE,
+        phenotype_note_clean: data.deidentified_text || '',
+        phenotype_disease: diseaseName,
+        phenotype_findings: findingsLabel,
+        candidates: findingCandidates,
+        disease_match: data.disease_match || null,
+        top_candidates: data.top_candidates || [],
+        hpo_resolution_method: data.hpo_resolution_method || null,
+        propagated_from_related_records: data.propagated_from_related_records || [],
+        ...(data.patient?.sex ? { sampleSex: data.patient.sex } : {}),
+      });
+    } catch (err) {
+      setNotePreview(null);
+      setResolveError(err?.message || 'Could not interpret clinical note');
+    } finally {
+      setInterpreting(false);
     }
   };
 
@@ -585,6 +720,18 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           <X className="w-3 h-3" />
         </button>
       )}
+      {mode === PHENOTYPE_MODE_NOTE && (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => removeCandidate(c.hpo_id)}
+          title="Remove"
+          className="ml-0.5 p-0.5"
+          style={{ color: 'var(--text-tertiary)' }}
+        >
+          <X className="w-3 h-3" />
+        </button>
+      )}
     </div>
   );
 
@@ -608,12 +755,15 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       >
         {tabBtn(PHENOTYPE_MODE_FINDINGS, 'Findings')}
         {tabBtn(PHENOTYPE_MODE_DISEASE, 'Disease')}
+        {tabBtn(PHENOTYPE_MODE_NOTE, 'Clinical note')}
       </div>
 
       <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
         {mode === PHENOTYPE_MODE_DISEASE
           ? 'Type a disease name or ORPHA/OMIM/MONDO ID. Confirm the matched disease, then select findings this patient actually has.'
-          : 'Search and add findings one by one (e.g. renal → Renal dysplasia). Selected chips stay when you clear the search.'}
+          : mode === PHENOTYPE_MODE_NOTE
+            ? 'Paste the doctor’s paragraph. Interpret proposes a disease match and HPO findings — review and tick what applies before running Phenotype prioritization.'
+            : 'Search and add findings one by one (e.g. renal → Renal dysplasia). Selected chips stay when you clear the search.'}
       </p>
 
       <div className="relative">
@@ -633,9 +783,11 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           placeholder={
             mode === PHENOTYPE_MODE_DISEASE
               ? 'Disease name or ID (e.g. Epidermolysis bullosa, ORPHA:648)…'
-              : 'Search a finding (e.g. seizure, renal, ptosis)…'
+              : mode === PHENOTYPE_MODE_NOTE
+                ? 'Paste clinical note (e.g. a 2 year old male diagnosed with Epidermolysis Bullosa Simplex…)'
+                : 'Search a finding (e.g. seizure, renal, ptosis)…'
           }
-          rows={mode === PHENOTYPE_MODE_FINDINGS ? 2 : 3}
+          rows={mode === PHENOTYPE_MODE_NOTE ? 5 : mode === PHENOTYPE_MODE_FINDINGS ? 2 : 3}
           className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all pr-9"
           style={inputStyle}
         />
@@ -651,6 +803,59 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           </button>
         )}
       </div>
+
+      {mode === PHENOTYPE_MODE_NOTE && (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={disabled || interpreting || draft.trim().length < 8}
+            onClick={runInterpretNote}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-2xs font-medium rounded-md border transition-all"
+            style={{
+              borderColor: 'var(--accent-teal)',
+              color: 'var(--accent-teal)',
+              background: 'color-mix(in srgb, var(--accent-teal) 10%, transparent)',
+            }}
+          >
+            {interpreting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+            Interpret note
+          </button>
+          <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+            Names are removed before chat / Exomiser text fallback
+          </span>
+        </div>
+      )}
+
+      {mode === PHENOTYPE_MODE_NOTE && notePreview?.deidentified_text && (
+        <div
+          className="px-2.5 py-2 rounded-lg border text-2xs space-y-1"
+          style={{ borderColor: 'var(--border-default)', background: 'var(--bg-muted)' }}
+        >
+          <div className="font-medium" style={{ color: 'var(--text-secondary)' }}>
+            Cleaned note (saved for chat)
+          </div>
+          <p style={{ color: 'var(--text-primary)' }}>{notePreview.deidentified_text}</p>
+          {(notePreview.patient?.sex || notePreview.patient?.age) && (
+            <p style={{ color: 'var(--text-tertiary)' }}>
+              {[
+                notePreview.patient?.sex ? `Sex → ${notePreview.patient.sex}` : null,
+                notePreview.patient?.age ? `Age noted: ${notePreview.patient.age}` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          )}
+        </div>
+      )}
+
+      {mode === PHENOTYPE_MODE_NOTE && (noteUnmapped.length > 0 || noteAmbiguous.length > 0) && (
+        <div className="text-2xs space-y-1" style={{ color: 'var(--text-tertiary)' }}>
+          {noteAmbiguous.length > 0 && <p>Ambiguous: {noteAmbiguous.join('; ')}</p>}
+          {noteUnmapped.length > 0 && (
+            <p>Could not map to HPO: {noteUnmapped.join('; ')}</p>
+          )}
+        </div>
+      )}
 
       {mode === PHENOTYPE_MODE_FINDINGS && typeahead.length > 0 && (
         <div
@@ -735,7 +940,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           </div>
         )}
 
-      {mode === PHENOTYPE_MODE_DISEASE && diseaseMatch?.name && (
+      {(mode === PHENOTYPE_MODE_DISEASE || mode === PHENOTYPE_MODE_NOTE) && diseaseMatch?.name && (
         <div
           className="px-2.5 py-2 rounded-lg border text-xs space-y-1.5"
           style={{ borderColor: 'var(--border-default)', background: 'var(--bg-muted)' }}
@@ -748,7 +953,9 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
               diseaseMatch.id,
               diseaseMatch.source ? `source ${diseaseMatch.source}` : null,
               diseaseMatch.score != null ? `score ${Number(diseaseMatch.score).toFixed(2)}` : null,
-              `${candidates.length} annotated HPO terms`,
+              mode === PHENOTYPE_MODE_NOTE
+                ? `${selectedCount} finding${selectedCount === 1 ? '' : 's'} selected for Exomiser`
+                : `${candidates.length} annotated HPO terms`,
               hpoResolutionMethod === 'propagated_from_related_subtypes'
                 ? 'expanded from related subtypes'
                 : hpoResolutionMethod === 'direct_disease_annotation'
@@ -759,10 +966,16 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
               .join(' · ')}
           </div>
           <p className="text-2xs" style={{ color: 'var(--text-secondary)' }}>
-            This card is the disease we matched — not a selectable finding. Below, tick only
-            findings present in <span className="font-medium">this patient</span>. Inheritance
-            terms (e.g. autosomal recessive) are listed separately; they describe the disease
-            model, not a symptom.
+            {mode === PHENOTYPE_MODE_NOTE
+              ? 'Disease match is for context. Tick findings below — only selected HPOs go to Phenotype prioritization.'
+              : (
+                <>
+                  This card is the disease we matched — not a selectable finding. Below, tick only
+                  findings present in <span className="font-medium">this patient</span>. Inheritance
+                  terms (e.g. autosomal recessive) are listed separately; they describe the disease
+                  model, not a symptom.
+                </>
+              )}
           </p>
           {propagatedFromRelated?.length > 0 && (
             <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
@@ -771,7 +984,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
               disease). Prefer precise disease names/IDs when possible.
             </p>
           )}
-          {altDiseases.length > 0 && (
+          {mode === PHENOTYPE_MODE_DISEASE && altDiseases.length > 0 && (
             <div className="pt-1 space-y-1">
               <div className="text-2xs font-medium" style={{ color: 'var(--text-secondary)' }}>
                 Other close matches — click to use instead
@@ -830,7 +1043,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         </div>
         {clinicalCandidates.length > 0 && (
           <div className="flex gap-2 text-2xs">
-            {mode === PHENOTYPE_MODE_DISEASE && (
+            {mode === PHENOTYPE_MODE_DISEASE || mode === PHENOTYPE_MODE_NOTE ? (
               <button
                 type="button"
                 className="underline"
@@ -840,7 +1053,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
               >
                 Select clinical
               </button>
-            )}
+            ) : null}
             <button
               type="button"
               className="underline"
@@ -858,9 +1071,9 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         )}
       </div>
 
-      {mode === PHENOTYPE_MODE_DISEASE &&
-        draft.trim() &&
+      {(mode === PHENOTYPE_MODE_DISEASE || mode === PHENOTYPE_MODE_NOTE) &&
         !resolving &&
+        !interpreting &&
         selectedCount === 0 &&
         candidates.length > 0 && (
           <p className="text-2xs" style={{ color: 'var(--warning, #b45309)' }}>

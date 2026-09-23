@@ -15,6 +15,19 @@ export const PHENOTYPE_MODE_NOTE = 'note';
 export const PHENOTYPE_RUN_MANUAL = 'manual';
 export const PHENOTYPE_RUN_AUTOMATIC = 'automatic';
 
+/**
+ * Deterministic cleanup before disease/HPO resolve (mirrors BE sanitize_clinical_query_text).
+ * Turns junk separators like "hailey=hailey" into searchable tokens.
+ */
+export function sanitizePhenotypeQuery(text) {
+  let s = String(text || '').trim();
+  if (!s) return '';
+  s = s.replace(/[=_/|\\;:]+/g, ' ');
+  s = s.replace(/[^\w\s\-'.,()]/gi, ' ');
+  s = s.replace(/\s+/g, ' ').replace(/^[,;\s.]+|[,;\s.]+$/g, '');
+  return s;
+}
+
 /** Strong disease match — auto-apply in Automatic analysis mode only. */
 const AUTO_DISEASE_MIN_SCORE = 0.9;
 
@@ -555,7 +568,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
 
   const applyDisease = useCallback(
     async (disease, { allowToggleOff = true } = {}) => {
-      const name = String(disease?.disease_name || disease?.name || '').trim();
+      const name = sanitizePhenotypeQuery(disease?.disease_name || disease?.name || '');
       if (!name || disabled) return;
 
       // Toggle off if this disease is already selected (manual click only).
@@ -748,7 +761,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
 
   /** Fast disease catalog update — deterministic resolve, no LLM. */
   const runFastDiseaseSearch = useCallback(async (text) => {
-    const trimmed = String(text || '').trim();
+    const trimmed = sanitizePhenotypeQuery(text);
     if (trimmed.length < 3 || disabled) return;
     const seq = ++diseaseSeq.current;
     setSearchingDiseases(true);

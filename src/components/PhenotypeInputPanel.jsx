@@ -279,6 +279,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     value?.phenotype_run_mode === PHENOTYPE_RUN_AUTOMATIC
       ? PHENOTYPE_RUN_AUTOMATIC
       : PHENOTYPE_RUN_MANUAL;
+  const isAutomatic = runMode === PHENOTYPE_RUN_AUTOMATIC;
 
   const [draft, setDraft] = useState('');
   const [resolving, setResolving] = useState(false);
@@ -289,6 +290,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
   const [noteAmbiguous, setNoteAmbiguous] = useState([]);
   const [showMoreDiseases, setShowMoreDiseases] = useState(false);
   const [showInheritance, setShowInheritance] = useState(false);
+  const notePreviewRef = useRef(null);
 
   const onChangeRef = useRef(onChange);
   const stateRef = useRef({});
@@ -302,6 +304,10 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    notePreviewRef.current = notePreview;
+  }, [notePreview]);
 
   useEffect(() => {
     stateRef.current = {
@@ -591,9 +597,18 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         .map(normalizeCandidate)
         .filter(Boolean)
         .filter((c) => c.origin !== 'disease_annotation' && c.match_type !== 'disease_annotation')
-        .map((c) => ({ ...c, selected: false, selected_default: false }));
+        .map((c) => {
+          if (isInheritanceLikeHpo(c)) {
+            return { ...c, selected: false, selected_default: false };
+          }
+          // Manual: unchecked. Automatic: keep backend high-confidence / high-score ticks.
+          if (stateRef.current.runMode !== PHENOTYPE_RUN_AUTOMATIC) {
+            return { ...c, selected: false, selected_default: false };
+          }
+          return c;
+        });
 
-      // Keep only analyst-pinned chips; replace proposals from this note (no stale merge).
+      // Keep analyst-pinned chips; replace proposals from this note (no stale merge).
       const priorPinned = (stateRef.current.candidates || []).filter((c) => c.selected);
       const mergedFindings = mergeCandidates(priorPinned, phraseFindings);
 
@@ -744,7 +759,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       if (
         stateRef.current.topCandidates?.length ||
         stateRef.current.noteCleanText ||
-        notePreview ||
+        notePreviewRef.current ||
         stateRef.current.diseaseMatch ||
         (stateRef.current.candidates || []).some((c) => !c.selected)
       ) {
@@ -758,10 +773,9 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     return () => {
       if (diseaseDebounceRef.current) clearTimeout(diseaseDebounceRef.current);
     };
-  }, [draft, disabled, runFastDiseaseSearch, clearEphemeralPhenotypeResults, notePreview]);
+  }, [draft, disabled, runFastDiseaseSearch, clearEphemeralPhenotypeResults]);
 
-  // Live interpret while typing (clinical note). Shortening below the threshold drops
-  // stale cleaned-note / unselected proposals; disease scores still refresh via fast search.
+  // Live interpret while typing. Do NOT depend on notePreview — that re-fired interpret forever.
   useEffect(() => {
     if (disabled) return undefined;
     if (interpretDebounceRef.current) clearTimeout(interpretDebounceRef.current);
@@ -771,7 +785,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       interpretSeq.current += 1;
       const pinned = (stateRef.current.candidates || []).filter((c) => c.selected);
       const hadUnselected = (stateRef.current.candidates || []).some((c) => !c.selected);
-      if (stateRef.current.noteCleanText || notePreview || hadUnselected) {
+      if (stateRef.current.noteCleanText || notePreviewRef.current || hadUnselected) {
         setNotePreview(null);
         setNoteUnmapped([]);
         setNoteAmbiguous([]);
@@ -789,7 +803,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     return () => {
       if (interpretDebounceRef.current) clearTimeout(interpretDebounceRef.current);
     };
-  }, [draft, disabled, runInterpretNote, emit, notePreview]);
+  }, [draft, disabled, runInterpretNote, emit]);
 
   const inputStyle = {
     borderColor: 'var(--border-default)',
@@ -848,6 +862,11 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           (enables phenotype-driven prioritization)
         </span>
       </label>
+      {isAutomatic ? (
+        <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+          Automatic: high-confidence findings are pre-selected — disease still needs a click.
+        </p>
+      ) : null}
 
       <div className="relative">
         <textarea
@@ -1053,6 +1072,9 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
             <span>
               Clinical findings ({clinicalCandidates.filter((c) => c.selected).length}/
               {clinicalCandidates.length} selected)
+              {clinicalCandidates.some((c) => c.selected && c.selected_default && isAutomatic)
+                ? ' · high-confidence pre-selected — click to undo'
+                : ''}
               {inheritanceCandidates.length > 0
                 ? ` · ${inheritanceCandidates.length} inheritance terms hidden`
                 : ''}

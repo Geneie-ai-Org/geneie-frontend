@@ -1,6 +1,7 @@
 /**
  * Case-level Manual vs Automatic for the full pipeline (M1 → report).
  */
+import { useEffect, useRef, useState } from 'react';
 import { Info } from 'lucide-react';
 import { PillToggle } from '@/components/ui/pill-toggle';
 
@@ -60,25 +61,64 @@ function earlyAccessSurface(paddingBg = 'var(--bg-input)') {
 }
 
 const AUTOMATIC_INFO =
-  'Early access — Automatic runs annotation and phenotype prioritization with fewer clicks. Review results before clinical use.';
+  'Early access. Automatic advances annotation and phenotype prioritization when ready, and pre-selects high-confidence findings. Review before clinical use.';
 
 function AutomaticInfoButton() {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (e) => {
+      if (!wrapRef.current?.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
   return (
-    <button
-      type="button"
-      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
-      style={{
-        color: 'var(--early-access-from)',
-        borderColor: 'color-mix(in srgb, var(--early-access-from) 45%, transparent)',
-        background: 'color-mix(in srgb, var(--early-access-from) 10%, transparent)',
-      }}
-      title={AUTOMATIC_INFO}
-      aria-label={AUTOMATIC_INFO}
-      onClick={(e) => e.stopPropagation()}
-      onMouseDown={(e) => e.preventDefault()}
-    >
-      <Info className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
-    </button>
+    <span className="relative inline-flex" ref={wrapRef}>
+      <button
+        type="button"
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
+        style={{
+          color: 'var(--early-access-from)',
+          borderColor: 'color-mix(in srgb, var(--early-access-from) 45%, transparent)',
+          background: open
+            ? 'color-mix(in srgb, var(--early-access-from) 18%, transparent)'
+            : 'color-mix(in srgb, var(--early-access-from) 10%, transparent)',
+        }}
+        aria-label="About Automatic mode"
+        aria-expanded={open}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <Info className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+      </button>
+      {open ? (
+        <div
+          role="tooltip"
+          className="absolute left-0 top-full z-50 mt-1.5 w-60 rounded-md border px-2.5 py-2 text-2xs leading-snug shadow-md"
+          style={{
+            color: 'var(--text-secondary)',
+            background: 'var(--bg-surface-raised)',
+            borderColor: 'var(--border-default)',
+          }}
+        >
+          {AUTOMATIC_INFO}
+        </div>
+      ) : null}
+    </span>
   );
 }
 

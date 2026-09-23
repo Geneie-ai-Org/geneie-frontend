@@ -93,6 +93,7 @@ const EMPTY_SAMPLE_METADATA = {
   phenotype_findings: '',
   phenotype_disease: '',
   phenotype_note_clean: '',
+  phenotype_run_mode: 'manual',
   phenotype_hpo: null,
 };
 
@@ -470,6 +471,7 @@ const Module1UploadForm = ({
               phenotype_findings: sampleMetadata.phenotype_findings || '',
               phenotype_disease: sampleMetadata.phenotype_disease || '',
               phenotype_note_clean: sampleMetadata.phenotype_note_clean || '',
+              phenotype_run_mode: sampleMetadata.phenotype_run_mode || 'manual',
               phenotype_hpo: sampleMetadata.phenotype_hpo || null,
             }
           : {}),
@@ -648,6 +650,7 @@ const Module1UploadForm = ({
                           phenotype_findings: sampleMetadata.phenotype_findings || '',
                           phenotype_disease: sampleMetadata.phenotype_disease || '',
                           phenotype_note_clean: sampleMetadata.phenotype_note_clean || '',
+                          phenotype_run_mode: sampleMetadata.phenotype_run_mode || 'manual',
                           phenotype: sampleMetadata.phenotype || '',
                           phenotype_hpo: sampleMetadata.phenotype_hpo,
                         }}

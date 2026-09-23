@@ -11,6 +11,10 @@ export const PHENOTYPE_MODE_FINDINGS = 'findings';
 export const PHENOTYPE_MODE_DISEASE = 'disease';
 export const PHENOTYPE_MODE_NOTE = 'note';
 
+/** How aggressively phenotype is applied. Default Manual = live today (user confirms). */
+export const PHENOTYPE_RUN_MANUAL = 'manual';
+export const PHENOTYPE_RUN_AUTOMATIC = 'automatic';
+
 /** Mode-of-inheritance / non-finding HPO IDs commonly dumped in disease annotations. */
 const INHERITANCE_HPO_IDS = new Set([
   'HP:0000005',
@@ -63,6 +67,7 @@ export function buildPhenotypeFieldsForSave({
   hpoResolutionMethod = null,
   propagatedFromRelated = [],
   noteClean = '',
+  runMode = PHENOTYPE_RUN_MANUAL,
 }) {
   const isDisease = mode === PHENOTYPE_MODE_DISEASE;
   const isNote = mode === PHENOTYPE_MODE_NOTE || !isDisease;
@@ -89,8 +94,12 @@ export function buildPhenotypeFieldsForSave({
     phenotype = disease.trim();
   }
 
+  const phenotype_run_mode =
+    runMode === PHENOTYPE_RUN_AUTOMATIC ? PHENOTYPE_RUN_AUTOMATIC : PHENOTYPE_RUN_MANUAL;
+
   return {
     phenotype_mode: isNote ? PHENOTYPE_MODE_NOTE : PHENOTYPE_MODE_DISEASE,
+    phenotype_run_mode,
     phenotype_findings: findings,
     phenotype_disease: disease,
     phenotype,
@@ -152,10 +161,15 @@ function normalizeCandidate(c) {
     match_type: c.match_type || '',
     origin: c.origin || (c.match_type === 'disease_annotation' ? 'disease_annotation' : 'note_phrase'),
     selected: Boolean(c.selected),
+    selected_default: Boolean(c.selected_default ?? c.selected),
+    llm_confidence: c.llm_confidence || '',
   };
 }
 
-/** Keep pinned (selected) chips; merge incoming proposals without dropping selections. */
+/** Keep pinned (selected) chips; merge incoming proposals without dropping selections.
+ * For IDs already seen, preserve the user's selected/deselected choice (undo survives re-interpret).
+ * New IDs take the backend auto-select default.
+ */
 function mergeCandidates(existing, incoming) {
   const byId = new Map();
   for (const raw of existing || []) {
@@ -170,9 +184,10 @@ function mergeCandidates(existing, incoming) {
     if (prev) {
       byId.set(c.hpo_id, {
         ...c,
-        selected: prev.selected || c.selected,
+        selected: prev.selected,
         hpo_name: prev.hpo_name || c.hpo_name,
         matched_phrase: prev.matched_phrase || c.matched_phrase,
+        selected_default: c.selected_default ?? prev.selected_default,
       });
     } else {
       byId.set(c.hpo_id, c);
@@ -257,6 +272,11 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
   const noteCleanText = value?.phenotype_note_clean || '';
   const diseaseText = value?.phenotype_disease || '';
   const findingsText = value?.phenotype_findings || '';
+  const runMode =
+    value?.phenotype_run_mode === PHENOTYPE_RUN_AUTOMATIC
+      ? PHENOTYPE_RUN_AUTOMATIC
+      : PHENOTYPE_RUN_MANUAL;
+  const isAutomatic = runMode === PHENOTYPE_RUN_AUTOMATIC;
 
   const [draft, setDraft] = useState('');
   const [resolving, setResolving] = useState(false);
@@ -292,6 +312,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       diseaseText,
       findingsText,
       draft,
+      runMode,
     };
   }, [
     candidates,
@@ -303,6 +324,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     diseaseText,
     findingsText,
     draft,
+    runMode,
   ]);
 
   // Ensure saved mode is always clinical-note.
@@ -319,6 +341,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           hpoResolutionMethod: value?.phenotype_hpo?.hpo_resolution_method || null,
           propagatedFromRelated: value?.phenotype_hpo?.propagated_from_related_records || [],
           noteClean: value.phenotype_note_clean || '',
+          runMode: value.phenotype_run_mode || PHENOTYPE_RUN_MANUAL,
         })
       );
     }
@@ -348,10 +371,17 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           : cur.propagatedFromRelated,
       noteClean:
         patch.phenotype_note_clean !== undefined ? patch.phenotype_note_clean : cur.noteCleanText,
+      runMode: patch.phenotype_run_mode !== undefined ? patch.phenotype_run_mode : cur.runMode,
     });
     if (patch.sampleSex !== undefined) fields.sampleSex = patch.sampleSex;
     onChangeRef.current?.(fields);
   }, []);
+
+  const setRunMode = (nextMode) => {
+    if (disabled) return;
+    const mode = nextMode === PHENOTYPE_RUN_AUTOMATIC ? PHENOTYPE_RUN_AUTOMATIC : PHENOTYPE_RUN_MANUAL;
+    emit({ phenotype_run_mode: mode });
+  };
 
   const selectedCount = useMemo(
     () => candidates.filter((c) => c.selected).length,
@@ -507,10 +537,22 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       const phraseFindings = (data.finding_candidates || [])
         .map(normalizeCandidate)
         .filter(Boolean)
-        .filter((c) => c.origin !== 'disease_annotation' && c.match_type !== 'disease_annotation');
+        .filter((c) => c.origin !== 'disease_annotation' && c.match_type !== 'disease_annotation')
+        .map((c) => {
+          // Inheritance never auto-ticked.
+          if (isInheritanceLikeHpo(c)) {
+            return { ...c, selected: false, selected_default: false };
+          }
+          // Manual (default / live): show chips, user ticks. Automatic: keep BE auto-select.
+          if (stateRef.current.runMode !== PHENOTYPE_RUN_AUTOMATIC) {
+            return { ...c, selected: false, selected_default: false };
+          }
+          return c;
+        });
 
-      const pinned = (stateRef.current.candidates || []).filter((c) => c.selected);
-      const mergedFindings = mergeCandidates(pinned, phraseFindings);
+      // Merge against full prior list so deselections survive re-interpret (undo).
+      const prior = stateRef.current.candidates || [];
+      const mergedFindings = mergeCandidates(prior, phraseFindings);
 
       const incomingDiseases = [
         data.disease_match
@@ -722,12 +764,56 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
 
   return (
     <div className="space-y-2">
-      <label className="flex items-baseline gap-1.5 text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-        Phenotype
-        <span className="text-2xs font-normal" style={{ color: 'var(--text-tertiary)' }}>
-          (enables phenotype-driven prioritization)
-        </span>
-      </label>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label className="flex items-baseline gap-1.5 text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+          Phenotype
+          <span className="text-2xs font-normal" style={{ color: 'var(--text-tertiary)' }}>
+            (enables phenotype-driven prioritization)
+          </span>
+        </label>
+        <div
+          className="inline-flex rounded-md border overflow-hidden text-2xs"
+          style={{ borderColor: 'var(--border-default)' }}
+          role="group"
+          aria-label="Phenotype run mode"
+        >
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => setRunMode(PHENOTYPE_RUN_MANUAL)}
+            className="px-2 py-1"
+            style={{
+              background: !isAutomatic ? 'var(--bg-surface-raised)' : 'transparent',
+              color: !isAutomatic ? 'var(--text-primary)' : 'var(--text-tertiary)',
+              fontWeight: !isAutomatic ? 600 : 400,
+            }}
+            title="You review and select findings (current live behaviour)"
+          >
+            Manual
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => setRunMode(PHENOTYPE_RUN_AUTOMATIC)}
+            className="px-2 py-1 border-l"
+            style={{
+              borderColor: 'var(--border-default)',
+              background: isAutomatic ? 'var(--bg-surface-raised)' : 'transparent',
+              color: isAutomatic ? 'var(--text-primary)' : 'var(--text-tertiary)',
+              fontWeight: isAutomatic ? 600 : 400,
+            }}
+            title="Pre-select high-confidence findings (auto-run prioritization coming next)"
+          >
+            Automatic
+          </button>
+        </div>
+      </div>
+      {isAutomatic && (
+        <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+          Automatic: high-confidence findings are pre-selected. You can still untick any chip. Auto-run
+          of prioritization comes in a later step.
+        </p>
+      )}
 
       <div className="relative">
         <textarea
@@ -933,6 +1019,9 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
             <span>
               Clinical findings ({clinicalCandidates.filter((c) => c.selected).length}/
               {clinicalCandidates.length} selected)
+              {clinicalCandidates.some((c) => c.selected && c.selected_default && isAutomatic)
+                ? ' · high-confidence pre-selected — click to undo'
+                : ''}
               {inheritanceCandidates.length > 0
                 ? ` · ${inheritanceCandidates.length} inheritance terms hidden`
                 : ''}

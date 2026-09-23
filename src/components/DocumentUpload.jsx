@@ -1396,21 +1396,16 @@ const DocumentUpload = ({
             <div className="flex-1 overflow-y-auto px-7 pb-4 space-y-5">
               {metadataStep === 'sample' && (
               <div className="space-y-5">
-              <div
-                className="p-3 rounded-lg border"
-                style={{ borderColor: 'var(--border-default)', background: 'var(--bg-input)' }}
-              >
-                <PipelineRunModeToggle
-                  value={sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode}
-                  onChange={(mode) =>
-                    setSampleMetadata((prev) => ({
-                      ...prev,
-                      pipeline_run_mode: mode,
-                      phenotype_run_mode: mode,
-                    }))
-                  }
-                />
-              </div>
+              <PipelineRunModeToggle
+                value={sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode}
+                onChange={(mode) =>
+                  setSampleMetadata((prev) => ({
+                    ...prev,
+                    pipeline_run_mode: mode,
+                    phenotype_run_mode: mode,
+                  }))
+                }
+              />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
                 {/* Name - Editable */}
                 <div>

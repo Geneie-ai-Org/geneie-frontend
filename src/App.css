@@ -28,11 +28,15 @@
   --text-tertiary: #6B7280;
   --text-disabled: #C3C6CB;
 
-  /* Accent — the single brand accent. Teal in dark, primary (orange) in light. */
+  /* Accent — the single brand accent. Teal in dark, primary (blue) in light. */
   --accent-teal: hsl(var(--primary));
   --accent-teal-soft: hsl(var(--primary) / 0.12);
   --accent-teal-hover: color-mix(in srgb, hsl(var(--primary)) 85%, #000);
   --accent-teal-contrast: #FFFFFF;
+  /* Early access — primary → chart-3 (muted teal) so Automatic reads as brand, not a new hue. */
+  --early-access-from: hsl(var(--primary));
+  --early-access-to: hsl(var(--chart-3));
+  --early-access-gradient: linear-gradient(135deg, var(--early-access-from), var(--early-access-to));
   --code-inline: #111827;
   --code-inline-bg: #F3F4F6;
 
@@ -121,6 +125,10 @@
   --accent-teal-soft: rgba(77,182,172,0.10);
   --accent-teal-hover: #80CBC4;
   --accent-teal-contrast: #0F0F0F;
+  /* Early access — teal → info blue (existing dark tokens). */
+  --early-access-from: var(--accent-teal);
+  --early-access-to: var(--info);
+  --early-access-gradient: linear-gradient(135deg, var(--early-access-from), var(--early-access-to));
 
   --code-inline: #8AB4F8;
   --code-inline-bg: var(--bg-app);

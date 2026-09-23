@@ -523,18 +523,17 @@ const Module1UploadForm = ({
             <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
               Upload paired FASTQ files (R1 + R2). Typical runtime: 2–4 hours — you can close this and keep using the app.
             </p>
-            <div className="mt-4 p-3 rounded-lg border" style={{ borderColor: 'var(--border-default)', background: 'var(--bg-input)' }}>
-              <PipelineRunModeToggle
-                value={sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode}
-                onChange={(mode) =>
-                  setSampleMetadata((prev) => ({
-                    ...prev,
-                    pipeline_run_mode: mode,
-                    phenotype_run_mode: mode,
-                  }))
-                }
-              />
-            </div>
+            <PipelineRunModeToggle
+              className="mt-4"
+              value={sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode}
+              onChange={(mode) =>
+                setSampleMetadata((prev) => ({
+                  ...prev,
+                  pipeline_run_mode: mode,
+                  phenotype_run_mode: mode,
+                }))
+              }
+            />
             {module1SubmitError && (
               <div className="mt-4 p-3 border rounded-lg flex items-start gap-2" style={{ backgroundColor: 'var(--error-soft)', borderColor: 'var(--error)' }}>
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--error)' }} />

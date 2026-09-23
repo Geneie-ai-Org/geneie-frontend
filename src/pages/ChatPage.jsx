@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown, Info } from 'lucide-react';
+import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
 import { toast } from 'sonner';
@@ -45,6 +45,9 @@ import { useVariantPipeline } from '@/hooks/useVariantPipeline';
 import { useModule1Pipeline } from '@/hooks/useModule1Pipeline';
 import { useAutomaticPipelineConductor } from '@/hooks/useAutomaticPipelineConductor';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { getClinicalReportGate } from '@/components/CaseReportDownloadButton';
+import ClinicalReportAssignModal from '@/components/ClinicalReportAssignModal';
+import AutomaticPipelinePanel from '@/components/AutomaticPipelinePanel';
 import { DEFAULT_GUEST_CHAT_LIMIT } from '@/services/backendApi';
 import { formatMeterDetail, meterExhausted, meterFor, meterNearLimit, patchGuestChatUsed } from '@/services/tierLimits';
 import { describeLimitError, isEmailVerificationCode } from '@/services/limitErrors';
@@ -64,6 +67,7 @@ const ChatPage = () => {
   // Conversation state
   const [conversations, setConversations] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [clinicalReportOpen, setClinicalReportOpen] = useState(false);
   const [currentDocument, setCurrentDocument] = useState(null);
   const [variantData, setVariantData] = useState(null);
   const [isVariantSidebarOpen, setIsVariantSidebarOpen] = useState(false);
@@ -441,6 +445,10 @@ const ChatPage = () => {
     fetchExomiserEligibility,
     runExomiser,
   });
+
+  useEffect(() => {
+    setClinicalReportOpen(false);
+  }, [activeConversationId]);
 
   const { handleDocumentUpload } = useDocumentUpload({
     userId,
@@ -1306,31 +1314,28 @@ const ChatPage = () => {
     />
   ) : null;
 
+  const reportGate = getClinicalReportGate({ downloadGate, chatEligibility });
+  const showAutomaticReportCta =
+    automaticPipeline.active &&
+    automaticPipeline.phase === 'ready_report' &&
+    userTier !== 'guest' &&
+    !!variantData &&
+    !!activeConversationId;
+
   const automaticPipelineBanner =
     automaticPipeline.active && automaticPipeline.message ? (
-      <div
-        className="mx-3 mb-2 px-3 py-2 rounded-lg border text-2xs flex flex-wrap items-center gap-2"
-        style={{
-          borderColor: 'color-mix(in srgb, var(--accent-teal) 35%, transparent)',
-          background: 'color-mix(in srgb, var(--accent-teal) 10%, transparent)',
-          color: 'var(--text-secondary)',
+      <AutomaticPipelinePanel
+        message={automaticPipeline.message}
+        phase={automaticPipeline.phase}
+        steps={automaticPipeline.steps}
+        events={automaticPipeline.events}
+        showReportCta={showAutomaticReportCta}
+        reportGate={reportGate}
+        onGenerateReport={() => {
+          setIsVariantSidebarOpen(true);
+          setClinicalReportOpen(true);
         }}
-        role="status"
-      >
-        <span
-          className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
-          style={{
-            color: 'var(--accent-teal)',
-            borderColor: 'color-mix(in srgb, var(--accent-teal) 45%, transparent)',
-            background: 'color-mix(in srgb, var(--accent-teal) 10%, transparent)',
-          }}
-          title="Early access — Automatic advances ready pipeline steps. Review results before clinical use."
-          aria-label="Early access"
-        >
-          <Info className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
-        </span>
-        <span>{automaticPipeline.message}</span>
-      </div>
+      />
     ) : null;
 
   // Both composer call sites are the same component with the same wiring; only the
@@ -1755,10 +1760,19 @@ const ChatPage = () => {
             refreshAfterFilterChange={refreshAfterFilterChange}
             downloadGate={downloadGate}
             chatEligibility={chatEligibility}
+            onClinicalReportOpen={() => setClinicalReportOpen(true)}
             onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
             onGuestRefreshMetadata={handleGuestRefreshMetadata}
           />
       </aside>
+
+      {userTier !== 'guest' && activeConversationId ? (
+        <ClinicalReportAssignModal
+          open={clinicalReportOpen}
+          onOpenChange={setClinicalReportOpen}
+          conversationId={activeConversationId}
+        />
+      ) : null}
 
       {/* Hidden file inputs for dropdown file type selection */}
       <input

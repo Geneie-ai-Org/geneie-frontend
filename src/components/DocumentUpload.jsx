@@ -21,6 +21,10 @@ import PhenotypeInputPanel, {
   PHENOTYPE_MODE_NOTE,
   sampleHasPhenotype,
 } from '@/components/PhenotypeInputPanel';
+import PipelineRunModeToggle, {
+  PIPELINE_RUN_MANUAL,
+  normalizePipelineRunMode,
+} from '@/components/PipelineRunModeToggle';
 import { PillToggle } from '@/components/ui/pill-toggle';
 import {
   Dialog,
@@ -151,7 +155,8 @@ const DocumentUpload = ({
     phenotype_findings: '',
     phenotype_disease: '',
     phenotype_note_clean: '',
-    phenotype_run_mode: 'manual',
+    phenotype_run_mode: PIPELINE_RUN_MANUAL,
+    pipeline_run_mode: PIPELINE_RUN_MANUAL,
     phenotype_hpo: null,
     tumorType: '' // Free text (only for Somatic/Tumor-Normal Paired/Tumor-Only)
   });
@@ -193,7 +198,12 @@ const DocumentUpload = ({
         phenotype_findings: initialMetadata.phenotype_findings || (initialMetadata.phenotype_mode === 'disease' ? '' : (initialMetadata.phenotype || '')),
         phenotype_disease: initialMetadata.phenotype_disease || (initialMetadata.phenotype_mode === 'disease' ? (initialMetadata.phenotype || '') : ''),
         phenotype_note_clean: initialMetadata.phenotype_note_clean || '',
-        phenotype_run_mode: initialMetadata.phenotype_run_mode || 'manual',
+        phenotype_run_mode: normalizePipelineRunMode(
+          initialMetadata.pipeline_run_mode || initialMetadata.phenotype_run_mode
+        ),
+        pipeline_run_mode: normalizePipelineRunMode(
+          initialMetadata.pipeline_run_mode || initialMetadata.phenotype_run_mode
+        ),
         phenotype_hpo: initialMetadata.phenotype_hpo || null,
         tumorType: initialMetadata.tumorType || '',
       });
@@ -546,7 +556,12 @@ const DocumentUpload = ({
                 phenotype_findings: sampleMetadata.phenotype_findings || '',
                 phenotype_disease: sampleMetadata.phenotype_disease || '',
                 phenotype_note_clean: sampleMetadata.phenotype_note_clean || '',
-                phenotype_run_mode: sampleMetadata.phenotype_run_mode || 'manual',
+                phenotype_run_mode: normalizePipelineRunMode(
+                  sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode
+                ),
+                pipeline_run_mode: normalizePipelineRunMode(
+                  sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode
+                ),
                 phenotype_hpo: sampleMetadata.phenotype_hpo || null,
               }
             : {
@@ -555,7 +570,8 @@ const DocumentUpload = ({
                 phenotype_findings: '',
                 phenotype_disease: '',
                 phenotype_note_clean: '',
-                phenotype_run_mode: 'manual',
+                phenotype_run_mode: PIPELINE_RUN_MANUAL,
+                pipeline_run_mode: PIPELINE_RUN_MANUAL,
                 phenotype_hpo: null,
               }),
           tumorType: (sampleMetadata.analysisType === 'Somatic' || sampleMetadata.analysisType === 'Tumor-Normal Paired' || sampleMetadata.analysisType === 'Tumor-Only') ? sampleMetadata.tumorType : '',
@@ -650,7 +666,8 @@ const DocumentUpload = ({
       phenotype_findings: '',
       phenotype_disease: '',
       phenotype_note_clean: '',
-      phenotype_run_mode: 'manual',
+      phenotype_run_mode: PIPELINE_RUN_MANUAL,
+      pipeline_run_mode: PIPELINE_RUN_MANUAL,
       phenotype_hpo: null,
       tumorType: ''
     });
@@ -1378,6 +1395,22 @@ const DocumentUpload = ({
           <form onSubmit={handleInfoFormSubmit} className="flex flex-col flex-1 min-h-0">
             <div className="flex-1 overflow-y-auto px-7 pb-4 space-y-5">
               {metadataStep === 'sample' && (
+              <div className="space-y-5">
+              <div
+                className="p-3 rounded-lg border"
+                style={{ borderColor: 'var(--border-default)', background: 'var(--bg-input)' }}
+              >
+                <PipelineRunModeToggle
+                  value={sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode}
+                  onChange={(mode) =>
+                    setSampleMetadata((prev) => ({
+                      ...prev,
+                      pipeline_run_mode: mode,
+                      phenotype_run_mode: mode,
+                    }))
+                  }
+                />
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
                 {/* Name - Editable */}
                 <div>
@@ -1533,6 +1566,7 @@ const DocumentUpload = ({
                   />
                 </div>
               </div>
+              </div>
               )}
 
               {metadataStep === 'analysis' && sampleMetadata.analysisType === 'Germline' && (
@@ -1605,7 +1639,12 @@ const DocumentUpload = ({
                       phenotype_findings: sampleMetadata.phenotype_findings || '',
                       phenotype_disease: sampleMetadata.phenotype_disease || '',
                       phenotype_note_clean: sampleMetadata.phenotype_note_clean || '',
-                      phenotype_run_mode: sampleMetadata.phenotype_run_mode || 'manual',
+                      phenotype_run_mode: normalizePipelineRunMode(
+                        sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode
+                      ),
+                      pipeline_run_mode: normalizePipelineRunMode(
+                        sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode
+                      ),
                       phenotype: sampleMetadata.phenotype || '',
                       phenotype_hpo: sampleMetadata.phenotype_hpo,
                     }}
@@ -1613,6 +1652,8 @@ const DocumentUpload = ({
                       setSampleMetadata((prev) => ({
                         ...prev,
                         ...fields,
+                        pipeline_run_mode: prev.pipeline_run_mode || prev.phenotype_run_mode,
+                        phenotype_run_mode: prev.pipeline_run_mode || prev.phenotype_run_mode,
                       }))
                     }
                   />

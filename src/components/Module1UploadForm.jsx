@@ -21,6 +21,10 @@ import { MODULE1_BED_MAX_BYTES, MODULE1_FASTQ_MAX_BYTES } from '@/services/backe
 import { isRecognizedImportUrl, module1UrlErrorMessage, precheckBedChromStyle } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
 import PhenotypeInputPanel, { PHENOTYPE_MODE_NOTE } from '@/components/PhenotypeInputPanel';
+import PipelineRunModeToggle, {
+  PIPELINE_RUN_MANUAL,
+  normalizePipelineRunMode,
+} from '@/components/PipelineRunModeToggle';
 
 const GENOME_OPTIONS = [
   { value: 'hg38', label: 'hg38 (GRCh38)' },
@@ -93,7 +97,8 @@ const EMPTY_SAMPLE_METADATA = {
   phenotype_findings: '',
   phenotype_disease: '',
   phenotype_note_clean: '',
-  phenotype_run_mode: 'manual',
+  phenotype_run_mode: PIPELINE_RUN_MANUAL,
+  pipeline_run_mode: PIPELINE_RUN_MANUAL,
   phenotype_hpo: null,
 };
 
@@ -471,7 +476,12 @@ const Module1UploadForm = ({
               phenotype_findings: sampleMetadata.phenotype_findings || '',
               phenotype_disease: sampleMetadata.phenotype_disease || '',
               phenotype_note_clean: sampleMetadata.phenotype_note_clean || '',
-              phenotype_run_mode: sampleMetadata.phenotype_run_mode || 'manual',
+              phenotype_run_mode: normalizePipelineRunMode(
+                sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode
+              ),
+              pipeline_run_mode: normalizePipelineRunMode(
+                sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode
+              ),
               phenotype_hpo: sampleMetadata.phenotype_hpo || null,
             }
           : {}),
@@ -513,6 +523,18 @@ const Module1UploadForm = ({
             <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
               Upload paired FASTQ files (R1 + R2). Typical runtime: 2–4 hours — you can close this and keep using the app.
             </p>
+            <div className="mt-4 p-3 rounded-lg border" style={{ borderColor: 'var(--border-default)', background: 'var(--bg-input)' }}>
+              <PipelineRunModeToggle
+                value={sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode}
+                onChange={(mode) =>
+                  setSampleMetadata((prev) => ({
+                    ...prev,
+                    pipeline_run_mode: mode,
+                    phenotype_run_mode: mode,
+                  }))
+                }
+              />
+            </div>
             {module1SubmitError && (
               <div className="mt-4 p-3 border rounded-lg flex items-start gap-2" style={{ backgroundColor: 'var(--error-soft)', borderColor: 'var(--error)' }}>
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--error)' }} />
@@ -650,7 +672,12 @@ const Module1UploadForm = ({
                           phenotype_findings: sampleMetadata.phenotype_findings || '',
                           phenotype_disease: sampleMetadata.phenotype_disease || '',
                           phenotype_note_clean: sampleMetadata.phenotype_note_clean || '',
-                          phenotype_run_mode: sampleMetadata.phenotype_run_mode || 'manual',
+                          phenotype_run_mode: normalizePipelineRunMode(
+                            sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode
+                          ),
+                          pipeline_run_mode: normalizePipelineRunMode(
+                            sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode
+                          ),
                           phenotype: sampleMetadata.phenotype || '',
                           phenotype_hpo: sampleMetadata.phenotype_hpo,
                         }}
@@ -658,6 +685,9 @@ const Module1UploadForm = ({
                           setSampleMetadata((prev) => ({
                             ...prev,
                             ...fields,
+                            // Keep case-level mode authoritative.
+                            pipeline_run_mode: prev.pipeline_run_mode || prev.phenotype_run_mode,
+                            phenotype_run_mode: prev.pipeline_run_mode || prev.phenotype_run_mode,
                           }))
                         }
                       />

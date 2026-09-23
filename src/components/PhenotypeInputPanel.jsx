@@ -878,6 +878,12 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     if (trimmed.length < 8) {
       setInterpreting(false);
       interpretSeq.current += 1;
+      // Fully cleared / too short for interpret: do not re-emit pinned chips here —
+      // the disease-search effect owns the empty-note wipe (keeps races from restoring selections).
+      if (trimmed.length < 3) {
+        return undefined;
+      }
+      // Shortened but still typing (3–7 chars): drop cleaned note + unselected proposals only.
       const pinned = (stateRef.current.candidates || []).filter((c) => c.selected);
       const hadUnselected = (stateRef.current.candidates || []).some((c) => !c.selected);
       if (stateRef.current.noteCleanText || notePreviewRef.current || hadUnselected) {

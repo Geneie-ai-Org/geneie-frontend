@@ -659,6 +659,9 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     const trimmed = String(text || '').trim();
     if (trimmed.length < 8 || disabled) return;
     const seq = ++interpretSeq.current;
+    // Invalidate in-flight raw fast-search so it cannot overwrite LLM-grounded matches.
+    diseaseSeq.current += 1;
+    setSearchingDiseases(false);
     setInterpreting(true);
     setResolveError('');
     try {
@@ -873,6 +876,12 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       ) {
         clearEphemeralPhenotypeResults({ keepPinned: false });
       }
+      return undefined;
+    }
+    // Longer notes: LLM interpret owns disease/HPO grounding (corrected names).
+    // Fast resolve on raw draft would defeat typo/special-char cleanup.
+    if (trimmed.length >= 8) {
+      setSearchingDiseases(false);
       return undefined;
     }
     diseaseDebounceRef.current = setTimeout(() => {

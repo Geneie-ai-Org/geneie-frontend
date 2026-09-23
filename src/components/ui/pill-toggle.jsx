@@ -17,9 +17,9 @@ export function PillToggle({ options, value, onChange, className = '' }) {
             type="button"
             onClick={() => (opt.disabled ? opt.onDisabledClick?.(opt) : onChange(opt.value))}
             aria-pressed={active}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-[background-color,border-color,color,transform] duration-150 ease-out ${
+            className={`relative px-3 py-1.5 text-xs font-medium rounded-lg border transition-[background-color,border-color,color,transform] duration-150 ease-out ${
               opt.disabled ? 'cursor-not-allowed' : 'active:scale-[0.97]'
-            }`}
+            } ${opt.badge ? 'overflow-visible' : ''}`}
             style={{
               borderColor: active ? 'var(--accent-teal)' : 'var(--border-default)',
               color: opt.disabled
@@ -31,6 +31,7 @@ export function PillToggle({ options, value, onChange, className = '' }) {
             }}
           >
             {opt.label}
+            {opt.badge}
           </button>
         );
       })}

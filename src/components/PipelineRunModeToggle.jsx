@@ -16,23 +16,25 @@ function earlyAccessSurface(paddingBg = 'var(--bg-input)') {
     ? paddingBg
     : `linear-gradient(${paddingBg}, ${paddingBg})`;
   return {
-    border: '1px solid transparent',
+    border: '1.5px solid transparent',
     background: `${padLayer} padding-box, var(--early-access-gradient) border-box`,
   };
 }
 
-function EarlyAccessMark() {
+/** Compact superscript mark for the Automatic option. */
+function EarlyAccessSuperscript() {
   const softFill =
-    'linear-gradient(135deg, color-mix(in srgb, var(--early-access-from) 14%, var(--bg-input)), color-mix(in srgb, var(--early-access-to) 14%, var(--bg-input)))';
+    'linear-gradient(135deg, color-mix(in srgb, var(--early-access-from) 16%, var(--bg-input)), color-mix(in srgb, var(--early-access-to) 16%, var(--bg-input)))';
   return (
     <span
-      className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+      aria-label="Early access"
+      title="Early access — review results before clinical use"
+      className="pointer-events-none absolute -top-2 -right-1.5 z-10 inline-flex max-w-[4.5rem] items-center rounded px-1 py-px text-[8px] font-semibold uppercase leading-none tracking-wide whitespace-nowrap"
       style={{
         ...earlyAccessSurface(softFill),
         color: 'var(--early-access-from)',
-        letterSpacing: '0.04em',
+        letterSpacing: '0.03em',
       }}
-      title="Early access — review results before clinical use"
     >
       Early access
     </span>
@@ -59,14 +61,12 @@ export default function PipelineRunModeToggle({
             }
       }
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0 flex flex-wrap items-center gap-2">
-          <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-            Analysis mode
-          </p>
-          {isAutomatic && <EarlyAccessMark />}
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+        <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+          Analysis mode
+        </p>
         <PillToggle
+          className="overflow-visible"
           value={mode}
           onChange={(next) => {
             if (disabled) return;
@@ -74,7 +74,11 @@ export default function PipelineRunModeToggle({
           }}
           options={[
             { value: PIPELINE_RUN_MANUAL, label: 'Manual' },
-            { value: PIPELINE_RUN_AUTOMATIC, label: 'Automatic' },
+            {
+              value: PIPELINE_RUN_AUTOMATIC,
+              label: 'Automatic',
+              badge: <EarlyAccessSuperscript />,
+            },
           ]}
         />
       </div>

@@ -33,9 +33,9 @@
   --accent-teal-soft: hsl(var(--primary) / 0.12);
   --accent-teal-hover: color-mix(in srgb, hsl(var(--primary)) 85%, #000);
   --accent-teal-contrast: #FFFFFF;
-  /* Early access — primary → chart-3 (muted teal) so Automatic reads as brand, not a new hue. */
+  /* Early access — primary blue → stronger teal so the thin border reads as a gradient. */
   --early-access-from: hsl(var(--primary));
-  --early-access-to: hsl(var(--chart-3));
+  --early-access-to: hsl(174 52% 34%);
   --early-access-gradient: linear-gradient(135deg, var(--early-access-from), var(--early-access-to));
   --code-inline: #111827;
   --code-inline-bg: #F3F4F6;

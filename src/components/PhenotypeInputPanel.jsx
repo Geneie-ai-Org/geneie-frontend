@@ -294,6 +294,9 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       ? PHENOTYPE_RUN_AUTOMATIC
       : PHENOTYPE_RUN_MANUAL;
   const isAutomatic = runMode === PHENOTYPE_RUN_AUTOMATIC;
+  // Async search/interpret must not wait for the stateRef effect — that lag treated Automatic as Manual.
+  const runModeRef = useRef(runMode);
+  runModeRef.current = runMode;
 
   const [draft, setDraft] = useState('');
   const [resolving, setResolving] = useState(false);
@@ -393,8 +396,8 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           : cur.propagatedFromRelated,
       noteClean:
         patch.phenotype_note_clean !== undefined ? patch.phenotype_note_clean : cur.noteCleanText,
-      // Mode is owned at case/upload level — phenotype panel does not change it.
-      runMode: cur.runMode,
+      // Mode is owned at case/upload level — always read the live ref, not a stale stateRef.
+      runMode: runModeRef.current || PHENOTYPE_RUN_MANUAL,
     });
     if (patch.sampleSex !== undefined) fields.sampleSex = patch.sampleSex;
     onChangeRef.current?.(fields);
@@ -569,7 +572,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         });
         const fromDisease = mapResolveToCandidates(resolved, {
           // Automatic: pre-select disease-linked clinical findings (not inheritance).
-          defaultSelected: stateRef.current.runMode === PHENOTYPE_RUN_AUTOMATIC,
+          defaultSelected: runModeRef.current === PHENOTYPE_RUN_AUTOMATIC,
         }).map((c) =>
           isInheritanceLikeHpo(c) ? { ...c, selected: false, selected_default: false } : c
         );
@@ -616,8 +619,19 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
 
   const autoApplyTopDisease = useCallback(async (disease) => {
     if (!disease || autoApplyingDiseaseRef.current) return;
-    if (stateRef.current.runMode !== PHENOTYPE_RUN_AUTOMATIC) return;
-    if (stateRef.current.diseaseMatch?.name) return;
+    if (runModeRef.current !== PHENOTYPE_RUN_AUTOMATIC) return;
+    if (!shouldAutoSelectDisease(disease, runModeRef.current)) return;
+    // Skip only if this same disease is already applied.
+    const cur = stateRef.current.diseaseMatch;
+    if (
+      cur?.name &&
+      (String(cur.name).toLowerCase() === String(disease.disease_name || disease.name || '').toLowerCase() ||
+        (cur.id &&
+          (disease.disease_id || disease.id) &&
+          cur.id === (disease.disease_id || disease.id)))
+    ) {
+      return;
+    }
     autoApplyingDiseaseRef.current = true;
     try {
       await applyDiseaseRef.current?.(disease, { allowToggleOff: false });
@@ -645,7 +659,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
             return { ...c, selected: false, selected_default: false };
           }
           // Manual: unchecked. Automatic: keep backend high-confidence / high-score ticks.
-          if (stateRef.current.runMode !== PHENOTYPE_RUN_AUTOMATIC) {
+          if (runModeRef.current !== PHENOTYPE_RUN_AUTOMATIC) {
             return { ...c, selected: false, selected_default: false };
           }
           return c;
@@ -694,7 +708,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       }
 
       const autoDisease =
-        !nextMatch && shouldAutoSelectDisease(catalog[0], stateRef.current.runMode)
+        !nextMatch && shouldAutoSelectDisease(catalog[0], runModeRef.current)
           ? catalog[0]
           : null;
 
@@ -764,6 +778,28 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         return;
       }
 
+      // Prefer API disease_match when it qualifies; else top catalog row.
+      const preferredAuto =
+        resolved.disease_match &&
+        shouldAutoSelectDisease(
+          {
+            disease_id: resolved.disease_match.id,
+            disease_name: resolved.disease_match.name,
+            score: resolved.disease_match.score,
+            source: resolved.disease_match.source,
+          },
+          runModeRef.current
+        )
+          ? {
+              disease_id: resolved.disease_match.id,
+              disease_name: resolved.disease_match.name,
+              score: resolved.disease_match.score,
+              source: resolved.disease_match.source,
+            }
+          : shouldAutoSelectDisease(catalog[0], runModeRef.current)
+            ? catalog[0]
+            : null;
+
       // Preserve selection; only refresh the ranked disease list.
       const prev = stateRef.current.diseaseMatch;
       let nextMatch = null;
@@ -783,10 +819,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         }
       }
 
-      const autoDisease =
-        !nextMatch && shouldAutoSelectDisease(catalog[0], stateRef.current.runMode)
-          ? catalog[0]
-          : null;
+      const autoDisease = !nextMatch ? preferredAuto : null;
 
       emit({
         top_candidates: catalog,

@@ -1641,12 +1641,20 @@ const DocumentUpload = ({
                       phenotype_hpo: sampleMetadata.phenotype_hpo,
                     }}
                     onChange={(fields) =>
-                      setSampleMetadata((prev) => ({
-                        ...prev,
-                        ...fields,
-                        pipeline_run_mode: prev.pipeline_run_mode || prev.phenotype_run_mode,
-                        phenotype_run_mode: prev.pipeline_run_mode || prev.phenotype_run_mode,
-                      }))
+                      setSampleMetadata((prev) => {
+                        const mode = normalizePipelineRunMode(
+                          prev.pipeline_run_mode ||
+                            prev.phenotype_run_mode ||
+                            fields.pipeline_run_mode ||
+                            fields.phenotype_run_mode
+                        );
+                        return {
+                          ...prev,
+                          ...fields,
+                          pipeline_run_mode: mode,
+                          phenotype_run_mode: mode,
+                        };
+                      })
                     }
                   />
                 </div>

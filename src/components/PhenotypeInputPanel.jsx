@@ -629,7 +629,8 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           nextMatch = {
             id: nextMatch.disease_id || prev.id || '',
             name: nextMatch.disease_name,
-            score: nextMatch.score ?? prev.score,
+            // Fresh score for the current note — do not keep the previous phrase's score.
+            score: nextMatch.score != null ? nextMatch.score : prev.score,
             source: nextMatch.source || prev.source,
           };
         }
@@ -710,7 +711,8 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           nextMatch = {
             id: found.disease_id || prev.id || '',
             name: found.disease_name,
-            score: found.score ?? prev.score,
+            // Always take the fresh score for the current note text.
+            score: found.score != null ? found.score : prev.score,
             source: found.source || prev.source,
           };
         }
@@ -730,7 +732,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     }
   }, [disabled, emit]);
 
-  // Fast disease matches on every edit (short debounce).
+  // Fast disease matches on every edit (short debounce) — scores refresh from the current text.
   useEffect(() => {
     if (disabled) return undefined;
     if (diseaseDebounceRef.current) clearTimeout(diseaseDebounceRef.current);
@@ -738,12 +740,13 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     if (trimmed.length < 3) {
       setSearchingDiseases(false);
       diseaseSeq.current += 1;
-      // Drop stale disease hits / cleaned note when the typed text is cleared or too short.
+      // Cleared / too short: wipe ephemeral results; keep pinned selections only.
       if (
         stateRef.current.topCandidates?.length ||
         stateRef.current.noteCleanText ||
         notePreview ||
-        stateRef.current.diseaseMatch
+        stateRef.current.diseaseMatch ||
+        (stateRef.current.candidates || []).some((c) => !c.selected)
       ) {
         clearEphemeralPhenotypeResults({ keepPinned: true });
       }
@@ -757,7 +760,8 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     };
   }, [draft, disabled, runFastDiseaseSearch, clearEphemeralPhenotypeResults, notePreview]);
 
-  // Live interpret while typing (clinical note).
+  // Live interpret while typing (clinical note). Shortening below the threshold drops
+  // stale cleaned-note / unselected proposals; disease scores still refresh via fast search.
   useEffect(() => {
     if (disabled) return undefined;
     if (interpretDebounceRef.current) clearTimeout(interpretDebounceRef.current);
@@ -765,6 +769,18 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     if (trimmed.length < 8) {
       setInterpreting(false);
       interpretSeq.current += 1;
+      const pinned = (stateRef.current.candidates || []).filter((c) => c.selected);
+      const hadUnselected = (stateRef.current.candidates || []).some((c) => !c.selected);
+      if (stateRef.current.noteCleanText || notePreview || hadUnselected) {
+        setNotePreview(null);
+        setNoteUnmapped([]);
+        setNoteAmbiguous([]);
+        emit({
+          phenotype_note_clean: '',
+          candidates: pinned,
+          phenotype_findings: findingsLabelFrom(pinned),
+        });
+      }
       return undefined;
     }
     interpretDebounceRef.current = setTimeout(() => {
@@ -773,7 +789,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     return () => {
       if (interpretDebounceRef.current) clearTimeout(interpretDebounceRef.current);
     };
-  }, [draft, disabled, runInterpretNote]);
+  }, [draft, disabled, runInterpretNote, emit, notePreview]);
 
   const inputStyle = {
     borderColor: 'var(--border-default)',

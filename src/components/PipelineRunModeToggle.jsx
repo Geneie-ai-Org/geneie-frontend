@@ -61,7 +61,7 @@ function earlyAccessSurface(paddingBg = 'var(--bg-input)') {
 }
 
 const AUTOMATIC_INFO =
-  'Early access. Automatic advances annotation and phenotype prioritization when ready, and pre-selects high-confidence findings. Review before clinical use.';
+  'Early access. Automatic advances annotation and phenotype prioritization when ready, and pre-selects strong disease matches (score ≥ 0.90) plus high-confidence findings. Review before clinical use.';
 
 function AutomaticInfoButton() {
   const [open, setOpen] = useState(false);

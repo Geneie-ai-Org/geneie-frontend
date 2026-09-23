@@ -15,6 +15,9 @@ export const PHENOTYPE_MODE_NOTE = 'note';
 export const PHENOTYPE_RUN_MANUAL = 'manual';
 export const PHENOTYPE_RUN_AUTOMATIC = 'automatic';
 
+/** Strong disease match — auto-apply in Automatic analysis mode only. */
+const AUTO_DISEASE_MIN_SCORE = 0.9;
+
 /** Mode-of-inheritance / non-finding HPO IDs commonly dumped in disease annotations. */
 const INHERITANCE_HPO_IDS = new Set([
   'HP:0000005',
@@ -203,6 +206,17 @@ function findingsLabelFrom(candidates) {
     .filter((c) => c.selected)
     .map((c) => c.hpo_name || c.matched_phrase || c.hpo_id)
     .join(', ');
+}
+
+function diseaseScore(d) {
+  const n = Number(d?.score);
+  return Number.isFinite(n) ? n : null;
+}
+
+function shouldAutoSelectDisease(d, runMode) {
+  if (runMode !== PHENOTYPE_RUN_AUTOMATIC || !d) return false;
+  const score = diseaseScore(d);
+  return score != null && score >= AUTO_DISEASE_MIN_SCORE;
 }
 
 function diseaseKey(d) {
@@ -534,54 +548,83 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     });
   };
 
-  const applyDisease = async (disease) => {
-    const name = String(disease?.disease_name || disease?.name || '').trim();
-    if (!name || disabled) return;
+  const applyDisease = useCallback(
+    async (disease, { allowToggleOff = true } = {}) => {
+      const name = String(disease?.disease_name || disease?.name || '').trim();
+      if (!name || disabled) return;
 
-    // Toggle off if this disease is already selected.
-    if (isActiveDisease(disease)) {
-      clearDisease();
-      return;
-    }
+      // Toggle off if this disease is already selected (manual click only).
+      if (allowToggleOff && isActiveDisease(disease)) {
+        clearDisease();
+        return;
+      }
+      if (!allowToggleOff && isActiveDisease(disease)) return;
 
-    setResolving(true);
-    setResolveError('');
+      setResolving(true);
+      setResolveError('');
+      try {
+        const resolved = await resolveHpoTerms({
+          text: name,
+          forceMode: PHENOTYPE_MODE_DISEASE,
+        });
+        const fromDisease = mapResolveToCandidates(resolved, {
+          // Automatic: pre-select disease-linked clinical findings (not inheritance).
+          defaultSelected: stateRef.current.runMode === PHENOTYPE_RUN_AUTOMATIC,
+        }).map((c) =>
+          isInheritanceLikeHpo(c) ? { ...c, selected: false, selected_default: false } : c
+        );
+        const pinned = (stateRef.current.candidates || []).filter((c) => c.selected);
+        const merged = mergeCandidates(pinned, fromDisease);
+        const match =
+          resolved.disease_match ||
+          {
+            id: disease.disease_id || disease.id || '',
+            name,
+            score: disease.score,
+            source: disease.source,
+          };
+        const catalog = mergeDiseaseCatalog(stateRef.current.topCandidates, [
+          match,
+          ...(resolved.top_candidates || []),
+          disease,
+        ]);
+        emit({
+          phenotype_disease: name,
+          candidates: merged,
+          disease_match: match,
+          top_candidates: catalog,
+          hpo_resolution_method: resolved.hpo_resolution_method || null,
+          propagated_from_related_records: resolved.propagated_from_related_records || [],
+          phenotype_findings: findingsLabelFrom(merged),
+        });
+      } catch (err) {
+        setResolveError(err?.message || 'Could not load findings for that disease');
+      } finally {
+        setResolving(false);
+      }
+    },
+    // isActiveDisease/clearDisease close over latest diseaseMatch via render; emit is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [disabled, emit, diseaseMatch]
+  );
+
+  const applyDiseaseRef = useRef(applyDisease);
+  const autoApplyingDiseaseRef = useRef(false);
+  useEffect(() => {
+    applyDiseaseRef.current = applyDisease;
+  }, [applyDisease]);
+
+  const autoApplyTopDisease = useCallback(async (disease) => {
+    if (!disease || autoApplyingDiseaseRef.current) return;
+    if (stateRef.current.runMode !== PHENOTYPE_RUN_AUTOMATIC) return;
+    if (stateRef.current.diseaseMatch?.name) return;
+    autoApplyingDiseaseRef.current = true;
     try {
-      const resolved = await resolveHpoTerms({
-        text: name,
-        forceMode: PHENOTYPE_MODE_DISEASE,
-      });
-      const fromDisease = mapResolveToCandidates(resolved, { defaultSelected: false });
-      const pinned = (stateRef.current.candidates || []).filter((c) => c.selected);
-      const merged = mergeCandidates(pinned, fromDisease);
-      const match =
-        resolved.disease_match ||
-        {
-          id: disease.disease_id || disease.id || '',
-          name,
-          score: disease.score,
-          source: disease.source,
-        };
-      const catalog = mergeDiseaseCatalog(stateRef.current.topCandidates, [
-        match,
-        ...(resolved.top_candidates || []),
-        disease,
-      ]);
-      emit({
-        phenotype_disease: name,
-        candidates: merged,
-        disease_match: match,
-        top_candidates: catalog,
-        hpo_resolution_method: resolved.hpo_resolution_method || null,
-        propagated_from_related_records: resolved.propagated_from_related_records || [],
-        phenotype_findings: findingsLabelFrom(merged),
-      });
-    } catch (err) {
-      setResolveError(err?.message || 'Could not load findings for that disease');
+      await applyDiseaseRef.current?.(disease, { allowToggleOff: false });
     } finally {
-      setResolving(false);
+      autoApplyingDiseaseRef.current = false;
     }
-  };
+  }, []);
 
   const runInterpretNote = useCallback(async (text) => {
     const trimmed = String(text || '').trim();
@@ -630,7 +673,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       // Fresh catalog for this note — do not keep diseases from a previous phrase.
       const catalog = mergeDiseaseCatalog([], incomingDiseases);
 
-      // Keep user's disease selection if still in catalog; never auto-select a new best match.
+      // Keep user's disease selection if still in catalog; Automatic may adopt a strong top hit.
       const prev = stateRef.current.diseaseMatch;
       let nextMatch = null;
       if (prev?.name) {
@@ -644,12 +687,16 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           nextMatch = {
             id: nextMatch.disease_id || prev.id || '',
             name: nextMatch.disease_name,
-            // Fresh score for the current note — do not keep the previous phrase's score.
             score: nextMatch.score != null ? nextMatch.score : prev.score,
             source: nextMatch.source || prev.source,
           };
         }
       }
+
+      const autoDisease =
+        !nextMatch && shouldAutoSelectDisease(catalog[0], stateRef.current.runMode)
+          ? catalog[0]
+          : null;
 
       setNotePreview(data);
       setNoteUnmapped(data.unmapped || []);
@@ -671,13 +718,17 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           : data.propagated_from_related_records || [],
         ...(data.patient?.sex ? { sampleSex: data.patient.sex } : {}),
       });
+
+      if (autoDisease && seq === interpretSeq.current) {
+        await autoApplyTopDisease(autoDisease);
+      }
     } catch (err) {
       if (seq !== interpretSeq.current) return;
       setResolveError(err?.message || 'Could not interpret clinical note');
     } finally {
       if (seq === interpretSeq.current) setInterpreting(false);
     }
-  }, [disabled, emit]);
+  }, [disabled, emit, autoApplyTopDisease]);
 
   /** Fast disease catalog update — deterministic resolve, no LLM. */
   const runFastDiseaseSearch = useCallback(async (text) => {
@@ -726,18 +777,26 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           nextMatch = {
             id: found.disease_id || prev.id || '',
             name: found.disease_name,
-            // Always take the fresh score for the current note text.
             score: found.score != null ? found.score : prev.score,
             source: found.source || prev.source,
           };
         }
       }
 
+      const autoDisease =
+        !nextMatch && shouldAutoSelectDisease(catalog[0], stateRef.current.runMode)
+          ? catalog[0]
+          : null;
+
       emit({
         top_candidates: catalog,
         disease_match: nextMatch,
         phenotype_disease: nextMatch?.name || '',
       });
+
+      if (autoDisease && seq === diseaseSeq.current) {
+        await autoApplyTopDisease(autoDisease);
+      }
     } catch (err) {
       if (seq !== diseaseSeq.current) return;
       // Soft-fail: interpret path may still populate diseases.
@@ -745,7 +804,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     } finally {
       if (seq === diseaseSeq.current) setSearchingDiseases(false);
     }
-  }, [disabled, emit]);
+  }, [disabled, emit, autoApplyTopDisease]);
 
   // Fast disease matches on every edit (short debounce) — scores refresh from the current text.
   useEffect(() => {
@@ -864,7 +923,8 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       </label>
       {isAutomatic ? (
         <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-          Automatic: high-confidence findings are pre-selected — disease still needs a click.
+          Automatic: strong disease matches (score ≥ 0.90) and high-confidence findings are
+          pre-selected — click to change.
         </p>
       ) : null}
 

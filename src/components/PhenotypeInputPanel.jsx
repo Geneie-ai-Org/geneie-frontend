@@ -279,7 +279,6 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     value?.phenotype_run_mode === PHENOTYPE_RUN_AUTOMATIC
       ? PHENOTYPE_RUN_AUTOMATIC
       : PHENOTYPE_RUN_MANUAL;
-  const isAutomatic = runMode === PHENOTYPE_RUN_AUTOMATIC;
 
   const [draft, setDraft] = useState('');
   const [resolving, setResolving] = useState(false);
@@ -381,20 +380,31 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     onChangeRef.current?.(fields);
   }, []);
 
-  // Automatic → Manual: drop auto-selected findings so the analyst re-confirms.
+  // Any analysis-mode switch: clear phenotype interpret UI + selections.
   const prevRunModeRef = useRef(runMode);
   useEffect(() => {
     const was = prevRunModeRef.current;
     prevRunModeRef.current = runMode;
-    if (was !== PHENOTYPE_RUN_AUTOMATIC || runMode !== PHENOTYPE_RUN_MANUAL) return;
-    const cur = stateRef.current;
-    const list = cur.candidates || [];
-    const hadSelections = list.some((c) => c.selected) || Boolean(cur.diseaseMatch);
-    if (!hadSelections) return;
+    if (was === runMode) return;
+    interpretSeq.current += 1;
+    diseaseSeq.current += 1;
+    setDraft('');
+    setInterpreting(false);
+    setSearchingDiseases(false);
+    setNotePreview(null);
+    setNoteUnmapped([]);
+    setNoteAmbiguous([]);
+    setResolveError('');
+    setShowMoreDiseases(false);
     emit({
-      candidates: list.map((c) => ({ ...c, selected: false, selected_default: false })),
-      disease_match: null,
+      phenotype_note_clean: '',
+      phenotype_disease: '',
       phenotype_findings: '',
+      candidates: [],
+      disease_match: null,
+      top_candidates: [],
+      hpo_resolution_method: null,
+      propagated_from_related_records: [],
     });
   }, [runMode, emit]);
 
@@ -429,13 +439,41 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
   const altDiseases = diseaseOptions.slice(1);
   const visibleAlts = showMoreDiseases ? altDiseases : [];
 
-  const clearNoteOnly = () => {
-    setDraft('');
+  const clearInterpretUi = useCallback(() => {
     setNotePreview(null);
     setNoteUnmapped([]);
     setNoteAmbiguous([]);
     setResolveError('');
-    // Keep disease catalog + selected findings pinned.
+    setShowMoreDiseases(false);
+  }, []);
+
+  const clearEphemeralPhenotypeResults = useCallback(
+    ({ keepPinned = true } = {}) => {
+      clearInterpretUi();
+      const pinned = keepPinned
+        ? (stateRef.current.candidates || []).filter((c) => c.selected)
+        : [];
+      emit({
+        phenotype_note_clean: '',
+        phenotype_disease: '',
+        phenotype_findings: findingsLabelFrom(pinned),
+        candidates: pinned,
+        disease_match: null,
+        top_candidates: [],
+        hpo_resolution_method: null,
+        propagated_from_related_records: [],
+      });
+    },
+    [clearInterpretUi, emit]
+  );
+
+  const clearNoteOnly = () => {
+    interpretSeq.current += 1;
+    diseaseSeq.current += 1;
+    setDraft('');
+    setInterpreting(false);
+    setSearchingDiseases(false);
+    clearEphemeralPhenotypeResults({ keepPinned: true });
   };
 
   const toggleCandidate = (hpoId) => {
@@ -553,21 +591,11 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         .map(normalizeCandidate)
         .filter(Boolean)
         .filter((c) => c.origin !== 'disease_annotation' && c.match_type !== 'disease_annotation')
-        .map((c) => {
-          // Inheritance never auto-ticked.
-          if (isInheritanceLikeHpo(c)) {
-            return { ...c, selected: false, selected_default: false };
-          }
-          // Manual (default / live): show chips, user ticks. Automatic: keep BE auto-select.
-          if (stateRef.current.runMode !== PHENOTYPE_RUN_AUTOMATIC) {
-            return { ...c, selected: false, selected_default: false };
-          }
-          return c;
-        });
+        .map((c) => ({ ...c, selected: false, selected_default: false }));
 
-      // Merge against full prior list so deselections survive re-interpret (undo).
-      const prior = stateRef.current.candidates || [];
-      const mergedFindings = mergeCandidates(prior, phraseFindings);
+      // Keep only analyst-pinned chips; replace proposals from this note (no stale merge).
+      const priorPinned = (stateRef.current.candidates || []).filter((c) => c.selected);
+      const mergedFindings = mergeCandidates(priorPinned, phraseFindings);
 
       const incomingDiseases = [
         data.disease_match
@@ -584,7 +612,8 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           score: c.confidence === 'high' ? 1 : c.confidence === 'medium' ? 0.7 : 0.4,
         })) || []),
       ];
-      const catalog = mergeDiseaseCatalog(stateRef.current.topCandidates, incomingDiseases);
+      // Fresh catalog for this note — do not keep diseases from a previous phrase.
+      const catalog = mergeDiseaseCatalog([], incomingDiseases);
 
       // Keep user's disease selection if still in catalog; never auto-select a new best match.
       const prev = stateRef.current.diseaseMatch;
@@ -658,8 +687,15 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           : null,
         ...(resolved.top_candidates || []),
       ];
-      const catalog = mergeDiseaseCatalog(stateRef.current.topCandidates, incoming);
-      if (catalog.length === 0) return;
+      const catalog = mergeDiseaseCatalog([], incoming);
+      if (catalog.length === 0) {
+        emit({
+          top_candidates: [],
+          disease_match: null,
+          phenotype_disease: '',
+        });
+        return;
+      }
 
       // Preserve selection; only refresh the ranked disease list.
       const prev = stateRef.current.diseaseMatch;
@@ -701,6 +737,16 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     const trimmed = String(draft || '').trim();
     if (trimmed.length < 3) {
       setSearchingDiseases(false);
+      diseaseSeq.current += 1;
+      // Drop stale disease hits / cleaned note when the typed text is cleared or too short.
+      if (
+        stateRef.current.topCandidates?.length ||
+        stateRef.current.noteCleanText ||
+        notePreview ||
+        stateRef.current.diseaseMatch
+      ) {
+        clearEphemeralPhenotypeResults({ keepPinned: true });
+      }
       return undefined;
     }
     diseaseDebounceRef.current = setTimeout(() => {
@@ -709,15 +755,16 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     return () => {
       if (diseaseDebounceRef.current) clearTimeout(diseaseDebounceRef.current);
     };
-  }, [draft, disabled, runFastDiseaseSearch]);
+  }, [draft, disabled, runFastDiseaseSearch, clearEphemeralPhenotypeResults, notePreview]);
 
-  // Slower LLM interpret for cleaned note + phrase findings (does not block disease list).
+  // Live interpret while typing (clinical note).
   useEffect(() => {
     if (disabled) return undefined;
     if (interpretDebounceRef.current) clearTimeout(interpretDebounceRef.current);
     const trimmed = String(draft || '').trim();
     if (trimmed.length < 8) {
       setInterpreting(false);
+      interpretSeq.current += 1;
       return undefined;
     }
     interpretDebounceRef.current = setTimeout(() => {
@@ -990,9 +1037,6 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
             <span>
               Clinical findings ({clinicalCandidates.filter((c) => c.selected).length}/
               {clinicalCandidates.length} selected)
-              {clinicalCandidates.some((c) => c.selected && c.selected_default && isAutomatic)
-                ? ' · high-confidence pre-selected — click to undo'
-                : ''}
               {inheritanceCandidates.length > 0
                 ? ` · ${inheritanceCandidates.length} inheritance terms hidden`
                 : ''}

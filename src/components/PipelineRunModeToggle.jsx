@@ -1,6 +1,7 @@
 /**
  * Case-level Manual vs Automatic for the full pipeline (M1 → report).
  */
+import { Info } from 'lucide-react';
 import { PillToggle } from '@/components/ui/pill-toggle';
 
 export const PIPELINE_RUN_MANUAL = 'manual';
@@ -10,9 +11,28 @@ export function normalizePipelineRunMode(value) {
   return value === PIPELINE_RUN_AUTOMATIC ? PIPELINE_RUN_AUTOMATIC : PIPELINE_RUN_MANUAL;
 }
 
+/** Clear phenotype interpret/selection state; keeps unrelated sample fields. */
+export function clearPhenotypeMetadataFields(prev = {}) {
+  return {
+    phenotype_findings: '',
+    phenotype_disease: '',
+    phenotype_note_clean: '',
+    phenotype: '',
+    phenotype_hpo: {
+      ...(prev.phenotype_hpo || {}),
+      candidates: [],
+      confirmed_ids: [],
+      disease_match: null,
+      top_candidates: [],
+      hpo_resolution_method: null,
+      propagated_from_related_records: [],
+    },
+  };
+}
+
 /**
  * Apply Manual/Automatic on sample metadata.
- * Automatic → Manual clears phenotype selections (keeps the clinical note text).
+ * Any mode switch resets phenotype results (note text in the panel is local and clears there too).
  */
 export function applyPipelineRunModeChange(prev = {}, mode) {
   const nextMode = normalizePipelineRunMode(mode);
@@ -24,32 +44,8 @@ export function applyPipelineRunModeChange(prev = {}, mode) {
     pipeline_run_mode: nextMode,
     phenotype_run_mode: nextMode,
   };
-  if (prevMode !== PIPELINE_RUN_AUTOMATIC || nextMode !== PIPELINE_RUN_MANUAL) {
-    return next;
-  }
-  const ph = prev.phenotype_hpo;
-  const hadSelections =
-    Boolean(ph?.disease_match) ||
-    (Array.isArray(ph?.confirmed_ids) && ph.confirmed_ids.length > 0) ||
-    (Array.isArray(ph?.candidates) && ph.candidates.some((c) => c?.selected));
-  if (!hadSelections && !prev.phenotype_findings) {
-    return next;
-  }
-  next.phenotype_hpo = {
-    ...(ph || {}),
-    candidates: (ph?.candidates || []).map((c) => ({
-      ...c,
-      selected: false,
-      selected_default: false,
-    })),
-    confirmed_ids: [],
-    disease_match: null,
-  };
-  next.phenotype_findings = '';
-  const note = String(prev.phenotype_note_clean || '').trim();
-  const disease = String(prev.phenotype_disease || '').trim();
-  next.phenotype = note || disease;
-  return next;
+  if (prevMode === nextMode) return next;
+  return { ...next, ...clearPhenotypeMetadataFields(prev) };
 }
 
 /** Gradient border that respects border-radius (padding-box + border-box). */
@@ -63,26 +59,26 @@ function earlyAccessSurface(paddingBg = 'var(--bg-input)') {
   };
 }
 
-/** Inline power-style mark, flush to the end of “Automatic”. */
-function EarlyAccessSuperscript() {
-  const softFill =
-    'linear-gradient(135deg, color-mix(in srgb, var(--early-access-from) 16%, var(--bg-input)), color-mix(in srgb, var(--early-access-to) 16%, var(--bg-input)))';
+const AUTOMATIC_INFO =
+  'Early access — Automatic runs annotation and phenotype prioritization with fewer clicks. Review results before clinical use.';
+
+function AutomaticInfoButton() {
   return (
-    <sup
-      aria-label="Early access"
-      title="Early access — review results before clinical use"
-      className="ml-0.5 inline-block rounded px-[3px] py-px text-[7px] font-semibold uppercase leading-none tracking-wide align-super"
+    <button
+      type="button"
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
       style={{
-        ...earlyAccessSurface(softFill),
         color: 'var(--early-access-from)',
-        letterSpacing: '0.02em',
-        verticalAlign: 'super',
-        top: 0,
-        position: 'relative',
+        borderColor: 'color-mix(in srgb, var(--early-access-from) 45%, transparent)',
+        background: 'color-mix(in srgb, var(--early-access-from) 10%, transparent)',
       }}
+      title={AUTOMATIC_INFO}
+      aria-label={AUTOMATIC_INFO}
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.preventDefault()}
     >
-      Early access
-    </sup>
+      <Info className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+    </button>
   );
 }
 
@@ -107,9 +103,12 @@ export default function PipelineRunModeToggle({
       }
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-          Analysis mode
-        </p>
+        <div className="min-w-0 flex items-center gap-1.5">
+          <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+            Analysis mode
+          </p>
+          {isAutomatic && <AutomaticInfoButton />}
+        </div>
         <PillToggle
           value={mode}
           onChange={(next) => {
@@ -118,15 +117,7 @@ export default function PipelineRunModeToggle({
           }}
           options={[
             { value: PIPELINE_RUN_MANUAL, label: 'Manual' },
-            {
-              value: PIPELINE_RUN_AUTOMATIC,
-              label: (
-                <>
-                  Automatic
-                  <EarlyAccessSuperscript />
-                </>
-              ),
-            },
+            { value: PIPELINE_RUN_AUTOMATIC, label: 'Automatic' },
           ]}
         />
       </div>

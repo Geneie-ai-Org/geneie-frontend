@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown } from 'lucide-react';
+import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown, Info } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
 import { toast } from 'sonner';
@@ -1318,14 +1318,16 @@ const ChatPage = () => {
         role="status"
       >
         <span
-          className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+          className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
           style={{
             color: 'var(--accent-teal)',
-            background: 'color-mix(in srgb, var(--accent-teal) 14%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--accent-teal) 35%, transparent)',
+            borderColor: 'color-mix(in srgb, var(--accent-teal) 45%, transparent)',
+            background: 'color-mix(in srgb, var(--accent-teal) 10%, transparent)',
           }}
+          title="Early access — Automatic advances ready pipeline steps. Review results before clinical use."
+          aria-label="Early access"
         >
-          Early access
+          <Info className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
         </span>
         <span>{automaticPipeline.message}</span>
       </div>

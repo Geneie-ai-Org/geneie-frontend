@@ -10,6 +10,11 @@ export function getChatApiUrl() {
   return env.chatApiUrl;
 }
 
+/** Full URL for POST /api/chat/stream (SSE token streaming) */
+export function getChatStreamApiUrl() {
+  return `${getApiOrigin()}/api/chat/stream`;
+}
+
 /** Build a backend API URL from a path, e.g. apiUrl('/api/conversations') */
 export function apiUrl(path) {
   const normalized = path.startsWith('/') ? path : `/${path}`;

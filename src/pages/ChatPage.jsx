@@ -43,6 +43,7 @@ import { conversationPath, isValidConversationId } from '@/lib/conversationRoute
 import { getDeviceId } from '@/lib/deviceId';
 import { useVariantPipeline } from '@/hooks/useVariantPipeline';
 import { useModule1Pipeline } from '@/hooks/useModule1Pipeline';
+import { useAutomaticPipelineConductor } from '@/hooks/useAutomaticPipelineConductor';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { DEFAULT_GUEST_CHAT_LIMIT } from '@/services/backendApi';
 import { formatMeterDetail, meterExhausted, meterFor, meterNearLimit, patchGuestChatUsed } from '@/services/tierLimits';
@@ -424,6 +425,22 @@ const ChatPage = () => {
   });
   module1JobActiveRef.current = module1.module1JobActive;
   onOpenModule1UploadRef.current = module1.openModule1Form;
+
+  const automaticPipeline = useAutomaticPipelineConductor({
+    enabled: userTier !== 'guest' && !!activeConversationId,
+    conversationId: activeConversationId,
+    sampleMetadata: currentDocument?.sample_metadata,
+    analysisType: currentDocument?.sample_metadata?.analysisType,
+    hasAnnotatedFile: pipelineSnapshot.hasAnnotatedFile,
+    annovarJobStatus: pipelineSnapshot.annovarJob?.status,
+    isRunningAnnovar,
+    exomiserStatus,
+    isRunningExomiser,
+    module1JobActive: module1.module1JobActive,
+    runAnnovar: runAnnovarForCurrentConversation,
+    fetchExomiserEligibility,
+    runExomiser,
+  });
 
   const { handleDocumentUpload } = useDocumentUpload({
     userId,
@@ -1289,6 +1306,31 @@ const ChatPage = () => {
     />
   ) : null;
 
+  const automaticPipelineBanner =
+    automaticPipeline.active && automaticPipeline.message ? (
+      <div
+        className="mx-3 mb-2 px-3 py-2 rounded-lg border text-2xs flex flex-wrap items-center gap-2"
+        style={{
+          borderColor: 'color-mix(in srgb, var(--accent-teal) 35%, transparent)',
+          background: 'color-mix(in srgb, var(--accent-teal) 10%, transparent)',
+          color: 'var(--text-secondary)',
+        }}
+        role="status"
+      >
+        <span
+          className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+          style={{
+            color: 'var(--accent-teal)',
+            background: 'color-mix(in srgb, var(--accent-teal) 14%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--accent-teal) 35%, transparent)',
+          }}
+        >
+          Early access
+        </span>
+        <span>{automaticPipeline.message}</span>
+      </div>
+    ) : null;
+
   // Both composer call sites are the same component with the same wiring; only the
   // layout and the dropdown's identity differ.
   const composerProps = {
@@ -1312,6 +1354,7 @@ const ChatPage = () => {
     // the two is ever non-null for a given conversation.
     pipelineDrawer: (
       <>
+        {automaticPipelineBanner}
         {module1PipelineBlock}
         {pipelineDrawer}
       </>

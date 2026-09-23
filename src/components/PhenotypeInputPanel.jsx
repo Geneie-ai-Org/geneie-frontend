@@ -381,6 +381,23 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     onChangeRef.current?.(fields);
   }, []);
 
+  // Automatic → Manual: drop auto-selected findings so the analyst re-confirms.
+  const prevRunModeRef = useRef(runMode);
+  useEffect(() => {
+    const was = prevRunModeRef.current;
+    prevRunModeRef.current = runMode;
+    if (was !== PHENOTYPE_RUN_AUTOMATIC || runMode !== PHENOTYPE_RUN_MANUAL) return;
+    const cur = stateRef.current;
+    const list = cur.candidates || [];
+    const hadSelections = list.some((c) => c.selected) || Boolean(cur.diseaseMatch);
+    if (!hadSelections) return;
+    emit({
+      candidates: list.map((c) => ({ ...c, selected: false, selected_default: false })),
+      disease_match: null,
+      phenotype_findings: '',
+    });
+  }, [runMode, emit]);
+
   const selectedCount = useMemo(
     () => candidates.filter((c) => c.selected).length,
     [candidates]

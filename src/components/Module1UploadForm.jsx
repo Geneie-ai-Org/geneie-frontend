@@ -24,6 +24,7 @@ import PhenotypeInputPanel, { PHENOTYPE_MODE_NOTE } from '@/components/Phenotype
 import PipelineRunModeToggle, {
   PIPELINE_RUN_MANUAL,
   normalizePipelineRunMode,
+  applyPipelineRunModeChange,
 } from '@/components/PipelineRunModeToggle';
 
 const GENOME_OPTIONS = [
@@ -527,11 +528,7 @@ const Module1UploadForm = ({
               className="mt-4"
               value={sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode}
               onChange={(mode) =>
-                setSampleMetadata((prev) => ({
-                  ...prev,
-                  pipeline_run_mode: mode,
-                  phenotype_run_mode: mode,
-                }))
+                setSampleMetadata((prev) => applyPipelineRunModeChange(prev, mode))
               }
             />
             {module1SubmitError && (

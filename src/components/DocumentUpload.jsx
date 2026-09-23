@@ -24,6 +24,7 @@ import PhenotypeInputPanel, {
 import PipelineRunModeToggle, {
   PIPELINE_RUN_MANUAL,
   normalizePipelineRunMode,
+  applyPipelineRunModeChange,
 } from '@/components/PipelineRunModeToggle';
 import { PillToggle } from '@/components/ui/pill-toggle';
 import {
@@ -1399,11 +1400,7 @@ const DocumentUpload = ({
               <PipelineRunModeToggle
                 value={sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode}
                 onChange={(mode) =>
-                  setSampleMetadata((prev) => ({
-                    ...prev,
-                    pipeline_run_mode: mode,
-                    phenotype_run_mode: mode,
-                  }))
+                  setSampleMetadata((prev) => applyPipelineRunModeChange(prev, mode))
                 }
               />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">

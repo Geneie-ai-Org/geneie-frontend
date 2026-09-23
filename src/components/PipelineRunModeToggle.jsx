@@ -10,6 +10,48 @@ export function normalizePipelineRunMode(value) {
   return value === PIPELINE_RUN_AUTOMATIC ? PIPELINE_RUN_AUTOMATIC : PIPELINE_RUN_MANUAL;
 }
 
+/**
+ * Apply Manual/Automatic on sample metadata.
+ * Automatic → Manual clears phenotype selections (keeps the clinical note text).
+ */
+export function applyPipelineRunModeChange(prev = {}, mode) {
+  const nextMode = normalizePipelineRunMode(mode);
+  const prevMode = normalizePipelineRunMode(
+    prev.pipeline_run_mode || prev.phenotype_run_mode
+  );
+  const next = {
+    ...prev,
+    pipeline_run_mode: nextMode,
+    phenotype_run_mode: nextMode,
+  };
+  if (prevMode !== PIPELINE_RUN_AUTOMATIC || nextMode !== PIPELINE_RUN_MANUAL) {
+    return next;
+  }
+  const ph = prev.phenotype_hpo;
+  const hadSelections =
+    Boolean(ph?.disease_match) ||
+    (Array.isArray(ph?.confirmed_ids) && ph.confirmed_ids.length > 0) ||
+    (Array.isArray(ph?.candidates) && ph.candidates.some((c) => c?.selected));
+  if (!hadSelections && !prev.phenotype_findings) {
+    return next;
+  }
+  next.phenotype_hpo = {
+    ...(ph || {}),
+    candidates: (ph?.candidates || []).map((c) => ({
+      ...c,
+      selected: false,
+      selected_default: false,
+    })),
+    confirmed_ids: [],
+    disease_match: null,
+  };
+  next.phenotype_findings = '';
+  const note = String(prev.phenotype_note_clean || '').trim();
+  const disease = String(prev.phenotype_disease || '').trim();
+  next.phenotype = note || disease;
+  return next;
+}
+
 /** Gradient border that respects border-radius (padding-box + border-box). */
 function earlyAccessSurface(paddingBg = 'var(--bg-input)') {
   const padLayer = /gradient|color-mix/i.test(paddingBg)

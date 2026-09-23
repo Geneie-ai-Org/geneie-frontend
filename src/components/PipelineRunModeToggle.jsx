@@ -21,23 +21,26 @@ function earlyAccessSurface(paddingBg = 'var(--bg-input)') {
   };
 }
 
-/** Compact superscript mark for the Automatic option. */
+/** Inline power-style mark, flush to the end of “Automatic”. */
 function EarlyAccessSuperscript() {
   const softFill =
     'linear-gradient(135deg, color-mix(in srgb, var(--early-access-from) 16%, var(--bg-input)), color-mix(in srgb, var(--early-access-to) 16%, var(--bg-input)))';
   return (
-    <span
+    <sup
       aria-label="Early access"
       title="Early access — review results before clinical use"
-      className="pointer-events-none absolute -top-2 -right-1.5 z-10 inline-flex max-w-[4.5rem] items-center rounded px-1 py-px text-[8px] font-semibold uppercase leading-none tracking-wide whitespace-nowrap"
+      className="ml-0.5 inline-block rounded px-[3px] py-px text-[7px] font-semibold uppercase leading-none tracking-wide align-super"
       style={{
         ...earlyAccessSurface(softFill),
         color: 'var(--early-access-from)',
-        letterSpacing: '0.03em',
+        letterSpacing: '0.02em',
+        verticalAlign: 'super',
+        top: 0,
+        position: 'relative',
       }}
     >
       Early access
-    </span>
+    </sup>
   );
 }
 
@@ -61,12 +64,11 @@ export default function PipelineRunModeToggle({
             }
       }
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
           Analysis mode
         </p>
         <PillToggle
-          className="overflow-visible"
           value={mode}
           onChange={(next) => {
             if (disabled) return;
@@ -76,8 +78,12 @@ export default function PipelineRunModeToggle({
             { value: PIPELINE_RUN_MANUAL, label: 'Manual' },
             {
               value: PIPELINE_RUN_AUTOMATIC,
-              label: 'Automatic',
-              badge: <EarlyAccessSuperscript />,
+              label: (
+                <>
+                  Automatic
+                  <EarlyAccessSuperscript />
+                </>
+              ),
             },
           ]}
         />

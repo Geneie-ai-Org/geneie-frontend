@@ -8,7 +8,7 @@
  */
 export function PillToggle({ options, value, onChange, className = '' }) {
   return (
-    <div className={`flex gap-2 ${className}`}>
+    <div className={`flex items-center gap-2 ${className}`}>
       {options.map((opt) => {
         const active = value === opt.value;
         return (
@@ -17,9 +17,9 @@ export function PillToggle({ options, value, onChange, className = '' }) {
             type="button"
             onClick={() => (opt.disabled ? opt.onDisabledClick?.(opt) : onChange(opt.value))}
             aria-pressed={active}
-            className={`relative px-3 py-1.5 text-xs font-medium rounded-lg border transition-[background-color,border-color,color,transform] duration-150 ease-out ${
+            className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border transition-[background-color,border-color,color,transform] duration-150 ease-out ${
               opt.disabled ? 'cursor-not-allowed' : 'active:scale-[0.97]'
-            } ${opt.badge ? 'overflow-visible' : ''}`}
+            }`}
             style={{
               borderColor: active ? 'var(--accent-teal)' : 'var(--border-default)',
               color: opt.disabled
@@ -31,7 +31,6 @@ export function PillToggle({ options, value, onChange, className = '' }) {
             }}
           >
             {opt.label}
-            {opt.badge}
           </button>
         );
       })}

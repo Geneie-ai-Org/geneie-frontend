@@ -493,10 +493,12 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
   const clearNoteOnly = () => {
     interpretSeq.current += 1;
     diseaseSeq.current += 1;
+    autoApplyingDiseaseRef.current = false;
     setDraft('');
     setInterpreting(false);
     setSearchingDiseases(false);
-    clearEphemeralPhenotypeResults({ keepPinned: true });
+    // Clearing the note clears auto-detected disease + findings too.
+    clearEphemeralPhenotypeResults({ keepPinned: false });
   };
 
   const toggleCandidate = (hpoId) => {
@@ -847,15 +849,16 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     if (trimmed.length < 3) {
       setSearchingDiseases(false);
       diseaseSeq.current += 1;
-      // Cleared / too short: wipe ephemeral results; keep pinned selections only.
+      autoApplyingDiseaseRef.current = false;
+      // Cleared / too short: wipe disease matches, cleaned note, and all findings (incl. auto-selected).
       if (
         stateRef.current.topCandidates?.length ||
         stateRef.current.noteCleanText ||
         notePreviewRef.current ||
         stateRef.current.diseaseMatch ||
-        (stateRef.current.candidates || []).some((c) => !c.selected)
+        (stateRef.current.candidates || []).length > 0
       ) {
-        clearEphemeralPhenotypeResults({ keepPinned: true });
+        clearEphemeralPhenotypeResults({ keepPinned: false });
       }
       return undefined;
     }
@@ -984,7 +987,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
             type="button"
             onClick={clearNoteOnly}
             className="absolute top-2 right-2 p-1 rounded-md"
-            title="Clear note (keeps selected findings)"
+            title="Clear note and detected findings"
             style={{ color: 'var(--text-tertiary)' }}
           >
             <X className="w-3.5 h-3.5" />

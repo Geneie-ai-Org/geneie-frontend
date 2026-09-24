@@ -17,6 +17,10 @@ import {
   isRecognizedImportUrl,
 } from '@/services/backendApi';
 import { patchSampleMetadata } from '@/services/mongodbApi';
+import PhenotypeInputPanel, {
+  PHENOTYPE_MODE_FINDINGS,
+  sampleHasPhenotype,
+} from '@/components/PhenotypeInputPanel';
 import { PillToggle } from '@/components/ui/pill-toggle';
 import {
   Dialog,
@@ -43,6 +47,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 /** Tabular + VCF (.vcf and .vcf.gz). Uses suffix checks so .vcf.gz is not mistaken for .gz-only. */
 function isAllowedVariantFilename(fileName) {
@@ -69,11 +74,30 @@ const CustomSelect = ({ value, onChange, placeholder, options, error, className 
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent className="p-1.5">
-        {(options || []).map((opt) => (
-          <SelectItem key={opt.value} value={opt.value}>
-            {opt.label}
-          </SelectItem>
-        ))}
+        {(options || []).map((opt) =>
+          opt.disabled ? (
+            <div
+              key={opt.value}
+              role="option"
+              aria-disabled="true"
+              aria-selected="false"
+              className="relative flex w-full cursor-not-allowed items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm select-none"
+              style={{ color: 'var(--text-tertiary)' }}
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toast.info(opt.disabledReason);
+              }}
+            >
+              {opt.label}
+            </div>
+          ) : (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          )
+        )}
       </SelectContent>
     </Select>
   );
@@ -120,7 +144,11 @@ const DocumentUpload = ({
     sampleRole: '', // proband / mother / father / sibling / other
     affectedStatus: '', // affected / unaffected
     inheritanceModel: '', // Autosomal Dominant / Autosomal Recessive / X-linked / De novo / Unknown
-    phenotype: '', // Free text (only for Germline)
+    phenotype: '', // Canonical active-tab text (only for Germline)
+    phenotype_mode: PHENOTYPE_MODE_FINDINGS,
+    phenotype_findings: '',
+    phenotype_disease: '',
+    phenotype_hpo: null,
     tumorType: '' // Free text (only for Somatic/Tumor-Normal Paired/Tumor-Only)
   });
   const [existingProjects, setExistingProjects] = useState([]); // Will be fetched from backend later
@@ -157,6 +185,10 @@ const DocumentUpload = ({
         affectedStatus: initialMetadata.affectedStatus || '',
         inheritanceModel: initialMetadata.inheritanceModel || '',
         phenotype: initialMetadata.phenotype || '',
+        phenotype_mode: initialMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+        phenotype_findings: initialMetadata.phenotype_findings || (initialMetadata.phenotype_mode === 'disease' ? '' : (initialMetadata.phenotype || '')),
+        phenotype_disease: initialMetadata.phenotype_disease || (initialMetadata.phenotype_mode === 'disease' ? (initialMetadata.phenotype || '') : ''),
+        phenotype_hpo: initialMetadata.phenotype_hpo || null,
         tumorType: initialMetadata.tumorType || '',
       });
       setEditImpact(null);
@@ -456,10 +488,6 @@ const DocumentUpload = ({
       if (!sampleMetadata.genome) { setError('Please select a Genome (required)'); return; }
       if (!sampleMetadata.sequencingType) { setError('Please select a Sequencing Type (required)'); return; }
       if (!sampleMetadata.analysisType) { setError('Please select an Analysis Type (required)'); return; }
-      if (sampleMetadata.analysisType === 'Germline' && !sampleMetadata.phenotype?.trim()) {
-        setError('Phenotype is required for Germline analysis (needed for Exomiser prioritization).');
-        return;
-      }
 
       setIsUploading(true);
       try {
@@ -471,7 +499,15 @@ const DocumentUpload = ({
           projectName: sampleMetadata.project,
           patientSex: sampleMetadata.sampleSex,
           patientAge: initialMetadata?.patientAge || '',
-          phenotype: sampleMetadata.analysisType === 'Germline' ? sampleMetadata.phenotype : '',
+          ...(sampleMetadata.analysisType === 'Germline'
+            ? {
+                phenotype: sampleMetadata.phenotype || '',
+                phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+                phenotype_findings: sampleMetadata.phenotype_findings || '',
+                phenotype_disease: sampleMetadata.phenotype_disease || '',
+                phenotype_hpo: sampleMetadata.phenotype_hpo || null,
+              }
+            : { phenotype: '', phenotype_mode: PHENOTYPE_MODE_FINDINGS, phenotype_findings: '', phenotype_disease: '', phenotype_hpo: null }),
           tumorType: (sampleMetadata.analysisType === 'Somatic' || sampleMetadata.analysisType === 'Tumor-Normal Paired' || sampleMetadata.analysisType === 'Tumor-Only') ? sampleMetadata.tumorType : '',
         });
         onEditSaved?.(result);
@@ -513,10 +549,6 @@ const DocumentUpload = ({
       setError('Please select an Analysis Type (required)');
       return;
     }
-    if (sampleMetadata.analysisType === 'Germline' && !sampleMetadata.phenotype?.trim()) {
-      setError('Phenotype is required for Germline analysis (needed for Exomiser prioritization).');
-      return;
-    }
 
     // Check for optional fields that are empty - show encouragement but allow proceeding
     const emptyOptionalFields = [];
@@ -526,6 +558,9 @@ const DocumentUpload = ({
       if (!sampleMetadata.sampleRole) emptyOptionalFields.push('Sample Role');
       if (!sampleMetadata.affectedStatus) emptyOptionalFields.push('Affected Status');
       if (!sampleMetadata.inheritanceModel) emptyOptionalFields.push('Inheritance Model');
+      // Optional, but the phenotype-driven filter cannot run without it, so it is worth
+      // naming before the upload starts.
+      if (!sampleHasPhenotype(sampleMetadata)) emptyOptionalFields.push('Phenotype');
     }
 
     // If optional fields are empty, show custom warning modal
@@ -573,6 +608,10 @@ const DocumentUpload = ({
       affectedStatus: '',
       inheritanceModel: '',
       phenotype: '',
+      phenotype_mode: PHENOTYPE_MODE_FINDINGS,
+      phenotype_findings: '',
+      phenotype_disease: '',
+      phenotype_hpo: null,
       tumorType: ''
     });
     setShowCreateProject(false);
@@ -990,10 +1029,10 @@ const DocumentUpload = ({
           {!compact && !existingDocument && (
             <div className="mb-3">
               <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-                Add an annotated variant file
+                Add a variants file (VCF/TSV)
               </h3>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-                VCF, TSV or CSV with variant calls already annotated.
+                VCF, TSV or CSV with variant calls. Annotated or not.
               </p>
             </div>
           )}
@@ -1143,7 +1182,7 @@ const DocumentUpload = ({
                   onClick={handleUrlContinue}
                   disabled={isPreflighting || !fileUrl.trim()}
                   className="h-9 px-5 rounded-lg text-xs font-medium inline-flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
+                  style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
                   onMouseEnter={(e) => { if (!isPreflighting && fileUrl.trim()) e.currentTarget.style.backgroundColor = 'var(--accent-teal-hover)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal)'; }}
                 >
@@ -1404,12 +1443,12 @@ const DocumentUpload = ({
                     placeholder="Choose one"
                     options={[
                       { value: 'Germline', label: 'Germline' },
-                      { value: 'Somatic', label: 'Somatic' },
-                      { value: 'Tumor-Normal Paired', label: 'Tumor-Normal Paired' },
-                      { value: 'Tumor-Only', label: 'Tumor-Only' },
-                      { value: 'IVF', label: 'IVF' },
-                      { value: 'PGT', label: 'PGT' },
-                      { value: 'Unknown', label: 'Unknown' },
+                      { value: 'Somatic', label: 'Somatic', disabled: true, disabledReason: 'Somatic analysis is coming soon.' },
+                      { value: 'Tumor-Normal Paired', label: 'Tumor-Normal Paired', disabled: true, disabledReason: 'Tumor-Normal Paired analysis is coming soon.' },
+                      { value: 'Tumor-Only', label: 'Tumor-Only', disabled: true, disabledReason: 'Tumor-Only analysis is coming soon.' },
+                      { value: 'IVF', label: 'IVF', disabled: true, disabledReason: 'IVF analysis is coming soon.' },
+                      { value: 'PGT', label: 'PGT', disabled: true, disabledReason: 'PGT analysis is coming soon.' },
+                      { value: 'Unknown', label: 'Unknown', disabled: true, disabledReason: 'Unknown analysis type is not supported yet.' },
                     ]}
                     error={validationAttempted && !sampleMetadata.analysisType}
                   />
@@ -1497,36 +1536,23 @@ const DocumentUpload = ({
 
                   </div>
 
-                  {/* Phenotype - Full width — required for Germline */}
-                  {(() => {
-                    const phenotypeInvalid = validationAttempted && !sampleMetadata.phenotype?.trim();
-                    return (
-                      <div>
-                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                          Phenotype <span style={{ color: 'var(--error)' }}>*</span>
-                        </label>
-                        <textarea
-                          value={sampleMetadata.phenotype}
-                          onChange={(e) => setSampleMetadata({ ...sampleMetadata, phenotype: e.target.value })}
-                          placeholder="Describe the phenotype or clinical presentation..."
-                          rows={3}
-                          className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all"
-                          style={{
-                            borderColor: phenotypeInvalid ? 'var(--error)' : 'var(--border-default)',
-                            background: 'var(--bg-input)',
-                            backdropFilter: 'blur(10px)',
-                            WebkitBackdropFilter: 'blur(10px)',
-                            color: 'var(--text-primary)'
-                          }}
-                        />
-                        {phenotypeInvalid && (
-                          <p className="mt-1 text-xs" style={{ color: 'var(--error)' }}>
-                            Required for Germline analysis — used for Exomiser phenotype prioritization.
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  {/* Phenotype - Full width. Optional: the pipeline runs without it, and
+                    * only the phenotype-driven filter needs it. */}
+                  <PhenotypeInputPanel
+                    value={{
+                      phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+                      phenotype_findings: sampleMetadata.phenotype_findings || '',
+                      phenotype_disease: sampleMetadata.phenotype_disease || '',
+                      phenotype: sampleMetadata.phenotype || '',
+                      phenotype_hpo: sampleMetadata.phenotype_hpo,
+                    }}
+                    onChange={(fields) =>
+                      setSampleMetadata((prev) => ({
+                        ...prev,
+                        ...fields,
+                      }))
+                    }
+                  />
                 </div>
               )}
 
@@ -1578,7 +1604,7 @@ const DocumentUpload = ({
                 type="submit"
                 disabled={isUploading}
                 className="h-10 px-5 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface-raised)]"
-                style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
+                style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
                 onMouseEnter={(e) => { if (!isUploading) e.currentTarget.style.opacity = '0.9'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
               >
@@ -1608,7 +1634,7 @@ const DocumentUpload = ({
           <AlertDialogFooter>
             <AlertDialogCancel>Go Back</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-[var(--accent-teal)] text-[#0F0F0F] hover:bg-[var(--accent-teal-hover)]"
+              className="bg-[var(--accent-teal)] text-[var(--accent-teal-contrast)] hover:bg-[var(--accent-teal-hover)]"
               onClick={async () => {
                 setShowOptionalFieldsWarning(false);
                 notifyUploadStarting(importMode === 'url' ? { name: importUrlMeta.file_name } : selectedFile);
@@ -1670,7 +1696,7 @@ const DocumentUpload = ({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-[var(--accent-teal)] text-[#0F0F0F] hover:bg-[var(--accent-teal-hover)]"
+              className="bg-[var(--accent-teal)] text-[var(--accent-teal-contrast)] hover:bg-[var(--accent-teal-hover)]"
               onClick={async () => {
                 setShowReplaceConfirm(false);
                 const file = pendingFile;

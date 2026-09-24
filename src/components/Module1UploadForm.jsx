@@ -20,10 +20,11 @@ import { PillToggle } from '@/components/ui/pill-toggle';
 import { MODULE1_BED_MAX_BYTES, MODULE1_FASTQ_MAX_BYTES } from '@/services/backendApi';
 import { isRecognizedImportUrl, module1UrlErrorMessage, precheckBedChromStyle } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
+import PhenotypeInputPanel, { PHENOTYPE_MODE_FINDINGS } from '@/components/PhenotypeInputPanel';
 
 const GENOME_OPTIONS = [
   { value: 'hg38', label: 'hg38 (GRCh38)' },
-  { value: 'hg19', label: 'hg19 (GRCh37)', disabled: true, disabledReason: 'hg19 (GRCh37) references are coming soon.' },
+  { value: 'hg19', label: 'hg19 (GRCh37)' },
 ];
 
 const EMPTY_URL_ROW = { url: '', meta: null, error: null, checking: false };
@@ -46,9 +47,9 @@ const ANALYSIS_TYPE_OPTIONS = [
   { value: 'Somatic', label: 'Somatic' },
   { value: 'Tumor-Normal Paired', label: 'Tumor-Normal Paired' },
   { value: 'Tumor-Only', label: 'Tumor-Only' },
-  { value: 'IVF', label: 'IVF' },
-  { value: 'PGT', label: 'PGT' },
-  { value: 'Unknown', label: 'Unknown' },
+  { value: 'IVF', label: 'IVF', disabled: true, disabledReason: 'IVF analysis is coming soon.' },
+  { value: 'PGT', label: 'PGT', disabled: true, disabledReason: 'PGT analysis is coming soon.' },
+  { value: 'Unknown', label: 'Unknown', disabled: true, disabledReason: 'Unknown analysis type is not supported yet.' },
 ];
 
 const SAMPLE_SOURCE_OPTIONS = [
@@ -88,6 +89,10 @@ const EMPTY_SAMPLE_METADATA = {
   affectedStatus: '',
   inheritanceModel: '',
   phenotype: '',
+  phenotype_mode: PHENOTYPE_MODE_FINDINGS,
+  phenotype_findings: '',
+  phenotype_disease: '',
+  phenotype_hpo: null,
 };
 
 /**
@@ -139,7 +144,7 @@ function SelectWithDisabledOptions({ value, onChange, placeholder, options, clas
   );
 }
 
-function FilePickerRow({ label, file, onSelect, progress, accept }) {
+function FilePickerRow({ label, file, onSelect, progress, accept, placeholder }) {
   return (
     <div>
       <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
@@ -150,7 +155,7 @@ function FilePickerRow({ label, file, onSelect, progress, accept }) {
         style={{ borderColor: 'var(--border-default)', background: 'var(--bg-input)', color: file ? 'var(--text-primary)' : 'var(--text-tertiary)' }}
       >
         <FileText className="w-4 h-4 shrink-0" style={{ color: 'var(--accent-teal)' }} />
-        <span className="truncate">{file?.name || `Choose ${label} file…`}</span>
+        <span className="truncate">{file?.name || placeholder || `Choose ${label} file…`}</span>
         <input type="file" accept={accept} className="hidden" onChange={(e) => onSelect(e.target.files?.[0] || null)} />
       </label>
       {progress != null && (
@@ -169,6 +174,16 @@ function formatBytes(bytes) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
+function basenameFromUrl(fileUrl) {
+  if (!fileUrl) return '';
+  try {
+    const { pathname } = new URL(fileUrl);
+    return decodeURIComponent(pathname.split('/').filter(Boolean).pop() || '');
+  } catch {
+    return '';
+  }
+}
+
 /**
  * URL field for one Module 1 role. Validates on blur/Enter rather than behind a button —
  * the resolved `file_url` + `file_name` from preflight are what the import call needs,
@@ -176,12 +191,26 @@ function formatBytes(bytes) {
  */
 function UrlPickerRow({ label, required = true, placeholder, state, onChange, onValidate }) {
   const size = formatBytes(state.meta?.content_length);
+  const resolved = !state.checking && !state.error && !!state.meta;
+  const resolvedName = resolved ? (state.meta.file_name || basenameFromUrl(state.meta.file_url) || 'Linked file') : '';
+  const resolvedLabel = resolved ? `${resolvedName}${size ? ` · ${size}` : ''}` : '';
   return (
     <div>
-      {label && (
-        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-          {label} {required && <span style={{ color: 'var(--error)' }}>*</span>}
-        </label>
+      {(label || resolved) && (
+        <div className="flex items-baseline justify-between gap-2 mb-1.5">
+          {label ? (
+            <label className="text-xs font-medium shrink-0" style={{ color: 'var(--text-secondary)' }}>
+              {label} {required && <span style={{ color: 'var(--error)' }}>*</span>}
+            </label>
+          ) : (
+            <span aria-hidden="true" />
+          )}
+          {resolved && (
+            <span className="flex items-center gap-1 min-w-0 text-2xs" style={{ color: 'var(--text-secondary)' }}>
+              <span className="truncate">{resolvedLabel}</span>
+            </span>
+          )}
+        </div>
       )}
       <input
         type="url"
@@ -213,14 +242,6 @@ function UrlPickerRow({ label, required = true, placeholder, state, onChange, on
         <div className="flex items-start gap-1.5 mt-1.5">
           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: 'var(--error)' }} />
           <span className="text-2xs" style={{ color: 'var(--error)' }}>{state.error}</span>
-        </div>
-      )}
-      {!state.checking && !state.error && state.meta && (
-        <div className="flex items-start gap-1.5 mt-1.5">
-          <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: 'var(--success)' }} />
-          <span className="text-2xs truncate" style={{ color: 'var(--text-secondary)' }}>
-            {state.meta.file_name}{size ? ` · ${size}` : ''}
-          </span>
         </div>
       )}
     </div>
@@ -398,9 +419,18 @@ const Module1UploadForm = ({
   const submitLabel = gate?.staging ? 'Stage files' : 'Start pipeline';
   const oversizedRead = [r1File, r2File].find((f) => f && f.size > MODULE1_FASTQ_MAX_BYTES) || null;
 
+  // Honor backend MODULE1_GENOMES_READY via bed-catalog.genome_ready (hg38 + hg19).
+  // Require catalog payload to match the selected genome so a stale hg38 response
+  // cannot unlock submit while hg19 is still loading.
+  const genomeReady =
+    !bedCatalogLoading &&
+    !!bedCatalog &&
+    bedCatalog.genome === genome &&
+    bedCatalog.genome_ready === true;
+
   const canSubmit =
     !!sampleName.trim() &&
-    genome === 'hg38' &&
+    genomeReady &&
     sequencingType === 'WES' &&
     readsResolved &&
     bedResolved &&
@@ -412,14 +442,13 @@ const Module1UploadForm = ({
 
   const isGermline = sampleMetadata.analysisType === 'Germline';
   const analysisTypeMissing = !sampleMetadata.analysisType;
-  const phenotypeMissing = isGermline && !sampleMetadata.phenotype.trim();
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!canSubmit) return;
 
     setValidationAttempted(true);
-    if (analysisTypeMissing || phenotypeMissing) return;
+    if (analysisTypeMissing) return;
     const useCustomBed = bedMode === 'custom';
     startModule1Run({
       sampleName: sampleName.trim(),
@@ -436,6 +465,10 @@ const Module1UploadForm = ({
               affectedStatus: sampleMetadata.affectedStatus,
               inheritanceModel: sampleMetadata.inheritanceModel,
               phenotype: sampleMetadata.phenotype.trim(),
+              phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+              phenotype_findings: sampleMetadata.phenotype_findings || '',
+              phenotype_disease: sampleMetadata.phenotype_disease || '',
+              phenotype_hpo: sampleMetadata.phenotype_hpo || null,
             }
           : {}),
       },
@@ -607,26 +640,21 @@ const Module1UploadForm = ({
                     </div>
 
                     <div className="md:col-span-2">
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                        Phenotype <span style={{ color: 'var(--error)' }}>*</span>
-                      </label>
-                      <textarea
-                        value={sampleMetadata.phenotype}
-                        onChange={(e) => setSampleMetadata((prev) => ({ ...prev, phenotype: e.target.value }))}
-                        rows={3}
-                        className="w-full px-3 py-2 border rounded-lg text-sm resize-none"
-                        style={{
-                          borderColor: validationAttempted && phenotypeMissing ? 'var(--error)' : 'var(--border-default)',
-                          background: 'var(--bg-input)',
-                          color: 'var(--text-primary)',
+                      <PhenotypeInputPanel
+                        value={{
+                          phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_FINDINGS,
+                          phenotype_findings: sampleMetadata.phenotype_findings || '',
+                          phenotype_disease: sampleMetadata.phenotype_disease || '',
+                          phenotype: sampleMetadata.phenotype || '',
+                          phenotype_hpo: sampleMetadata.phenotype_hpo,
                         }}
-                        placeholder="Describe the phenotype or clinical presentation…"
+                        onChange={(fields) =>
+                          setSampleMetadata((prev) => ({
+                            ...prev,
+                            ...fields,
+                          }))
+                        }
                       />
-                      {validationAttempted && phenotypeMissing && (
-                        <p className="text-2xs mt-1" style={{ color: 'var(--error)' }}>
-                          Required for Germline analysis — used for Exomiser phenotype prioritization.
-                        </p>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -649,14 +677,14 @@ const Module1UploadForm = ({
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
                       <UrlPickerRow
-                        label="R1 link"
+                        label="Forward read (R1) link"
                         placeholder="https://…/sample_R1_001.fastq.gz"
                         state={urlState.r1}
                         onChange={(v) => setUrlValue('r1', v)}
                         onValidate={() => validateUrlRow('r1')}
                       />
                       <UrlPickerRow
-                        label="R2 link"
+                        label="Reverse read (R2) link"
                         placeholder="https://…/sample_R2_001.fastq.gz"
                         state={urlState.r2}
                         onChange={(v) => setUrlValue('r2', v)}
@@ -672,14 +700,16 @@ const Module1UploadForm = ({
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
                     <FilePickerRow
-                      label="R1"
+                      label="Forward read (R1)"
+                      placeholder="Choose R1 file…"
                       file={r1File}
                       onSelect={setR1File}
                       progress={module1UploadProgress?.r1}
                       accept=".fastq.gz,.fastq,.fq.gz,.fq"
                     />
                     <FilePickerRow
-                      label="R2"
+                      label="Reverse read (R2)"
+                      placeholder="Choose R2 file…"
                       file={r2File}
                       onSelect={setR2File}
                       progress={module1UploadProgress?.r2}
@@ -804,7 +834,7 @@ const Module1UploadForm = ({
                 disabled={!canSubmit}
                 title={quotaBlocked ? gate.reason : undefined}
                 className="px-4 py-2 text-sm font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
+                style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
               >
                 {module1Submitting ? (isUrlMode ? 'Importing…' : 'Starting…') : submitLabel}
               </button>

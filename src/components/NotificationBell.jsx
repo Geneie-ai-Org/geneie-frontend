@@ -8,10 +8,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
+import { PHENOTYPE_FILTER_DISPLAY_NAME } from '@/lib/filterDisplayNames';
+
 const JOB_TYPE_CONFIG = {
-  annovar: { label: 'ANNOVAR', color: 'var(--accent-teal)' },
+  annovar: { label: 'Annotation', color: 'var(--accent-teal)' },
   acmg: { label: 'ACMG', color: 'var(--accent-purple, #7c3aed)' },
-  exomiser: { label: 'Exomiser', color: 'var(--warning)' },
+  exomiser: { label: PHENOTYPE_FILTER_DISPLAY_NAME, color: 'var(--warning)' },
 };
 
 function getJobColor(jobType) {
@@ -47,6 +49,7 @@ export default function NotificationBell({ onNavigateToConversation, triggerClas
     dropdownOpen,
     toggleDropdown,
     closeDropdown,
+    markAllRead,
     handleNotificationClick,
   } = useNotifications();
 
@@ -94,11 +97,22 @@ export default function NotificationBell({ onNavigateToConversation, triggerClas
             Notifications
           </span>
           {unreadCount > 0 && (
-            <span
-              className="text-2xs px-1.5 h-[18px] inline-flex items-center rounded-full font-semibold tabular-nums bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]"
-            >
-              {unreadCount} new
-            </span>
+            <div className="flex items-center gap-2">
+              <span
+                className="text-2xs px-1.5 h-[18px] inline-flex items-center rounded-full font-semibold tabular-nums bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]"
+              >
+                {unreadCount} new
+              </span>
+              {/* Clicking one notification only clears that conversation's, so reading
+                * everything needed a way out that isn't "open every conversation". */}
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); markAllRead(); }}
+                className="text-2xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] rounded"
+              >
+                Mark all read
+              </button>
+            </div>
           )}
         </div>
 

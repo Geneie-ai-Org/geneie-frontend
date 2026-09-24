@@ -19,6 +19,14 @@ import {
   normalizeChatEligibilityMessage,
   resolveVariantsUnderConsideration,
 } from '@/lib/variantPipelineUtils';
+import {
+  PHENOTYPE_FILTER_DISPLAY_NAME,
+  PHENOTYPE_STARTING_MESSAGE,
+  PHENOTYPE_RUNNING_MESSAGE,
+  PHENOTYPE_COMPLETE_MESSAGE,
+  PHENOTYPE_FAILED_TITLE,
+  PHENOTYPE_FAILED_FALLBACK,
+} from '@/lib/filterDisplayNames';
 
 /**
  * Phase F variant pipeline: chat eligibility, ANNOVAR/ACMG async jobs, background polling.
@@ -657,7 +665,7 @@ export function useVariantPipeline({
    * the manual-clear path passes nothing and lets eligibility alone decide.
    */
   const refreshAfterFilterChange = useCallback(
-    async (conversationId, { enrichmentWillRequeue, totalCount } = {}) => {
+    async (conversationId, { enrichmentWillRequeue, totalCount, clearExomiserStatus = false } = {}) => {
       if (!conversationId) return null;
       // A completed or removed filter can leave filter_job stuck at "running" in local
       // snapshot state, which blocks re-apply via pipelineBusy with no network call.
@@ -667,6 +675,17 @@ export function useVariantPipeline({
         ...prev,
         filterJob: null,
       }));
+      // exomiserStatus is polled into local state, not re-derived from the conversation on
+      // this path, so a terminal run would otherwise keep the Filter step red after the
+      // user removed the filter. Only the remove path opts in (`clearExomiserStatus`) —
+      // an unrelated filter apply/clear must not wipe an unacknowledged Exomiser failure
+      // banner. Only terminal states are dropped; a live run keeps polling.
+      if (clearExomiserStatus) {
+        setExomiserStatus((prev) => {
+          const status = (prev?.status || '').toLowerCase();
+          return status === 'running' || status === 'queued' ? prev : null;
+        });
+      }
       if (userTierRef.current === 'guest') {
         try {
           const filterRes = await fetch(
@@ -1342,7 +1361,7 @@ export function useVariantPipeline({
         title: 'Annotation is running',
         message:
           pipelineSnapshot.annovarJob?.message ||
-          'ANNOVAR is annotating your variants. Chat will unlock automatically when it finishes.',
+          'Clinical Annotation is running on your variants. Chat will unlock automatically when it finishes.',
         variant: 'info',
       });
       return true;
@@ -1364,13 +1383,13 @@ export function useVariantPipeline({
     }
     if (isRunningAnnovar) return;
     if (pipelineSnapshot.hasAnnotatedFile) {
-      setAnnovarMessageModal({ title: 'Already annotated', message: 'ANNOVAR has already been run on this file. Edit sample metadata to re-run annotation.', variant: 'info' });
+      setAnnovarMessageModal({ title: 'Already annotated', message: 'Annotation has already been run on this file. Edit sample metadata to re-run annotation.', variant: 'info' });
       return;
     }
     if (pipelineSnapshot.vcfAnnotated) {
       setAnnovarMessageModal({
         title: 'File already annotated',
-        message: 'Your uploaded VCF already contains ANNOVAR annotations. Running ANNOVAR again is not needed.',
+        message: 'Your uploaded VCF already contains annotations. Running Annotation again is not needed.',
         variant: 'info',
       });
       return;
@@ -1381,7 +1400,7 @@ export function useVariantPipeline({
     const annovarQuotaGate = actionGate(limits, 'annovar');
     if (!annovarQuotaGate.allowed) {
       setAnnovarMessageModal({
-        title: 'ANNOVAR limit reached',
+        title: 'Annotation limit reached',
         message: annovarQuotaGate.reason,
         variant: 'info',
         ...(annovarQuotaGate.cta && annovarQuotaGate.cta.kind !== 'none'
@@ -1403,7 +1422,7 @@ export function useVariantPipeline({
         } catch {
           setAnnovarMessageModal({
             title: 'Sign in required',
-            message: 'Please log in to run ANNOVAR annotation.',
+            message: 'Please log in to run Annotation.',
             variant: 'info',
           });
           return;
@@ -1524,7 +1543,7 @@ export function useVariantPipeline({
         setIsAnnovarRecommended(false);
       }
     } catch (error) {
-      console.error('[useVariantPipeline] Run ANNOVAR error:', error);
+      console.error('[useVariantPipeline] Run Annotation error:', error);
       setAnnovarMessageModal({
         title: 'Error',
         message: humanizeError(error.message) || 'Annotation failed. Please try again.',
@@ -1568,7 +1587,7 @@ export function useVariantPipeline({
 
   const FILTER_DISPLAY_NAMES = {
     filter_1: 'ACMG filter',
-    filter_3: 'Exomiser',
+    filter_3: PHENOTYPE_FILTER_DISPLAY_NAME,
   };
 
   const runProprietaryFilter = useCallback(async (filterType) => {
@@ -1629,9 +1648,9 @@ export function useVariantPipeline({
       const guestAnnotated = userTier === 'guest' && pipelineSnapshot.hasAnnotatedFile;
       if (!step2Ready && !guestAnnotated && chatEligibility.requires_annovar) {
         setAnnovarMessageModal({
-          title: 'Run ANNOVAR first',
+          title: 'Run Annotation first',
           message:
-            'The ACMG filter needs ClinVar or InterVar annotations and population frequency from ANNOVAR. Run ANNOVAR, then apply the ACMG filter.',
+            'The ACMG filter needs ClinVar or InterVar annotations and population frequency from Annotation. Run Annotation, then apply the ACMG filter.',
           variant: 'info',
         });
         return;
@@ -1747,7 +1766,7 @@ export function useVariantPipeline({
         title: displayName,
         message:
           humanizeError(error.message) ||
-          `Failed to apply ${displayName}. Run ANNOVAR first if your file is not annotated yet.`,
+          `Failed to apply ${displayName}. Run Annotation first if your file is not annotated yet.`,
         variant: 'error',
       });
       // Resolve the optimistic "unknown" state set by beginPipelineWork().
@@ -1852,6 +1871,12 @@ export function useVariantPipeline({
         error: payload?.exomiser_job?.error || payload?.error || '',
         progress_percent: payload?.progress_percent ?? payload?.exomiser_job?.progress_percent ?? null,
         matched_count: payload?.matched_count ?? payload?.exomiser_job?.matched_count ?? null,
+        // Carried so the pipeline drawer can time this run even when it started in
+        // another tab or before this one was opened.
+        started_at: payload?.started_at ?? payload?.exomiser_job?.started_at ?? null,
+        completed_at: payload?.completed_at ?? payload?.exomiser_job?.completed_at ?? null,
+        duration_seconds:
+          payload?.duration_seconds ?? payload?.exomiser_job?.duration_seconds ?? null,
       });
       if (terminal.has(status)) {
         if (status === 'failed') {
@@ -1860,13 +1885,13 @@ export function useVariantPipeline({
             payload?.error ||
             payload?.exomiser_job?.message ||
             payload?.message ||
-            'Exomiser did not complete successfully.';
+            PHENOTYPE_FAILED_FALLBACK;
           const friendly =
             /no valid hpo/i.test(detail)
               ? 'Could not derive any valid HPO terms from the phenotype description. Edit the sample metadata and provide a clearer clinical phenotype (e.g. specific symptoms or HPO terms), then try again.'
               : humanizeError(detail) || detail;
           setAnnovarMessageModal({
-            title: 'Exomiser failed',
+            title: PHENOTYPE_FAILED_TITLE,
             message: friendly,
             variant: 'error',
           });
@@ -1888,7 +1913,7 @@ export function useVariantPipeline({
 
     beginPipelineWork();
     setIsRunningExomiser(true);
-    setExomiserStatus({ status: 'running', phase: 'queued', message: 'Starting Exomiser…', progress_percent: 0 });
+    setExomiserStatus({ status: 'running', phase: 'queued', message: PHENOTYPE_STARTING_MESSAGE, progress_percent: 0 });
 
     try {
       const token = await requiredIdToken();
@@ -1905,15 +1930,15 @@ export function useVariantPipeline({
 
       if (!res.ok && res.status !== 202) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(apiErrorDetailToMessage(err.detail) || 'Failed to start Exomiser');
+        throw new Error(apiErrorDetailToMessage(err.detail) || `Failed to start ${PHENOTYPE_FILTER_DISPLAY_NAME} prioritization`);
       }
 
       await pollExomiserUntilDone(activeConversationId);
     } catch (error) {
       console.error('[useVariantPipeline] runExomiser error:', error);
       setAnnovarMessageModal({
-        title: 'Exomiser',
-        message: humanizeError(error.message) || 'Failed to start Exomiser.',
+        title: PHENOTYPE_FILTER_DISPLAY_NAME,
+        message: humanizeError(error.message) || `Failed to start ${PHENOTYPE_FILTER_DISPLAY_NAME} prioritization.`,
         variant: 'error',
       });
       setIsRunningExomiser(false);
@@ -1979,7 +2004,7 @@ export function useVariantPipeline({
       setExomiserStatus({
         status: exoStatus,
         phase: convData.exomiser_job?.phase || '',
-        message: convData.exomiser_job?.message || 'Exomiser is running…',
+        message: convData.exomiser_job?.message || PHENOTYPE_RUNNING_MESSAGE,
         error: '',
         progress_percent: convData.exomiser_job?.progress_percent ?? 0,
         matched_count: convData.exomiser_job?.matched_count ?? null,
@@ -1992,7 +2017,7 @@ export function useVariantPipeline({
         setExomiserStatus({
           status: 'completed',
           phase: convData.exomiser_job?.phase || 'complete',
-          message: convData.exomiser_job?.message || 'Exomiser complete.',
+          message: convData.exomiser_job?.message || PHENOTYPE_COMPLETE_MESSAGE,
           error: '',
           progress_percent: 100,
           matched_count: convData.exomiser_job?.matched_count ?? null,

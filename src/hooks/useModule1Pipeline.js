@@ -32,6 +32,9 @@ function jobFromStatusPayload(data) {
     genome: data.genome ?? null,
     sampleName: data.sample_name ?? null,
     ingestStatus: data.ingest_status ?? null,
+    startedAt: data.started_at ?? null,
+    completedAt: data.completed_at ?? null,
+    durationSeconds: data.duration_seconds ?? null,
   };
 }
 

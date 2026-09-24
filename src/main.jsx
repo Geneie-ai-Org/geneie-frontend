@@ -16,8 +16,11 @@ initAnalytics();
 
 const LandingPage = React.lazy(() => import('./pages/LandingPage'));
 const AuthPage = React.lazy(() => import('./pages/AuthPage'));
+const AuthActionPage = React.lazy(() => import('./pages/AuthActionPage'));
 const ChatPage = React.lazy(() => import('./pages/ChatPage'));
 const AdminPage = React.lazy(() => import('./pages/AdminPage'));
+const LegalDocPage = React.lazy(() => import('./pages/LegalDocPage'));
+const LegalConsentGate = React.lazy(() => import('./components/LegalConsentGate'));
 
 function ThemedToaster() {
   const { theme } = useTheme();
@@ -63,9 +66,30 @@ root.render(
             }
           />
 
-          {/* Chat — guests and authenticated users */}
-          <Route path="/app" element={<ChatPage />} />
-          <Route path="/app/:conversationId" element={<ChatPage />} />
+          {/* Firebase account links (password reset, email verification). Deliberately not
+              wrapped in PublicRoute: that redirects signed-in users to /app, which would
+              discard the oobCode for anyone resetting on a device they are signed in on. */}
+          <Route path="/auth/action" element={<AuthActionPage />} />
+
+          {/* Chat — guests and authenticated users; legal gate first */}
+          <Route
+            path="/app"
+            element={
+              <LegalConsentGate>
+                <ChatPage />
+              </LegalConsentGate>
+            }
+          />
+          <Route
+            path="/app/:conversationId"
+            element={
+              <LegalConsentGate>
+                <ChatPage />
+              </LegalConsentGate>
+            }
+          />
+          <Route path="/legal/terms" element={<LegalDocPage doc="terms" />} />
+          <Route path="/legal/privacy" element={<LegalDocPage doc="privacy" />} />
           <Route path="/admin-haha" element={<AdminPage />} />
           <Route path="/subscription-success" element={<Navigate to="/app" replace />} />
           <Route path="/subscription-canceled" element={<Navigate to="/app" replace />} />

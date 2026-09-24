@@ -12,6 +12,7 @@ import { Markdown } from '../components/chat/ChatMarkdown';
 import { useAuth } from '../hooks/useAuth';
 import { useChatMessaging } from '../hooks/useChatMessaging';
 import { useDocumentUpload } from '../hooks/useDocumentUpload';
+import { sampleHasPhenotype } from '../components/PhenotypeInputPanel';
 import AuthForm from '../components/AuthForm';
 import ChatMessage, { GlobalTypingStyles } from '../components/chat/ChatMessage';
 import AuthPageLayout from '../components/chat/AuthPageLayout';
@@ -277,7 +278,7 @@ const ChatPage = () => {
     ? null
     : (conversationWarning
       || (needsFilterForChat
-        ? `${variantWorkingSet.toLocaleString()} variants in play — chat needs ACMG or Exomiser applied, `
+        ? `${variantWorkingSet.toLocaleString()} variants in play — chat needs ACMG or Phenotype applied, `
           + `or a working set of ${variantCap.toLocaleString()} or fewer.`
         : null)
       || (chatRunningLow ? `${chatMeter.remaining} chat exchanges left on your plan.` : null));
@@ -341,6 +342,7 @@ const ChatPage = () => {
   const {
     messages,
     setMessages,
+    turnStartedAt,
     typingText,
     isLoading,
     input,
@@ -760,6 +762,7 @@ const ChatPage = () => {
             text: msg.text,
             sources: msg.sources || [],
             createdAt: msg.created_at,
+            durationMs: msg.duration_ms ?? null,
           }))
         );
 
@@ -952,6 +955,25 @@ const ChatPage = () => {
     module1.openModule1Form();
   };
 
+  // Escape closes the variant upload modal, same as clicking the backdrop.
+  useEffect(() => {
+    if (!showUploadModal || metadataFormOpen) return;
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      setShowUploadModal(false);
+      setPreSelectedFile(null);
+      if (uploadSessionConversationId === activeConversationId) {
+        toast.info('Upload in progress', {
+          description:
+            'Your file is still uploading. Please wait — chat will resume when processing finishes.',
+        });
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showUploadModal, metadataFormOpen, uploadSessionConversationId, activeConversationId]);
+
   useEffect(() => {
     if (!columnInterpretationResult) {
       setIsAnnovarRecommended(false);
@@ -1116,11 +1138,13 @@ const ChatPage = () => {
 
   let inputPlaceholder = "Ask anything about bioinformatics...";
   if (annovarRunning) {
-    inputPlaceholder = 'ANNOVAR is running — chat will resume when annotation is complete…';
+    inputPlaceholder = 'Clinical Annotation is running — chat will resume when annotation is complete…';
   } else if (variantUploadInProgress) {
     inputPlaceholder = 'Upload in progress — chat will resume when your file is ready…';
   } else if (isCurrentlyActive) {
-    inputPlaceholder = "Geneie is thinking...";
+    // The composer stays typable while a response streams, so the placeholder invites
+    // the next message instead of only reporting that Geneie is busy.
+    inputPlaceholder = 'Geneie is thinking… type your next message';
   } else if (isChatPipelineGated) {
     if (enrichmentState.active) {
       const pct = enrichmentState.progress != null ? ` (${Math.round(enrichmentState.progress)}%)` : '';
@@ -1128,7 +1152,7 @@ const ChatPage = () => {
     } else if (indexingState.active) {
       inputPlaceholder = 'Indexing variants for chat…';
     } else if (chatEligibility.reason === 'FILTER_JOB_RUNNING') {
-      inputPlaceholder = isRunningExomiser ? 'Running Exomiser…' : 'Applying filter…';
+      inputPlaceholder = isRunningExomiser ? 'Running phenotype prioritization…' : 'Applying filter…';
     } else if (chatEligibility.reason === 'CHAT_REQUIRES_FILTER') {
       inputPlaceholder = 'Apply a filter to enable chat';
     } else if (chatEligibility.allowed === null) {
@@ -1185,6 +1209,7 @@ const ChatPage = () => {
   const pipelineDrawer = showAnalysisPipeline ? (
     <PipelineDrawer
       fileName={currentDocument?.name ?? currentDocument?.file_name}
+      conversationId={activeConversationId}
       expanded={pipelineExpanded}
       onExpandedChange={setPipelineExpanded}
       isGuest={userTier === 'guest'}
@@ -1522,7 +1547,7 @@ const ChatPage = () => {
                                     <div key={k} style={{ paddingLeft: 14, opacity: 0.8 }}>
                                       • <span style={{ opacity: 0.95 }}>{o.claim}</span>
                                       {o.row_evidence ? <span style={{ opacity: 0.6 }}> — vs {o.row_evidence}</span> : null}
-                                      {o.severity ? <span style={{ opacity: 0.45 }}> [{o.severity}]</span> : null}
+                                      {o.confidence ? <span style={{ opacity: 0.45 }}> [{o.confidence}]</span> : null}
                                     </div>
                                   ))}
                                 </div>;
@@ -1559,6 +1584,7 @@ const ChatPage = () => {
                           role={msg.role}
                           text={msg.text}
                           sources={msg.sources}
+                          durationMs={msg.durationMs}
                           showRegenerate={
                             !isCurrentlyActive &&
                             index === messages.length - 1 &&
@@ -1579,7 +1605,7 @@ const ChatPage = () => {
                                 {typingText}
                               </Markdown>
                             ) : (
-                              <ThinkingIndicator />
+                              <ThinkingIndicator startedAt={turnStartedAt} />
                             )}
                           </div>
                         </div>
@@ -1642,6 +1668,7 @@ const ChatPage = () => {
             userId={userId || 'guest'}
             variantData={variantData}
             currentDocument={currentDocument}
+            onEditSampleInfo={userTier === 'guest' ? null : () => setIsEditSampleModalOpen(true)}
             onUploadSuccess={handleDocumentUpload}
             isOpen={isVariantSidebarOpen}
             onToggle={() => setIsVariantSidebarOpen(!isVariantSidebarOpen)}
@@ -1717,6 +1744,7 @@ const ChatPage = () => {
             beginPipelineWork={beginPipelineWork}
             refreshAfterFilterChange={refreshAfterFilterChange}
             downloadGate={downloadGate}
+            chatEligibility={chatEligibility}
             onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
             onGuestRefreshMetadata={handleGuestRefreshMetadata}
           />
@@ -1922,6 +1950,7 @@ const ChatPage = () => {
           annovarMeterDetail={formatMeterDetail(limits, annovarGate?.meter)}
           acmgMeterDetail={formatMeterDetail(limits, acmgExomiserGate?.meter)}
           exomiserCanApply={pipelineSnapshot.hasAnnotatedFile || !chatEligibility.requires_annovar}
+          phenotypeMissing={!sampleHasPhenotype(currentDocument?.sample_metadata)}
           showVcfTabHighlight={columnInterpretationResult?.step1?.passed === false}
           onDeleteDocument={() => handleDocumentUpload(null)}
         />
@@ -1965,7 +1994,7 @@ const ChatPage = () => {
                 // Explain what just happened before the pipeline kicks off silently.
                 toast.info(
                   backendMessage ||
-                    'Genome build changed. Previous ANNOVAR results were cleared — re-running now.',
+                    'Genome build changed. Previous Annotation results were cleared — re-running now.',
                   { duration: 6000 }
                 );
                 setTimeout(() => runAnnovarForCurrentConversation(), 300);

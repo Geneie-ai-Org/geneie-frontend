@@ -6,6 +6,7 @@ import {
     signInWithEmailAndPassword,
     signInWithPopup,
     sendEmailVerification,
+    sendPasswordResetEmail,
     signOut,
     applyActionCode,
     linkWithCredential,
@@ -13,6 +14,7 @@ import {
     reauthenticateWithCredential
 } from 'firebase/auth';
 import { Loader2, Eye, EyeOff, AlertCircle, CheckCircle2, Info } from 'lucide-react';
+import { authErrorMessage } from '@/lib/authErrors';
 
 const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificationPending }) => {
     const navigate = useNavigate();
@@ -27,6 +29,9 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
     const [verifyingEmail, setVerifyingEmail] = useState(false);
     const [verificationSuccess, setVerificationSuccess] = useState(false);
     const [inlineMessage, setInlineMessage] = useState(null);
+    /* Separate from isLogin, which already drives headings, autoComplete and the submit
+     * label — overloading it with a third value would touch all of those. */
+    const [resetMode, setResetMode] = useState(false);
 
     // Account linking state
     const [pendingCredential, setPendingCredential] = useState(null);
@@ -220,6 +225,21 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
         setLoading(true);
 
         try {
+            if (resetMode) {
+                await sendPasswordResetEmail(auth, email, {
+                    // Where Firebase sends them after the reset completes. Origin-relative so
+                    // a preview deployment continues to itself rather than to production.
+                    url: `${window.location.origin}/auth`,
+                    handleCodeInApp: false,
+                });
+                setInlineMessage({
+                    type: 'success',
+                    text: `If an account exists for ${email}, we've sent a reset link. Check your inbox, including spam.`,
+                });
+                setEmail('');
+                return;
+            }
+
             if (isLogin) {
                 const userCredential = await signInWithEmailAndPassword(auth, email, password);
                 let user = userCredential.user;
@@ -266,6 +286,22 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                 setPassword('');
             }
         } catch (err) {
+            /* A reset request answers the same way whether or not the address has an
+             * account — anything else tells a stranger who is registered here. Rate
+             * limiting is about the requester, not the account, so it is worth saying. */
+            if (resetMode) {
+                if (err.code === 'auth/too-many-requests' || err.code === 'auth/invalid-email') {
+                    setInlineMessage({ type: 'error', text: authErrorMessage(err.code) });
+                } else {
+                    setInlineMessage({
+                        type: 'success',
+                        text: `If an account exists for ${email}, we've sent a reset link. Check your inbox, including spam.`,
+                    });
+                    setEmail('');
+                }
+                return;
+            }
+
             let friendlyError = 'An unknown error occurred.';
             if (err.code) {
                 switch (err.code) {
@@ -293,6 +329,11 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
     // Contextual heading
     let mainHeading = isLogin ? 'Log in to Geneie' : 'Create an account';
     let subMessage = null;
+
+    if (resetMode) {
+        mainHeading = 'Reset your password';
+        subMessage = "Enter the email you signed up with and we'll send you a link to set a new password.";
+    }
 
     if (triggerReason === 'guestLimit') {
         mainHeading = 'Guest Access Ended';
@@ -381,7 +422,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
             )}
 
             {/* === Social Login Buttons === */}
-            {!showLinkingPrompt && (
+            {!showLinkingPrompt && !resetMode && (
                 <div className="space-x-3 mb-6 flex flex-row">
                     {/* Google Button */}
                     <button
@@ -418,7 +459,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
             )}
 
             {/* === Divider === */}
-            {!showLinkingPrompt && (
+            {!showLinkingPrompt && !resetMode && (
                 <div className="flex items-center gap-3 my-6">
                     <div className="flex-1 h-px bg-zinc-800"></div>
                     <span className="text-xs text-zinc-500 shrink-0">or continue with</span>
@@ -446,16 +487,22 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                     </div>
 
                     {/* Password Field */}
+                    {!resetMode && (
                     <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
                             <label htmlFor="password" className="block text-xs font-medium text-zinc-400">
                                 Password
                             </label>
-                            {/* {isLogin && (
-                                <button type="button" className="text-xs text-[#4ad6cd] hover:underline" tabIndex={-1}>
-                                    Forgot Password?
+                            {isLogin && (
+                                <button
+                                    type="button"
+                                    onClick={() => { setResetMode(true); setPassword(''); setInlineMessage(null); }}
+                                    className="text-xs text-[#4ad6cd] hover:underline"
+                                    disabled={loading}
+                                >
+                                    Forgot password?
                                 </button>
-                            )} */}
+                            )}
                         </div>
                         <div className="relative">
                             <input
@@ -479,6 +526,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                             </button>
                         </div>
                     </div>
+                    )}
 
                     {inlineMessage && (
                         <div className={`flex items-start gap-2 px-3 py-2.5 rounded-md text-xs ${
@@ -497,13 +545,13 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                     <div className="pt-2 flex justify-center">
                         <button
                             type="submit"
-                            disabled={loading || password.length < 6 || email.length < 3}
+                            disabled={loading || email.length < 3 || (!resetMode && password.length < 6)}
                             className="hover:animate-none w-[60%] h-10 bg-gradient-to-b from-zinc-700 to-black hover:from-neutral-800 hover:to-black disabled:opacity-65 disabled:cursor-not-allowed rounded-xl text-sm font-medium text-white shadow-[0px_0.5px_0px_0px_#404040_inset,1px_4px_4px_1px_#171717] [text-shadow:0px_1px_2px_black] transition-all duration-200 flex items-center justify-center gap-2"
                         >
                             {loading ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
-                                isLogin ? 'Log in' : 'Sign up'
+                                resetMode ? 'Send reset link' : isLogin ? 'Log in' : 'Sign up'
                             )}
                         </button>
                     </div>
@@ -512,14 +560,24 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
 
             {/* === Toggle Link === */}
             <p className="mt-8 text-center text-sm text-zinc-400">
-                {isLogin ? "New to Geneie? " : "Already have an account? "}
+                {resetMode ? 'Remembered it? ' : isLogin ? 'New to Geneie? ' : 'Already have an account? '}
                 <button
                     type="button"
-                    onClick={() => { setIsLogin(!isLogin); setError(''); setSignupSuccess(false); setInlineMessage(null); }}
+                    onClick={() => {
+                        if (resetMode) {
+                            setResetMode(false);
+                            setIsLogin(true);
+                        } else {
+                            setIsLogin(!isLogin);
+                        }
+                        setError('');
+                        setSignupSuccess(false);
+                        setInlineMessage(null);
+                    }}
                     className="font-medium text-[#60a5fa] hover:text-[#3b82f6] hover:underline transition-colors duration-200"
                     disabled={loading}
                 >
-                    {isLogin ? 'Sign up' : 'Log in'}
+                    {resetMode ? 'Back to log in' : isLogin ? 'Sign up' : 'Log in'}
                 </button>
             </p>
         </div>

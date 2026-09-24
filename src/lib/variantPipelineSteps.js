@@ -1,7 +1,12 @@
+import {
+  PHENOTYPE_RUNNING_MESSAGE,
+  sanitizePhenotypeStatusMessage,
+} from '@/lib/filterDisplayNames';
+
 export const PIPELINE_STEP_DEFS = [
   { id: 'upload', label: 'Upload', shortLabel: 'Upload' },
   { id: 'interpret', label: 'Interpretation', shortLabel: 'Interpret' },
-  { id: 'annovar', label: 'ANNOVAR', shortLabel: 'ANNOVAR' },
+  { id: 'annovar', label: 'Annotation', shortLabel: 'Annotation' },
   { id: 'reduce', label: 'Reduce variants', shortLabel: 'Filter' },
   { id: 'chat', label: 'Chat ready', shortLabel: 'Chat' },
 ];
@@ -123,7 +128,9 @@ export function computePipelineSteps({
     isRunningExomiser ||
     exomiserStatus?.status === 'running' ||
     exomiserStatus?.status === 'queued';
-  const filterFailed = filterJob?.status === 'failed' || exomiserStatus?.status === 'failed';
+    
+  const filterFailed =
+    filterJob?.status === 'failed' || (exomiserStatus?.status === 'failed' && !hasReduction);
 
   const { status: reduce } = computeReduceStep({
     hasReduction,
@@ -217,7 +224,7 @@ export function getPipelineStatusLine(props, steps) {
     return 'Counting variant rows in your file on the server…';
   }
   if (lineCountInProgress && interpretationReady) {
-    return 'Counting rows in the background. You can run ANNOVAR or apply filters while this finishes.';
+    return 'Counting rows in the background. You can run Annotation or apply filters while this finishes.';
   }
   if (isRunningAnnovar || annovarJob?.status === 'running') {
     return annovarJob?.message || 'Annotation is running in the background.';
@@ -226,7 +233,7 @@ export function getPipelineStatusLine(props, steps) {
     return filterJob?.message || 'Prioritizing variants in the background.';
   }
   if (isRunningExomiser || exomiserStatus?.status === 'running' || exomiserStatus?.status === 'queued') {
-    return exomiserStatus?.message || 'Exomiser is running in the background.';
+    return sanitizePhenotypeStatusMessage(exomiserStatus?.message, PHENOTYPE_RUNNING_MESSAGE);
   }
   if (chatEligibility?.allowed) {
     const n = variantsUnderConsideration ?? filteredVariantCount;
@@ -238,7 +245,7 @@ export function getPipelineStatusLine(props, steps) {
     return chatEligibility.message;
   }
   if (steps?.annovar === 'failed') {
-    return 'ANNOVAR did not complete. Open details to retry.';
+    return 'Annotation did not complete. Open details to retry.';
   }
   if (steps?.reduce === 'failed') {
     return 'Variant prioritization failed. Open filters to try again.';

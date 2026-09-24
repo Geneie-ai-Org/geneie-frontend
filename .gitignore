@@ -82,3 +82,5 @@ skills/
 # ==================== Not frontend (optional) ====================
 merge_vcf_annovar.py
 start-backend.sh
+# Local testing notes (not part of the product)
+BETA_SEATS_TESTING.md

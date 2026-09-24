@@ -50,6 +50,17 @@ export function parseApiErrorDetail(detail) {
  * VITE_ADMIN_EMAILS gate in the UI is only there to avoid showing a page that would 403.
  */
 
+/** Whether the signed-in user may use the admin tool. Throws for everyone else. */
+export async function adminWhoAmI() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl('/api/admin/whoami'), { headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Admin access required');
+  }
+  return data;
+}
+
 export async function adminListUsers({ plan, email, limit = 100, cursor } = {}) {
   const params = new URLSearchParams();
   if (plan) params.set('plan', plan);
@@ -105,6 +116,101 @@ export async function adminResetDevices(uid) {
     throw new Error(parseApiErrorDetail(data.detail) || 'Failed to reset devices');
   }
   return data.user;
+}
+
+/* --- Closed beta: seats and waitlist ------------------------------------------------ */
+
+/**
+ * Seats left in the closed beta. Public — the landing page calls this before anyone has
+ * signed in, so no Authorization header (same shape as fetchGuestStatus).
+ */
+export async function fetchBetaSeats() {
+  const response = await fetch(apiUrl('/api/beta/seats'));
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load beta seats');
+  }
+  return data;
+}
+
+/** Join the waitlist once the seats are gone. Public, device-keyed, idempotent on email. */
+export async function joinWaitlist({ email, source } = {}) {
+  const response = await fetch(apiUrl('/api/waitlist'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Device-Id': getDeviceId() },
+    body: JSON.stringify({ email, source }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Could not add you to the waitlist');
+  }
+  return data;
+}
+
+export async function adminGetBetaSeats() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl('/api/admin/beta/seats'), { headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load beta seats');
+  }
+  return data;
+}
+
+export async function adminSetBetaSeats(total) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(apiUrl('/api/admin/beta/seats'), {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ total }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to update seats');
+  }
+  return data.seats;
+}
+
+export async function adminListWaitlist({ status, limit = 100, cursor } = {}) {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (limit) params.set('limit', String(limit));
+  if (cursor) params.set('cursor', cursor);
+
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/admin/waitlist?${params.toString()}`), { headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load waitlist');
+  }
+  return data;
+}
+
+export async function adminSetWaitlistStatus(entryId, status) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(apiUrl(`/api/admin/waitlist/${encodeURIComponent(entryId)}`), {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ status }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to update entry');
+  }
+  return data.entry;
+}
+
+export async function adminDeleteWaitlistEntry(entryId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/admin/waitlist/${encodeURIComponent(entryId)}`), {
+    method: 'DELETE',
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to delete entry');
+  }
+  return true;
 }
 
 /**
@@ -631,6 +737,90 @@ export async function exportVariants(conversationId) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * Download Geneie case report PDF for a conversation (legacy MVP; no section assignment).
+ * GET /api/case-report/{conversationId}.pdf
+ */
+export async function downloadCaseReport(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(
+    apiUrl(`/api/case-report/${encodeURIComponent(conversationId)}.pdf`),
+    { headers },
+  );
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(parseApiErrorDetail(data.detail) || 'Case report download failed');
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const filenameMatch = disposition.match(/filename="(.+?)"/);
+  const filename = filenameMatch?.[1] || `Geneie_CaseReport_${conversationId}.pdf`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return {
+    variantRows: response.headers.get('X-Case-Report-Variant-Rows'),
+    variantsShown: response.headers.get('X-Case-Report-Variants-Shown'),
+  };
+}
+
+/**
+ * Ranked working-set candidates for the clinical report assignment modal.
+ * GET /api/conversations/{id}/clinical-report/candidates
+ */
+export async function fetchClinicalReportCandidates(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(
+    apiUrl(`/api/conversations/${encodeURIComponent(conversationId)}/clinical-report/candidates`),
+    { headers },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load report candidates');
+  }
+  return data;
+}
+
+/**
+ * Generate clinical report PDF from section assignments.
+ * POST /api/conversations/{id}/clinical-report
+ */
+export async function generateClinicalReport(conversationId, body) {
+  const headers = await getAuthHeaders();
+  headers['Content-Type'] = 'application/json';
+  const response = await fetch(
+    apiUrl(`/api/conversations/${encodeURIComponent(conversationId)}/clinical-report`),
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    },
+  );
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(parseApiErrorDetail(data.detail) || 'Clinical report generation failed');
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const filenameMatch = disposition.match(/filename="(.+?)"/);
+  const filename =
+    filenameMatch?.[1] || `Geneie_Clinical_Report_${conversationId}.pdf`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return true;
 }
 
 /**

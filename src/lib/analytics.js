@@ -32,6 +32,15 @@ export function initAnalytics() {
       // Opts into current PostHog defaults, incl. SPA pageview capture on history
       // changes — without this, react-router navigations are never recorded.
       defaults: '2025-05-24',
+      // PHI safety (clinical genomic data): the app renders patient variant tables and
+      // accepts uploads. PostHog autocapture, session recording, and heatmaps would
+      // sweep DOM text / input values / click positions on those pages to PostHog,
+      // outside our AWS boundary. Disable all three — we send only explicit, curated
+      // events (conversation_id, tier) plus a pseudonymous Firebase UID via identify().
+      // No clinical data leaves the client.
+      autocapture: false,
+      disable_session_recording: true,
+      enable_heatmaps: false,
     });
     posthog = loaded;
     for (const [method, args] of pending.splice(0)) {

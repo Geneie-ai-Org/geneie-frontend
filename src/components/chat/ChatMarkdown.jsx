@@ -28,7 +28,7 @@ const INITIAL_COMPONENTS = {
       return (
         <span
           className={cn('rounded-sm px-1 font-mono text-sm', className)}
-          style={{ backgroundColor: 'var(--bg-app)', color: 'var(--code-inline)' }}
+          style={{ backgroundColor: 'var(--code-inline-bg)', color: 'var(--code-inline)' }}
           {...props}
         >
           {children}

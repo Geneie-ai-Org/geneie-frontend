@@ -1,7 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AlertCircle, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
+import { PHENOTYPE_RUNNING_MESSAGE } from '@/lib/filterDisplayNames';
 import PerimeterProgress from '@/components/ui/PerimeterProgress';
+import RunTimer from '@/components/ui/RunTimer';
+import { useRunTimer } from '@/hooks/useRunTimer';
 import {
   PIPELINE_STEP_DEFS,
   computePipelineSteps,
@@ -142,6 +145,7 @@ function SegmentMeter({ steps }) {
  */
 const PipelineDrawer = ({
   fileName,
+  conversationId = null,
   expanded,
   onExpandedChange,
   isGuest = false,
@@ -198,6 +202,58 @@ const PipelineDrawer = ({
   };
 
   const steps = computePipelineSteps(pipelineProps);
+
+  /* ── Per-step timing ─────────────────────────────────────────────────────────────
+   * Server-reported start/finish times where the job has them (annotation, filter,
+   * phenotype prioritization); observed client-side for the steps that run in this
+   * tab (upload, interpretation). Keyed per conversation so two open analyses don't
+   * share one stopwatch.
+   */
+  const timerKey = (stepId) => (conversationId ? `${conversationId}:${stepId}` : null);
+  const jobTiming = (job) => ({
+    startedAt: job?.started_at ?? null,
+    completedAt: job?.completed_at ?? null,
+    durationSeconds: job?.duration_seconds ?? null,
+  });
+
+  /* Phenotype prioritization and the ACMG filter are the same pipeline step, so one of
+   * the two owns its clock: whichever is live, else whichever finished last. Picking
+   * "exomiser if it has any status" instead would report a stale Exomiser total while
+   * the ACMG filter is the run actually in flight. */
+  const reduceJob = (() => {
+    const live = (status, flag) =>
+      flag || ['running', 'queued', 'pending'].includes((status || '').trim().toLowerCase());
+    if (live(exomiserStatus?.status, isRunningExomiser)) return exomiserStatus;
+    if (live(filterJob?.status, isApplyingProprietaryFilter)) return filterJob;
+    const finishedAt = (job) => Date.parse(job?.completed_at || '') || 0;
+    return finishedAt(exomiserStatus) >= finishedAt(filterJob) ? exomiserStatus : filterJob;
+  })();
+
+  const stepTimers = {
+    upload: useRunTimer(timerKey('upload'), steps.upload === 'running'),
+    interpret: useRunTimer(timerKey('interpret'), steps.interpret === 'running'),
+    annovar: useRunTimer(timerKey('annovar'), steps.annovar === 'running', jobTiming(annovarJob)),
+    reduce: useRunTimer(timerKey('reduce'), steps.reduce === 'running', jobTiming(reduceJob)),
+    chat: null,
+  };
+  /* Enrichment and indexing are the two waits the five-step model doesn't own, and they
+   * are the last thing between a filter and a usable chat — so they get a clock too.
+   * Neither is timestamped server-side, so these are observed in this tab. */
+  const enrichmentTimer = useRunTimer(timerKey('enrichment'), Boolean(enrichmentState?.active));
+  const indexingTimer = useRunTimer(timerKey('indexing'), Boolean(indexingState?.active));
+
+  // The collapsed line carries one clock: whatever is actually in flight. Order matches
+  // the wording above it, so the reading always belongs to the named wait.
+  const activeTimer =
+    [
+      enrichmentState?.active ? enrichmentTimer : null,
+      indexingState?.active ? indexingTimer : null,
+      stepTimers.upload,
+      stepTimers.annovar,
+      stepTimers.reduce,
+      stepTimers.interpret,
+    ].find((t) => t?.running && t.elapsedMs != null) || null;
+
   const backgroundActive = getPipelineBackgroundActive(pipelineProps);
   const statusLine = getPipelineStatusLine(pipelineProps, steps);
   const summary = getPipelineChipSummary(steps, hasUploadedFile);
@@ -274,7 +330,7 @@ const PipelineDrawer = ({
     if (steps.annovar === 'failed') return settled('Annotation failed');
     if (steps.reduce === 'failed') return settled('Prioritization failed');
     if (isRunningAnnovar || annovarJob?.status === 'running') return working('Annotating…');
-    if (isRunningExomiser || exomiserStatus?.status === 'running') return working('Running Exomiser…');
+    if (isRunningExomiser || exomiserStatus?.status === 'running') return working(PHENOTYPE_RUNNING_MESSAGE);
     if (isApplyingProprietaryFilter || filterJob?.status === 'running') return working('Applying filter…');
     if (chatReady) {
       return settled(
@@ -358,6 +414,17 @@ const PipelineDrawer = ({
         >
           {stateText}
         </span>
+        {/* Only while collapsed: expanded, the running step's own clock is right below
+          * this line, and two readings of the same number is noise. */}
+        {!expanded && activeTimer && (
+          <RunTimer
+            running
+            elapsedMs={activeTimer.elapsedMs}
+            startMs={activeTimer.startMs}
+            className="text-2xs shrink-0"
+            prefix="· "
+          />
+        )}
         <span className="ml-auto shrink-0 flex items-center" style={{ color: 'var(--text-tertiary)' }}>
           {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
         </span>
@@ -382,7 +449,7 @@ const PipelineDrawer = ({
             className="overflow-hidden"
           >
             <div className="px-3.5 pt-0.5">
-              <ol className="flex flex-wrap items-center gap-x-0.5 gap-y-1.5 pb-1 w-full">
+              <ol className="flex flex-wrap items-center gap-x-2 gap-y-2 pb-1.5 w-full">
                 {PIPELINE_STEP_DEFS.map((def, index) => {
                   const status = steps[def.id];
                   const isLast = index === PIPELINE_STEP_DEFS.length - 1;
@@ -398,32 +465,37 @@ const PipelineDrawer = ({
                   return (
                     <li
                       key={def.id}
-                      className={`flex items-center${isLast ? '' : ' flex-1 min-w-0'}`}
+                      className={`flex items-center${isLast ? '' : ' flex-1'}`}
                     >
                       <button
                         type="button"
                         disabled={guestLocked}
                         onClick={() => handleStepClick(def.id)}
-                        className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded-[10px] text-2xs sm:text-xs shrink-0 transition-colors ${
+                        className={`flex items-center gap-1.5 px-2 py-1 rounded-[10px] text-2xs sm:text-xs shrink-0 transition-colors ${
                           clickable ? 'hover:bg-black/[0.04] dark:hover:bg-white/[0.05] cursor-pointer' : 'cursor-default opacity-60'
                         }`}
                         style={{
                           ...stepTextStyle(status, guestLocked),
-                          // Tint + weight are the whole "you are here" signal here; the
-                          // shimmer is reserved for the collapsed status line.
                           ...(running ? { backgroundColor: 'var(--accent-teal-soft)' } : null),
                         }}
                         title={guestLocked ? 'Sign in for full analysis' : `View ${def.label}`}
                       >
                         <StepGlyph status={status} locked={guestLocked} />
                         <span>{def.shortLabel || def.label}</span>
+                        {stepTimers[def.id] && !guestLocked && (
+                          <RunTimer
+                            running={status === 'running'}
+                            elapsedMs={stepTimers[def.id].elapsedMs}
+                            durationMs={status === 'running' ? null : stepTimers[def.id].durationMs}
+                            startMs={stepTimers[def.id].startMs}
+                            className="text-2xs font-normal whitespace-nowrap"
+                            style={{ color: 'var(--text-tertiary)' }}
+                          />
+                        )}
                       </button>
                       {!isLast && (
                         <span
-                          // Grows to fill the drawer: the connectors absorb the spare
-                          // width, so the row spans it and the labels land on an even
-                          // pitch instead of huddling at the left edge.
-                          className="h-px flex-1 min-w-[0.875rem]"
+                          className="h-px flex-1 min-w-[0.75rem] mx-2 shrink-0"
                           style={{
                             backgroundColor: isStepPassed(status)
                               ? 'var(--text-disabled)'
@@ -512,8 +584,8 @@ const PipelineDrawer = ({
                       style={{ backgroundColor: 'var(--accent-teal-soft)', color: 'var(--accent-teal)' }}
                       title={
                         hasAnnotatedFile
-                          ? 'ANNOVAR annotations added by Geneie'
-                          : 'This VCF already contains ANNOVAR annotations'
+                          ? 'Annotations added by Geneie'
+                          : 'This VCF already contains annotations'
                       }
                     >
                       Annotated

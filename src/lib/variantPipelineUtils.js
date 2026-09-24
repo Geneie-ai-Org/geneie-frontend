@@ -1,4 +1,4 @@
-/** Sidebar denominator: annotated multianno rows when ANNOVAR finished, else upload line count. */
+import { PHENOTYPE_FILTER_DISPLAY_NAME } from '@/lib/filterDisplayNames';
 export function variantFileRowCountForSidebar(convData, vm = {}) {
   const annotated =
     convData?.annotated_multianno_row_count ??
@@ -145,7 +145,7 @@ export function buildGuestChatEligibility({
     return {
       ...GUEST_ELIGIBILITY_DEFAULTS,
       allowed: false,
-      message: 'ANNOVAR did not complete. Open details to retry.',
+      message: 'Annotation did not complete. Open details to retry.',
       reason: 'ANNOVAR_FAILED',
       requires_annovar: true,
       requires_filter: false,
@@ -160,7 +160,7 @@ export function buildGuestChatEligibility({
       !hasProprietary && under != null && under > maxVariantsWithoutFilter;
 
     if (hasProprietary) {
-      const label = activeProprietaryFilter === 'filter_3' ? 'Exomiser' : 'ACMG';
+      const label = activeProprietaryFilter === 'filter_3' ? PHENOTYPE_FILTER_DISPLAY_NAME : 'ACMG';
       const countLabel =
         under != null ? `${Number(under).toLocaleString()} variant${under === 1 ? '' : 's'}` : 'your prioritized set';
       return {
@@ -178,7 +178,7 @@ export function buildGuestChatEligibility({
       return {
         ...GUEST_ELIGIBILITY_DEFAULTS,
         allowed: false,
-        message: `This file has ${Number(under).toLocaleString()} variant rows. Apply the ACMG or Exomiser filter to enable guest chat.`,
+        message: `This file has ${Number(under).toLocaleString()} variant rows. Apply the ACMG or ${PHENOTYPE_FILTER_DISPLAY_NAME} filter to enable guest chat.`,
         reason: 'CHAT_REQUIRES_FILTER',
         requires_annovar: false,
         requires_filter: true,
@@ -201,7 +201,7 @@ export function buildGuestChatEligibility({
   return {
     ...GUEST_ELIGIBILITY_DEFAULTS,
     allowed: false,
-    message: 'Run ANNOVAR to annotate your variants, then chat or apply filters.',
+    message: 'Run Annotation to annotate your variants, then chat or apply filters.',
     reason: 'CHAT_REQUIRES_ANNOVAR',
     requires_annovar: true,
     requires_filter: false,
@@ -265,7 +265,7 @@ export function getGuestPipelineCta({
   }
 
   return {
-    message: 'Guest preview includes one ANNOVAR run and 5 chat exchanges on this device.',
+    message: 'Guest preview includes one Annotation run and 5 chat exchanges on this device.',
     action: onSignUp ? { label: 'Sign up for full analysis', onClick: onSignUp } : null,
   };
 }

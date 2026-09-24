@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2, Check, Filter, Stethoscope, X } from 'lucide-react';
-import qiagenLogo from '../Qiagen.svg.png';
-import { ACMG_FILTER_DISPLAY_NAME } from './VariantFilterSidebar';
+import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2, Check, Filter, Stethoscope, Tags, X } from 'lucide-react';
+import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
+import { formatAcmgPhenotypeMeterLabel } from '@/lib/filterDisplayNames';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Accordion,
@@ -27,7 +27,7 @@ const C = {
   info: 'var(--info)',
   infoSoft: 'var(--info-soft)',
   teal: 'var(--accent-teal)',
-  onAccent: '#0F0F0F',
+  onAccent: 'var(--accent-teal-contrast)',
   tealSoft: 'var(--accent-teal-soft)',
   tealHover: 'var(--accent-teal-hover)',
   error: 'var(--error)',
@@ -52,6 +52,7 @@ const ColumnInterpretationResults = ({
   acmgFilterActive = false,
   acmgFilterCanApply = false,
   exomiserCanApply = false,
+  phenotypeMissing = false,
   showVcfTabHighlight,
   onDeleteDocument,
   onTryVcfUpload,
@@ -68,7 +69,7 @@ const ColumnInterpretationResults = ({
 }) => {
   const [expandedStep, setExpandedStep] = useState(initialStep ?? (hasAnnotatedFile ? 2 : null)); // Track which step is expanded
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // Explicit remove-file confirmation only
-  const [showAnnovarConfirm, setShowAnnovarConfirm] = useState(false); // Confirm ANNOVAR when all columns present
+  const [showAnnovarConfirm, setShowAnnovarConfirm] = useState(false); // Confirm Annotation when all columns present
 
   // Close on ESC — a nested confirm dialog takes precedence over closing the whole modal.
   useEffect(() => {
@@ -92,12 +93,12 @@ const ColumnInterpretationResults = ({
   const annovarEnabled = Boolean(step1?.passed) && !genomeMismatch && !annovarQuotaBlocked;
   const annovarMeter = annovarGate?.meter;
   const annovarMeterLabel = annovarMeter?.tracked && !annovarMeter.unlimited && annovarMeter.remaining != null
-    ? `${annovarMeter.remaining} of ${annovarMeter.limit} ANNOVAR runs left`
+    ? `${annovarMeter.remaining} of ${annovarMeter.limit} Annotation runs left`
     : null;
   const acmgQuotaBlocked = acmgExomiserGate?.allowed === false;
   const acmgMeter = acmgExomiserGate?.meter;
   const acmgMeterLabel = acmgMeter?.tracked && !acmgMeter.unlimited && acmgMeter.remaining != null
-    ? `${acmgMeter.remaining} of ${acmgMeter.limit} ACMG / Exomiser applies left`
+    ? formatAcmgPhenotypeMeterLabel(acmgMeter.remaining, acmgMeter.limit)
     : null;
 
   // Determine status for each step
@@ -200,7 +201,16 @@ const ColumnInterpretationResults = ({
   //     - If Step 1 fails: Essential VCF columns missing → recommend raw data upload (no ANNOVAR).
   // - Any source:
   //     - If Step 1 passes but Step 2/3 fails: "Run ANNOVAR to add missing columns."
-  const allRecommendations = recommendations || [];
+  // Recommendations come from the backend, which still names the ANNOVAR tool.
+  // The UI only ever says "Annotation", so strip the tool name before display.
+  const allRecommendations = (recommendations || []).map((r) =>
+    typeof r === 'string'
+      ? r
+          .replace(/\bANNOVAR annotation\b/gi, 'annotation')
+          .replace(/\bRun ANNOVAR\b/g, 'Run Annotation')
+          .replace(/\bANNOVAR\b/g, 'Annotation')
+      : r
+  );
   
   // Get primary recommendation (first one, usually most important)
   const primaryRecommendation = allRecommendations.length > 0 ? allRecommendations[0] : null;
@@ -555,7 +565,7 @@ const ColumnInterpretationResults = ({
   const stepperSteps = [
     {
       n: 1,
-      name: isVcfFile ? 'ANNOVAR ready' : 'VCF Reconstruction',
+      name: isVcfFile ? 'Ready for Annotation' : 'VCF Reconstruction',
       icon: FileText,
       status: step1Status,
       progress: step1Progress,
@@ -653,7 +663,7 @@ const ColumnInterpretationResults = ({
         </div>
       )}
 
-      {/* ANNOVAR Confirmation - When all required columns already present */}
+      {/* Annotation Confirmation - When all required columns already present */}
       {showAnnovarConfirm && (
         <div className="fixed inset-0 flex items-center justify-center z-[60]" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", backgroundColor: 'rgba(0,0,0,0.72)' }}>
           <div 
@@ -663,14 +673,14 @@ const ColumnInterpretationResults = ({
           >
             <div className="px-6 py-4 flex items-center gap-2.5" style={{ borderBottom: `1px solid ${C.border}` }}>
               <Info className="w-5 h-5" style={{ color: C.teal }} />
-              <h2 className="text-base font-semibold" style={{ color: C.text }}>Run ANNOVAR?</h2>
+              <h2 className="text-base font-semibold" style={{ color: C.text }}>Run Annotation?</h2>
             </div>
             <div className="p-6 space-y-4">
               <p className="text-sm" style={{ color: C.textMuted }}>
                 All required columns are already present in your file. Do you really want to proceed?
               </p>
               <p className="text-sm" style={{ color: C.textMuted }}>
-                Running ANNOVAR will add more information to some columns and make the analysis more streamlined.
+                Running Annotation will add more information to some columns and make the analysis more streamlined.
               </p>
             </div>
             <div className="px-6 py-4 border-t flex items-center justify-end gap-3 rounded-b-2xl" style={{ borderColor: C.border }}>
@@ -687,9 +697,9 @@ const ColumnInterpretationResults = ({
                   onAnnovarClick?.();
                 }}
                 className="px-6 py-2 text-sm font-semibold rounded-xl transition-colors"
-                style={{ backgroundColor: 'var(--accent-teal)', color: '#0F0F0F' }}
+                style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
               >
-                Run ANNOVAR
+                Run Annotation
               </button>
             </div>
           </div>
@@ -730,7 +740,7 @@ const ColumnInterpretationResults = ({
               style={{ backgroundColor: C.successSoft, border: `1px solid ${C.success}`, color: C.text }}
             >
               {isRunningAnnovar
-                ? 'ANNOVAR is running in the background. You can close this window and continue in chat, progress appears in the pipeline bar at the top.'
+                ? 'Annotation is running in the background. You can close this window and continue in chat, progress appears in the pipeline bar at the top.'
                 : 'The ACMG filter is running in the background. You can close this window and continue in chat.'}
             </div>
           )}
@@ -758,7 +768,7 @@ const ColumnInterpretationResults = ({
                 >
                   <div>
                     <span className="font-semibold" style={{ color: C.error }}>Genome mismatch</span>
-                    <span className="ml-1">{gbc.message || `You selected ${(gbc.declared || '').toUpperCase()}, but coordinates match ${(gbc.likely || '').toUpperCase()}. ANNOVAR and Exomiser cannot run until this is resolved — update the genome in sample information or re-upload.`}</span>
+                    <span className="ml-1">{gbc.message || `You selected ${(gbc.declared || '').toUpperCase()}, but coordinates match ${(gbc.likely || '').toUpperCase()}. Annotation and phenotype prioritization cannot run until this is resolved — update the genome in sample information or re-upload.`}</span>
                   </div>
                 </div>
               );
@@ -774,7 +784,7 @@ const ColumnInterpretationResults = ({
               return (
                 <p className="text-xs flex items-center gap-1.5" style={{ color: C.textMuted }}>
                   <AlertCircle className="w-3.5 h-3.5" style={{ color: C.warning }} />
-                  {gbc.message || `Could not verify genome build — double-check before running ANNOVAR.`}
+                  {gbc.message || `Could not verify genome build — double-check before running Annotation.`}
                 </p>
               );
             }
@@ -941,7 +951,7 @@ const ColumnInterpretationResults = ({
 
             {selectedStep === 2 && (
               <>
-              {/* ANNOVAR complete indicator */}
+              {/* Annotation complete indicator */}
               {hasAnnotatedFile && (
                 <div className="flex items-center gap-2">
                   {/* <span
@@ -952,7 +962,7 @@ const ColumnInterpretationResults = ({
                       color: C.success,
                     }}
                   >
-                    ANNOVAR complete
+                    Annotation complete
                   </span> */}
                   <p className="text-xs" style={{ color: C.success }}>
                     Columns added, proceed to the next step to apply filters.
@@ -960,29 +970,34 @@ const ColumnInterpretationResults = ({
                 </div>
               )}
 
-              {/* Run ANNOVAR — shown when step2 has missing columns */}
-              {!hasAnnotatedFile && !step2?.passed && (
+              {/* Run Annotation — stays on screen once the file is annotated, disabled, so the
+                * step keeps the same shape before and after the run instead of the button
+                * vanishing and leaving only a line of green text. */}
+              {(() => {
+                const annovarAlreadyRun = hasAnnotatedFile || step2?.passed;
+                const annovarActionable = annovarEnabled && !annovarAlreadyRun;
+                return (
               <div className="relative group">
                 <button
-                  onClick={annovarEnabled ? () => {
+                  onClick={annovarActionable ? () => {
                     const allComplete = step1?.passed && step2?.passed && step3?.passed;
                     if (allComplete) { setShowAnnovarConfirm(true); } else { onAnnovarClick?.(); }
                   } : undefined}
-                  disabled={!annovarEnabled}
-                  title={annovarQuotaBlocked ? annovarGate.reason : undefined}
+                  disabled={!annovarActionable}
+                  title={annovarAlreadyRun ? 'Already run on this file' : annovarQuotaBlocked ? annovarGate.reason : undefined}
                   className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${
-                    annovarEnabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+                    annovarActionable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
                   }`}
                   style={{
-                    backgroundColor: annovarEnabled ? C.surfaceCard : C.surfaceHover,
+                    backgroundColor: annovarActionable ? C.surfaceCard : C.surfaceHover,
                     border: `1px solid ${genomeMismatch ? C.error : C.border}`,
-                    color: annovarEnabled ? C.textMuted : C.textDim,
+                    color: annovarActionable ? C.textMuted : C.textDim,
                   }}
-                  onMouseEnter={(e) => { if (annovarEnabled) { e.target.style.backgroundColor = C.surfaceHover; e.target.style.color = C.text; } }}
-                  onMouseLeave={(e) => { if (annovarEnabled) { e.target.style.backgroundColor = C.surfaceCard; e.target.style.color = C.textMuted; } }}
+                  onMouseEnter={(e) => { if (annovarActionable) { e.target.style.backgroundColor = C.surfaceHover; e.target.style.color = C.text; } }}
+                  onMouseLeave={(e) => { if (annovarActionable) { e.target.style.backgroundColor = C.surfaceCard; e.target.style.color = C.textMuted; } }}
                 >
-                  <img src={qiagenLogo} alt="Qiagen" className="w-5 h-5 object-contain" style={{ filter: annovarEnabled ? 'none' : 'grayscale(100%) opacity(0.5)' }} />
-                  Run ANNOVAR
+                  <Tags className="w-4 h-4 shrink-0" aria-hidden style={{ color: annovarActionable ? 'var(--accent-teal)' : 'var(--text-disabled)' }} />
+                  {annovarAlreadyRun ? 'Annotation complete' : 'Run Annotation'}
                 </button>
                 {annovarMeterLabel && (
                   <p className="text-2xs mt-1" style={{ color: annovarQuotaBlocked ? C.error : C.textDim }}>
@@ -996,7 +1011,7 @@ const ColumnInterpretationResults = ({
                   <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '250px', whiteSpace: 'normal', textAlign: 'left' }}>
                     <div className="flex items-center gap-2">
                       <AlertCircle className="w-3 h-3 flex-shrink-0" style={{ color: C.error }} />
-                      <span>ANNOVAR and Exomiser require a matching genome build. Please fix the mismatch first.</span>
+                      <span>Annotation and phenotype prioritization require a matching genome build. Please fix the mismatch first.</span>
                     </div>
                     <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
                   </div>
@@ -1017,9 +1032,10 @@ const ColumnInterpretationResults = ({
                   </div>
                 )}
               </div>
-              )}
+                );
+              })()}
 
-              {/* Step 2 all passed, no ANNOVAR needed */}
+              {/* Step 2 all passed, no Annotation needed */}
               {!hasAnnotatedFile && step2?.passed && (
                 <p className="text-xs" style={{ color: C.textMuted }}>
                   All annotation columns present — proceed to the next step.
@@ -1047,12 +1063,12 @@ const ColumnInterpretationResults = ({
                   onMouseEnter={(e) => { if (acmgFilterCanApply && !acmgFilterActive && !isApplyingProprietaryFilter) { e.target.style.backgroundColor = C.surfaceHover; } }}
                   onMouseLeave={(e) => { if (acmgFilterCanApply && !acmgFilterActive && !isApplyingProprietaryFilter) { e.target.style.backgroundColor = C.surfaceCard; } }}
                 >
-                  {isApplyingProprietaryFilter ? 'Applying…' : acmgFilterActive ? `${ACMG_FILTER_DISPLAY_NAME} applied` : `Apply ${ACMG_FILTER_DISPLAY_NAME}`}
+                  {isApplyingProprietaryFilter ? 'Applying…' : acmgFilterActive ? 'ACMG applied' : 'ACMG'}
                 </button>
                 {/* Quota and readiness are different problems, so they get different copy. */}
                 {!acmgFilterCanApply && !acmgFilterActive && step1?.passed && !acmgQuotaBlocked && (
                   <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '280px', whiteSpace: 'normal', textAlign: 'left' }}>
-                    Run ANNOVAR first — the ACMG filter needs ClinVar or InterVar annotations and gnomAD frequency.
+                    Run Annotation first — the ACMG filter needs ClinVar or InterVar annotations and gnomAD frequency.
                     <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
                   </div>
                 )}
@@ -1069,7 +1085,8 @@ const ColumnInterpretationResults = ({
               {/* Exomiser — needs an annotated file; remaining eligibility (phenotype, germline) is checked in the sidebar tab */}
               {onOpenExomiser && (() => {
                 // Exomiser applies draw on the same metered budget as ACMG.
-                const exomiserEnabled = exomiserCanApply && !genomeMismatch && !acmgQuotaBlocked;
+                const exomiserEnabled =
+                  exomiserCanApply && !genomeMismatch && !acmgQuotaBlocked && !phenotypeMissing;
                 return (
                   <div className="relative group">
                     <button
@@ -1087,13 +1104,15 @@ const ColumnInterpretationResults = ({
                       onMouseEnter={(e) => { if (exomiserEnabled) e.currentTarget.style.backgroundColor = C.surfaceHover; }}
                       onMouseLeave={(e) => { if (exomiserEnabled) e.currentTarget.style.backgroundColor = C.surfaceCard; }}
                     >
-                      Prioritize with Exomiser
+                      <PhenotypeAiLabel variant="inline" />
                     </button>
                     {!exomiserEnabled && step1?.passed && (
                       <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '280px', whiteSpace: 'normal', textAlign: 'left' }}>
                         {genomeMismatch
-                          ? 'ANNOVAR and Exomiser require a matching genome build. Please fix the mismatch first.'
-                          : 'Run ANNOVAR first — Exomiser requires an annotated file.'}
+                          ? 'Annotation and phenotype prioritization require a matching genome build. Please fix the mismatch first.'
+                          : phenotypeMissing
+                            ? 'Add a phenotype description in sample info to enable phenotype-driven prioritization. Everything else runs without one.'
+                            : 'Run Annotation first — phenotype prioritization requires an annotated file.'}
                         <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
                       </div>
                     )}
@@ -1140,7 +1159,7 @@ const ColumnInterpretationResults = ({
                 type="button"
                 onClick={handleDismiss}
                 className="px-4 py-2 text-sm font-semibold rounded-xl transition-colors"
-                style={{ backgroundColor: 'var(--accent-teal)', border: 'none', color: '#0F0F0F' }}
+                style={{ backgroundColor: 'var(--accent-teal)', border: 'none', color: 'var(--accent-teal-contrast)' }}
                 onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal-hover)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal)'; }}
               >

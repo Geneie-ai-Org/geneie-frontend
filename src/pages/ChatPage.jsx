@@ -4,6 +4,7 @@ import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, B
 import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
 import { toast } from 'sonner';
+import ExploratoryModeToggle from '../components/ExploratoryModeToggle';
 
 import { useStickToBottom } from 'use-stick-to-bottom';
 import { Markdown } from '../components/chat/ChatMarkdown';
@@ -1498,20 +1499,101 @@ const ChatPage = () => {
                 <div ref={chatContentRef} className="chat-column-inner space-y-8 pt-5 pb-4">
                   <div className="space-y-8 pb-4 w-full">
                     {messages.map((msg, index) => (
-                      <ChatMessage
-                        key={msg.id}
-                        role={msg.role}
-                        text={msg.text}
-                        sources={msg.sources}
-                        durationMs={msg.durationMs}
-                        showRegenerate={
-                          !isCurrentlyActive &&
-                          index === messages.length - 1 &&
-                          msg.role === 'ai'
-                        }
-                        onRegenerate={regenerateLastResponse}
-                        regenerateDisabled={!isAuthReady}
-                      />
+                      <div key={msg.id}>
+                        {/* Exploratory-mode RAW trace: a plain streaming line log (no cards).
+                            One line per event, in stream order, all readable (it's the audit
+                            trail). Hierarchy by glyph + weight, not boxes. Live line pulses. */}
+                        {Array.isArray(msg.trace) && msg.trace.length > 0 && (
+                          <div style={{
+                            margin: '0 0 8px', paddingLeft: 4,
+                            fontSize: 12.5, lineHeight: 1.65,
+                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                            color: 'hsl(var(--muted-foreground))',
+                          }}>
+                            {msg.trace.map((t, i) => {
+                              const isLast = i === msg.trace.length - 1;
+                              const live = msg.streaming && isLast;
+                              if (t.kind === 'routed') {
+                                // multi-agent panel — same RAW line-log theme (monospace, monotone,
+                                // no card/modal). Shows which agent the orchestrator chose, why, who
+                                // else was considered, and the agent's tools + curated knowledge.
+                                const d = t.data || {};
+                                const considered = Array.isArray(d.considered) ? d.considered : [];
+                                return <div key={i} style={{ margin: '6px 0 2px', paddingLeft: 2 }}>
+                                  <div style={{ color: 'hsl(var(--card-foreground))', fontWeight: 600 }}>
+                                    {live ? '▸' : '✓'} routed → <span style={{ color: '#4ea1a1' }}>{d.agent || t.text}</span>
+                                  </div>
+                                  {d.reason ? <div style={{ paddingLeft: 14, opacity: 0.75 }}>why: {d.reason}</div> : null}
+                                  {d.capability ? <div style={{ paddingLeft: 14, opacity: 0.6 }}>does: {d.capability}</div> : null}
+                                  {(d.tools && d.tools.length) ? <div style={{ paddingLeft: 14, opacity: 0.6 }}>tools: {d.tools.join(', ')}</div> : null}
+                                  {(d.knowledge && d.knowledge.length) ? <div style={{ paddingLeft: 14, opacity: 0.6 }}>knowledge: {d.knowledge.join(', ')}</div> : null}
+                                  {considered.length > 1 ? (
+                                    <div style={{ paddingLeft: 14, opacity: 0.45, marginTop: 1 }}>
+                                      considered: {considered.map((c) => c.name === (d.agent) ? `[${c.name}]` : c.name).join('  ·  ')}
+                                    </div>
+                                  ) : null}
+                                </div>;
+                              }
+                              if (t.kind === 'critique') {
+                                // adversarial critic round - same raw theme. amber-ish for the
+                                // counter guy; lists grounded objections or 'concede'.
+                                const d = t.data || {};
+                                const objs = Array.isArray(d.objections) ? d.objections : [];
+                                return <div key={i} style={{ margin: '6px 0 2px', paddingLeft: 2 }}>
+                                  <div style={{ color: d.concede ? '#4ea1a1' : '#c9a227', fontWeight: 600 }}>
+                                    {live ? '▸' : '✓'} ⚖ critic (round {d.round ?? '?'}): {d.concede ? 'no objection — concede' : `${objs.length} objection(s)`}
+                                  </div>
+                                  {objs.map((o, k) => (
+                                    <div key={k} style={{ paddingLeft: 14, opacity: 0.8 }}>
+                                      • <span style={{ opacity: 0.95 }}>{o.claim}</span>
+                                      {o.row_evidence ? <span style={{ opacity: 0.6 }}> — vs {o.row_evidence}</span> : null}
+                                      {o.confidence ? <span style={{ opacity: 0.45 }}> [{o.confidence}]</span> : null}
+                                    </div>
+                                  ))}
+                                </div>;
+                              }
+                              if (t.kind === 'revision') {
+                                const d = t.data || {};
+                                return <div key={i} style={{ paddingLeft: 2, opacity: 0.9 }}>
+                                  {live ? '▸' : '✓'} ↩ {d.changed ? 'worker revises' : 'worker holds'} (round {d.round ?? '?'})
+                                  {d.response ? <span style={{ opacity: 0.6 }}>: {d.response}</span> : null}
+                                </div>;
+                              }
+                              if (t.kind === 'toolcall') {
+                                return <div key={i} style={{ color: 'hsl(var(--card-foreground))', marginTop: 4 }}>
+                                  {live ? '▸' : '✓'} query: <span style={{ opacity: 0.85 }}>{t.text}</span>
+                                </div>;
+                              }
+                              if (t.kind === 'toolresult') {
+                                return <div key={i} style={{ color: '#4ea1a1' }}>  └ {t.text}</div>;
+                              }
+                              if (t.kind === 'fact') {
+                                return <div key={i} style={{ paddingLeft: 14, opacity: 0.9 }}>• {t.text}</div>;
+                              }
+                              if (t.kind === 'think') {
+                                return <div key={i} style={{ fontStyle: 'italic', opacity: 0.8, margin: '2px 0' }}>
+                                  {t.text}{live ? <span className="ex-cursor">▍</span> : null}
+                                </div>;
+                              }
+                              // plain step (planning / verifying)
+                              return <div key={i}>{live ? '▸' : '✓'} {t.text}</div>;
+                            })}
+                          </div>
+                        )}
+                        <ChatMessage
+                          role={msg.role}
+                          text={msg.text}
+                          sources={msg.sources}
+                          durationMs={msg.durationMs}
+                          showRegenerate={
+                            !isCurrentlyActive &&
+                            index === messages.length - 1 &&
+                            msg.role === 'ai'
+                          }
+                          onRegenerate={regenerateLastResponse}
+                          regenerateDisabled={!isAuthReady}
+                        />
+                      </div>
                     ))}
 
                     {isCurrentlyActive && (
@@ -1950,6 +2032,8 @@ const ChatPage = () => {
         onClose={() => setUpgradeModal(null)}
         userId={userId}
       />
+
+      <ExploratoryModeToggle />
     </div>
   );
 };

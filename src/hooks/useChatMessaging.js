@@ -6,6 +6,7 @@ import { getDeviceId } from '@/lib/deviceId';
 import { DEFAULT_GUEST_CHAT_LIMIT } from '@/services/backendApi';
 import { useAuth } from '@/hooks/useAuth';
 import { describeLimitError, isLimitCode } from '@/services/limitErrors';
+import { streamExploratory } from '@/services/streamExploratory';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const MAX_RETRIES = 3;
@@ -224,13 +225,19 @@ export function useChatMessaging({
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         if (signal.aborted) return { data: null, lastError: null, aborted: true };
         try {
+          // Note: exploratory mode is handled in an earlier branch (streams directly to the
+          // exploratory service); this requestBody is the normal PROD chat path only.
           const requestBody = {
             message: userMessageText,
             history: historyPayload,
             conversationId: activeConversationId || (userTier === 'guest' ? 'guest-session' : null),
             hasUploadedFile: userTier === 'guest' && currentDocument !== null,
           };
-          const token = userTier === 'guest' ? null : await optionalIdToken();
+          // Always attempt a fresh token: optionalIdToken() returns null iff genuinely not signed in
+      // (no currentUser). Gating on userTier==='guest' wrongly nulled a valid token when the tier
+      // state hadn't resolved yet -> request went out as guest -> backend 400 on the user's own
+      // conversation. currentUser is the source of truth, not the tier snapshot.
+      const token = await optionalIdToken();
 
           const response = await fetch(getChatApiUrl(), {
             method: 'POST',
@@ -331,6 +338,97 @@ export function useChatMessaging({
       ...messages.map((msg) => ({ role: msg.role, text: msg.text })),
       { role: 'user', text: userMessageText },
     ];
+
+    // --- Exploratory (Strands) mode: stream steps + live answer via SSE, then return.
+    // Isolated branch; the normal PROD path below is untouched.
+    const exploratoryOn = typeof window !== 'undefined'
+      && window.localStorage?.getItem('geneie_exploratory_mode') === 'on';
+    if (exploratoryOn) {
+      // Auth for the exploratory stream: same as the PROD branch. Signed-in users send a
+      // Firebase bearer so the backend resolves ownership; guests use their device id only.
+      // (Previously referenced `token` from the PROD branch's scope -> "token is not defined".)
+      // Always attempt a fresh token: optionalIdToken() returns null iff genuinely not signed in
+      // (no currentUser). Gating on userTier==='guest' wrongly nulled a valid token when the tier
+      // state hadn't resolved yet -> request went out as guest -> backend 400 on the user's own
+      // conversation. currentUser is the source of truth, not the tier snapshot.
+      const token = await optionalIdToken();
+      const aiId = userLocalId + 1;
+      setMessages((prev) => [...prev, { role: 'ai', text: '', id: aiId, streaming: true, trace: [] }]);
+      const patch = (fn) => setMessages((prev) => prev.map((m) => (m.id === aiId ? fn(m) : m)));
+      // append an item to the ordered trace; coalesce consecutive 'think' deltas into one item.
+      // data carries structured detail for kinds the FE renders richly (e.g. 'routed' -> the
+      // multi-agent panel: which agent, why, considered, tools, curated knowledge).
+      const pushTrace = (kind, text, data) => patch((m) => {
+        const tr = [...(m.trace || [])];
+        if (kind === 'think' && tr.length && tr[tr.length - 1].kind === 'think') {
+          tr[tr.length - 1] = { kind, text: tr[tr.length - 1].text + text };
+        } else {
+          tr.push(data ? { kind, text, data } : { kind, text });
+        }
+        return { ...m, trace: tr };
+      });
+      let finalAnswer = '';   // accumulate so we can PERSIST the turn after the stream
+      try {
+        await streamExploratory(userMessageText, (evt) => {
+          if (evt.type === 'answer_delta') {
+            const t = evt.data?.text || '';
+            finalAnswer += t;
+            patch((m) => ({ ...m, text: m.text + t }));
+          } else if (evt.type === 'routed') {
+            // the orchestrator picked a specialised agent -> render the multi-agent panel inline,
+            // in stream order, from the structured data (agent / why / considered / tools / packs)
+            pushTrace('routed', evt.data?.agent || evt.label, evt.data || {});
+          } else if (evt.type === 'critique') {
+            // adversarial critic round -> render the objections (or concede) inline
+            pushTrace('critique', evt.label, evt.data || {});
+          } else if (evt.type === 'revision') {
+            // worker's revision/defense for that round
+            pushTrace('revision', evt.label, evt.data || {});
+          } else if (evt.type === 'thinking') {
+            pushTrace('think', evt.data?.text || '');            // real reasoning, in-order
+          } else if (evt.type === 'narration') {
+            pushTrace('fact', evt.data?.fact || evt.label);      // grounded fact, in-order
+          } else if (evt.type === 'refused') {
+            finalAnswer = '⚠️ ' + (evt.label || 'Answer withheld (not grounded).');
+            patch((m) => ({ ...m, text: finalAnswer }));
+          } else if (evt.type === 'error') {
+            patch((m) => ({ ...m, text: 'Error: ' + (evt.data?.error || 'stream failed') }));
+          } else if (evt.type === 'done') {
+            patch((m) => ({ ...m, streaming: false }));
+          } else if (evt.type === 'tool_call') {
+            pushTrace('toolcall', evt.data?.query || evt.label);  // starts a new timeline turn
+          } else if (evt.type === 'tool_result') {
+            pushTrace('toolresult', evt.label);                   // row count for the current turn
+          } else {
+            // planning / verifying -> a plain step line, in-order
+            if (evt.label) pushTrace('step', evt.label);
+          }
+        }, ac.signal, activeConversationId || 'guest-session',
+           { ...(token && { Authorization: `Bearer ${token}` }), 'X-Device-Id': getDeviceId() });
+
+        // PERSIST the exploratory turn so it survives reload (Standard persists; this branch didn't).
+        // Best-effort — a save failure must never break the live UI.
+        if (userId && activeConversationId && finalAnswer.trim()) {
+          try {
+            await mongodbApi.createMessage(activeConversationId, 'user', userMessageText, []);
+            await mongodbApi.createMessage(activeConversationId, 'ai', finalAnswer, []);
+          } catch (persistErr) {
+            console.error('Exploratory persist error:', persistErr);
+          }
+        }
+      } catch (e) {
+        patch((m) => ({ ...m, streaming: false, text: m.text || `Error: ${e.message}` }));
+      }
+      chatAbortControllerRef.current = null;
+      setIsLoading(false);
+      // updateConversationTitle expects (conversationId, firstMessage) — the exploratory branch
+      // was calling it with just (userMessageText), so firstMessage was undefined -> the title
+      // endpoint 422'd. Pass both, and only when we have a real conversation.
+      if (wasFirstInConversation && updateConversationTitle && activeConversationId) {
+        updateConversationTitle(activeConversationId, userMessageText);
+      }
+      return;
+    }
 
     const { data, lastError, aborted } = await runChatCompletion(userMessageText, historyPayload, ac.signal);
     chatAbortControllerRef.current = null;

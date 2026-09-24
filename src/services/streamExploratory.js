@@ -9,7 +9,9 @@
  * type ∈ planning | tool_call | tool_result | verifying | answer_delta | refused | done | error
  */
 
-const STREAM_URL = '/exploratory/stream'; // same-origin -> Vite proxy -> :8100
+import { apiUrl } from '@/config/api';
+
+const STREAM_URL = apiUrl('/api/exploratory/stream');
 
 export async function streamExploratory(question, onEvent, signal, conversationId, authHeaders = {}) {
   const res = await fetch(STREAM_URL, {

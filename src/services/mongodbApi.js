@@ -213,6 +213,26 @@ export const suggestPhenotypePhrases = async ({ text } = {}) => {
 };
 
 /**
+ * Paste clinical note → disease + grounded finding chips (confirm before save).
+ */
+export const interpretPhenotypeNarrative = async ({ text } = {}) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const response = await fetch(`${API_BASE_URL}/api/phenotype/interpret-narrative`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ text: text || '' }),
+  });
+
+  if (!response.ok) await handleResponseError(response);
+  return response.json();
+};
+
+/**
  * Delete a conversation
  */
 export const deleteConversation = async (conversationId) => {

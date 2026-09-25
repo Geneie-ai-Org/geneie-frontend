@@ -44,7 +44,11 @@ import { conversationPath, isValidConversationId } from '@/lib/conversationRoute
 import { getDeviceId } from '@/lib/deviceId';
 import { useVariantPipeline } from '@/hooks/useVariantPipeline';
 import { useModule1Pipeline } from '@/hooks/useModule1Pipeline';
+import { useAutomaticPipelineConductor } from '@/hooks/useAutomaticPipelineConductor';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { getClinicalReportGate } from '@/components/CaseReportDownloadButton';
+import ClinicalReportAssignModal from '@/components/ClinicalReportAssignModal';
+import AutomaticPipelinePanel from '@/components/AutomaticPipelinePanel';
 import { DEFAULT_GUEST_CHAT_LIMIT } from '@/services/backendApi';
 import { formatMeterDetail, meterExhausted, meterFor, meterNearLimit, patchGuestChatUsed } from '@/services/tierLimits';
 import { describeLimitError, isEmailVerificationCode } from '@/services/limitErrors';
@@ -64,6 +68,7 @@ const ChatPage = () => {
   // Conversation state
   const [conversations, setConversations] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [clinicalReportOpen, setClinicalReportOpen] = useState(false);
   const [currentDocument, setCurrentDocument] = useState(null);
   const [variantData, setVariantData] = useState(null);
   const [isVariantSidebarOpen, setIsVariantSidebarOpen] = useState(false);
@@ -303,6 +308,22 @@ const ChatPage = () => {
   const updateConversationTitle = useCallback(async (conversationId, firstMessage) => {
     if (!userId) return;
 
+    // Prefer uploaded file name over LLM conversation summaries in the sidebar.
+    const existing = conversations.find(
+      (c) => String(c.id) === String(conversationId) || String(c.conversation_id) === String(conversationId)
+    );
+    if (existing?.documentName) {
+      if (existing.title !== existing.documentName) {
+        try {
+          await mongodbApi.updateConversation(conversationId, { title: existing.documentName });
+          applyConversationTitle(conversationId, existing.documentName);
+        } catch (error) {
+          console.error('Error syncing file-name title:', error);
+        }
+      }
+      return;
+    }
+
     try {
       const auth = getAuth();
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
@@ -337,7 +358,7 @@ const ChatPage = () => {
         console.error('Error with fallback title update:', fallbackError);
       }
     }
-  }, [userId, applyConversationTitle]);
+  }, [userId, applyConversationTitle, conversations]);
 
   const {
     messages,
@@ -410,6 +431,26 @@ const ChatPage = () => {
   module1JobActiveRef.current = module1.module1JobActive;
   onOpenModule1UploadRef.current = module1.openModule1Form;
 
+  const automaticPipeline = useAutomaticPipelineConductor({
+    enabled: userTier !== 'guest' && !!activeConversationId,
+    conversationId: activeConversationId,
+    sampleMetadata: currentDocument?.sample_metadata,
+    analysisType: currentDocument?.sample_metadata?.analysisType,
+    hasAnnotatedFile: pipelineSnapshot.hasAnnotatedFile,
+    annovarJobStatus: pipelineSnapshot.annovarJob?.status,
+    isRunningAnnovar,
+    exomiserStatus,
+    isRunningExomiser,
+    module1JobActive: module1.module1JobActive,
+    runAnnovar: runAnnovarForCurrentConversation,
+    fetchExomiserEligibility,
+    runExomiser,
+  });
+
+  useEffect(() => {
+    setClinicalReportOpen(false);
+  }, [activeConversationId]);
+
   const { handleDocumentUpload } = useDocumentUpload({
     userId,
     userTier,
@@ -427,6 +468,19 @@ const ChatPage = () => {
     refreshSubscriptionStatus,
     syncPipelineFromConversationRef,
     setConversationFilterState,
+    onDocumentAttached: (conversationId, fileName) => {
+      if (!conversationId || !fileName) return;
+      setConversations((prev) =>
+        prev.map((c) =>
+          String(c.id) === String(conversationId) || String(c.conversation_id) === String(conversationId)
+            ? { ...c, documentName: fileName, title: fileName }
+            : c
+        )
+      );
+      mongodbApi.updateConversation(conversationId, { title: fileName }).catch((err) => {
+        console.warn('[App] Failed to persist file-name title:', err);
+      });
+    },
   });
 
   const handleUploadStarted = useCallback((fileName) => {
@@ -770,9 +824,20 @@ const ChatPage = () => {
         if (cancelled) return;
 
         if (convData) {
-          // Pick up any backend-side title change (e.g. auto-generated "Greeting and Initial Contact")
-          // so the sidebar entry and chat header reflect it.
-          applyConversationTitle(conversationId, convData.title);
+          // Prefer uploaded file name over any LLM-generated conversation summary.
+          const fileName = convData.document?.file_name || null;
+          if (fileName) {
+            applyConversationTitle(conversationId, fileName);
+            setConversations((prev) =>
+              prev.map((c) =>
+                String(c.id) === String(conversationId) || String(c.conversation_id) === String(conversationId)
+                  ? { ...c, documentName: fileName, title: fileName }
+                  : c
+              )
+            );
+          } else if (convData.title) {
+            applyConversationTitle(conversationId, convData.title);
+          }
 
           if (convData.document?.s3_url && convData.document?.file_name) {
             setCurrentDocument({
@@ -937,10 +1002,17 @@ const ChatPage = () => {
 
   const conversationHeaderTitle = useMemo(() => {
     if (userTier === 'guest') return 'Guest session';
+    if (activeConversation?.documentName) return activeConversation.documentName;
     if (activeConversation?.title) return activeConversation.title;
     if (isConversationStarted || isCurrentlyActive) return 'New conversation';
     return 'Geneie';
-  }, [userTier, activeConversation?.title, isConversationStarted, isCurrentlyActive]);
+  }, [
+    userTier,
+    activeConversation?.documentName,
+    activeConversation?.title,
+    isConversationStarted,
+    isCurrentlyActive,
+  ]);
 
   // One row per data kind; the file-vs-URL choice is a toggle inside the modal.
   const onSelectVariantFile = () => {
@@ -1243,6 +1315,30 @@ const ChatPage = () => {
     />
   ) : null;
 
+  const reportGate = getClinicalReportGate({ downloadGate, chatEligibility });
+  const showAutomaticReportCta =
+    automaticPipeline.active &&
+    automaticPipeline.phase === 'ready_report' &&
+    userTier !== 'guest' &&
+    !!variantData &&
+    !!activeConversationId;
+
+  const automaticPipelineBanner =
+    automaticPipeline.active && automaticPipeline.message ? (
+      <AutomaticPipelinePanel
+        message={automaticPipeline.message}
+        phase={automaticPipeline.phase}
+        steps={automaticPipeline.steps}
+        events={automaticPipeline.events}
+        showReportCta={showAutomaticReportCta}
+        reportGate={reportGate}
+        onGenerateReport={() => {
+          setIsVariantSidebarOpen(true);
+          setClinicalReportOpen(true);
+        }}
+      />
+    ) : null;
+
   // Both composer call sites are the same component with the same wiring; only the
   // layout and the dropdown's identity differ.
   const composerProps = {
@@ -1266,6 +1362,7 @@ const ChatPage = () => {
     // the two is ever non-null for a given conversation.
     pipelineDrawer: (
       <>
+        {automaticPipelineBanner}
         {module1PipelineBlock}
         {pipelineDrawer}
       </>
@@ -1745,10 +1842,19 @@ const ChatPage = () => {
             refreshAfterFilterChange={refreshAfterFilterChange}
             downloadGate={downloadGate}
             chatEligibility={chatEligibility}
+            onClinicalReportOpen={() => setClinicalReportOpen(true)}
             onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
             onGuestRefreshMetadata={handleGuestRefreshMetadata}
           />
       </aside>
+
+      {userTier !== 'guest' && activeConversationId ? (
+        <ClinicalReportAssignModal
+          open={clinicalReportOpen}
+          onOpenChange={setClinicalReportOpen}
+          conversationId={activeConversationId}
+        />
+      ) : null}
 
       {/* Hidden file inputs for dropdown file type selection */}
       <input

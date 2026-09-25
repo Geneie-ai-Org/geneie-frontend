@@ -1,28 +1,16 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { FileText } from 'lucide-react';
-import ClinicalReportAssignModal from './ClinicalReportAssignModal';
 
 /**
- * Opens the clinical-report assignment modal (replaces one-click PDF download).
- * Gated on chat eligibility (same unlock as variant chat) plus job downloadGate.
+ * Same unlock rules as variant chat + job downloadGate.
+ * Shared by the sidebar button and the Automatic pipeline banner CTA.
  */
-export default function CaseReportDownloadButton({
-  conversationId,
-  variantData,
-  isGuest,
-  downloadGate = null,
-  chatEligibility = null,
-}) {
-  const [open, setOpen] = useState(false);
-
+export function getClinicalReportGate({ downloadGate = null, chatEligibility = null } = {}) {
   const gateBlocked = downloadGate?.blocked === true;
   const chatReady = chatEligibility?.allowed === true;
   const chatPending = chatEligibility?.allowed == null;
   const chatBlocked = !chatReady;
   const blocked = gateBlocked || chatBlocked;
-
-  if (isGuest) return null;
-  if (!conversationId || !variantData) return null;
 
   const gateLabel = () => {
     if (downloadGate?.kind === 'enriching') return 'Report unlocks after enrichment…';
@@ -52,12 +40,33 @@ export default function CaseReportDownloadButton({
       ? chatEligibility?.message || 'Chat must be enabled before generating a report'
       : 'Assign variants and generate Geneie clinical report PDF';
 
+  return { blocked, label, title };
+}
+
+/**
+ * Opens the clinical-report assignment modal (replaces one-click PDF download).
+ * Gated on chat eligibility (same unlock as variant chat) plus job downloadGate.
+ * Modal itself is owned by ChatPage so Automatic banner can open it when the sidebar is closed.
+ */
+export default function CaseReportDownloadButton({
+  conversationId,
+  variantData,
+  isGuest,
+  downloadGate = null,
+  chatEligibility = null,
+  onRequestOpen,
+}) {
+  const { blocked, label, title } = getClinicalReportGate({ downloadGate, chatEligibility });
+
+  if (isGuest) return null;
+  if (!conversationId || !variantData) return null;
+
   return (
     <div className="space-y-1">
       <button
         type="button"
         onClick={() => {
-          if (!blocked) setOpen(true);
+          if (!blocked && typeof onRequestOpen === 'function') onRequestOpen();
         }}
         disabled={blocked}
         title={title}
@@ -70,11 +79,6 @@ export default function CaseReportDownloadButton({
         <FileText className="w-3.5 h-3.5" />
         {label}
       </button>
-      <ClinicalReportAssignModal
-        open={open}
-        onOpenChange={setOpen}
-        conversationId={conversationId}
-      />
     </div>
   );
 }

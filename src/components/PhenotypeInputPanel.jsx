@@ -1,30 +1,52 @@
 /**
- * Germline phenotype entry: Findings | Disease tabs + live HPO chips.
- * Confirmed HPO IDs are what Exomiser prefers when saved on sample_metadata.
+ * Germline phenotype entry via clinical note.
+ * Selected HPO finding IDs (confirmed_ids) drive phenotype prioritization.
+ * Disease matches are a shortcut to load annotated findings for review.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Sparkles, X } from 'lucide-react';
-import { resolveHpoTerms, suggestHpoTerms, suggestPhenotypePhrases } from '@/services/mongodbApi';
+import { ChevronDown, ChevronUp, Loader2, X } from 'lucide-react';
+import { interpretPhenotypeNarrative, resolveHpoTerms } from '@/services/mongodbApi';
 
 export const PHENOTYPE_MODE_FINDINGS = 'findings';
 export const PHENOTYPE_MODE_DISEASE = 'disease';
+export const PHENOTYPE_MODE_NOTE = 'note';
+
+/** @deprecated use PIPELINE_RUN_* from PipelineRunModeToggle — kept for save-field compat */
+export const PHENOTYPE_RUN_MANUAL = 'manual';
+export const PHENOTYPE_RUN_AUTOMATIC = 'automatic';
+
+/**
+ * Deterministic cleanup before disease/HPO resolve (mirrors BE sanitize_clinical_query_text).
+ * Turns junk separators like "hailey=hailey" into searchable tokens.
+ */
+export function sanitizePhenotypeQuery(text) {
+  let s = String(text || '').trim();
+  if (!s) return '';
+  s = s.replace(/[=_/|\\;:]+/g, ' ');
+  s = s.replace(/[^\w\s\-'.,()]/gi, ' ');
+  s = s.replace(/\s+/g, ' ').replace(/^[,;\s.]+|[,;\s.]+$/g, '');
+  return s;
+}
+
+/** Strong disease match — auto-apply in Automatic analysis mode only. */
+const AUTO_DISEASE_MIN_SCORE = 0.9;
 
 /** Mode-of-inheritance / non-finding HPO IDs commonly dumped in disease annotations. */
 const INHERITANCE_HPO_IDS = new Set([
-  'HP:0000005', // Mode of inheritance
-  'HP:0000006', // Autosomal dominant inheritance
-  'HP:0000007', // Autosomal recessive inheritance
-  'HP:0001417', // X-linked inheritance
-  'HP:0001419', // X-linked recessive inheritance
-  'HP:0001423', // X-linked dominant inheritance
-  'HP:0001426', // Multifactorial inheritance
-  'HP:0001427', // Mitochondrial inheritance
-  'HP:0001428', // Somatic mutation
-  'HP:0001450', // Y-linked inheritance
-  'HP:0001470', // Sex-limited autosomal dominant
-  'HP:0003745', // Sporadic
-  'HP:0010985', // Gonosomal inheritance
-  'HP:0032113', // Semidominant
+  'HP:0000005',
+  'HP:0000006',
+  'HP:0000007',
+  'HP:0001417',
+  'HP:0001419',
+  'HP:0001423',
+  'HP:0001426',
+  'HP:0001427',
+  'HP:0001428',
+  'HP:0001450',
+  'HP:0001470',
+  'HP:0003745',
+  'HP:0010985',
+  'HP:0032113',
 ]);
 
 const INHERITANCE_NAME_RE =
@@ -46,7 +68,8 @@ export function sampleHasPhenotype(sampleMetadata) {
   return Boolean(
     String(meta.phenotype || '').trim() ||
       String(meta.phenotype_findings || '').trim() ||
-      String(meta.phenotype_disease || '').trim()
+      String(meta.phenotype_disease || '').trim() ||
+      String(meta.phenotype_note_clean || '').trim()
   );
 }
 
@@ -59,27 +82,50 @@ export function buildPhenotypeFieldsForSave({
   topCandidates = [],
   hpoResolutionMethod = null,
   propagatedFromRelated = [],
+  noteClean = '',
+  runMode = PHENOTYPE_RUN_MANUAL,
 }) {
   const isDisease = mode === PHENOTYPE_MODE_DISEASE;
+  const isNote = mode === PHENOTYPE_MODE_NOTE || !isDisease;
   const selected = (candidates || []).filter((c) => c.selected);
   const confirmed_ids = selected.map((c) => c.hpo_id).filter(Boolean);
-  // Findings chip basket: persist selected term labels (not the live search draft).
   const chipLabel = selected
     .map((c) => c.hpo_name || c.matched_phrase || c.hpo_id)
     .filter(Boolean)
     .join(', ');
-  const findings = isDisease ? '' : chipLabel || String(findingsText ?? '');
-  const disease = isDisease ? String(diseaseText ?? '') : '';
-  const phenotype = (isDisease ? disease : findings).trim();
+
+  let findings = '';
+  let disease = '';
+  let phenotype = '';
+  let phenotype_note_clean = '';
+
+  if (isNote) {
+    findings = chipLabel || String(findingsText ?? '');
+    disease = String(diseaseText ?? '');
+    phenotype_note_clean = String(noteClean ?? '').trim();
+    phenotype = (phenotype_note_clean || findings || disease).trim();
+  } else {
+    findings = '';
+    disease = String(diseaseText ?? '');
+    phenotype = disease.trim();
+  }
+
+  const phenotype_run_mode =
+    runMode === PHENOTYPE_RUN_AUTOMATIC ? PHENOTYPE_RUN_AUTOMATIC : PHENOTYPE_RUN_MANUAL;
+
   return {
-    phenotype_mode: isDisease ? PHENOTYPE_MODE_DISEASE : PHENOTYPE_MODE_FINDINGS,
+    phenotype_mode: isNote ? PHENOTYPE_MODE_NOTE : PHENOTYPE_MODE_DISEASE,
+    phenotype_run_mode,
+    // Case-level alias — same value; parent may also set pipeline_run_mode directly.
+    pipeline_run_mode: phenotype_run_mode,
     phenotype_findings: findings,
     phenotype_disease: disease,
     phenotype,
+    phenotype_note_clean,
     phenotype_hpo: {
       confirmed_ids,
       candidates: candidates || [],
-      resolution_mode: isDisease ? 'somatic' : 'germline',
+      resolution_mode: isNote ? 'note' : 'somatic',
       disease_match: diseaseMatch || null,
       top_candidates: topCandidates || [],
       hpo_resolution_method: hpoResolutionMethod,
@@ -101,7 +147,8 @@ function mapResolveToCandidates(payload, { defaultSelected }) {
       hpo_name: m.hpo_name || '',
       matched_phrase: m.matched_phrase || '',
       match_score: m.match_score,
-      match_type: m.match_type || '',
+      match_type: m.match_type || 'disease_annotation',
+      origin: 'disease_annotation',
       selected: Boolean(defaultSelected),
     });
   }
@@ -113,79 +160,289 @@ function mapResolveToCandidates(payload, { defaultSelected }) {
       hpo_name: '',
       matched_phrase: '',
       match_score: null,
-      match_type: '',
+      match_type: 'disease_annotation',
+      origin: 'disease_annotation',
       selected: Boolean(defaultSelected),
     });
   }
   return Array.from(byId.values());
 }
 
+function normalizeCandidate(c) {
+  const hid = String(c?.hpo_id || '').trim().toUpperCase();
+  if (!hid.startsWith('HP:')) return null;
+  return {
+    hpo_id: hid,
+    hpo_name: c.hpo_name || '',
+    matched_phrase: c.matched_phrase || c.source_phrase || '',
+    match_score: c.match_score,
+    match_type: c.match_type || '',
+    origin: c.origin || (c.match_type === 'disease_annotation' ? 'disease_annotation' : 'note_phrase'),
+    selected: Boolean(c.selected),
+    selected_default: Boolean(c.selected_default ?? c.selected),
+    llm_confidence: c.llm_confidence || '',
+  };
+}
+
+/** Keep pinned (selected) chips; merge incoming proposals without dropping selections.
+ * For IDs already seen, preserve the user's selected/deselected choice (undo survives re-interpret).
+ * New IDs take the backend auto-select default.
+ */
+function mergeCandidates(existing, incoming) {
+  const byId = new Map();
+  for (const raw of existing || []) {
+    const c = normalizeCandidate(raw);
+    if (!c) continue;
+    byId.set(c.hpo_id, c);
+  }
+  for (const raw of incoming || []) {
+    const c = normalizeCandidate(raw);
+    if (!c) continue;
+    const prev = byId.get(c.hpo_id);
+    if (prev) {
+      byId.set(c.hpo_id, {
+        ...c,
+        selected: prev.selected,
+        hpo_name: prev.hpo_name || c.hpo_name,
+        matched_phrase: prev.matched_phrase || c.matched_phrase,
+        selected_default: c.selected_default ?? prev.selected_default,
+      });
+    } else {
+      byId.set(c.hpo_id, c);
+    }
+  }
+  return Array.from(byId.values());
+}
+
+function findingsLabelFrom(candidates) {
+  return (candidates || [])
+    .filter((c) => c.selected)
+    .map((c) => c.hpo_name || c.matched_phrase || c.hpo_id)
+    .join(', ');
+}
+
+function diseaseScore(d) {
+  const n = Number(d?.score);
+  return Number.isFinite(n) ? n : null;
+}
+
+function shouldAutoSelectDisease(d, runMode) {
+  if (runMode !== PHENOTYPE_RUN_AUTOMATIC || !d) return false;
+  const score = diseaseScore(d);
+  return score != null && score >= AUTO_DISEASE_MIN_SCORE;
+}
+
+function diseaseKey(d) {
+  return `${String(d?.disease_id || d?.id || '').trim()}::${String(d?.disease_name || d?.name || '')
+    .trim()
+    .toLowerCase()}`;
+}
+
+function normalizeDiseaseOption(d) {
+  if (!d) return null;
+  const disease_name = String(d.disease_name || d.name || '').trim();
+  if (!disease_name) return null;
+  const scoreRaw = d.score;
+  let score = null;
+  if (typeof scoreRaw === 'number' && Number.isFinite(scoreRaw)) score = scoreRaw;
+  else if (scoreRaw != null && scoreRaw !== '') {
+    const n = Number(scoreRaw);
+    if (Number.isFinite(n)) score = n;
+  } else if (d.confidence === 'high') score = 1;
+  else if (d.confidence === 'medium') score = 0.7;
+  else if (d.confidence === 'low') score = 0.4;
+  return {
+    disease_id: d.disease_id || d.id || '',
+    disease_name,
+    score,
+    source: d.source || '',
+  };
+}
+
+/** Merge disease lists; keep highest score; sort score desc. Never drop prior entries. */
+function mergeDiseaseCatalog(existing, incoming) {
+  const byKey = new Map();
+  for (const raw of [...(existing || []), ...(incoming || [])]) {
+    const d = normalizeDiseaseOption(raw);
+    if (!d) continue;
+    const key = diseaseKey(d);
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, d);
+      continue;
+    }
+    const prevScore = prev.score == null ? -1 : prev.score;
+    const nextScore = d.score == null ? -1 : d.score;
+    byKey.set(key, {
+      ...prev,
+      ...d,
+      disease_id: d.disease_id || prev.disease_id,
+      source: d.source || prev.source,
+      score: Math.max(prevScore, nextScore) < 0 ? null : Math.max(prevScore, nextScore),
+    });
+  }
+  return Array.from(byKey.values()).sort((a, b) => {
+    const as = a.score == null ? -1 : a.score;
+    const bs = b.score == null ? -1 : b.score;
+    if (bs !== as) return bs - as;
+    return String(a.disease_name).localeCompare(String(b.disease_name));
+  });
+}
+
 /**
- * Controlled phenotype panel with local draft so resolve does not block typing.
+ * Clinical-note phenotype panel (pinned findings + optional disease shortcut).
  */
 export default function PhenotypeInputPanel({ value, onChange, disabled = false }) {
-  const mode = value?.phenotype_mode === PHENOTYPE_MODE_DISEASE
-    ? PHENOTYPE_MODE_DISEASE
-    : PHENOTYPE_MODE_FINDINGS;
-  const findingsText = value?.phenotype_findings ?? (mode === PHENOTYPE_MODE_FINDINGS ? (value?.phenotype || '') : '');
-  const diseaseText = value?.phenotype_disease ?? (mode === PHENOTYPE_MODE_DISEASE ? (value?.phenotype || '') : '');
   const candidates = value?.phenotype_hpo?.candidates || [];
   const diseaseMatch = value?.phenotype_hpo?.disease_match || null;
   const topCandidates = value?.phenotype_hpo?.top_candidates || [];
   const hpoResolutionMethod = value?.phenotype_hpo?.hpo_resolution_method || null;
   const propagatedFromRelated = value?.phenotype_hpo?.propagated_from_related_records || [];
+  const noteCleanText = value?.phenotype_note_clean || '';
+  const diseaseText = value?.phenotype_disease || '';
+  const findingsText = value?.phenotype_findings || '';
+  const runMode =
+    value?.pipeline_run_mode === PHENOTYPE_RUN_AUTOMATIC ||
+    value?.phenotype_run_mode === PHENOTYPE_RUN_AUTOMATIC
+      ? PHENOTYPE_RUN_AUTOMATIC
+      : PHENOTYPE_RUN_MANUAL;
+  const isAutomatic = runMode === PHENOTYPE_RUN_AUTOMATIC;
+  // Async search/interpret must not wait for the stateRef effect — that lag treated Automatic as Manual.
+  const runModeRef = useRef(runMode);
+  runModeRef.current = runMode;
 
-  const parentText = mode === PHENOTYPE_MODE_DISEASE ? diseaseText : findingsText;
-  const [draft, setDraft] = useState(parentText || '');
+  const [draft, setDraft] = useState('');
   const [resolving, setResolving] = useState(false);
+  const [interpreting, setInterpreting] = useState(false);
   const [resolveError, setResolveError] = useState('');
-  const [suggesting, setSuggesting] = useState(false);
-  const [suggestions, setSuggestions] = useState({ suggested_phrases: [], ambiguous: [], too_vague: [] });
-  const [typeahead, setTypeahead] = useState([]);
+  const [notePreview, setNotePreview] = useState(null);
+  const [noteUnmapped, setNoteUnmapped] = useState([]);
+  const [noteAmbiguous, setNoteAmbiguous] = useState([]);
+  const [showMoreDiseases, setShowMoreDiseases] = useState(false);
   const [showInheritance, setShowInheritance] = useState(false);
+  const notePreviewRef = useRef(null);
 
-  const resolveSeq = useRef(0);
-  const debounceRef = useRef(null);
-  const lastResolvedKey = useRef('');
   const onChangeRef = useRef(onChange);
-  const focusedRef = useRef(false);
   const stateRef = useRef({});
+  const focusedRef = useRef(false);
+  const interpretSeq = useRef(0);
+  const interpretDebounceRef = useRef(null);
+  const diseaseSeq = useRef(0);
+  const diseaseDebounceRef = useRef(null);
+  const [searchingDiseases, setSearchingDiseases] = useState(false);
 
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
 
-  // Sync draft from parent only when not focused (external load / mode switch).
-  // Findings search box is independent of pinned chip labels in phenotype_findings.
   useEffect(() => {
-    if (focusedRef.current) return;
-    if (mode === PHENOTYPE_MODE_FINDINGS) return;
-    setDraft(parentText || '');
-  }, [parentText, mode]);
+    notePreviewRef.current = notePreview;
+  }, [notePreview]);
 
   useEffect(() => {
     stateRef.current = {
-      mode,
-      findingsText,
-      diseaseText,
       candidates,
       diseaseMatch,
       topCandidates,
       hpoResolutionMethod,
       propagatedFromRelated,
+      noteCleanText,
+      diseaseText,
+      findingsText,
       draft,
+      runMode,
     };
   }, [
-    mode,
-    findingsText,
-    diseaseText,
     candidates,
     diseaseMatch,
     topCandidates,
     hpoResolutionMethod,
     propagatedFromRelated,
+    noteCleanText,
+    diseaseText,
+    findingsText,
     draft,
+    runMode,
   ]);
+
+  // Ensure saved mode is always clinical-note.
+  useEffect(() => {
+    if (value?.phenotype_mode && value.phenotype_mode !== PHENOTYPE_MODE_NOTE) {
+      onChangeRef.current?.(
+        buildPhenotypeFieldsForSave({
+          mode: PHENOTYPE_MODE_NOTE,
+          findingsText: value.phenotype_findings || '',
+          diseaseText: value.phenotype_disease || '',
+          candidates: value?.phenotype_hpo?.candidates || [],
+          diseaseMatch: value?.phenotype_hpo?.disease_match || null,
+          topCandidates: value?.phenotype_hpo?.top_candidates || [],
+          hpoResolutionMethod: value?.phenotype_hpo?.hpo_resolution_method || null,
+          propagatedFromRelated: value?.phenotype_hpo?.propagated_from_related_records || [],
+          noteClean: value.phenotype_note_clean || '',
+          runMode: value.phenotype_run_mode || PHENOTYPE_RUN_MANUAL,
+        })
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time normalize on mount / legacy modes
+  }, [value?.phenotype_mode]);
+
+  const emit = useCallback((patch) => {
+    const cur = stateRef.current;
+    const nextCandidates = patch.candidates !== undefined ? patch.candidates : cur.candidates;
+    const fields = buildPhenotypeFieldsForSave({
+      mode: PHENOTYPE_MODE_NOTE,
+      findingsText:
+        patch.phenotype_findings !== undefined
+          ? patch.phenotype_findings
+          : findingsLabelFrom(nextCandidates) || cur.findingsText,
+      diseaseText: patch.phenotype_disease !== undefined ? patch.phenotype_disease : cur.diseaseText,
+      candidates: nextCandidates,
+      diseaseMatch: patch.disease_match !== undefined ? patch.disease_match : cur.diseaseMatch,
+      topCandidates: patch.top_candidates !== undefined ? patch.top_candidates : cur.topCandidates,
+      hpoResolutionMethod:
+        patch.hpo_resolution_method !== undefined
+          ? patch.hpo_resolution_method
+          : cur.hpoResolutionMethod,
+      propagatedFromRelated:
+        patch.propagated_from_related_records !== undefined
+          ? patch.propagated_from_related_records
+          : cur.propagatedFromRelated,
+      noteClean:
+        patch.phenotype_note_clean !== undefined ? patch.phenotype_note_clean : cur.noteCleanText,
+      // Mode is owned at case/upload level — always read the live ref, not a stale stateRef.
+      runMode: runModeRef.current || PHENOTYPE_RUN_MANUAL,
+    });
+    if (patch.sampleSex !== undefined) fields.sampleSex = patch.sampleSex;
+    onChangeRef.current?.(fields);
+  }, []);
+
+  // Any analysis-mode switch: clear phenotype interpret UI + selections.
+  const prevRunModeRef = useRef(runMode);
+  useEffect(() => {
+    const was = prevRunModeRef.current;
+    prevRunModeRef.current = runMode;
+    if (was === runMode) return;
+    interpretSeq.current += 1;
+    diseaseSeq.current += 1;
+    setDraft('');
+    setInterpreting(false);
+    setSearchingDiseases(false);
+    setNotePreview(null);
+    setNoteUnmapped([]);
+    setNoteAmbiguous([]);
+    setResolveError('');
+    setShowMoreDiseases(false);
+    emit({
+      phenotype_note_clean: '',
+      phenotype_disease: '',
+      phenotype_findings: '',
+      candidates: [],
+      disease_match: null,
+      top_candidates: [],
+      hpo_resolution_method: null,
+      propagated_from_related_records: [],
+    });
+  }, [runMode, emit]);
 
   const selectedCount = useMemo(
     () => candidates.filter((c) => c.selected).length,
@@ -202,213 +459,59 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     return { clinicalCandidates: clinical, inheritanceCandidates: inheritance };
   }, [candidates]);
 
-  const emit = useCallback((patch) => {
-    const cur = stateRef.current;
-    const nextMode = patch.phenotype_mode ?? cur.mode;
-    const nextFindings =
-      patch.phenotype_findings !== undefined ? patch.phenotype_findings : cur.findingsText;
-    const nextDisease =
-      patch.phenotype_disease !== undefined ? patch.phenotype_disease : cur.diseaseText;
-    const nextCandidates =
-      patch.candidates !== undefined ? patch.candidates : cur.candidates;
-    const nextDiseaseMatch =
-      patch.disease_match !== undefined ? patch.disease_match : cur.diseaseMatch;
-    const nextTop =
-      patch.top_candidates !== undefined ? patch.top_candidates : cur.topCandidates;
-    const nextMethod =
-      patch.hpo_resolution_method !== undefined
-        ? patch.hpo_resolution_method
-        : cur.hpoResolutionMethod;
-    const nextProp =
-      patch.propagated_from_related_records !== undefined
-        ? patch.propagated_from_related_records
-        : cur.propagatedFromRelated;
+  const diseaseOptions = useMemo(() => {
+    // Stable catalog from top_candidates (score-sorted). Selection never reorders/removes rows.
+    const fromTop = mergeDiseaseCatalog([], topCandidates || []);
+    const fromPreview = (notePreview?.disease_candidates || []).map((c) =>
+      normalizeDiseaseOption({
+        disease_name: c.name,
+        score: c.confidence === 'high' ? 1 : c.confidence === 'medium' ? 0.7 : 0.4,
+      })
+    );
+    return mergeDiseaseCatalog(fromTop, fromPreview);
+  }, [topCandidates, notePreview]);
 
-    const fields = buildPhenotypeFieldsForSave({
-      mode: nextMode,
-      findingsText: nextFindings,
-      diseaseText: nextDisease,
-      candidates: nextCandidates,
-      diseaseMatch: nextDiseaseMatch,
-      topCandidates: nextTop,
-      hpoResolutionMethod: nextMethod,
-      propagatedFromRelated: nextProp,
-    });
-    onChangeRef.current?.(fields);
+  const primaryDisease = diseaseOptions[0] || null;
+  const altDiseases = diseaseOptions.slice(1);
+  const visibleAlts = showMoreDiseases ? altDiseases : [];
+
+  const clearInterpretUi = useCallback(() => {
+    setNotePreview(null);
+    setNoteUnmapped([]);
+    setNoteAmbiguous([]);
+    setResolveError('');
+    setShowMoreDiseases(false);
   }, []);
 
-  const switchMode = (nextMode) => {
-    if (nextMode === mode || disabled) return;
-    setSuggestions({ suggested_phrases: [], ambiguous: [], too_vague: [] });
-    setTypeahead([]);
-    setResolveError('');
-    lastResolvedKey.current = '';
-    focusedRef.current = false;
-    setDraft('');
-    setShowInheritance(false);
-    emit({
-      phenotype_mode: nextMode,
-      phenotype_findings: '',
-      phenotype_disease: '',
-      candidates: [],
-      disease_match: null,
-      top_candidates: [],
-      hpo_resolution_method: null,
-      propagated_from_related_records: [],
-    });
-  };
-
-  // Disease: live resolve. Findings: HPO typeahead (pinned chips stay when search clears).
-  useEffect(() => {
-    if (disabled) return undefined;
-    const text = String(draft || '');
-    const trimmed = text.trim();
-    const key = `${mode}::${trimmed}`;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    if (mode === PHENOTYPE_MODE_FINDINGS) {
-      if (trimmed.length < 2) {
-        setTypeahead([]);
-        setResolving(false);
-        setResolveError('');
-        return undefined;
-      }
-      if (key === lastResolvedKey.current) return undefined;
-
-      debounceRef.current = setTimeout(async () => {
-        const seq = ++resolveSeq.current;
-        setResolving(true);
-        setResolveError('');
-        try {
-          const payload = await suggestHpoTerms({ text: trimmed, limit: 15 });
-          if (seq !== resolveSeq.current) return;
-          if (String(stateRef.current.draft || '').trim() !== trimmed) return;
-          lastResolvedKey.current = key;
-          const selectedIds = new Set(
-            (stateRef.current.candidates || [])
-              .filter((c) => c.selected)
-              .map((c) => String(c.hpo_id || '').toUpperCase())
-          );
-          setTypeahead(
-            (payload.suggestions || []).filter(
-              (s) => !selectedIds.has(String(s.hpo_id || '').toUpperCase())
-            )
-          );
-        } catch (err) {
-          if (seq !== resolveSeq.current) return;
-          setResolveError(err?.message || 'Could not suggest HPO terms');
-          setTypeahead([]);
-        } finally {
-          if (seq === resolveSeq.current) setResolving(false);
-        }
-      }, 250);
-
-      return () => {
-        if (debounceRef.current) clearTimeout(debounceRef.current);
-      };
-    }
-
-    // Disease mode — existing resolve behavior
-    if (!trimmed) {
-      if (lastResolvedKey.current !== key) {
-        lastResolvedKey.current = key;
-        emit({
-          candidates: [],
-          disease_match: null,
-          top_candidates: [],
-          hpo_resolution_method: null,
-          propagated_from_related_records: [],
-        });
-      }
-      setResolveError('');
-      setResolving(false);
-      setTypeahead([]);
-      return undefined;
-    }
-
-    if (key === lastResolvedKey.current) return undefined;
-
-    debounceRef.current = setTimeout(async () => {
-      const seq = ++resolveSeq.current;
-      setResolving(true);
-      setResolveError('');
-      try {
-        const payload = await resolveHpoTerms({ text: trimmed, forceMode: mode });
-        if (seq !== resolveSeq.current) return;
-        if (String(stateRef.current.draft || '').trim() !== trimmed) return;
-        const nextCandidates = mapResolveToCandidates(payload, { defaultSelected: false });
-        lastResolvedKey.current = key;
-        emit({
-          candidates: nextCandidates,
-          disease_match: payload.disease_match || null,
-          top_candidates: payload.top_candidates || [],
-          hpo_resolution_method: payload.hpo_resolution_method,
-          propagated_from_related_records: payload.propagated_from_related_records || [],
-        });
-      } catch (err) {
-        if (seq !== resolveSeq.current) return;
-        setResolveError(err?.message || 'Could not resolve HPO terms');
-      } finally {
-        if (seq === resolveSeq.current) setResolving(false);
-      }
-    }, 300);
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [draft, mode, disabled, emit]);
-
-  const pickTypeahead = (suggestion) => {
-    const hid = String(suggestion?.hpo_id || '').trim().toUpperCase();
-    if (!hid.startsWith('HP:')) return;
-    const existing = candidates || [];
-    const already = existing.find((c) => String(c.hpo_id || '').toUpperCase() === hid);
-    let next;
-    if (already) {
-      next = existing.map((c) =>
-        String(c.hpo_id || '').toUpperCase() === hid ? { ...c, selected: true } : c
-      );
-    } else {
-      next = [
-        ...existing,
-        {
-          hpo_id: hid,
-          hpo_name: suggestion.hpo_name || '',
-          matched_phrase: suggestion.matched_phrase || '',
-          match_score: suggestion.match_score,
-          match_type: 'typeahead',
-          selected: true,
-        },
-      ];
-    }
-    lastResolvedKey.current = '';
-    setDraft('');
-    setTypeahead([]);
-    emit({
-      candidates: next,
-      phenotype_findings: next
-        .filter((c) => c.selected)
-        .map((c) => c.hpo_name || c.matched_phrase || c.hpo_id)
-        .join(', '),
-      phenotype_disease: '',
-    });
-  };
-
-  const clearSearch = () => {
-    lastResolvedKey.current = '';
-    setDraft('');
-    setTypeahead([]);
-    setResolveError('');
-    if (mode === PHENOTYPE_MODE_DISEASE) {
+  const clearEphemeralPhenotypeResults = useCallback(
+    ({ keepPinned = true } = {}) => {
+      clearInterpretUi();
+      const pinned = keepPinned
+        ? (stateRef.current.candidates || []).filter((c) => c.selected)
+        : [];
       emit({
+        phenotype_note_clean: '',
         phenotype_disease: '',
-        candidates: [],
+        phenotype_findings: findingsLabelFrom(pinned),
+        candidates: pinned,
         disease_match: null,
         top_candidates: [],
         hpo_resolution_method: null,
         propagated_from_related_records: [],
       });
-    }
+    },
+    [clearInterpretUi, emit]
+  );
+
+  const clearNoteOnly = () => {
+    interpretSeq.current += 1;
+    diseaseSeq.current += 1;
+    autoApplyingDiseaseRef.current = false;
+    setDraft('');
+    setInterpreting(false);
+    setSearchingDiseases(false);
+    // Clearing the note clears auto-detected disease + findings too.
+    clearEphemeralPhenotypeResults({ keepPinned: false });
   };
 
   const toggleCandidate = (hpoId) => {
@@ -417,14 +520,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     );
     emit({
       candidates: next,
-      ...(mode === PHENOTYPE_MODE_FINDINGS
-        ? {
-            phenotype_findings: next
-              .filter((c) => c.selected)
-              .map((c) => c.hpo_name || c.matched_phrase || c.hpo_id)
-              .join(', '),
-          }
-        : {}),
+      phenotype_findings: findingsLabelFrom(next),
     });
   };
 
@@ -434,89 +530,403 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     );
     emit({
       candidates: next,
-      ...(mode === PHENOTYPE_MODE_FINDINGS
-        ? {
-            phenotype_findings: next
-              .filter((c) => c.selected)
-              .map((c) => c.hpo_name || c.matched_phrase || c.hpo_id)
-              .join(', '),
-          }
-        : {}),
+      phenotype_findings: findingsLabelFrom(next),
     });
   };
 
   const setGroupSelected = (group, selected) => {
     const ids = new Set(group.map((c) => c.hpo_id));
+    const next = candidates.map((c) => (ids.has(c.hpo_id) ? { ...c, selected } : c));
     emit({
-      candidates: candidates.map((c) =>
-        ids.has(c.hpo_id) ? { ...c, selected } : c
-      ),
+      candidates: next,
+      phenotype_findings: findingsLabelFrom(next),
     });
   };
 
-  const onTextChange = (text) => {
-    lastResolvedKey.current = '';
-    setDraft(text);
-    if (mode === PHENOTYPE_MODE_DISEASE) {
-      emit({ phenotype_disease: text, phenotype_findings: '' });
-    } else {
-      emit({ phenotype_findings: text, phenotype_disease: '' });
-    }
-  };
+  const isActiveDisease = (d) =>
+    Boolean(
+      diseaseMatch &&
+        d &&
+        ((diseaseMatch.id && (d.disease_id || d.id) && diseaseMatch.id === (d.disease_id || d.id)) ||
+          String(diseaseMatch.name || '').toLowerCase() ===
+            String(d.disease_name || d.name || '').toLowerCase())
+    );
 
-  const pickDiseaseCandidate = (cand) => {
-    const name = String(cand?.disease_name || cand?.matched_variant || '').trim();
-    if (!name) return;
-    lastResolvedKey.current = '';
-    focusedRef.current = false;
-    setDraft(name);
+  const clearDisease = () => {
+    // Deselect only — keep catalog (top_candidates) and pinned findings.
+    const pinned = (stateRef.current.candidates || []).filter((c) => c.selected);
     emit({
-      phenotype_disease: name,
-      phenotype_findings: '',
-      candidates: [],
+      phenotype_disease: '',
+      candidates: pinned,
       disease_match: null,
+      hpo_resolution_method: null,
+      propagated_from_related_records: [],
+      phenotype_findings: findingsLabelFrom(pinned),
+      // top_candidates intentionally unchanged
     });
   };
 
-  const runSuggest = async () => {
-    if (mode !== PHENOTYPE_MODE_FINDINGS || !draft.trim() || disabled) return;
-    setSuggesting(true);
-    try {
-      const data = await suggestPhenotypePhrases({ text: draft.trim() });
-      setSuggestions({
-        suggested_phrases: data.suggested_phrases || [],
-        ambiguous: data.ambiguous || [],
-        too_vague: data.too_vague || [],
-      });
-    } catch (err) {
-      setSuggestions({
-        suggested_phrases: [],
-        ambiguous: [],
-        too_vague: [],
-        error: err?.message,
-      });
-    } finally {
-      setSuggesting(false);
-    }
-  };
+  const applyDisease = useCallback(
+    async (disease, { allowToggleOff = true } = {}) => {
+      const name = sanitizePhenotypeQuery(disease?.disease_name || disease?.name || '');
+      if (!name || disabled) return;
 
-  const acceptSuggestion = (phrase) => {
-    const p = String(phrase || '').trim();
-    if (!p) return;
-    lastResolvedKey.current = '';
-    const existing = draft.trim();
-    const next = existing
-      ? existing.toLowerCase().includes(p.toLowerCase())
-        ? existing
-        : `${existing}, ${p}`
-      : p;
-    setDraft(next);
-    emit({ phenotype_findings: next, phenotype_disease: '' });
-    setSuggestions((prev) => ({
-      ...prev,
-      suggested_phrases: (prev.suggested_phrases || []).filter((x) => x !== phrase),
-    }));
-  };
+      // Toggle off if this disease is already selected (manual click only).
+      if (allowToggleOff && isActiveDisease(disease)) {
+        clearDisease();
+        return;
+      }
+      if (!allowToggleOff && isActiveDisease(disease)) return;
+
+      setResolving(true);
+      setResolveError('');
+      try {
+        const resolved = await resolveHpoTerms({
+          text: name,
+          forceMode: PHENOTYPE_MODE_DISEASE,
+        });
+        const fromDisease = mapResolveToCandidates(resolved, {
+          // Automatic: pre-select disease-linked clinical findings (not inheritance).
+          defaultSelected: runModeRef.current === PHENOTYPE_RUN_AUTOMATIC,
+        }).map((c) =>
+          isInheritanceLikeHpo(c) ? { ...c, selected: false, selected_default: false } : c
+        );
+        const pinned = (stateRef.current.candidates || []).filter((c) => c.selected);
+        const merged = mergeCandidates(pinned, fromDisease);
+        const match =
+          resolved.disease_match ||
+          {
+            id: disease.disease_id || disease.id || '',
+            name,
+            score: disease.score,
+            source: disease.source,
+          };
+        const catalog = mergeDiseaseCatalog(stateRef.current.topCandidates, [
+          match,
+          ...(resolved.top_candidates || []),
+          disease,
+        ]);
+        emit({
+          phenotype_disease: name,
+          candidates: merged,
+          disease_match: match,
+          top_candidates: catalog,
+          hpo_resolution_method: resolved.hpo_resolution_method || null,
+          propagated_from_related_records: resolved.propagated_from_related_records || [],
+          phenotype_findings: findingsLabelFrom(merged),
+        });
+      } catch (err) {
+        setResolveError(err?.message || 'Could not load findings for that disease');
+      } finally {
+        setResolving(false);
+      }
+    },
+    // isActiveDisease/clearDisease close over latest diseaseMatch via render; emit is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [disabled, emit, diseaseMatch]
+  );
+
+  const applyDiseaseRef = useRef(applyDisease);
+  const autoApplyingDiseaseRef = useRef(false);
+  useEffect(() => {
+    applyDiseaseRef.current = applyDisease;
+  }, [applyDisease]);
+
+  const autoApplyTopDisease = useCallback(async (disease) => {
+    if (!disease || autoApplyingDiseaseRef.current) return;
+    if (runModeRef.current !== PHENOTYPE_RUN_AUTOMATIC) return;
+    if (!shouldAutoSelectDisease(disease, runModeRef.current)) return;
+    // Skip only if this same disease is already applied.
+    const cur = stateRef.current.diseaseMatch;
+    if (
+      cur?.name &&
+      (String(cur.name).toLowerCase() === String(disease.disease_name || disease.name || '').toLowerCase() ||
+        (cur.id &&
+          (disease.disease_id || disease.id) &&
+          cur.id === (disease.disease_id || disease.id)))
+    ) {
+      return;
+    }
+    autoApplyingDiseaseRef.current = true;
+    try {
+      await applyDiseaseRef.current?.(disease, { allowToggleOff: false });
+    } finally {
+      autoApplyingDiseaseRef.current = false;
+    }
+  }, []);
+
+  const runInterpretNote = useCallback(async (text) => {
+    const trimmed = String(text || '').trim();
+    if (trimmed.length < 8 || disabled) return;
+    const seq = ++interpretSeq.current;
+    // Invalidate in-flight raw fast-search so it cannot overwrite LLM-grounded matches.
+    diseaseSeq.current += 1;
+    setSearchingDiseases(false);
+    setInterpreting(true);
+    setResolveError('');
+    try {
+      const data = await interpretPhenotypeNarrative({ text: trimmed });
+      if (seq !== interpretSeq.current) return;
+
+      const phraseFindings = (data.finding_candidates || [])
+        .map(normalizeCandidate)
+        .filter(Boolean)
+        .filter((c) => c.origin !== 'disease_annotation' && c.match_type !== 'disease_annotation')
+        .map((c) => {
+          if (isInheritanceLikeHpo(c)) {
+            return { ...c, selected: false, selected_default: false };
+          }
+          // Manual: unchecked. Automatic: keep backend high-confidence / high-score ticks.
+          if (runModeRef.current !== PHENOTYPE_RUN_AUTOMATIC) {
+            return { ...c, selected: false, selected_default: false };
+          }
+          return c;
+        });
+
+      // Keep analyst-pinned chips; replace proposals from this note (no stale merge).
+      const priorPinned = (stateRef.current.candidates || []).filter((c) => c.selected);
+      const mergedFindings = mergeCandidates(priorPinned, phraseFindings);
+
+      const incomingDiseases = [
+        data.disease_match
+          ? {
+              disease_id: data.disease_match.id,
+              disease_name: data.disease_match.name,
+              score: data.disease_match.score,
+              source: data.disease_match.source,
+            }
+          : null,
+        ...(data.top_candidates || []),
+        ...((data.disease_candidates || []).map((c) => ({
+          disease_name: c.name,
+          score: c.confidence === 'high' ? 1 : c.confidence === 'medium' ? 0.7 : 0.4,
+        })) || []),
+      ];
+      // Fresh catalog for this note — do not keep diseases from a previous phrase.
+      const catalog = mergeDiseaseCatalog([], incomingDiseases);
+
+      // Keep user's disease selection if still in catalog; Automatic may adopt a strong top hit.
+      const prev = stateRef.current.diseaseMatch;
+      let nextMatch = null;
+      if (prev?.name) {
+        nextMatch =
+          catalog.find(
+            (d) =>
+              (prev.id && d.disease_id && prev.id === d.disease_id) ||
+              String(d.disease_name || '').toLowerCase() === String(prev.name || '').toLowerCase()
+          ) || null;
+        if (nextMatch) {
+          nextMatch = {
+            id: nextMatch.disease_id || prev.id || '',
+            name: nextMatch.disease_name,
+            score: nextMatch.score != null ? nextMatch.score : prev.score,
+            source: nextMatch.source || prev.source,
+          };
+        }
+      }
+
+      const autoDisease =
+        !nextMatch && shouldAutoSelectDisease(catalog[0], runModeRef.current)
+          ? catalog[0]
+          : null;
+
+      setNotePreview(data);
+      setNoteUnmapped(data.unmapped || []);
+      setNoteAmbiguous(data.ambiguous || []);
+
+      emit({
+        phenotype_mode: PHENOTYPE_MODE_NOTE,
+        phenotype_note_clean: data.deidentified_text || stateRef.current.noteCleanText || '',
+        phenotype_disease: nextMatch?.name || '',
+        phenotype_findings: findingsLabelFrom(mergedFindings),
+        candidates: mergedFindings,
+        disease_match: nextMatch,
+        top_candidates: catalog,
+        hpo_resolution_method: nextMatch
+          ? stateRef.current.hpoResolutionMethod
+          : data.hpo_resolution_method || null,
+        propagated_from_related_records: nextMatch
+          ? stateRef.current.propagatedFromRelated
+          : data.propagated_from_related_records || [],
+        ...(data.patient?.sex ? { sampleSex: data.patient.sex } : {}),
+      });
+
+      if (autoDisease && seq === interpretSeq.current) {
+        await autoApplyTopDisease(autoDisease);
+      }
+    } catch (err) {
+      if (seq !== interpretSeq.current) return;
+      setResolveError(err?.message || 'Could not interpret clinical note');
+    } finally {
+      if (seq === interpretSeq.current) setInterpreting(false);
+    }
+  }, [disabled, emit, autoApplyTopDisease]);
+
+  /** Fast disease catalog update — deterministic resolve, no LLM. */
+  const runFastDiseaseSearch = useCallback(async (text) => {
+    const trimmed = sanitizePhenotypeQuery(text);
+    if (trimmed.length < 3 || disabled) return;
+    const seq = ++diseaseSeq.current;
+    setSearchingDiseases(true);
+    try {
+      const resolved = await resolveHpoTerms({
+        text: trimmed,
+        forceMode: PHENOTYPE_MODE_DISEASE,
+      });
+      if (seq !== diseaseSeq.current) return;
+
+      const incoming = [
+        resolved.disease_match
+          ? {
+              disease_id: resolved.disease_match.id,
+              disease_name: resolved.disease_match.name,
+              score: resolved.disease_match.score,
+              source: resolved.disease_match.source,
+            }
+          : null,
+        ...(resolved.top_candidates || []),
+      ];
+      const catalog = mergeDiseaseCatalog([], incoming);
+      if (catalog.length === 0) {
+        emit({
+          top_candidates: [],
+          disease_match: null,
+          phenotype_disease: '',
+        });
+        return;
+      }
+
+      // Prefer API disease_match when it qualifies; else top catalog row.
+      const preferredAuto =
+        resolved.disease_match &&
+        shouldAutoSelectDisease(
+          {
+            disease_id: resolved.disease_match.id,
+            disease_name: resolved.disease_match.name,
+            score: resolved.disease_match.score,
+            source: resolved.disease_match.source,
+          },
+          runModeRef.current
+        )
+          ? {
+              disease_id: resolved.disease_match.id,
+              disease_name: resolved.disease_match.name,
+              score: resolved.disease_match.score,
+              source: resolved.disease_match.source,
+            }
+          : shouldAutoSelectDisease(catalog[0], runModeRef.current)
+            ? catalog[0]
+            : null;
+
+      // Preserve selection; only refresh the ranked disease list.
+      const prev = stateRef.current.diseaseMatch;
+      let nextMatch = null;
+      if (prev?.name) {
+        const found = catalog.find(
+          (d) =>
+            (prev.id && d.disease_id && prev.id === d.disease_id) ||
+            String(d.disease_name || '').toLowerCase() === String(prev.name || '').toLowerCase()
+        );
+        if (found) {
+          nextMatch = {
+            id: found.disease_id || prev.id || '',
+            name: found.disease_name,
+            score: found.score != null ? found.score : prev.score,
+            source: found.source || prev.source,
+          };
+        }
+      }
+
+      const autoDisease = !nextMatch ? preferredAuto : null;
+
+      emit({
+        top_candidates: catalog,
+        disease_match: nextMatch,
+        phenotype_disease: nextMatch?.name || '',
+      });
+
+      if (autoDisease && seq === diseaseSeq.current) {
+        await autoApplyTopDisease(autoDisease);
+      }
+    } catch (err) {
+      if (seq !== diseaseSeq.current) return;
+      // Soft-fail: interpret path may still populate diseases.
+      console.warn('[Phenotype] fast disease search failed', err);
+    } finally {
+      if (seq === diseaseSeq.current) setSearchingDiseases(false);
+    }
+  }, [disabled, emit, autoApplyTopDisease]);
+
+  // Fast disease matches on every edit (short debounce) — scores refresh from the current text.
+  useEffect(() => {
+    if (disabled) return undefined;
+    if (diseaseDebounceRef.current) clearTimeout(diseaseDebounceRef.current);
+    const trimmed = String(draft || '').trim();
+    if (trimmed.length < 3) {
+      setSearchingDiseases(false);
+      diseaseSeq.current += 1;
+      autoApplyingDiseaseRef.current = false;
+      // Cleared / too short: wipe disease matches, cleaned note, and all findings (incl. auto-selected).
+      if (
+        stateRef.current.topCandidates?.length ||
+        stateRef.current.noteCleanText ||
+        notePreviewRef.current ||
+        stateRef.current.diseaseMatch ||
+        (stateRef.current.candidates || []).length > 0
+      ) {
+        clearEphemeralPhenotypeResults({ keepPinned: false });
+      }
+      return undefined;
+    }
+    // Longer notes: LLM interpret owns disease/HPO grounding (corrected names).
+    // Fast resolve on raw draft would defeat typo/special-char cleanup.
+    if (trimmed.length >= 8) {
+      setSearchingDiseases(false);
+      return undefined;
+    }
+    diseaseDebounceRef.current = setTimeout(() => {
+      runFastDiseaseSearch(trimmed);
+    }, 180);
+    return () => {
+      if (diseaseDebounceRef.current) clearTimeout(diseaseDebounceRef.current);
+    };
+  }, [draft, disabled, runFastDiseaseSearch, clearEphemeralPhenotypeResults]);
+
+  // Live interpret while typing. Do NOT depend on notePreview — that re-fired interpret forever.
+  useEffect(() => {
+    if (disabled) return undefined;
+    if (interpretDebounceRef.current) clearTimeout(interpretDebounceRef.current);
+    const trimmed = String(draft || '').trim();
+    if (trimmed.length < 8) {
+      setInterpreting(false);
+      interpretSeq.current += 1;
+      // Fully cleared / too short for interpret: do not re-emit pinned chips here —
+      // the disease-search effect owns the empty-note wipe (keeps races from restoring selections).
+      if (trimmed.length < 3) {
+        return undefined;
+      }
+      // Shortened but still typing (3–7 chars): drop cleaned note + unselected proposals only.
+      const pinned = (stateRef.current.candidates || []).filter((c) => c.selected);
+      const hadUnselected = (stateRef.current.candidates || []).some((c) => !c.selected);
+      if (stateRef.current.noteCleanText || notePreviewRef.current || hadUnselected) {
+        setNotePreview(null);
+        setNoteUnmapped([]);
+        setNoteAmbiguous([]);
+        emit({
+          phenotype_note_clean: '',
+          candidates: pinned,
+          phenotype_findings: findingsLabelFrom(pinned),
+        });
+      }
+      return undefined;
+    }
+    interpretDebounceRef.current = setTimeout(() => {
+      runInterpretNote(trimmed);
+    }, 500);
+    return () => {
+      if (interpretDebounceRef.current) clearTimeout(interpretDebounceRef.current);
+    };
+  }, [draft, disabled, runInterpretNote, emit]);
 
   const inputStyle = {
     borderColor: 'var(--border-default)',
@@ -524,25 +934,6 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     backdropFilter: 'blur(10px)',
     WebkitBackdropFilter: 'blur(10px)',
     color: 'var(--text-primary)',
-  };
-
-  const tabBtn = (id, label) => {
-    const active = mode === id;
-    return (
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => switchMode(id)}
-        className="flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all"
-        style={{
-          background: active ? 'var(--bg-surface-raised)' : 'transparent',
-          color: active ? 'var(--text-primary)' : 'var(--text-tertiary)',
-          boxShadow: active ? 'var(--shadow-sm)' : 'none',
-        }}
-      >
-        {label}
-      </button>
-    );
   };
 
   const renderChip = (c) => (
@@ -573,25 +964,18 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           <span style={{ color: 'var(--text-secondary)' }}> — {c.hpo_name}</span>
         ) : null}
       </button>
-      {mode === PHENOTYPE_MODE_FINDINGS && (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => removeCandidate(c.hpo_id)}
-          title="Remove"
-          className="ml-0.5 p-0.5"
-          style={{ color: 'var(--text-tertiary)' }}
-        >
-          <X className="w-3 h-3" />
-        </button>
-      )}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => removeCandidate(c.hpo_id)}
+        title="Remove"
+        className="ml-0.5 p-0.5"
+        style={{ color: 'var(--text-tertiary)' }}
+      >
+        <X className="w-3 h-3" />
+      </button>
     </div>
   );
-
-  const altDiseases = (topCandidates || [])
-    .filter((c) => c && (c.disease_id || c.disease_name))
-    .filter((c) => !diseaseMatch?.id || c.disease_id !== diseaseMatch.id)
-    .slice(0, 5);
 
   return (
     <div className="space-y-2">
@@ -601,50 +985,37 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           (enables phenotype-driven prioritization)
         </span>
       </label>
-
-      <div
-        className="flex p-0.5 rounded-lg gap-0.5"
-        style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}
-      >
-        {tabBtn(PHENOTYPE_MODE_FINDINGS, 'Findings')}
-        {tabBtn(PHENOTYPE_MODE_DISEASE, 'Disease')}
-      </div>
-
-      <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-        {mode === PHENOTYPE_MODE_DISEASE
-          ? 'Type a disease name or ORPHA/OMIM/MONDO ID. Confirm the matched disease, then select findings this patient actually has.'
-          : 'Search and add findings one by one (e.g. renal → Renal dysplasia). Selected chips stay when you clear the search.'}
-      </p>
+      {isAutomatic ? (
+        <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+          Automatic: strong disease matches (score ≥ 0.90) and high-confidence findings are
+          pre-selected — click to change.
+        </p>
+      ) : null}
 
       <div className="relative">
         <textarea
           value={draft}
-          onChange={(e) => onTextChange(e.target.value)}
+          onChange={(e) => setDraft(e.target.value)}
           onFocus={() => {
             focusedRef.current = true;
           }}
           onBlur={() => {
-            // Delay so typeahead click can register before list unmounts.
             setTimeout(() => {
               focusedRef.current = false;
             }, 150);
           }}
           disabled={disabled}
-          placeholder={
-            mode === PHENOTYPE_MODE_DISEASE
-              ? 'Disease name or ID (e.g. Epidermolysis bullosa, ORPHA:648)…'
-              : 'Search a finding (e.g. seizure, renal, ptosis)…'
-          }
-          rows={mode === PHENOTYPE_MODE_FINDINGS ? 2 : 3}
+          placeholder="Paste clinical note (e.g. painful raw blisters in skin folds, armpits and groin…)"
+          rows={5}
           className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all pr-9"
           style={inputStyle}
         />
         {draft.trim() && !disabled && (
           <button
             type="button"
-            onClick={clearSearch}
+            onClick={clearNoteOnly}
             className="absolute top-2 right-2 p-1 rounded-md"
-            title="Clear search"
+            title="Clear note and detected findings"
             style={{ color: 'var(--text-tertiary)' }}
           >
             <X className="w-3.5 h-3.5" />
@@ -652,222 +1023,218 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         )}
       </div>
 
-      {mode === PHENOTYPE_MODE_FINDINGS && typeahead.length > 0 && (
-        <div
-          className="rounded-lg border max-h-44 overflow-y-auto divide-y"
-          style={{ borderColor: 'var(--border-default)', background: 'var(--bg-surface-raised)' }}
-        >
-          {typeahead.map((s) => (
-            <button
-              key={`${s.hpo_id}-${s.matched_phrase}`}
-              type="button"
-              disabled={disabled}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => pickTypeahead(s)}
-              className="w-full text-left px-2.5 py-1.5 text-2xs hover:opacity-90 transition-opacity"
-              style={{ color: 'var(--text-primary)' }}
-            >
-              <span className="font-medium">{s.hpo_name || s.matched_phrase}</span>
-              <span style={{ color: 'var(--text-tertiary)' }}> · {s.hpo_id}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {mode === PHENOTYPE_MODE_FINDINGS && (
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled={disabled || suggesting || !draft.trim()}
-            onClick={runSuggest}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-2xs font-medium rounded-md border transition-all"
-            style={{
-              borderColor: 'var(--border-default)',
-              color: 'var(--text-secondary)',
-              background: 'var(--bg-surface-raised)',
-            }}
-          >
-            {suggesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-            Improve for HPO matching
-          </button>
-        </div>
-      )}
-
-      {mode === PHENOTYPE_MODE_FINDINGS &&
-        (suggestions.suggested_phrases?.length > 0 ||
-          suggestions.ambiguous?.length > 0 ||
-          suggestions.too_vague?.length > 0) && (
-          <div className="space-y-1.5 p-2 rounded-lg border" style={{ borderColor: 'var(--border-default)' }}>
-            {suggestions.suggested_phrases?.length > 0 && (
-              <div>
-                <div className="text-2xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
-                  Suggested phrases — click to add
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {suggestions.suggested_phrases.map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => acceptSuggestion(p)}
-                      className="px-2 py-0.5 text-2xs rounded-full border"
-                      style={{
-                        borderColor: 'var(--accent-teal)',
-                        color: 'var(--accent-teal)',
-                        background: 'transparent',
-                      }}
-                    >
-                      + {p}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {suggestions.ambiguous?.length > 0 && (
-              <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                Ambiguous: {suggestions.ambiguous.join('; ')}
-              </p>
-            )}
-            {suggestions.too_vague?.length > 0 && (
-              <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                Too vague: {suggestions.too_vague.join('; ')}
-              </p>
-            )}
-          </div>
+      <div className="flex items-center gap-2 flex-wrap min-h-[1.25rem]">
+        {searchingDiseases || interpreting ? (
+          <span className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
+            <Loader2 className="w-3 h-3 animate-spin" />
+            {searchingDiseases ? 'Updating disease matches…' : 'Updating findings…'}
+          </span>
+        ) : draft.trim().length >= 3 ? (
+          <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+            Patient names are removed before chat
+          </span>
+        ) : draft.trim().length > 0 ? (
+          <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+            Keep typing to search…
+          </span>
+        ) : (
+          <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+            Patient names are removed before chat
+          </span>
         )}
+      </div>
 
-      {mode === PHENOTYPE_MODE_DISEASE && diseaseMatch?.name && (
+      {notePreview?.deidentified_text && (
+        <div
+          className="px-2.5 py-2 rounded-lg border text-2xs space-y-1"
+          style={{ borderColor: 'var(--border-default)', background: 'var(--bg-muted)' }}
+        >
+          <div className="font-medium" style={{ color: 'var(--text-secondary)' }}>
+            Cleaned note (saved for chat)
+          </div>
+          <p style={{ color: 'var(--text-primary)' }}>{notePreview.deidentified_text}</p>
+          {(notePreview.patient?.sex || notePreview.patient?.age) && (
+            <p style={{ color: 'var(--text-tertiary)' }}>
+              {[
+                notePreview.patient?.sex ? `Sex → ${notePreview.patient.sex}` : null,
+                notePreview.patient?.age ? `Age noted: ${notePreview.patient.age}` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          )}
+        </div>
+      )}
+
+      {(noteUnmapped.length > 0 || noteAmbiguous.length > 0) && (
+        <div className="text-2xs space-y-1" style={{ color: 'var(--text-tertiary)' }}>
+          {noteAmbiguous.length > 0 && <p>Ambiguous: {noteAmbiguous.join('; ')}</p>}
+          {noteUnmapped.length > 0 && (
+            <p>Could not map to HPO: {noteUnmapped.join('; ')}</p>
+          )}
+        </div>
+      )}
+
+      {primaryDisease && (
         <div
           className="px-2.5 py-2 rounded-lg border text-xs space-y-1.5"
           style={{ borderColor: 'var(--border-default)', background: 'var(--bg-muted)' }}
         >
           <div className="font-medium" style={{ color: 'var(--text-primary)' }}>
-            Best match: {diseaseMatch.name}
+            Disease matches
           </div>
-          <div style={{ color: 'var(--text-tertiary)' }}>
-            {[
-              diseaseMatch.id,
-              diseaseMatch.source ? `source ${diseaseMatch.source}` : null,
-              diseaseMatch.score != null ? `score ${Number(diseaseMatch.score).toFixed(2)}` : null,
-              `${candidates.length} annotated HPO terms`,
-              hpoResolutionMethod === 'propagated_from_related_subtypes'
-                ? 'expanded from related subtypes'
-                : hpoResolutionMethod === 'direct_disease_annotation'
-                  ? 'direct disease annotations'
+
+          <button
+            type="button"
+            disabled={disabled || resolving}
+            onClick={() => applyDisease(primaryDisease)}
+            className="w-full text-left px-2.5 py-2 rounded-md border text-2xs transition-all"
+            style={{
+              borderColor: isActiveDisease(primaryDisease)
+                ? 'var(--accent-teal)'
+                : 'var(--border-default)',
+              background: isActiveDisease(primaryDisease)
+                ? 'color-mix(in srgb, var(--accent-teal) 12%, transparent)'
+                : 'var(--bg-surface-raised)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            <span className="font-medium">
+              {isActiveDisease(primaryDisease) ? '✓ ' : ''}
+              {primaryDisease.disease_name}
+            </span>
+            <span style={{ color: 'var(--text-tertiary)' }}>
+              {' '}
+              ·{' '}
+              {[
+                primaryDisease.disease_id,
+                primaryDisease.source ? `source ${primaryDisease.source}` : null,
+                primaryDisease.score != null
+                  ? `score ${Number(primaryDisease.score).toFixed(2)}`
                   : null,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </div>
-          <p className="text-2xs" style={{ color: 'var(--text-secondary)' }}>
-            This card is the disease we matched — not a selectable finding. Below, tick only
-            findings present in <span className="font-medium">this patient</span>. Inheritance
-            terms (e.g. autosomal recessive) are listed separately; they describe the disease
-            model, not a symptom.
-          </p>
-          {propagatedFromRelated?.length > 0 && (
+                isActiveDisease(primaryDisease) ? 'selected — click to deselect' : 'click to use',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </span>
+          </button>
+
+          {visibleAlts.map((c) => (
+            <button
+              key={diseaseKey(c)}
+              type="button"
+              disabled={disabled || resolving}
+              onClick={() => applyDisease(c)}
+              className="w-full text-left px-2.5 py-1.5 rounded-md border text-2xs transition-all"
+              style={{
+                borderColor: isActiveDisease(c) ? 'var(--accent-teal)' : 'var(--border-default)',
+                background: isActiveDisease(c)
+                  ? 'color-mix(in srgb, var(--accent-teal) 12%, transparent)'
+                  : 'var(--bg-surface-raised)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <span className="font-medium">
+                {isActiveDisease(c) ? '✓ ' : ''}
+                {c.disease_name}
+              </span>
+              <span style={{ color: 'var(--text-tertiary)' }}>
+                {' '}
+                ·{' '}
+                {[
+                  c.disease_id,
+                  c.score != null ? `score ${Number(c.score).toFixed(2)}` : null,
+                  isActiveDisease(c) ? 'selected — click to deselect' : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+            </button>
+          ))}
+
+          {altDiseases.length > 0 && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => setShowMoreDiseases((v) => !v)}
+              className="inline-flex items-center gap-1 text-2xs underline"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              {showMoreDiseases ? (
+                <>
+                  <ChevronUp className="w-3 h-3" /> Hide other matches
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-3 h-3" /> Show more ({altDiseases.length})
+                </>
+              )}
+            </button>
+          )}
+
+          {propagatedFromRelated?.length > 0 && isActiveDisease(primaryDisease) && (
             <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
               Includes annotations from {propagatedFromRelated.length} related subtype
-              {propagatedFromRelated.length === 1 ? '' : 's'} (may be broader than this exact
-              disease). Prefer precise disease names/IDs when possible.
+              {propagatedFromRelated.length === 1 ? '' : 's'}.
             </p>
           )}
-          {altDiseases.length > 0 && (
-            <div className="pt-1 space-y-1">
-              <div className="text-2xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                Other close matches — click to use instead
-              </div>
-              <div className="flex flex-col gap-1">
-                {altDiseases.map((c) => (
-                  <button
-                    key={`${c.disease_id}-${c.disease_name}`}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => pickDiseaseCandidate(c)}
-                    className="text-left px-2 py-1 rounded-md border text-2xs transition-all"
-                    style={{
-                      borderColor: 'var(--border-default)',
-                      background: 'var(--bg-surface-raised)',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
-                    <span className="font-medium">{c.disease_name}</span>
-                    <span style={{ color: 'var(--text-tertiary)' }}>
-                      {' '}
-                      · {[c.disease_id, c.score != null ? `score ${Number(c.score).toFixed(2)}` : null]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
+          {resolving && (
+            <p className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
+              <Loader2 className="w-3 h-3 animate-spin" /> Loading findings for disease…
+            </p>
           )}
         </div>
       )}
 
       <div className="flex items-center justify-between gap-2">
         <div className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-          {resolving ? (
+          {interpreting ? (
             <span className="inline-flex items-center gap-1">
-              <Loader2 className="w-3 h-3 animate-spin" />{' '}
-              {mode === PHENOTYPE_MODE_FINDINGS
-                ? 'Searching HPO terms…'
-                : 'Looking up HPO terms… (keep typing)'}
+              <Loader2 className="w-3 h-3 animate-spin" /> Interpreting note…
             </span>
           ) : candidates.length > 0 ? (
             <span>
               Clinical findings ({clinicalCandidates.filter((c) => c.selected).length}/
               {clinicalCandidates.length} selected)
+              {clinicalCandidates.some((c) => c.selected && c.selected_default && isAutomatic)
+                ? ' · high-confidence pre-selected — click to undo'
+                : ''}
               {inheritanceCandidates.length > 0
                 ? ` · ${inheritanceCandidates.length} inheritance terms hidden`
                 : ''}
             </span>
-          ) : mode === PHENOTYPE_MODE_FINDINGS && draft.trim().length >= 2 && typeahead.length === 0 ? (
-            <span>No matching HPO terms — try another word</span>
-          ) : mode === PHENOTYPE_MODE_DISEASE && draft.trim() ? (
-            <span>No HPO terms detected yet</span>
           ) : null}
         </div>
         {clinicalCandidates.length > 0 && (
           <div className="flex gap-2 text-2xs">
-            {mode === PHENOTYPE_MODE_DISEASE && (
-              <button
-                type="button"
-                className="underline"
-                style={{ color: 'var(--text-secondary)' }}
-                onClick={() => setGroupSelected(clinicalCandidates, true)}
-                disabled={disabled}
-              >
-                Select clinical
-              </button>
-            )}
             <button
               type="button"
               className="underline"
               style={{ color: 'var(--text-secondary)' }}
-              onClick={() =>
-                mode === PHENOTYPE_MODE_FINDINGS
-                  ? emit({ candidates: [], phenotype_findings: '' })
-                  : setGroupSelected(clinicalCandidates, false)
-              }
+              onClick={() => setGroupSelected(clinicalCandidates, true)}
               disabled={disabled}
             >
-              {mode === PHENOTYPE_MODE_FINDINGS ? 'Clear chips' : 'Clear'}
+              Select clinical
+            </button>
+            <button
+              type="button"
+              className="underline"
+              style={{ color: 'var(--text-secondary)' }}
+              onClick={() => setGroupSelected(clinicalCandidates, false)}
+              disabled={disabled}
+            >
+              Clear selection
             </button>
           </div>
         )}
       </div>
 
-      {mode === PHENOTYPE_MODE_DISEASE &&
-        draft.trim() &&
-        !resolving &&
-        selectedCount === 0 &&
-        candidates.length > 0 && (
-          <p className="text-2xs" style={{ color: 'var(--warning, #b45309)' }}>
-            Select at least one clinical finding for this patient before running phenotype
-            prioritization.
-          </p>
-        )}
+      {!resolving && !interpreting && selectedCount === 0 && candidates.length > 0 && (
+        <p className="text-2xs" style={{ color: 'var(--warning, #b45309)' }}>
+          Select at least one clinical finding for this patient before running phenotype
+          prioritization.
+        </p>
+      )}
 
       {resolveError && (
         <p className="text-2xs" style={{ color: 'var(--error)' }}>

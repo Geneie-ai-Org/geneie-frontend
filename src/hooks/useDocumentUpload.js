@@ -21,6 +21,7 @@ export function useDocumentUpload({
   refreshSubscriptionStatus,
   syncPipelineFromConversationRef,
   setConversationFilterState,
+  onDocumentAttached,
 }) {
   const handleDocumentUpload = useCallback(async (documentData) => {
     console.log('[App] handleDocumentUpload called with:', documentData);
@@ -135,6 +136,11 @@ export function useDocumentUpload({
         setPipelineDismissed(false);
         setPipelineExpanded(true);
 
+        const attachedName = documentData.name ?? documentData.file_name;
+        if (attachedName && activeConversationId) {
+          onDocumentAttached?.(activeConversationId, attachedName);
+        }
+
         if (documentData.column_interpretation) {
           setColumnInterpretationResult(documentData.column_interpretation);
           if (documentData.variant_metadata) {
@@ -226,6 +232,7 @@ export function useDocumentUpload({
     refreshSubscriptionStatus,
     syncPipelineFromConversationRef,
     setConversationFilterState,
+    onDocumentAttached,
   ]);
 
   return { handleDocumentUpload };

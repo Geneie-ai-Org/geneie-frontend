@@ -846,12 +846,17 @@ const LandingPage = () => {
                 </a>
               </div>
               <div className="flex items-center justify-between pt-10 pb-1 border-b border-zinc-800/60">
-                <span className="text-zinc-600 text-xs sm:text-sm">&copy; {new Date().getFullYear()} geneie</span>
-                <span className="flex items-center gap-1.5 text-zinc-500 text-xs sm:text-sm font-medium">
+                <span className="text-zinc-600 text-xs sm:text-sm">&copy; {new Date().getFullYear()} Geneie</span>
+                <a
+                  href="https://omixir.com/"
+                  target="_blank"
+                  rel="noopener"
+                  className="flex items-center gap-1.5 text-zinc-500 hover:text-zinc-300 text-xs sm:text-sm font-medium transition-colors"
+                >
                   powered by
-                  <img src="/omixer-small-logo.png" alt="Omixir" className="h-4 sm:h-5 object-contain" />
+                  <img src="/omixer-small-logo.png" alt="" className="h-4 sm:h-5 object-contain" />
                   Omixir
-                </span>
+                </a>
               </div>
             </div>
           </div>

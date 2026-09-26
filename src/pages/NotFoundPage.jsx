@@ -4,6 +4,7 @@ import { ArrowLeft, MessageSquare } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useSeo } from '@/hooks/useSeo';
 import { capture } from '@/lib/analytics';
+import BrokenHelix from '@/components/BrokenHelix';
 
 /**
  * Catch-all for unknown routes. Previously `*` redirected to `/`, which hid broken links;
@@ -38,6 +39,7 @@ export default function NotFoundPage() {
 
       <main className="flex flex-1 items-center justify-center px-6 pb-24">
         <div className="w-full max-w-[28rem] text-center">
+          <BrokenHelix className="mx-auto mb-8 h-auto w-full max-w-[20rem]" />
           <p className="font-mono text-xs font-medium uppercase tracking-[0.2em] text-[var(--accent-teal)]">
             Error 404
           </p>

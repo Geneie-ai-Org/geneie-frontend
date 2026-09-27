@@ -231,6 +231,20 @@ export async function fetchGuestStatus() {
   return data;
 }
 
+// Non-sensitive runtime config from the backend (pricing, tier-limit displays, feature flags). Lets the FE
+// stop hardcoding values that duplicate the backend (the $27.99 / tier-limit drift). DEGRADE-OPEN: returns
+// null on any error (404 before the endpoint ships, network blip) so callers fall back to their built-in
+// defaults - never throws, never blocks render. Mirrors the backend accessors' fail-safe philosophy.
+export async function fetchPublicConfig() {
+  try {
+    const response = await fetch(apiUrl('/api/config/public'));
+    if (!response.ok) return null;
+    return await response.json().catch(() => null);
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchSubscriptionStatus() {
   const headers = await getAuthHeaders();
   const response = await fetch(apiUrl('/api/subscription-status'), { headers });

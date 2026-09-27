@@ -167,6 +167,11 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
   const isPro = userTier === 'pro' || userTier === 'admin';
   const isFree = userTier === 'free';
 
+  // Pro monthly price comes from the backend (subscription-status pricing, hot-tunable via config).
+  // Fall back to the historical hardcoded 27.99 only if the API didn't supply it (degrade-open) so the
+  // page never renders blank pricing. This ends the drift where the fetched pricing was ignored.
+  const proMonthlyDisplay = subscriptionDetails?.pricing?.proMonthlyUsd ?? 27.99;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
       <div 
@@ -265,7 +270,7 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
                   <div className="bg-white rounded-lg p-4 mb-4 border border-gray-200">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-lg font-semibold" style={{ color: '#1F2A44' }}>Pro Plan</span>
-                      <span className="text-2xl font-bold" style={{ color: '#2F7F7A' }}>$27.99<span className="text-sm font-normal" style={{ color: '#5F6F82' }}>/month</span></span>
+                      <span className="text-2xl font-bold" style={{ color: '#2F7F7A' }}>${proMonthlyDisplay}<span className="text-sm font-normal" style={{ color: '#5F6F82' }}>/month</span></span>
                     </div>
                     <div className="mt-3 pt-3 border-t border-gray-200">
                       <p className="text-xs mb-2" style={{ color: '#5F6F82' }}>Payment Methods:</p>
@@ -295,11 +300,11 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-semibold" style={{ color: '#2E2E2E' }}>Total:</span>
                       <span className="text-xl font-bold" style={{ color: '#2F7F7A' }}>
-                        $27.99
+                        ${proMonthlyDisplay}
                       </span>
                     </div>
                     <div className="text-xs mt-1" style={{ color: '#5F6F82' }}>
-                      $27.99/month
+                      ${proMonthlyDisplay}/month
                     </div>
                   </div>
 

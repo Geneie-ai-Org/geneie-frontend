@@ -136,8 +136,33 @@ export default function TuningMode({ question, onClose }) {
 
   if (!isAdmin) return null; // non-admins never see this at all
 
+  // This component is a DIRECT child of .chat-app-shell, which is a 3-column CSS grid
+  // (--shell-left-col / minmax(0,1fr) / --shell-right-col). An unpositioned grid child is
+  // auto-placed into an implicit cell, which is how this ended up squeezed into the ~64px icon
+  // rail with its label wrapping one word per line. position:fixed takes it out of the grid
+  // entirely, so it can never reflow the chat shell - same escape hatch ExploratoryModeToggle uses.
+  // Anchored bottom-right, sitting ABOVE that toggle (which owns bottom:14) so the two never overlap.
+  const expanded = active && (panelOpen || running || acc.baseline || acc.candidate);
+
   return (
-    <div className="tune-root" style={{ border: '1px solid #c9ced6', borderRadius: 10, padding: 12, marginTop: 12 }}>
+    <div
+      className="tune-root"
+      style={{
+        position: 'fixed',
+        right: 14,
+        bottom: 58,
+        zIndex: 9998,
+        width: expanded ? 'min(920px, calc(100vw - 28px))' : 'auto',
+        maxWidth: 'calc(100vw - 28px)',
+        maxHeight: 'min(72vh, 720px)',
+        overflowY: 'auto',
+        background: 'var(--bg-app, #fff)',
+        border: '1px solid #c9ced6',
+        borderRadius: 10,
+        padding: 12,
+        boxShadow: '0 8px 28px rgba(0,0,0,0.18)',
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600 }}>
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />

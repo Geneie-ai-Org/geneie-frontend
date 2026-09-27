@@ -5,6 +5,7 @@ import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
 import { toast } from 'sonner';
 import ExploratoryModeToggle from '../components/ExploratoryModeToggle';
+import TuningMode from '../components/TuningMode';
 
 import { useStickToBottom } from 'use-stick-to-bottom';
 import { Markdown } from '../components/chat/ChatMarkdown';
@@ -2140,6 +2141,11 @@ const ChatPage = () => {
       />
 
       <ExploratoryModeToggle />
+
+      {/* Admin tuning mode. Renders NOTHING for non-admins (it gates on /api/admin/whoami),
+          and while it is off it changes nothing: no header, no compare endpoint, no second
+          column. The normal single-column chat path above is untouched either way. */}
+      <TuningMode question={input} />
     </div>
   );
 };

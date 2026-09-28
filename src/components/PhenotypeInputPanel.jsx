@@ -232,10 +232,32 @@ function shouldAutoSelectDisease(d, runMode) {
   return score != null && score >= AUTO_DISEASE_MIN_SCORE;
 }
 
-function diseaseKey(d) {
-  return `${String(d?.disease_id || d?.id || '').trim()}::${String(d?.disease_name || d?.name || '')
+/** Normalized name so OMIM / ORPHA / MONDO rows for the same disease collapse. */
+function diseaseNameClusterKey(name) {
+  return String(name || '')
     .trim()
-    .toLowerCase()}`;
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function diseaseKey(d) {
+  const nameKey = diseaseNameClusterKey(d?.disease_name || d?.name || '');
+  // Prefer name cluster over id::name so cross-ontology duplicates become one row.
+  return nameKey || String(d?.disease_id || d?.id || '').trim().toUpperCase();
+}
+
+function _uniqStrings(arr) {
+  const out = [];
+  const seen = new Set();
+  for (const x of arr || []) {
+    const s = String(x || '').trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
 }
 
 function normalizeDiseaseOption(d) {
@@ -251,15 +273,33 @@ function normalizeDiseaseOption(d) {
   } else if (d.confidence === 'high') score = 1;
   else if (d.confidence === 'medium') score = 0.7;
   else if (d.confidence === 'low') score = 0.4;
+  const hpo_ids = _uniqStrings(d.hpo_ids || []);
+  const member_ids = _uniqStrings(d.member_ids || [d.disease_id || d.id].filter(Boolean));
+  const sources = _uniqStrings(
+    Array.isArray(d.sources) && d.sources.length
+      ? d.sources
+      : String(d.source || '')
+          .split(';')
+          .map((s) => s.trim())
+          .filter(Boolean)
+  );
+  const annotation_hpo_count =
+    typeof d.annotation_hpo_count === 'number' && Number.isFinite(d.annotation_hpo_count)
+      ? d.annotation_hpo_count
+      : hpo_ids.length;
   return {
     disease_id: d.disease_id || d.id || '',
     disease_name,
     score,
-    source: d.source || '',
+    source: sources.join(';') || d.source || '',
+    sources,
+    hpo_ids,
+    member_ids,
+    annotation_hpo_count,
   };
 }
 
-/** Merge disease lists; keep highest score; sort score desc. Never drop prior entries. */
+/** Merge disease lists by normalized name; union HPOs; keep richest id + highest score. */
 function mergeDiseaseCatalog(existing, incoming) {
   const byKey = new Map();
   for (const raw of [...(existing || []), ...(incoming || [])]) {
@@ -273,11 +313,25 @@ function mergeDiseaseCatalog(existing, incoming) {
     }
     const prevScore = prev.score == null ? -1 : prev.score;
     const nextScore = d.score == null ? -1 : d.score;
+    const prevHpo = prev.annotation_hpo_count || (prev.hpo_ids || []).length || 0;
+    const nextHpo = d.annotation_hpo_count || (d.hpo_ids || []).length || 0;
+    // Prefer the ontology row with more annotated HPOs (usually HPOA over bare MONDO).
+    const preferIncomingId = nextHpo > prevHpo || (nextHpo === prevHpo && nextScore > prevScore);
+    const hpo_ids = _uniqStrings([...(prev.hpo_ids || []), ...(d.hpo_ids || [])]);
+    const member_ids = _uniqStrings([...(prev.member_ids || []), ...(d.member_ids || [])]);
+    const sources = _uniqStrings([...(prev.sources || []), ...(d.sources || [])]);
     byKey.set(key, {
       ...prev,
       ...d,
-      disease_id: d.disease_id || prev.disease_id,
-      source: d.source || prev.source,
+      disease_id: preferIncomingId
+        ? d.disease_id || prev.disease_id
+        : prev.disease_id || d.disease_id,
+      disease_name: prev.disease_name || d.disease_name,
+      source: sources.join(';') || d.source || prev.source,
+      sources,
+      hpo_ids,
+      member_ids,
+      annotation_hpo_count: hpo_ids.length || Math.max(prevHpo, nextHpo),
       score: Math.max(prevScore, nextScore) < 0 ? null : Math.max(prevScore, nextScore),
     });
   }
@@ -1108,6 +1162,9 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
               ·{' '}
               {[
                 primaryDisease.disease_id,
+                primaryDisease.annotation_hpo_count > 0
+                  ? `${primaryDisease.annotation_hpo_count} HPOs`
+                  : null,
                 primaryDisease.source ? `source ${primaryDisease.source}` : null,
                 primaryDisease.score != null
                   ? `score ${Number(primaryDisease.score).toFixed(2)}`
@@ -1143,6 +1200,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
                 ·{' '}
                 {[
                   c.disease_id,
+                  c.annotation_hpo_count > 0 ? `${c.annotation_hpo_count} HPOs` : null,
                   c.score != null ? `score ${Number(c.score).toFixed(2)}` : null,
                   isActiveDisease(c) ? 'selected — click to deselect' : null,
                 ]

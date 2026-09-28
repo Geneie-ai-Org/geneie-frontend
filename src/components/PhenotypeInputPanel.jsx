@@ -228,8 +228,19 @@ function diseaseScore(d) {
 
 function shouldAutoSelectDisease(d, runMode) {
   if (runMode !== PHENOTYPE_RUN_AUTOMATIC || !d) return false;
+  if (!diseaseHasHpoAnnotations(d)) return false;
   const score = diseaseScore(d);
   return score != null && score >= AUTO_DISEASE_MIN_SCORE;
+}
+
+/** True when catalog metadata says this disease has ≥1 usable HPO annotation. */
+function diseaseHasHpoAnnotations(d) {
+  if (!d) return false;
+  // Preview-only LLM names lack HPO metadata — allow until resolve fills counts.
+  if (!d.has_hpo_meta) return true;
+  const n = d.annotation_hpo_count;
+  if (typeof n === 'number' && Number.isFinite(n)) return n > 0;
+  return (d.hpo_ids || []).length > 0;
 }
 
 /** Normalized name so OMIM / ORPHA / MONDO rows for the same disease collapse. */
@@ -273,6 +284,11 @@ function normalizeDiseaseOption(d) {
   } else if (d.confidence === 'high') score = 1;
   else if (d.confidence === 'medium') score = 0.7;
   else if (d.confidence === 'low') score = 0.4;
+  const has_hpo_meta =
+    Array.isArray(d.hpo_ids) ||
+    typeof d.annotation_hpo_count === 'number' ||
+    Array.isArray(d.member_ids) ||
+    Array.isArray(d.sources);
   const hpo_ids = _uniqStrings(d.hpo_ids || []);
   const member_ids = _uniqStrings(d.member_ids || [d.disease_id || d.id].filter(Boolean));
   const sources = _uniqStrings(
@@ -296,6 +312,7 @@ function normalizeDiseaseOption(d) {
     hpo_ids,
     member_ids,
     annotation_hpo_count,
+    has_hpo_meta,
   };
 }
 
@@ -332,15 +349,18 @@ function mergeDiseaseCatalog(existing, incoming) {
       hpo_ids,
       member_ids,
       annotation_hpo_count: hpo_ids.length || Math.max(prevHpo, nextHpo),
+      has_hpo_meta: Boolean(prev.has_hpo_meta || d.has_hpo_meta),
       score: Math.max(prevScore, nextScore) < 0 ? null : Math.max(prevScore, nextScore),
     });
   }
-  return Array.from(byKey.values()).sort((a, b) => {
-    const as = a.score == null ? -1 : a.score;
-    const bs = b.score == null ? -1 : b.score;
-    if (bs !== as) return bs - as;
-    return String(a.disease_name).localeCompare(String(b.disease_name));
-  });
+  return Array.from(byKey.values())
+    .filter(diseaseHasHpoAnnotations)
+    .sort((a, b) => {
+      const as = a.score == null ? -1 : a.score;
+      const bs = b.score == null ? -1 : b.score;
+      if (bs !== as) return bs - as;
+      return String(a.disease_name).localeCompare(String(b.disease_name));
+    });
 }
 
 /**
@@ -632,6 +652,14 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       }
       if (!allowToggleOff && isActiveDisease(disease)) return;
 
+      // Phase B: never select a catalog row known to have zero HPO annotations.
+      if (disease?.has_hpo_meta && !diseaseHasHpoAnnotations(disease)) {
+        setResolveError(
+          'No clinical findings (HPO terms) are annotated for this disease — pick another match.'
+        );
+        return;
+      }
+
       setResolving(true);
       setResolveError('');
       try {
@@ -645,6 +673,12 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         }).map((c) =>
           isInheritanceLikeHpo(c) ? { ...c, selected: false, selected_default: false } : c
         );
+        if (!fromDisease.length) {
+          setResolveError(
+            'No clinical findings (HPO terms) are annotated for this disease — pick another match.'
+          );
+          return;
+        }
         const pinned = (stateRef.current.candidates || []).filter((c) => c.selected);
         const merged = mergeCandidates(pinned, fromDisease);
         const match =
@@ -656,7 +690,13 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
             source: disease.source,
           };
         const catalog = mergeDiseaseCatalog(stateRef.current.topCandidates, [
-          match,
+          {
+            ...match,
+            hpo_ids: (resolved.hpo_ids || fromDisease.map((c) => c.hpo_id)).filter(Boolean),
+            annotation_hpo_count: (resolved.hpo_ids || fromDisease).length,
+            member_ids: disease.member_ids,
+            sources: disease.sources,
+          },
           ...(resolved.top_candidates || []),
           disease,
         ]);

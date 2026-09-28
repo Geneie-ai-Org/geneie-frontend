@@ -1239,6 +1239,20 @@ export function useVariantPipeline({
     };
   })();
 
+  /**
+   * Case B (>1000): after ACMG / Exomiser the BE may briefly return CHAT_REQUIRES_FILTER
+   * ("filtered set not loaded yet") while Postgres catches up. Keep polling eligibility
+   * until chat unlocks or a terminal failure — not only during Enriching…/Indexing….
+   */
+  const filterLoadPending = (() => {
+    const reason = chatEligibility.reason;
+    if (reason === 'FILTER_JOB_RUNNING') return true;
+    if (reason !== 'CHAT_REQUIRES_FILTER') return false;
+    const pf = conversationFilterState?.activeProprietaryFilter;
+    if (pf === 'filter_1' || pf === 'filter_3') return true;
+    return /not loaded yet/i.test(String(chatEligibility.message || ''));
+  })();
+
   /** Single busy flag shared by the pipeline stepper and the sidebar so dual applies can't race (F6). */
   const pipelineBusy =
     isRunningAnnovar || isApplyingProprietaryFilter || isRunningExomiser || pipelineJobActive;
@@ -1283,11 +1297,21 @@ export function useVariantPipeline({
   const enrichmentActive = enrichmentState.active;
   const indexingActive = indexingState.active;
   useEffect(() => {
-    if ((!enrichmentActive && !indexingActive) || !activeConversationId || userTier === 'guest') return;
+    const shouldPoll = enrichmentActive || indexingActive || filterLoadPending;
+    if (!shouldPoll || !activeConversationId || userTier === 'guest') return;
     let cancelled = false;
     let timer = null;
+    let ticks = 0;
+    // Cap recovery polling for post-filter PG lag (~10 min at 4s). Enrichment/indexing
+    // may legitimately run longer; those reasons keep the poll via enrichmentActive.
+    const maxTicks = filterLoadPending && !enrichmentActive && !indexingActive ? 150 : Infinity;
     const tick = async () => {
       if (cancelled) return;
+      ticks += 1;
+      if (ticks > maxTicks) {
+        console.warn('[useVariantPipeline] stopping filter-load eligibility poll after max ticks');
+        return;
+      }
       try {
         await refreshChatEligibilityFromApiRef.current?.(activeConversationId, { announceReady: true });
       } catch (e) {
@@ -1300,7 +1324,13 @@ export function useVariantPipeline({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [enrichmentActive, indexingActive, activeConversationId, userTier]);
+  }, [
+    enrichmentActive,
+    indexingActive,
+    filterLoadPending,
+    activeConversationId,
+    userTier,
+  ]);
 
   const promptChatBlocked = useCallback(() => {
     if (!isChatPipelineGated) return false;

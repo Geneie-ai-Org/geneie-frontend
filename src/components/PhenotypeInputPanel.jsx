@@ -30,6 +30,8 @@ export function sanitizePhenotypeQuery(text) {
 
 /** Strong disease match — auto-apply in Automatic analysis mode only. */
 const AUTO_DISEASE_MIN_SCORE = 0.9;
+/** Cap auto-selected differentials from a clinical note (matches narrative grounding). */
+const MAX_AUTO_DISEASES = 3;
 
 /** Mode-of-inheritance / non-finding HPO IDs commonly dumped in disease annotations. */
 const INHERITANCE_HPO_IDS = new Set([
@@ -318,6 +320,38 @@ function shouldAutoSelectDisease(d, runMode) {
   if (!diseaseHasHpoAnnotations(d)) return false;
   const score = diseaseScore(d);
   return score != null && score >= AUTO_DISEASE_MIN_SCORE;
+}
+
+/**
+ * High-confidence catalog rows to auto-apply.
+ * Prefer diseases explicitly named by the note LLM (disease_candidates).
+ * Automatic without names: top score≥0.90 rows (capped). Manual: only named.
+ */
+function diseasesToAutoApply(
+  catalog,
+  runMode,
+  { alreadyKeys = new Set(), fromNote = false, namedNameKeys = null } = {}
+) {
+  const allow =
+    runMode === PHENOTYPE_RUN_AUTOMATIC || (fromNote && runMode === PHENOTYPE_RUN_MANUAL);
+  if (!allow) return [];
+
+  let pool = (catalog || []).filter((d) => {
+    if (!d || alreadyKeys.has(diseaseKey(d))) return false;
+    if (!diseaseHasHpoAnnotations(d)) return false;
+    const score = diseaseScore(d);
+    return score != null && score >= AUTO_DISEASE_MIN_SCORE;
+  });
+
+  if (namedNameKeys && namedNameKeys.size) {
+    const named = pool.filter((d) => namedNameKeys.has(diseaseNameClusterKey(d.disease_name)));
+    if (named.length) pool = named;
+    else if (runMode !== PHENOTYPE_RUN_AUTOMATIC) return [];
+  } else if (fromNote && runMode === PHENOTYPE_RUN_MANUAL) {
+    return [];
+  }
+
+  return pool.slice(0, MAX_AUTO_DISEASES);
 }
 
 /** True when catalog metadata says this disease has ≥1 usable HPO annotation. */
@@ -725,6 +759,10 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         ? stateRef.current.propagatedFromRelated
         : [],
     });
+    // Optimistic — sequential multi-apply must see updated matches before re-render.
+    stateRef.current.diseaseMatches = nextMatches;
+    stateRef.current.diseaseMatch = nextMatches[0] || null;
+    stateRef.current.candidates = nextCandidates;
   };
 
   const clearDisease = () => {
@@ -741,6 +779,9 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       phenotype_findings: findingsLabelFrom(pinned),
       // top_candidates intentionally unchanged
     });
+    stateRef.current.diseaseMatches = [];
+    stateRef.current.diseaseMatch = null;
+    stateRef.current.candidates = pinned;
   };
 
   const applyDisease = useCallback(
@@ -772,7 +813,6 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         });
         const dKey = diseaseKey(disease);
         const fromDisease = mapResolveToCandidates(resolved, {
-          // Automatic: pre-select disease-linked clinical findings (not inheritance).
           defaultSelected: runModeRef.current === PHENOTYPE_RUN_AUTOMATIC,
         })
           .map((c) =>
@@ -820,6 +860,10 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           propagated_from_related_records: resolved.propagated_from_related_records || [],
           phenotype_findings: findingsLabelFrom(merged),
         });
+        stateRef.current.diseaseMatches = nextMatches;
+        stateRef.current.diseaseMatch = nextMatches[0] || null;
+        stateRef.current.candidates = merged;
+        stateRef.current.topCandidates = catalog;
       } catch (err) {
         setResolveError(err?.message || 'Could not load findings for that disease');
       } finally {
@@ -839,8 +883,6 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
 
   const autoApplyTopDisease = useCallback(async (disease) => {
     if (!disease || autoApplyingDiseaseRef.current) return;
-    if (runModeRef.current !== PHENOTYPE_RUN_AUTOMATIC) return;
-    if (!shouldAutoSelectDisease(disease, runModeRef.current)) return;
     // Skip if this disease is already in the multi-select set.
     const curList = stateRef.current.diseaseMatches || [];
     const key = diseaseKey(disease);
@@ -852,6 +894,13 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       autoApplyingDiseaseRef.current = false;
     }
   }, []);
+
+  const autoApplyDiseases = useCallback(async (diseases, seqRef, seq) => {
+    for (const d of diseases || []) {
+      if (seqRef.current !== seq) return;
+      await autoApplyTopDisease(d);
+    }
+  }, [autoApplyTopDisease]);
 
   const runInterpretNote = useCallback(async (text) => {
     const trimmed = String(text || '').trim();
@@ -903,7 +952,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       // Fresh catalog for this note — do not keep diseases from a previous phrase.
       const catalog = mergeDiseaseCatalog([], incomingDiseases);
 
-      // Keep user's disease selections if still in catalog; Automatic may adopt a strong top hit.
+      // Keep user's disease selections if still in catalog; then auto-apply all high-score hits.
       const prevList = stateRef.current.diseaseMatches || [];
       let nextMatches = prevList
         .map((prev) => {
@@ -922,10 +971,17 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         })
         .filter(Boolean);
 
-      const autoDisease =
-        nextMatches.length === 0 && shouldAutoSelectDisease(catalog[0], runModeRef.current)
-          ? catalog[0]
-          : null;
+      const alreadyKeys = new Set(nextMatches.map(diseaseMatchKey));
+      const namedNameKeys = new Set(
+        (data.disease_candidates || [])
+          .map((c) => diseaseNameClusterKey(c?.name || ''))
+          .filter(Boolean)
+      );
+      const toAuto = diseasesToAutoApply(catalog, runModeRef.current, {
+        alreadyKeys,
+        fromNote: true,
+        namedNameKeys,
+      });
 
       setNotePreview(data);
       setNoteUnmapped(data.unmapped || []);
@@ -947,9 +1003,12 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           : data.propagated_from_related_records || [],
         ...(data.patient?.sex ? { sampleSex: data.patient.sex } : {}),
       });
+      stateRef.current.diseaseMatches = nextMatches;
+      stateRef.current.candidates = mergedFindings;
+      stateRef.current.topCandidates = catalog;
 
-      if (autoDisease && seq === interpretSeq.current) {
-        await autoApplyTopDisease(autoDisease);
+      if (toAuto.length && seq === interpretSeq.current) {
+        await autoApplyDiseases(toAuto, interpretSeq, seq);
       }
     } catch (err) {
       if (seq !== interpretSeq.current) return;
@@ -957,7 +1016,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     } finally {
       if (seq === interpretSeq.current) setInterpreting(false);
     }
-  }, [disabled, emit, autoApplyTopDisease]);
+  }, [disabled, emit, autoApplyDiseases]);
 
   /** Fast disease catalog update — deterministic resolve, no LLM. */
   const runFastDiseaseSearch = useCallback(async (text) => {
@@ -993,27 +1052,28 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         return;
       }
 
-      // Prefer API disease_match when it qualifies; else top catalog row.
-      const preferredAuto =
-        resolved.disease_match &&
-        shouldAutoSelectDisease(
-          {
-            disease_id: resolved.disease_match.id,
-            disease_name: resolved.disease_match.name,
-            score: resolved.disease_match.score,
-            source: resolved.disease_match.source,
-          },
-          runModeRef.current
-        )
-          ? {
-              disease_id: resolved.disease_match.id,
-              disease_name: resolved.disease_match.name,
-              score: resolved.disease_match.score,
-              source: resolved.disease_match.source,
-            }
-          : shouldAutoSelectDisease(catalog[0], runModeRef.current)
-            ? catalog[0]
-            : null;
+      // Prefer API disease_match when it qualifies; else top catalog row(s).
+      const preferredAutos = diseasesToAutoApply(
+        [
+          resolved.disease_match
+            ? {
+                disease_id: resolved.disease_match.id,
+                disease_name: resolved.disease_match.name,
+                score: resolved.disease_match.score,
+                source: resolved.disease_match.source,
+                ...(catalog.find(
+                  (d) =>
+                    d.disease_id === resolved.disease_match.id ||
+                    String(d.disease_name || '').toLowerCase() ===
+                      String(resolved.disease_match.name || '').toLowerCase()
+                ) || {}),
+              }
+            : null,
+          ...catalog,
+        ].filter(Boolean),
+        runModeRef.current,
+        { fromNote: false }
+      );
 
       // Preserve multi-select; only refresh the ranked disease list.
       const prevList = stateRef.current.diseaseMatches || [];
@@ -1034,16 +1094,19 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         })
         .filter(Boolean);
 
-      const autoDisease = nextMatches.length === 0 ? preferredAuto : null;
+      const alreadyKeys = new Set(nextMatches.map(diseaseMatchKey));
+      const toAuto = preferredAutos.filter((d) => !alreadyKeys.has(diseaseKey(d)));
 
       emit({
         top_candidates: catalog,
         disease_matches: nextMatches,
         phenotype_disease: phenotypeDiseaseLabel(nextMatches),
       });
+      stateRef.current.diseaseMatches = nextMatches;
+      stateRef.current.topCandidates = catalog;
 
-      if (autoDisease && seq === diseaseSeq.current) {
-        await autoApplyTopDisease(autoDisease);
+      if (toAuto.length && seq === diseaseSeq.current) {
+        await autoApplyDiseases(toAuto, diseaseSeq, seq);
       }
     } catch (err) {
       if (seq !== diseaseSeq.current) return;
@@ -1052,7 +1115,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
     } finally {
       if (seq === diseaseSeq.current) setSearchingDiseases(false);
     }
-  }, [disabled, emit, autoApplyTopDisease]);
+  }, [disabled, emit, autoApplyDiseases]);
 
   // Fast disease matches on every edit (short debounce) — scores refresh from the current text.
   useEffect(() => {

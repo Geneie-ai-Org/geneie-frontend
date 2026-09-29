@@ -156,15 +156,37 @@ export default function TuningMode({ question, onClose }) {
         maxWidth: 'calc(100vw - 28px)',
         maxHeight: 'min(72vh, 720px)',
         overflowY: 'auto',
-        background: 'var(--bg-app, #fff)',
-        border: '1px solid #c9ced6',
+        // When tuning mode is OFF, the panel must not sit as an opaque box over the
+        // results/download area and swallow clicks (Alfu 2026-09-29: the download
+        // button was unclickable behind this). Inactive => no fill/shadow and the
+        // container itself is click-through; only the toggle row (below) re-enables
+        // pointer events. Active => full panel chrome as before.
+        pointerEvents: active ? 'auto' : 'none',
+        background: active ? 'var(--bg-app, #fff)' : 'transparent',
+        border: active ? '1px solid #c9ced6' : 'none',
         borderRadius: 10,
-        padding: 12,
-        boxShadow: '0 8px 28px rgba(0,0,0,0.18)',
+        padding: active ? 12 : 0,
+        boxShadow: active ? '0 8px 28px rgba(0,0,0,0.18)' : 'none',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600 }}>
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          // Parent is click-through when inactive; the toggle row itself must stay
+          // interactive AND carry its own compact chrome so the checkbox is visible
+          // and clickable without the panel overlaying the results beneath it.
+          pointerEvents: 'auto',
+          background: active ? 'transparent' : 'var(--bg-app, #fff)',
+          border: active ? 'none' : '1px solid #c9ced6',
+          borderRadius: active ? 0 : 8,
+          padding: active ? 0 : '6px 10px',
+          boxShadow: active ? 'none' : '0 4px 14px rgba(0,0,0,0.12)',
+        }}
+      >
+        <label
+          title={active ? undefined : 'Off — chat behaves exactly as it does normally (no header, no second column).'}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600 }}
+        >
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
           Tuning mode (side-by-side)
         </label>
@@ -197,12 +219,6 @@ export default function TuningMode({ question, onClose }) {
         ) : null}
         {onClose ? <button type="button" onClick={onClose} style={{ fontSize: 12, marginLeft: 'auto' }}>Close</button> : null}
       </div>
-
-      {!active ? (
-        <div style={{ fontSize: 12, color: '#5b6472', marginTop: 6 }}>
-          Off — chat behaves exactly as it does normally (no header, no second column).
-        </div>
-      ) : null}
 
       {active && panelOpen ? (
         <div style={{ marginTop: 10, maxHeight: 260, overflow: 'auto', borderTop: '1px solid #e6e9ee', paddingTop: 8 }}>

@@ -772,6 +772,56 @@ export async function downloadCaseReport(conversationId) {
 }
 
 /**
+ * GA triage status + top candidates for analyst review UI.
+ * GET /api/conversations/{id}/ga-triage
+ */
+export async function fetchGaTriage(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(
+    apiUrl(`/api/conversations/${encodeURIComponent(conversationId)}/ga-triage`),
+    { headers },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load GA triage');
+  }
+  return data;
+}
+
+/**
+ * Download GA triage artifact (default: full ga_triage.tsv).
+ * GET /api/conversations/{id}/ga-triage/download?artifact=tsv
+ */
+export async function downloadGaTriageArtifact(conversationId, artifact = 'tsv') {
+  const headers = await getAuthHeaders();
+  const qs = new URLSearchParams({ artifact: artifact || 'tsv' });
+  const response = await fetch(
+    apiUrl(
+      `/api/conversations/${encodeURIComponent(conversationId)}/ga-triage/download?${qs}`,
+    ),
+    { headers },
+  );
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(parseApiErrorDetail(data.detail) || 'GA triage download failed');
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const filenameMatch = disposition.match(/filename="(.+?)"/);
+  const filename =
+    filenameMatch?.[1] || `ga_triage_${conversationId}.${artifact === 'tsv' ? 'tsv' : 'bin'}`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return true;
+}
+
+/**
  * Ranked working-set candidates for the clinical report assignment modal.
  * GET /api/conversations/{id}/clinical-report/candidates
  */

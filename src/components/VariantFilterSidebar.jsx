@@ -6,6 +6,7 @@ import { optionalIdToken } from '@/lib/safeAuth';
 import DocumentUpload from './DocumentUpload';
 import ExportVariantsButton from './ExportVariantsButton';
 import CaseReportDownloadButton from './CaseReportDownloadButton';
+import GaTriagePanel from './GaTriagePanel';
 import TypewriterText from '@/components/ui/TypewriterText';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
@@ -2761,7 +2762,7 @@ const VariantFilterSidebar = ({
           </div>
         </div>
 
-        {/* Sticky footer: export + case report, always visible */}
+        {/* Sticky footer: export + GA triage + case report, always visible */}
         {!isGuest && variantData && (
           <div className="shrink-0 px-3.5 py-2 bg-[var(--bg-sidebar)] space-y-2">
             <ExportVariantsButton
@@ -2771,6 +2772,11 @@ const VariantFilterSidebar = ({
               isGuest={isGuest}
               downloadGate={downloadGate}
               uiCount={underConsiderationCount}
+            />
+            <GaTriagePanel
+              conversationId={conversationId}
+              isGuest={isGuest}
+              variantData={variantData}
             />
             <CaseReportDownloadButton
               conversationId={conversationId}

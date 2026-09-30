@@ -258,6 +258,7 @@ const PipelineDrawer = ({
   const statusLine = getPipelineStatusLine(pipelineProps, steps);
   const summary = getPipelineChipSummary(steps, hasUploadedFile);
   const chatReady = chatEligibility?.allowed === true;
+  const pgxOnlyScope = chatReady && (chatEligibility?.scope || '').toLowerCase() === 'pgx_only';
   const variantCount = variantsUnderConsideration ?? filteredVariantCount;
   const displayName = fileName || 'Variant file';
   const guestFilterGateBlocked =
@@ -302,6 +303,10 @@ const PipelineDrawer = ({
     if (failed) expandRef.current?.(true);
   }, [failed]);
 
+  useEffect(() => {
+    if (pgxOnlyScope) expandRef.current?.(true);
+  }, [pgxOnlyScope]);
+
   const toggle = () => {
     userIntentRef.current = expanded ? 'closed' : 'open';
     onExpandedChange?.(!expanded);
@@ -332,6 +337,7 @@ const PipelineDrawer = ({
     if (isRunningAnnovar || annovarJob?.status === 'running') return working('Annotating…');
     if (isRunningExomiser || exomiserStatus?.status === 'running') return working(PHENOTYPE_RUNNING_MESSAGE);
     if (isApplyingProprietaryFilter || filterJob?.status === 'running') return working('Applying filter…');
+    if (pgxOnlyScope) return settled('PGx chat ready');
     if (chatReady) {
       return settled(
         variantCount != null

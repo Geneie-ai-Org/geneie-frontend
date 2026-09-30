@@ -69,6 +69,9 @@ export function useVariantPipeline({
     enrichment_progress_percent: null,
     literature_status: null,
     advanced_chat_status: null,
+    scope: null,
+    pgx_status: null,
+    redirect_hints: null,
   });
   const [pipelineSnapshot, setPipelineSnapshot] = useState({
     hasAnnotatedFile: false,
@@ -136,6 +139,9 @@ export function useVariantPipeline({
       enrichment_progress_percent: null,
       literature_status: null,
       advanced_chat_status: null,
+      scope: null,
+      pgx_status: null,
+      redirect_hints: null,
     }),
     []
   );
@@ -542,6 +548,9 @@ export function useVariantPipeline({
           enrichment_progress_percent: ce.enrichment_progress_percent ?? null,
           literature_status: ce.literature_status || null,
           advanced_chat_status: ce.advanced_chat_status || null,
+          scope: ce.scope || null,
+          pgx_status: ce.pgx_status || null,
+          redirect_hints: ce.redirect_hints || null,
         });
       } else {
         setChatEligibility(defaultChatEligibility());
@@ -585,6 +594,9 @@ export function useVariantPipeline({
           enrichment_progress_percent: data.enrichment_progress_percent ?? null,
           literature_status: data.literature_status || null,
           advanced_chat_status: data.advanced_chat_status || null,
+          scope: data.scope || null,
+          pgx_status: data.pgx_status || null,
+          redirect_hints: data.redirect_hints || null,
         });
         setDownloadValidatedGeneration(downloadValidationGenerationRef.current);
         return data;

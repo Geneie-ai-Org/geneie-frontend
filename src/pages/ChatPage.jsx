@@ -1231,11 +1231,19 @@ const ChatPage = () => {
     } else {
       inputPlaceholder = 'Chat disabled, see above message';
     }
+  } else if (
+    chatEligibility.allowed === true &&
+    (chatEligibility.scope || '').toLowerCase() === 'pgx_only'
+  ) {
+    inputPlaceholder = 'Ask about PGx (metabolizer status, CPIC, PharmGKB)…';
   } else if (isChatLimitReached) {
     inputPlaceholder = userTier === 'guest'
       ? `Limit reached (${DEFAULT_GUEST_CHAT_LIMIT} exchanges). Please Sign Up or Log In.`
       : `Limit reached${chatMeter.limit != null ? ` (${chatMeter.limit} exchanges)` : ''}. Please upgrade to Pro.`;
   }
+
+  const isPgxOnlyScope =
+    chatEligibility.allowed === true && (chatEligibility.scope || '').toLowerCase() === 'pgx_only';
 
   const pipelineOwnsMessage = enrichmentState.active || enrichmentState.failed || indexingState.active || indexingState.failed;
   const pipelineVariantsUnderConsideration = resolveVariantsUnderConsideration({
@@ -1253,14 +1261,23 @@ const ChatPage = () => {
     isChatPipelineGated && !annovarRunning && !pipelineOwnsMessage && !guestFilterGateBlocked
       ? chatEligibility.message || inputPlaceholder
       : null;
+  // When PGx-only unlocks chat, keep a non-blocking banner (not a hard gate).
+  const pipelineScopeMessage =
+    !isChatPipelineGated && isPgxOnlyScope
+      ? chatEligibility.message ||
+        'PGx results are ready. You can ask about pharmacogenes now. For disease-variant chat, apply ACMG or phenotype-driven prioritization.'
+      : null;
   // Signed-in only — guests use guestPipelineCta (single row, no duplicate button).
   const gatedAction =
-    isChatPipelineGated &&
     !annovarRunning &&
-    chatEligibility.reason === 'CHAT_REQUIRES_FILTER' &&
-    userTier !== 'guest'
-      ? { label: 'Apply a filter', onClick: () => setIsVariantSidebarOpen(true) }
-      : null;
+    userTier !== 'guest' &&
+    (isChatPipelineGated
+      ? chatEligibility.reason === 'CHAT_REQUIRES_FILTER'
+        ? { label: 'Apply a filter', onClick: () => setIsVariantSidebarOpen(true) }
+        : null
+      : isPgxOnlyScope
+        ? { label: 'Open filters', onClick: () => setIsVariantSidebarOpen(true) }
+        : null);
 
   const guestPipelineCta =
     userTier === 'guest' && showAnalysisPipeline
@@ -1308,7 +1325,7 @@ const ChatPage = () => {
       indexingState={indexingState}
       isRunningExomiser={isRunningExomiser}
       exomiserStatus={exomiserStatus}
-      gatedMessage={pipelineGatedMessage}
+      gatedMessage={pipelineGatedMessage || pipelineScopeMessage}
       gatedAction={gatedAction}
       guestPipelineCta={guestPipelineCta}
     />

@@ -25,18 +25,24 @@ export default function GaTriagePanel({ conversationId, isGuest = false, variant
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
 
-  const load = useCallback(async () => {
-    if (!conversationId) return;
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async ({ quiet = false } = {}) => {
+    if (!conversationId) return null;
+    if (!quiet) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const payload = await fetchGaTriage(conversationId);
       setData(payload);
+      return payload;
     } catch (err) {
-      setData(null);
-      setError(err.message || 'Failed to load GA triage');
+      if (!quiet) {
+        setData(null);
+        setError(err.message || 'Failed to load GA triage');
+      }
+      return null;
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, [conversationId]);
 
@@ -44,23 +50,45 @@ export default function GaTriagePanel({ conversationId, isGuest = false, variant
     if (open) load();
   }, [open, load]);
 
-  // Lightweight status peek so the sidebar button can show ready / running / absent.
+  // Initial peek + poll while GA is in flight so the sidebar updates without a hard refresh.
   useEffect(() => {
     if (!conversationId || isGuest || !variantData) {
       setData(null);
       return undefined;
     }
     let cancelled = false;
-    (async () => {
+    let timer = null;
+
+    const peek = async () => {
       try {
         const payload = await fetchGaTriage(conversationId);
-        if (!cancelled) setData(payload);
+        if (cancelled) return null;
+        setData(payload);
+        return payload;
       } catch {
         if (!cancelled) setData(null);
+        return null;
       }
+    };
+
+    const schedule = (payload) => {
+      const status = String(payload?.status || '').toLowerCase();
+      const inFlight = status === 'running' || status === 'pending' || status === 'queued';
+      if (!inFlight || cancelled) return;
+      timer = setTimeout(async () => {
+        const next = await peek();
+        if (!cancelled) schedule(next);
+      }, 8000);
+    };
+
+    (async () => {
+      const payload = await peek();
+      if (!cancelled) schedule(payload);
     })();
+
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, [conversationId, isGuest, variantData]);
 
@@ -127,7 +155,7 @@ export default function GaTriagePanel({ conversationId, isGuest = false, variant
           <div className="px-5 py-3 flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] shrink-0">
             <button
               type="button"
-              onClick={load}
+              onClick={() => load()}
               disabled={loading}
               className="h-8 px-3 rounded-md text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] inline-flex items-center gap-1.5 disabled:opacity-50"
             >

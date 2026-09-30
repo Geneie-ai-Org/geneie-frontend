@@ -14,8 +14,75 @@ function shortText(val, max = 80) {
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
+/** Prefer c. / p. fragments so the change line is readable in a narrow column. */
+function formatChange(variant) {
+  const raw = String(variant || '').trim();
+  if (!raw) return { primary: '—', full: '' };
+  const cMatch = raw.match(/c\.[^:\s]+/);
+  const pMatch = raw.match(/p\.\([^)]+\)|p\.[A-Za-z0-9*]+/);
+  if (cMatch || pMatch) {
+    const parts = [cMatch?.[0], pMatch?.[0]].filter(Boolean);
+    return { primary: parts.join(' '), full: raw };
+  }
+  return { primary: shortText(raw, 64), full: raw };
+}
+
+function humanGaLabel(label) {
+  const s = String(label || '').trim();
+  if (!s) return '—';
+  const lower = s.toLowerCase();
+  if (lower.startsWith('primary phenotype')) return 'Primary match';
+  if (lower.includes('strong clinical')) return 'Strong candidate';
+  if (lower.includes('follow-up') || lower.includes('follow up')) return 'Follow-up';
+  if (lower.includes('review candidate')) return 'Review candidate';
+  if (lower.includes('low priority')) return 'Low priority';
+  return shortText(s, 40);
+}
+
+function humanEnrichment(bucket) {
+  const s = String(bucket || '').trim();
+  if (!s) return '—';
+  const map = {
+    KEEP_STRONG_REVIEW: 'Keep — strong',
+    KEEP_REVIEW: 'Keep — review',
+    FILTER_LOW_SUPPORT: 'Filtered — low support',
+    FILTER_COMMON_OR_BENIGN: 'Filtered — common/benign',
+  };
+  if (map[s]) return map[s];
+  return s
+    .replace(/^KEEP_/i, 'Keep — ')
+    .replace(/^FILTER_/i, 'Filtered — ')
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/^\w/, (c) => c.toUpperCase());
+}
+
+function MetaChip({ label, value, tone = 'neutral', title }) {
+  if (!value || value === '—') return null;
+  const color =
+    tone === 'warn'
+      ? 'var(--error)'
+      : tone === 'accent'
+        ? 'var(--accent-teal)'
+        : 'var(--text-secondary)';
+  const border =
+    tone === 'warn'
+      ? 'color-mix(in srgb, var(--error) 35%, transparent)'
+      : 'var(--border-subtle)';
+  return (
+    <span
+      title={title || undefined}
+      className="inline-flex items-baseline gap-1 rounded-md border px-2 py-0.5 text-2xs leading-snug max-w-full"
+      style={{ borderColor: border, color }}
+    >
+      <span className="text-[var(--text-tertiary)] shrink-0">{label}</span>
+      <span className="font-medium truncate">{value}</span>
+    </span>
+  );
+}
+
 /**
- * Analyst GA triage: open a top-candidates table + download full ga_triage.tsv.
+ * Analyst GA triage: ranked candidates + download full ga_triage.tsv.
  * Decision-support only — does not drive Clinical result / Additional findings / PDF.
  */
 export default function GaTriagePanel({ conversationId, isGuest = false, variantData = null }) {
@@ -139,16 +206,16 @@ export default function GaTriagePanel({ conversationId, isGuest = false, variant
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
-          className="max-w-5xl w-[min(96vw,64rem)] max-h-[85vh] overflow-hidden flex flex-col gap-0 p-0"
+          className="max-w-3xl w-[min(96vw,48rem)] max-h-[85vh] overflow-hidden flex flex-col gap-0 p-0"
           style={{ background: 'var(--bg-app)', borderColor: 'var(--border-subtle)' }}
         >
           <div className="px-5 pt-5 pb-3 border-b border-[var(--border-subtle)] shrink-0">
             <DialogTitle className="text-base font-semibold text-[var(--text-primary)]">
-              Genome Analyst triage
+              Top review candidates
             </DialogTitle>
             <DialogDescription className="text-xs mt-1 text-[var(--text-tertiary)]">
-              Decision-support for review only. Enrichment FINAL_* still leads; this does not
-              select Clinical result, Additional findings, or the PDF.
+              Genome Analyst ranking for review. Enrichment still leads; this does not pick
+              Clinical result, Additional findings, or the PDF.
             </DialogDescription>
           </div>
 
@@ -168,8 +235,8 @@ export default function GaTriagePanel({ conversationId, isGuest = false, variant
               disabled={!canDownload || downloading}
               title={
                 canDownload
-                  ? 'Download full ga_triage.tsv'
-                  : 'TSV available after GA triage completes with an uploaded artifact'
+                  ? 'Download full triage TSV'
+                  : 'Download available after triage completes'
               }
               className={`h-8 px-3 rounded-md text-xs font-medium inline-flex items-center gap-1.5 ${
                 canDownload && !downloading
@@ -182,12 +249,12 @@ export default function GaTriagePanel({ conversationId, isGuest = false, variant
               ) : (
                 <Download className="w-3.5 h-3.5" />
               )}
-              Download TSV
+              Download full table
             </button>
-            {data?.sample_id ? (
+            {data?.variant_count != null ? (
               <span className="text-2xs text-[var(--text-tertiary)] ml-auto">
-                Sample {data.sample_id}
-                {data.variant_count != null ? ` · ${data.variant_count} variants reviewed` : ''}
+                {candidates.length} shown
+                {data.variant_count != null ? ` · ${data.variant_count} reviewed` : ''}
               </span>
             ) : null}
           </div>
@@ -201,104 +268,98 @@ export default function GaTriagePanel({ conversationId, isGuest = false, variant
             {loading && !data ? (
               <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)] py-8 justify-center">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Loading GA triage…
+                Loading triage…
               </div>
             ) : !ready ? (
               <p className="text-xs text-[var(--text-secondary)] py-6 leading-relaxed">
                 {data?.message ||
                   (running
-                    ? 'GA triage is still running.'
+                    ? 'Triage is still running.'
                     : status === 'failed'
-                      ? data?.error || 'GA triage failed.'
-                      : 'GA triage has not run for this case yet. It starts after enrichment when enabled.')}
+                      ? data?.error || 'Triage failed.'
+                      : 'Triage has not run for this case yet. It starts after enrichment when enabled.')}
               </p>
             ) : candidates.length === 0 ? (
               <p className="text-xs text-[var(--text-secondary)] py-6">
                 {data?.message || 'No top candidates stored.'}
               </p>
             ) : (
-              <>
-                <p className="text-2xs text-[var(--text-tertiary)] mb-2 leading-snug">
-                  {data?.message}
-                </p>
-                <div className="overflow-x-auto rounded-md border border-[var(--border-subtle)]">
-                  <table className="w-full text-left text-xs border-collapse min-w-[52rem]">
-                    <thead>
-                      <tr className="bg-[var(--bg-surface)] text-[var(--text-tertiary)]">
-                        <th className="px-2.5 py-2 font-medium">#</th>
-                        <th className="px-2.5 py-2 font-medium">Gene</th>
-                        <th className="px-2.5 py-2 font-medium">Variant</th>
-                        <th className="px-2.5 py-2 font-medium">GA label</th>
-                        <th className="px-2.5 py-2 font-medium">Score</th>
-                        <th className="px-2.5 py-2 font-medium">Reportability</th>
-                        <th className="px-2.5 py-2 font-medium">GA ACMG</th>
-                        <th className="px-2.5 py-2 font-medium">FINAL bucket</th>
-                        <th className="px-2.5 py-2 font-medium">Conflict</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {candidates.map((row, index) => (
-                        <tr
-                          key={`${row.gene || 'g'}-${row.variant_id || row.variant || index}`}
-                          className="border-t border-[var(--border-subtle)] align-top"
+              <ul className="space-y-2">
+                {candidates.map((row, index) => {
+                  const change = formatChange(row.variant);
+                  const enrichment = humanEnrichment(row.final_bucket || row.final_report);
+                  const gaRec = humanGaLabel(row.label);
+                  const conflict = row.has_final_ga_conflict
+                    ? row.final_ga_conflict
+                    : row.conflicts;
+                  return (
+                    <li
+                      key={`${row.gene || 'g'}-${row.variant_id || row.variant || index}`}
+                      className="rounded-lg border border-[var(--border-subtle)] px-3.5 py-3"
+                      style={{ background: 'var(--bg-surface)' }}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span
+                          className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-2xs font-semibold"
+                          style={{
+                            background: 'var(--bg-app)',
+                            color: 'var(--text-tertiary)',
+                            border: '1px solid var(--border-subtle)',
+                          }}
+                          aria-label={`Rank ${index + 1}`}
                         >
-                          <td className="px-2.5 py-2 text-[var(--text-tertiary)]">{index + 1}</td>
-                          <td className="px-2.5 py-2 font-medium text-[var(--text-primary)]">
-                            {row.gene || '—'}
-                          </td>
-                          <td
-                            className="px-2.5 py-2 text-[var(--text-secondary)] max-w-[14rem]"
-                            title={row.variant || ''}
-                          >
-                            {shortText(row.variant, 56)}
-                          </td>
-                          <td
-                            className="px-2.5 py-2 text-[var(--text-secondary)] max-w-[12rem]"
-                            title={row.label || ''}
-                          >
-                            {shortText(row.label, 48)}
-                          </td>
-                          <td className="px-2.5 py-2 text-[var(--text-primary)]">{row.score ?? '—'}</td>
-                          <td
-                            className="px-2.5 py-2 text-[var(--text-secondary)] max-w-[10rem]"
-                            title={row.reportability || ''}
-                          >
-                            {shortText(row.reportability, 36)}
-                          </td>
-                          <td className="px-2.5 py-2 text-[var(--text-secondary)]">
-                            {row.ga_acmg_2015 || row.ga_acmg_point || '—'}
-                          </td>
-                          <td
-                            className="px-2.5 py-2 text-[var(--text-secondary)] max-w-[10rem]"
-                            title={row.final_bucket || row.final_report || ''}
-                          >
-                            {shortText(row.final_bucket || row.final_report, 32)}
-                          </td>
-                          <td
-                            className="px-2.5 py-2 max-w-[12rem]"
-                            style={{
-                              color: row.has_final_ga_conflict
-                                ? 'var(--error)'
-                                : 'var(--text-tertiary)',
-                            }}
-                            title={row.final_ga_conflict || row.conflicts || ''}
-                          >
-                            {row.has_final_ga_conflict
-                              ? shortText(row.final_ga_conflict, 60)
-                              : shortText(row.conflicts, 40)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {data?.clinical_use_note ? (
-                  <p className="text-2xs text-[var(--text-tertiary)] mt-3 leading-relaxed">
-                    {data.clinical_use_note}
-                  </p>
-                ) : null}
-              </>
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                            <span className="text-sm font-semibold text-[var(--text-primary)]">
+                              {row.gene || 'Unknown gene'}
+                            </span>
+                            <span
+                              className="text-xs text-[var(--text-secondary)] font-mono break-all"
+                              title={change.full || undefined}
+                            >
+                              {change.primary}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            <MetaChip
+                              label="GA"
+                              value={gaRec}
+                              title={row.label || undefined}
+                              tone="accent"
+                            />
+                            <MetaChip label="Score" value={row.score != null ? String(row.score) : null} />
+                            <MetaChip
+                              label="Enrichment"
+                              value={enrichment}
+                              title={row.final_bucket || row.final_report || undefined}
+                            />
+                            <MetaChip
+                              label="ACMG"
+                              value={row.ga_acmg_2015 || row.ga_acmg_point || null}
+                            />
+                            {conflict ? (
+                              <MetaChip
+                                label="Flag"
+                                value={shortText(conflict, 48)}
+                                title={String(conflict)}
+                                tone="warn"
+                              />
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
+            {ready && data?.clinical_use_note ? (
+              <p className="text-2xs text-[var(--text-tertiary)] mt-3 leading-relaxed">
+                {data.clinical_use_note}
+              </p>
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>

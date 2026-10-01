@@ -85,12 +85,22 @@ function MetaChip({ label, value, tone = 'neutral', title }) {
  * Analyst GA triage: ranked candidates + download full ga_triage.tsv.
  * Decision-support only — does not drive Clinical result / Additional findings / PDF.
  */
-export default function GaTriagePanel({ conversationId, isGuest = false, variantData = null }) {
+export default function GaTriagePanel({
+  conversationId,
+  isGuest = false,
+  variantData = null,
+  /** Changes when filter/enrichment eligibility updates — restarts peek after ACMG re-runs GA. */
+  refreshKey = null,
+}) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
+  // Boolean dep only — parent often replaces `variantData` with a new object each
+  // pipeline tick; object identity in the effect deps cancelled the in-flight timer
+  // and left the button stuck on "GA triage running…".
+  const hasVariantData = Boolean(variantData);
 
   const load = useCallback(async ({ quiet = false } = {}) => {
     if (!conversationId) return null;
@@ -104,7 +114,6 @@ export default function GaTriagePanel({ conversationId, isGuest = false, variant
       return payload;
     } catch (err) {
       if (!quiet) {
-        setData(null);
         setError(err.message || 'Failed to load GA triage');
       }
       return null;
@@ -117,47 +126,57 @@ export default function GaTriagePanel({ conversationId, isGuest = false, variant
     if (open) load();
   }, [open, load]);
 
-  // Initial peek + poll while GA is in flight so the sidebar updates without a hard refresh.
+  // Peek on mount + poll while GA is in flight so the sidebar updates without a hard refresh.
   useEffect(() => {
-    if (!conversationId || isGuest || !variantData) {
+    if (!conversationId || isGuest || !hasVariantData) {
       setData(null);
       return undefined;
     }
     let cancelled = false;
     let timer = null;
+    let inFlight = false;
 
     const peek = async () => {
       try {
         const payload = await fetchGaTriage(conversationId);
         if (cancelled) return null;
         setData(payload);
+        const status = String(payload?.status || '').toLowerCase();
+        inFlight = status === 'running' || status === 'pending' || status === 'queued';
         return payload;
       } catch {
-        if (!cancelled) setData(null);
+        // Keep last known label; retry if we still believe a job is in flight.
         return null;
       }
     };
 
-    const schedule = (payload) => {
-      const status = String(payload?.status || '').toLowerCase();
-      const inFlight = status === 'running' || status === 'pending' || status === 'queued';
-      if (!inFlight || cancelled) return;
+    const schedule = () => {
+      if (cancelled || !inFlight) return;
       timer = setTimeout(async () => {
-        const next = await peek();
-        if (!cancelled) schedule(next);
-      }, 8000);
+        await peek();
+        if (!cancelled) schedule();
+      }, 4000);
     };
 
     (async () => {
-      const payload = await peek();
-      if (!cancelled) schedule(payload);
+      await peek();
+      if (!cancelled) schedule();
     })();
+
+    const onFocus = () => {
+      if (cancelled) return;
+      peek().then(() => {
+        if (!cancelled) schedule();
+      });
+    };
+    window.addEventListener('focus', onFocus);
 
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+      window.removeEventListener('focus', onFocus);
     };
-  }, [conversationId, isGuest, variantData]);
+  }, [conversationId, isGuest, hasVariantData, refreshKey]);
 
   const handleDownload = async () => {
     if (!conversationId || downloading) return;

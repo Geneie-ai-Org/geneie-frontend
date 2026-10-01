@@ -2777,6 +2777,7 @@ const VariantFilterSidebar = ({
               conversationId={conversationId}
               isGuest={isGuest}
               variantData={variantData}
+              refreshKey={`${chatEligibility?.enrichment_status || ''}:${chatEligibility?.updated_at || ''}:${chatEligibility?.variants_under_consideration ?? ''}`}
             />
             <CaseReportDownloadButton
               conversationId={conversationId}

@@ -144,7 +144,11 @@ export function computePipelineSteps({
   });
 
   const chat = (() => {
-    if (chatEligibility?.allowed) return 'done';
+    if (chatEligibility?.allowed) {
+      // PGx-only unlock opens the composer but disease prioritization may still be pending.
+      if ((chatEligibility.scope || '').toLowerCase() === 'pgx_only') return 'done';
+      return 'done';
+    }
     if (chatEligibility?.reason === 'S3_LINE_COUNT_PENDING') return 'pending';
     if (reduce === 'done' && filteredVariantCount != null) return 'pending';
     return 'pending';
@@ -236,6 +240,12 @@ export function getPipelineStatusLine(props, steps) {
     return sanitizePhenotypeStatusMessage(exomiserStatus?.message, PHENOTYPE_RUNNING_MESSAGE);
   }
   if (chatEligibility?.allowed) {
+    if ((chatEligibility.scope || '').toLowerCase() === 'pgx_only') {
+      return (
+        chatEligibility.message ||
+        'PGx chat is enabled. Apply ACMG or phenotype-driven prioritization for disease-variant chat.'
+      );
+    }
     const n = variantsUnderConsideration ?? filteredVariantCount;
     return n != null
       ? `Chat is enabled (${Number(n).toLocaleString()} variants under consideration).`

@@ -7,7 +7,9 @@ import { FileText } from 'lucide-react';
  */
 export function getClinicalReportGate({ downloadGate = null, chatEligibility = null } = {}) {
   const gateBlocked = downloadGate?.blocked === true;
-  const chatReady = chatEligibility?.allowed === true;
+  const scope = (chatEligibility?.scope || '').toLowerCase();
+  // PGx-only chat does not unlock the clinical disease report.
+  const chatReady = chatEligibility?.allowed === true && scope !== 'pgx_only';
   const chatPending = chatEligibility?.allowed == null;
   const chatBlocked = !chatReady;
   const blocked = gateBlocked || chatBlocked;
@@ -21,7 +23,10 @@ export function getClinicalReportGate({ downloadGate = null, chatEligibility = n
 
   const chatLabel = () => {
     if (chatPending) return 'Checking chat eligibility…';
-    if (chatEligibility?.reason === 'CHAT_REQUIRES_FILTER') {
+    if (scope === 'pgx_only') {
+      return 'PGx chat is open — apply ACMG or phenotype filter for the clinical report…';
+    }
+    if (chatEligibility?.reason === 'CHAT_REQUIRES_FILTER' || chatEligibility?.reason === 'PGX_ONLY') {
       return 'Report unlocks when chat unlocks (apply a filter)…';
     }
     if (chatEligibility?.reason === 'S3_LINE_COUNT_PENDING') {
@@ -37,8 +42,8 @@ export function getClinicalReportGate({ downloadGate = null, chatEligibility = n
   const title = gateBlocked
     ? downloadGate?.message || 'A job is still running'
     : chatBlocked
-      ? chatEligibility?.message || 'Chat must be enabled before generating a report'
-      : 'Assign variants and generate Geneie clinical report PDF';
+    ? chatEligibility?.message || 'Chat must be enabled before generating a report'
+    : 'Assign variants and generate Geneie clinical report PDF';
 
   return { blocked, label, title };
 }

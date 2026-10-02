@@ -47,12 +47,14 @@ function whyText(row) {
  * Slim assignment modal: variant id + Include / Additional only.
  * Unselected rows are excluded by default. Sorted by BE (persona workflow rules).
  * Assignments are keyed by unique row_key so duplicate variant ids don't steal clicks.
- * PFRA may pre-check Include/Additional; analyst override always wins before PDF.
+ * PFRA pre-checks Include/Additional on load; analyst override always wins before PDF.
+ * In Automatic mode, suggested rows are surfaced first and highlighted.
  */
 export default function ClinicalReportAssignModal({
   open,
   onOpenChange,
   conversationId,
+  automaticMode = false,
 }) {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -70,6 +72,7 @@ export default function ClinicalReportAssignModal({
       setMeta(data);
       const rows = Array.isArray(data.candidates) ? data.candidates : [];
       setCandidates(rows);
+      // Always apply PFRA pre-checks when present (Automatic + Manual).
       setAssignments(assignmentsFromSuggestions(rows));
     } catch (err) {
       setError(err.message || 'Failed to load report candidates');
@@ -84,6 +87,18 @@ export default function ClinicalReportAssignModal({
   useEffect(() => {
     if (open) load();
   }, [open, load]);
+
+  const displayRows = useMemo(() => {
+    if (!automaticMode) {
+      return candidates.map((row, index) => ({ row, index }));
+    }
+    // Automatic: surface PFRA-suggested rows first so preselection is obvious.
+    const withIdx = candidates.map((row, index) => ({ row, index }));
+    return [
+      ...withIdx.filter(({ row }) => Boolean(row.suggested_section)),
+      ...withIdx.filter(({ row }) => !row.suggested_section),
+    ];
+  }, [candidates, automaticMode]);
 
   const selectedIds = useMemo(() => {
     const clinical = [];
@@ -126,6 +141,7 @@ export default function ClinicalReportAssignModal({
 
   const pfra = meta?.pfra || null;
   const pfraAvailable = Boolean(pfra?.suggestions_available);
+  const suggestionCount = Number(pfra?.suggestion_count ?? 0);
   const pfraGateMessage =
     pfra?.gate?.message ||
     (!pfraAvailable
@@ -167,7 +183,9 @@ export default function ClinicalReportAssignModal({
             Generate clinical report
           </DialogTitle>
           <DialogDescription className="text-xs text-[var(--text-secondary)] mt-1">
-            Select Include and/or Additional. Unselected variants are left out.
+            {automaticMode
+              ? 'Automatic mode · PFRA pre-selected Include rows below — review, edit if needed, then Proceed.'
+              : 'Select Include and/or Additional. Unselected variants are left out.'}
             {meta?.workflow_display_name
               ? ` · ${meta.workflow_display_name}`
               : ''}
@@ -175,9 +193,18 @@ export default function ClinicalReportAssignModal({
               ? ` · ${meta.working_set_count.toLocaleString()} under consideration`
               : ''}
             {pfraAvailable
-              ? ` · PFRA suggestions pre-checked (${pfra?.suggestion_count ?? 0}) — review before Proceed`
+              ? ` · ${suggestionCount} suggestion${suggestionCount === 1 ? '' : 's'} pre-checked`
               : ''}
           </DialogDescription>
+          {!loading && pfraAvailable ? (
+            <p className="text-2xs mt-2" style={{ color: 'var(--accent-teal)' }}>
+              Pre-selected for Clinical result: {selectedIds.clinical.length}
+              {selectedIds.additional.length
+                ? ` · Additional: ${selectedIds.additional.length}`
+                : ''}
+              {' · '}unselected stay out of the PDF
+            </p>
+          ) : null}
           {!loading && pfraGateMessage && !pfraAvailable ? (
             <p className="text-2xs text-[var(--text-tertiary)] mt-2">
               {pfraGateMessage}
@@ -199,20 +226,37 @@ export default function ClinicalReportAssignModal({
           )}
           {!loading && candidates.length > 0 && (
             <ul className="divide-y divide-[var(--border-subtle)]">
-              {candidates.map((row, index) => {
+              {displayRows.map(({ row, index }) => {
                 const key = rowKeyOf(row, index);
                 const selected = assignments[key];
                 const badge = (row.badge || '').trim();
                 const suggested = Boolean(row.suggested_section);
+                const preselected = selected === INCLUDE || selected === ADDITIONAL;
                 return (
                   <li
                     key={key}
-                    className="flex items-center gap-2 py-1.5 min-h-[2rem]"
+                    className="flex items-center gap-2 py-1.5 min-h-[2rem] px-1 rounded-md"
+                    style={
+                      preselected
+                        ? {
+                            background:
+                              'color-mix(in srgb, var(--accent-teal) 10%, transparent)',
+                          }
+                        : undefined
+                    }
                   >
                     <span
                       className="flex-1 min-w-0 text-xs font-mono text-[var(--text-primary)] truncate"
                       title={whyText(row)}
                     >
+                      {suggested ? (
+                        <span
+                          className="mr-1.5 text-2xs font-sans font-medium"
+                          style={{ color: 'var(--accent-teal)' }}
+                        >
+                          Suggested
+                        </span>
+                      ) : null}
                       {rowLabel(row)}
                       {row.suggested_bucket === 'PRIMARY_VUS_HIGH' ? (
                         <span className="ml-1 text-2xs text-[var(--text-tertiary)]">

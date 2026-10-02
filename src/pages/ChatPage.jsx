@@ -68,6 +68,7 @@ const ChatPage = () => {
   const [conversations, setConversations] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [clinicalReportOpen, setClinicalReportOpen] = useState(false);
+  const autoOpenedReportForConvRef = useRef(null);
   const [currentDocument, setCurrentDocument] = useState(null);
   const [variantData, setVariantData] = useState(null);
   const [isVariantSidebarOpen, setIsVariantSidebarOpen] = useState(false);
@@ -448,6 +449,7 @@ const ChatPage = () => {
 
   useEffect(() => {
     setClinicalReportOpen(false);
+    autoOpenedReportForConvRef.current = null;
   }, [activeConversationId]);
 
   const { handleDocumentUpload } = useDocumentUpload({
@@ -1339,6 +1341,15 @@ const ChatPage = () => {
     !!variantData &&
     !!activeConversationId;
 
+  // Automatic ready_report: open assign modal once with PFRA pre-checks (still confirm before PDF).
+  useEffect(() => {
+    if (!showAutomaticReportCta || reportGate?.blocked) return;
+    if (autoOpenedReportForConvRef.current === activeConversationId) return;
+    autoOpenedReportForConvRef.current = activeConversationId;
+    setIsVariantSidebarOpen(true);
+    setClinicalReportOpen(true);
+  }, [showAutomaticReportCta, reportGate?.blocked, activeConversationId]);
+
   const automaticPipelineBanner =
     automaticPipeline.active && automaticPipeline.message ? (
       <AutomaticPipelinePanel
@@ -1348,6 +1359,7 @@ const ChatPage = () => {
         events={automaticPipeline.events}
         showReportCta={showAutomaticReportCta}
         reportGate={reportGate}
+        reportCtaLabel="Review suggested report"
         onGenerateReport={() => {
           setIsVariantSidebarOpen(true);
           setClinicalReportOpen(true);
@@ -1788,6 +1800,7 @@ const ChatPage = () => {
           open={clinicalReportOpen}
           onOpenChange={setClinicalReportOpen}
           conversationId={activeConversationId}
+          automaticMode={automaticPipeline.active}
         />
       ) : null}
 

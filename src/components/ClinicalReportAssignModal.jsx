@@ -260,7 +260,8 @@ export default function ClinicalReportAssignModal({
                         </span>
                       ) : null}
                       {rowLabel(row)}
-                      {row.suggested_bucket === 'PRIMARY_VUS_HIGH' ? (
+                      {Array.isArray(row.pfra_caveats) &&
+                      row.pfra_caveats.includes('VUS_CANDIDATE_NOT_ACTIONABLE') ? (
                         <span className="ml-1 text-2xs text-[var(--text-tertiary)]">
                           (VUS candidate)
                         </span>

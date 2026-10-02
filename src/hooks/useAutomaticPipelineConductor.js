@@ -101,7 +101,10 @@ export function deriveAutomaticSteps({
 
   const report = (() => {
     if (phase === 'ready_report' || exoDone) {
-      return { status: 'waiting', detail: 'Generate report when ready' };
+      return {
+        status: 'waiting',
+        detail: 'Review PFRA-preselected variants, then Proceed',
+      };
     }
     return { status: 'pending', detail: 'After prioritization' };
   })();

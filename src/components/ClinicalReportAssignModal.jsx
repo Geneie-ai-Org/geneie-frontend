@@ -183,9 +183,11 @@ export default function ClinicalReportAssignModal({
             Generate clinical report
           </DialogTitle>
           <DialogDescription className="text-xs text-[var(--text-secondary)] mt-1">
-            {automaticMode
+            {automaticMode && pfraAvailable
               ? 'Automatic mode · PFRA pre-selected Include rows below — review, edit if needed, then Proceed.'
-              : 'Select Include and/or Additional. Unselected variants are left out.'}
+              : automaticMode
+                ? 'Automatic mode · assign Clinical result manually (PFRA suggestions unavailable).'
+                : 'Select Include and/or Additional. Unselected variants are left out.'}
             {meta?.workflow_display_name
               ? ` · ${meta.workflow_display_name}`
               : ''}

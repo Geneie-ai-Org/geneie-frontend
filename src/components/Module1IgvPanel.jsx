@@ -1,8 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Loader2 } from 'lucide-react';
+import { Loader2, Maximize2 } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import { fetchModule1BamArtifacts, uploadModule1ReportFigure } from '@/services/backendApi';
 import { useTheme } from '@/hooks/useTheme';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   assemblyForGenome,
   buildGeneieJbrowseConfiguration,
@@ -11,11 +18,12 @@ import {
 
 /**
  * Geneie-themed JBrowse 2 linear genome view for retained Module 1 markdup BAM.
+ * Opens in a full dialog (not the bottom drawer) so pan/zoom is not clipped.
  * Auto-opens once to capture a PNG into the durable QC report before purge.
  */
 const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
   const { isDark } = useTheme();
-  const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [snapshotStatus, setSnapshotStatus] = useState(null);
@@ -26,23 +34,34 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
   const capturedRef = useRef(false);
   const autoOpenedRef = useRef(false);
 
-  // Auto-expand once while BAM is live so we can save a browser snapshot.
+  // Reset per conversation so a new BAM gets a fresh view + snapshot.
+  useEffect(() => {
+    capturedRef.current = false;
+    autoOpenedRef.current = false;
+    setViewState(null);
+    setBamMeta(null);
+    setSnapshotStatus(null);
+    setError(null);
+  }, [conversationId]);
+
+  // Auto-open once while BAM is live so we can save a browser snapshot.
   useEffect(() => {
     if (!hasBam || !conversationId || autoOpenedRef.current) return;
     autoOpenedRef.current = true;
-    setExpanded(true);
+    setOpen(true);
   }, [hasBam, conversationId]);
 
   useEffect(() => {
-    if (!expanded || !conversationId || !hasBam) return undefined;
+    if (!open || !conversationId || !hasBam) return undefined;
 
     let cancelled = false;
     setLoading(true);
     setError(null);
-    setViewState(null);
 
     (async () => {
       try {
+        // Keep an existing viewState across re-opens so locus/zoom survive; only
+        // bootstrap when first needed or after theme/genome change.
         const [{ createViewState, JBrowseLinearGenomeView }, data] = await Promise.all([
           import('@jbrowse/react-linear-genome-view2'),
           fetchModule1BamArtifacts(conversationId),
@@ -58,52 +77,54 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
         const sample = data.sample_name || 'Alignments';
         const trackId = `module1-bam-${conversationId}`;
 
-        const state = createViewState({
-          assembly: assemblyForGenome(assemblyName),
-          tracks: [
-            {
-              type: 'AlignmentsTrack',
-              trackId,
-              name: sample,
-              assemblyNames: [assemblyName],
-              adapter: {
-                type: 'BamAdapter',
-                bamLocation: { uri: data.bam_url, locationType: 'UriLocation' },
-                index: {
-                  location: { uri: data.bai_url, locationType: 'UriLocation' },
-                },
-              },
-            },
-          ],
-          location: defaultLocusForGenome(assemblyName),
-          defaultSession: {
-            name: 'module1',
-            view: {
-              id: 'linearGenomeView',
-              type: 'LinearGenomeView',
-              bpPerPx: 0.5,
-              tracks: [
-                {
-                  id: trackId,
-                  type: 'AlignmentsTrack',
-                  configuration: trackId,
-                  displays: [
-                    {
-                      id: `${trackId}-display`,
-                      type: 'LinearAlignmentsDisplay',
-                      configuration: `${trackId}-LinearAlignmentsDisplay`,
-                    },
-                  ],
-                },
-              ],
-            },
-          },
-          configuration: buildGeneieJbrowseConfiguration(isDark),
-        });
-
         setBamMeta({ sample, genome: assemblyName });
         setJBrowse(() => JBrowseLinearGenomeView);
-        setViewState(state);
+
+        setViewState((prev) => {
+          if (prev) return prev;
+          return createViewState({
+            assembly: assemblyForGenome(assemblyName),
+            tracks: [
+              {
+                type: 'AlignmentsTrack',
+                trackId,
+                name: sample,
+                assemblyNames: [assemblyName],
+                adapter: {
+                  type: 'BamAdapter',
+                  bamLocation: { uri: data.bam_url, locationType: 'UriLocation' },
+                  index: {
+                    location: { uri: data.bai_url, locationType: 'UriLocation' },
+                  },
+                },
+              },
+            ],
+            location: defaultLocusForGenome(assemblyName),
+            defaultSession: {
+              name: 'module1',
+              view: {
+                id: 'linearGenomeView',
+                type: 'LinearGenomeView',
+                bpPerPx: 2,
+                tracks: [
+                  {
+                    id: trackId,
+                    type: 'AlignmentsTrack',
+                    configuration: trackId,
+                    displays: [
+                      {
+                        id: `${trackId}-display`,
+                        type: 'LinearAlignmentsDisplay',
+                        configuration: `${trackId}-LinearAlignmentsDisplay`,
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+            configuration: buildGeneieJbrowseConfiguration(isDark),
+          });
+        });
       } catch (err) {
         if (!cancelled) setError(err?.message || 'Could not open alignment viewer.');
       } finally {
@@ -114,11 +135,11 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
     return () => {
       cancelled = true;
     };
-  }, [expanded, conversationId, hasBam, genomeHint, isDark]);
+  }, [open, conversationId, hasBam, genomeHint, isDark]);
 
   // Capture viewport → durable report (once per conversation while BAM live).
   useEffect(() => {
-    if (!expanded || !viewState || !captureRootRef.current || capturedRef.current || loading || error) {
+    if (!open || !viewState || !captureRootRef.current || capturedRef.current || loading || error) {
       return undefined;
     }
     let cancelled = false;
@@ -152,72 +173,86 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [expanded, viewState, loading, error, conversationId, isDark, bamMeta]);
+  }, [open, viewState, loading, error, conversationId, isDark, bamMeta]);
 
   const Browser = useMemo(() => JBrowse, [JBrowse]);
 
   if (!hasBam) return null;
 
   return (
-    <div
-      className="mt-3 rounded-lg border overflow-hidden"
-      style={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-subtle)' }}
-      aria-label="Module 1 alignment viewer"
-    >
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
+    <>
+      <div
+        className="mt-3 rounded-lg border"
+        style={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-subtle)' }}
+        aria-label="Module 1 alignment viewer"
       >
-        <div className="min-w-0">
-          <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-            Alignment browser
-          </p>
-          <p className="text-2xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-            Geneie-themed view · snapshot saved into the QC report before purge
-            {bamMeta?.genome ? ` · ${bamMeta.genome}` : ''}.
-          </p>
-        </div>
-        <ChevronDown
-          className="w-4 h-4 shrink-0 transition-transform"
-          style={{
-            color: 'var(--text-tertiary)',
-            transform: expanded ? 'rotate(180deg)' : 'none',
-          }}
-        />
-      </button>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
+        >
+          <div className="min-w-0">
+            <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+              Alignment browser
+            </p>
+            <p className="text-2xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+              Open full interactive view · pan, zoom, and search while BAM is retained
+              {bamMeta?.genome ? ` · ${bamMeta.genome}` : ''}.
+            </p>
+          </div>
+          <Maximize2 className="w-4 h-4 shrink-0" style={{ color: 'var(--text-tertiary)' }} />
+        </button>
+      </div>
 
-      {expanded && (
-        <div className="px-2 pb-2">
-          {loading && (
-            <div className="flex items-center gap-2 py-6 justify-center">
-              <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--text-tertiary)' }} />
-              <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                Loading browser…
-              </span>
-            </div>
-          )}
-          {error && (
-            <p className="text-2xs px-1 py-2" style={{ color: 'var(--error)' }}>
-              {error}
-            </p>
-          )}
-          {snapshotStatus && (
-            <p className="text-2xs px-1 pb-1" style={{ color: 'var(--text-tertiary)' }}>
-              {snapshotStatus}
-            </p>
-          )}
-          {!loading && !error && Browser && viewState && (
-            <div
-              ref={captureRootRef}
-              className="module1-jbrowse-root rounded-md overflow-hidden min-h-[320px]"
-            >
-              <Browser viewState={viewState} />
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent
+          showCloseButton
+          className="!max-w-[min(96vw,1100px)] w-full h-[min(90vh,860px)] flex flex-col p-0 gap-0 overflow-hidden"
+          style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-strong)' }}
+        >
+          <DialogHeader className="px-4 pt-4 pb-2 shrink-0 pr-12">
+            <DialogTitle className="text-sm" style={{ color: 'var(--text-primary)' }}>
+              Alignment browser
+              {bamMeta?.sample ? ` · ${bamMeta.sample}` : ''}
+            </DialogTitle>
+            <DialogDescription className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+              Drag the track to pan · use the toolbar to zoom or jump to a locus
+              {bamMeta?.genome ? ` · ${bamMeta.genome}` : ''}.
+              {snapshotStatus ? ` ${snapshotStatus}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 min-h-0 px-3 pb-3 flex flex-col">
+            {loading && (
+              <div className="flex items-center gap-2 py-12 justify-center">
+                <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--text-tertiary)' }} />
+                <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+                  Loading browser…
+                </span>
+              </div>
+            )}
+            {error && (
+              <p className="text-2xs px-1 py-2" style={{ color: 'var(--error)' }}>
+                {error}
+              </p>
+            )}
+            {!loading && !error && Browser && viewState && (
+              <div
+                ref={captureRootRef}
+                className="module1-jbrowse-root flex-1 min-h-[480px] rounded-md border overflow-auto"
+                style={{
+                  borderColor: 'var(--border-subtle)',
+                  backgroundColor: isDark ? '#0f0f0f' : '#ffffff',
+                  touchAction: 'none',
+                }}
+              >
+                <Browser viewState={viewState} />
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 

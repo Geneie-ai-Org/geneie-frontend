@@ -60,8 +60,12 @@ export default function PanelAppSuggestSection({
     userTouchedRef.current = false;
   }, [hpoKey]);
 
+  // Freeze phenotype text used for API: when HPOs are confirmed, gene overlap is enough —
+  // avoid refetch storms from unrelated text churn.
+  const suggestPhenotypeText = hpoKey ? '' : String(phenotypeText || '').trim();
+
   useEffect(() => {
-    if (!hpoKey && !String(phenotypeText || '').trim()) {
+    if (!hpoKey && !suggestPhenotypeText) {
       setSuggestions([]);
       setError('');
       return undefined;
@@ -69,12 +73,14 @@ export default function PanelAppSuggestSection({
     const seq = ++seqRef.current;
     setLoading(true);
     setError('');
+    // Longer debounce while analysts click many finding chips.
+    const delay = hpoKey ? 450 : 300;
     const timer = setTimeout(async () => {
       try {
         const data = await fetchPanelAppSuggestions({
           conversationId,
           hpoIds: hpoKey ? hpoKey.split(',') : [],
-          phenotypeText,
+          phenotypeText: suggestPhenotypeText,
           includeAmber,
           limit: 10,
         });
@@ -82,14 +88,14 @@ export default function PanelAppSuggestSection({
         setSuggestions(Array.isArray(data?.suggestions) ? data.suggestions : []);
       } catch (err) {
         if (seq !== seqRef.current) return;
-        setSuggestions([]);
+        // Keep prior suggestions on transient errors so the list does not blank out.
         setError(err.message || 'Could not load gene panel suggestions');
       } finally {
         if (seq === seqRef.current) setLoading(false);
       }
-    }, 350);
+    }, delay);
     return () => clearTimeout(timer);
-  }, [hpoKey, phenotypeText, includeAmber, conversationId]);
+  }, [hpoKey, suggestPhenotypeText, includeAmber, conversationId]);
 
   // Manual: catalog search when query has 2+ chars.
   useEffect(() => {

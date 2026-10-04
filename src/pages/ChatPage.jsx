@@ -48,6 +48,10 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 import { getClinicalReportGate } from '@/components/CaseReportDownloadButton';
 import ClinicalReportAssignModal from '@/components/ClinicalReportAssignModal';
 import AutomaticPipelinePanel from '@/components/AutomaticPipelinePanel';
+import {
+  normalizePipelineRunMode,
+  PIPELINE_RUN_AUTOMATIC,
+} from '@/components/PipelineRunModeToggle';
 import { DEFAULT_GUEST_CHAT_LIMIT, fetchGaTriage } from '@/services/backendApi';
 import { formatMeterDetail, meterExhausted, meterFor, meterNearLimit, patchGuestChatUsed } from '@/services/tierLimits';
 import { describeLimitError, isEmailVerificationCode } from '@/services/limitErrors';
@@ -1086,8 +1090,16 @@ const ChatPage = () => {
     setIsAnnovarRecommended(recommendAnnovar);
   }, [columnInterpretationResult]);
 
+  const isAutomaticCase =
+    normalizePipelineRunMode(
+      currentDocument?.sample_metadata?.pipeline_run_mode ||
+        currentDocument?.sample_metadata?.phenotype_run_mode
+    ) === PIPELINE_RUN_AUTOMATIC;
+
+  // Manual: show File Analysis for analyst review. Automatic: never block the conductor.
   const showFileAnalysisModal =
     showInterpretationModal &&
+    !isAutomaticCase &&
     !interpretationDismissedRef.current &&
     !pipelineJobActive &&
     !annovarMessageModal &&

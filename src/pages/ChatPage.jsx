@@ -473,6 +473,10 @@ const ChatPage = () => {
     fetchExomiserEligibility,
     runExomiser,
     gaTriageStatus,
+    activeProprietaryFilter: conversationFilterState.activeProprietaryFilter,
+    enrichmentStatus: chatEligibility?.enrichment_status,
+    // Wait for conversation document before kicking any Automatic stage.
+    statusHydrated: Boolean(currentDocument),
   });
 
   useEffect(() => {

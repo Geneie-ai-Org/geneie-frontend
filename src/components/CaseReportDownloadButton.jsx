@@ -21,8 +21,12 @@ export function getClinicalReportGate({
   // Filter already applied (phenotype/ACMG) — do not keep nagging "Apply filter…"
   // while disease chat is still pgx_only (common while GA / advanced-chat index runs).
   const filterAlreadyApplied =
-    Number(chatEligibility?.filtered_variant_count) > 0 ||
-    Number(chatEligibility?.variants_under_consideration) > 0 ||
+    Number(chatEligibility?.filtered_variant_count ?? chatEligibility?.filteredVariantCount) >
+      0 ||
+    Number(
+      chatEligibility?.variants_under_consideration ??
+        chatEligibility?.variantsUnderConsideration
+    ) > 0 ||
     Boolean(
       chatEligibility?.active_proprietary_filter ||
         chatEligibility?.activeProprietaryFilter

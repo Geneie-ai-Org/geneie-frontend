@@ -230,7 +230,7 @@ export function useModule1Pipeline({
         const completeNotIngested =
           data.status === 'complete' && data.ingest_status !== 'done' && data.ingest_status !== 'failed';
         const stillRunning = NON_TERMINAL_STATUSES.has(data.status) || completeNotIngested;
-        if (stillRunning || data.has_qc || data.has_bam) {
+        if (stillRunning || data.has_qc || data.has_bam || data.bam_qc_purged) {
           setModule1Job(jobFromStatusPayload(data, activeConversationId));
           if (stillRunning) {
             pollModule1StatusRef.current(activeConversationId);
@@ -518,7 +518,8 @@ export function useModule1Pipeline({
   // QC / IGV stay visible after the stepper would otherwise dismiss, until purge.
   const module1QcVisible = Boolean(module1Job?.hasQc && module1Job?.conversationId);
   const module1BamVisible = Boolean(module1Job?.hasBam && module1Job?.conversationId);
-  const module1ArtifactsVisible = module1QcVisible || module1BamVisible;
+  const module1ReportVisible = Boolean(module1Job?.bamQcPurged && module1Job?.conversationId);
+  const module1ArtifactsVisible = module1QcVisible || module1BamVisible || module1ReportVisible;
 
   return {
     bedCatalog,
@@ -539,6 +540,7 @@ export function useModule1Pipeline({
     module1JobActive,
     module1QcVisible,
     module1BamVisible,
+    module1ReportVisible,
     module1ArtifactsVisible,
     module1Gate,
     module1StageGate,

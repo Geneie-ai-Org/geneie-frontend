@@ -1,18 +1,25 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import { fetchModule1BamArtifacts } from '@/services/backendApi';
+import { useTheme } from '@/hooks/useTheme';
+import {
+  assemblyForGenome,
+  buildGeneieJbrowseConfiguration,
+  defaultLocusForGenome,
+} from '@/lib/module1JbrowseTheme';
 
 /**
- * Embedded igv.js alignment view for retained Module 1 markdup BAM.
- * Loads only when the user expands the panel (keeps the stepper light).
- * Presigned URLs refresh via promise-valued track urls when IGV re-fetches.
+ * Geneie-themed JBrowse 2 linear genome view for retained Module 1 markdup BAM.
+ * Live while BAM exists; after chat unlock the durable QC/alignment report remains.
  */
 const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
+  const { isDark } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const containerRef = useRef(null);
-  const browserRef = useRef(null);
+  const [bamMeta, setBamMeta] = useState(null);
+  const [JBrowse, setJBrowse] = useState(null);
+  const [viewState, setViewState] = useState(null);
 
   useEffect(() => {
     if (!expanded || !conversationId || !hasBam) return undefined;
@@ -20,64 +27,73 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setViewState(null);
 
     (async () => {
       try {
-        const igv = (await import('igv')).default;
+        const [{ createViewState, JBrowseLinearGenomeView }, data] = await Promise.all([
+          import('@jbrowse/react-linear-genome-view2'),
+          fetchModule1BamArtifacts(conversationId),
+        ]);
         if (cancelled) return;
 
-        const refreshUrls = async () => {
-          const data = await fetchModule1BamArtifacts(conversationId);
-          if (!data?.has_bam || !data.bam_url || !data.bai_url) {
-            throw new Error(data?.message || 'Alignment BAM is not available.');
-          }
-          return data;
-        };
-
-        const initial = await refreshUrls();
-        if (cancelled) return;
-
-        if (browserRef.current) {
-          try {
-            igv.removeBrowser(browserRef.current);
-          } catch {
-            /* ignore */
-          }
-          browserRef.current = null;
-        }
-        if (containerRef.current) {
-          containerRef.current.innerHTML = '';
+        if (!data?.has_bam || !data.bam_url || !data.bai_url) {
+          throw new Error(data?.message || 'Alignment BAM is not available.');
         }
 
-        const igvGenome = (initial.genome || genomeHint || 'hg38').toLowerCase() === 'hg19' ? 'hg19' : 'hg38';
-        const sample = initial.sample_name || 'Alignments';
+        const genome = (data.genome || genomeHint || 'hg38').toLowerCase();
+        const assemblyName = genome === 'hg19' ? 'hg19' : 'hg38';
+        const sample = data.sample_name || 'Alignments';
+        const trackId = `module1-bam-${conversationId}`;
 
-        const browser = await igv.createBrowser(containerRef.current, {
-          genome: igvGenome,
-          locus: igvGenome === 'hg19' ? 'chr17:7,571,720-7,579,900' : 'chr17:7,668,402-7,675,520',
-          showNavigation: true,
-          showRuler: true,
+        const state = createViewState({
+          assembly: assemblyForGenome(assemblyName),
           tracks: [
             {
+              type: 'AlignmentsTrack',
+              trackId,
               name: sample,
-              type: 'alignment',
-              format: 'bam',
-              // Promise-valued urls so IGV can refresh after presign expiry.
-              url: async () => (await refreshUrls()).bam_url,
-              indexURL: async () => (await refreshUrls()).bai_url,
-              height: 200,
+              assemblyNames: [assemblyName],
+              adapter: {
+                type: 'BamAdapter',
+                bamLocation: { uri: data.bam_url, locationType: 'UriLocation' },
+                index: {
+                  location: { uri: data.bai_url, locationType: 'UriLocation' },
+                },
+              },
             },
           ],
+          location: defaultLocusForGenome(assemblyName),
+          defaultSession: {
+            name: 'module1',
+            view: {
+              id: 'linearGenomeView',
+              type: 'LinearGenomeView',
+              bpPerPx: 0.5,
+              tracks: [
+                {
+                  id: trackId,
+                  type: 'AlignmentsTrack',
+                  configuration: trackId,
+                  displays: [
+                    {
+                      id: `${trackId}-display`,
+                      type: 'LinearAlignmentsDisplay',
+                      configuration: `${trackId}-LinearAlignmentsDisplay`,
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          configuration: buildGeneieJbrowseConfiguration(isDark),
         });
-        if (cancelled) {
-          igv.removeBrowser(browser);
-          return;
-        }
-        browserRef.current = browser;
+
+        setBamMeta({ sample, genome: assemblyName });
+        setJBrowse(() => JBrowseLinearGenomeView);
+        setViewState(state);
       } catch (err) {
-        if (!cancelled) {
-          setError(err?.message || 'Could not open IGV.');
-        }
+        if (!cancelled) setError(err?.message || 'Could not open alignment viewer.');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -85,21 +101,10 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
 
     return () => {
       cancelled = true;
-      const browser = browserRef.current;
-      browserRef.current = null;
-      if (browser) {
-        import('igv')
-          .then((mod) => {
-            try {
-              mod.default.removeBrowser(browser);
-            } catch {
-              /* ignore */
-            }
-          })
-          .catch(() => {});
-      }
     };
-  }, [expanded, conversationId, hasBam, genomeHint]);
+  }, [expanded, conversationId, hasBam, genomeHint, isDark]);
+
+  const Browser = useMemo(() => JBrowse, [JBrowse]);
 
   if (!hasBam) return null;
 
@@ -116,10 +121,11 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
       >
         <div className="min-w-0">
           <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-            Alignment (IGV)
+            Alignment browser
           </p>
           <p className="text-2xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-            View the markdup BAM while it is still retained.
+            Geneie-themed view of the markdup BAM while it is retained
+            {bamMeta?.genome ? ` · ${bamMeta.genome}` : ''}.
           </p>
         </div>
         <ChevronDown
@@ -132,25 +138,25 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
       </button>
 
       {expanded && (
-        <div className="px-3 pb-3">
+        <div className="px-2 pb-2">
           {loading && (
             <div className="flex items-center gap-2 py-6 justify-center">
               <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--text-tertiary)' }} />
               <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                Loading IGV…
+                Loading browser…
               </span>
             </div>
           )}
           {error && (
-            <p className="text-2xs py-2" style={{ color: 'var(--error)' }}>
+            <p className="text-2xs px-1 py-2" style={{ color: 'var(--error)' }}>
               {error}
             </p>
           )}
-          <div
-            ref={containerRef}
-            className="module1-igv-root rounded-md overflow-hidden"
-            style={{ minHeight: expanded && !error ? 280 : 0 }}
-          />
+          {!loading && !error && Browser && viewState && (
+            <div className="module1-jbrowse-root rounded-md overflow-hidden min-h-[320px]">
+              <Browser viewState={viewState} />
+            </div>
+          )}
         </div>
       )}
     </div>

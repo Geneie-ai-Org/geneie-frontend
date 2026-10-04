@@ -6,6 +6,7 @@ import RunTimer from '@/components/ui/RunTimer';
 import { useRunTimer } from '@/hooks/useRunTimer';
 import Module1QcPanel from '@/components/Module1QcPanel';
 import Module1IgvPanel from '@/components/Module1IgvPanel';
+import Module1QcReportPanel from '@/components/Module1QcReportPanel';
 
 const EASE = [0.23, 1, 0.32, 1];
 
@@ -173,6 +174,10 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
                   hasBam={job.hasBam}
                   genome={job.genome}
                 />
+              )}
+
+              {job.bamQcPurged && job.conversationId && (
+                <Module1QcReportPanel conversationId={job.conversationId} visible />
               )}
             </div>
           </motion.div>

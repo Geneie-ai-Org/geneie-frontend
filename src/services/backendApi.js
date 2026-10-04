@@ -845,6 +845,29 @@ export async function resolvePanelAppSelection({
   return data;
 }
 
+/** Catalog search by panel name (Manual picker). */
+export async function searchPanelAppPanels({
+  query = '',
+  includeAmber = true,
+  limit = 20,
+} = {}) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(apiUrl('/api/panelapp/search'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      query: query || '',
+      include_amber: includeAmber,
+      limit,
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to search gene panels');
+  }
+  return data;
+}
+
 /**
  * GA triage status + top candidates for analyst review UI.
  * GET /api/conversations/{id}/ga-triage

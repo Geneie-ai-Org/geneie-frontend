@@ -213,11 +213,21 @@ export default function PanelAppSuggestSection({
                       .filter(Boolean)
                       .join(' · ')}
                   </span>
-                  {s.reason ? (
-                    <span className="block mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-                      {s.reason}
-                    </span>
-                  ) : null}
+                  {/* Skip reason when it only repeats green/amber counts already shown above. */}
+                  {(() => {
+                    const reason = String(s.reason || '').trim();
+                    if (!reason || /^gene overlap$/i.test(reason)) return null;
+                    const onlyGeneCounts = reason
+                      .split(';')
+                      .map((p) => p.trim())
+                      .every((p) => /^\d+\s+(green|amber)\s+gene/i.test(p));
+                    if (onlyGeneCounts) return null;
+                    return (
+                      <span className="block mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+                        {reason}
+                      </span>
+                    );
+                  })()}
                 </span>
               </label>
             );

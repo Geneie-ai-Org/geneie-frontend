@@ -4,6 +4,7 @@ import { AlertCircle, Check, ChevronDown, Dna, Loader2 } from 'lucide-react';
 import { MODULE1_STAGE_GROUPS, getModule1PhaseMessage, getModule1StageGroup } from '@/lib/module1PipelinePhases';
 import RunTimer from '@/components/ui/RunTimer';
 import { useRunTimer } from '@/hooks/useRunTimer';
+import Module1QcPanel from '@/components/Module1QcPanel';
 
 const EASE = [0.23, 1, 0.32, 1];
 
@@ -159,6 +160,10 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
                     </button>
                   )}
                 </div>
+              )}
+
+              {job.hasQc && job.conversationId && (
+                <Module1QcPanel conversationId={job.conversationId} hasQc={job.hasQc} />
               )}
             </div>
           </motion.div>

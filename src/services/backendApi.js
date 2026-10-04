@@ -620,6 +620,21 @@ export async function fetchModule1Status(conversationId) {
   return data;
 }
 
+/** Retained Module 1 QC files (presigned GET) — empty once BAM/QC are purged. */
+export async function fetchModule1QcArtifacts(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/module1/qc/${encodeURIComponent(conversationId)}`), {
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to fetch Module 1 QC reports');
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
 /** Fast, non-authoritative client hint only — the server /validate-bed call remains the real gate. */
 export async function precheckBedChromStyle(file) {
   const head = await file.slice(0, 64 * 1024).text();

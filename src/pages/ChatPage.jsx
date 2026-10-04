@@ -1169,9 +1169,10 @@ const ChatPage = () => {
     [runAnnovarForCurrentConversation]
   );
 
-  const module1PipelineBlock = module1.module1JobActive ? (
-    <Module1PipelineStepper job={module1.module1Job} onStartOver={module1.openModule1Form} />
-  ) : null;
+  const module1PipelineBlock =
+    module1.module1JobActive || module1.module1QcVisible ? (
+      <Module1PipelineStepper job={module1.module1Job} onStartOver={module1.openModule1Form} />
+    ) : null;
 
 
   // --- MAIN RENDER GATING LOGIC ---

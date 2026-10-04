@@ -1304,28 +1304,6 @@ export default function PhenotypeInputPanel({
         )}
       </div>
 
-      {notePreview?.deidentified_text && (
-        <div
-          className="px-2.5 py-2 rounded-lg border text-2xs space-y-1"
-          style={{ borderColor: 'var(--border-default)', background: 'var(--bg-muted)' }}
-        >
-          <div className="font-medium" style={{ color: 'var(--text-secondary)' }}>
-            Cleaned note (saved for chat)
-          </div>
-          <p style={{ color: 'var(--text-primary)' }}>{notePreview.deidentified_text}</p>
-          {(notePreview.patient?.sex || notePreview.patient?.age) && (
-            <p style={{ color: 'var(--text-tertiary)' }}>
-              {[
-                notePreview.patient?.sex ? `Sex → ${notePreview.patient.sex}` : null,
-                notePreview.patient?.age ? `Age noted: ${notePreview.patient.age}` : null,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </p>
-          )}
-        </div>
-      )}
-
       {(noteUnmapped.length > 0 || noteAmbiguous.length > 0) && (
         <div className="text-2xs space-y-1" style={{ color: 'var(--text-tertiary)' }}>
           {noteAmbiguous.length > 0 && <p>Ambiguous: {noteAmbiguous.join('; ')}</p>}
@@ -1491,7 +1469,13 @@ export default function PhenotypeInputPanel({
       {selectedCount > 0 && (
         <PanelAppSuggestSection
           confirmedHpoIds={candidates.filter((c) => c.selected).map((c) => c.hpo_id)}
-          phenotypeText={value?.phenotype || value?.phenotype_disease || draft || ''}
+          // Stable text only — live `draft` was re-fetching panels on every keystroke.
+          phenotypeText={
+            value?.phenotype ||
+            value?.phenotype_note_clean ||
+            value?.phenotype_disease ||
+            ''
+          }
           value={value}
           conversationId={conversationId}
           disabled={disabled}

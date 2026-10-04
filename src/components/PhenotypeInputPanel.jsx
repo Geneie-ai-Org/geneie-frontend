@@ -1196,46 +1196,46 @@ export default function PhenotypeInputPanel({
     color: 'var(--text-primary)',
   };
 
-  const renderChip = (c) => (
-    <div
-      key={c.hpo_id}
-      className="inline-flex items-center gap-1 px-2 py-1 text-2xs rounded-md border text-left"
-      style={{
-        borderColor: c.selected ? 'var(--accent-teal)' : 'var(--border-default)',
-        background: c.selected
-          ? 'color-mix(in srgb, var(--accent-teal) 12%, transparent)'
-          : 'var(--bg-surface-raised)',
-        color: 'var(--text-primary)',
-        opacity: c.selected ? 1 : 0.75,
-      }}
-    >
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => toggleCandidate(c.hpo_id)}
-        title={c.matched_phrase ? `Matched: ${c.matched_phrase}` : c.hpo_id}
-        className="text-left"
+  const renderChip = (c) => {
+    const label = c.hpo_name || c.matched_phrase || c.hpo_id;
+    return (
+      <div
+        key={c.hpo_id}
+        className="inline-flex items-center gap-1 px-2 py-1 text-2xs rounded-md border text-left"
+        style={{
+          borderColor: c.selected ? 'var(--accent-teal)' : 'var(--border-default)',
+          background: c.selected
+            ? 'color-mix(in srgb, var(--accent-teal) 12%, transparent)'
+            : 'var(--bg-surface-raised)',
+          color: 'var(--text-primary)',
+          opacity: c.selected ? 1 : 0.75,
+        }}
       >
-        <span className="font-medium">
-          {c.selected ? '✓ ' : ''}
-          {c.hpo_id}
-        </span>
-        {c.hpo_name ? (
-          <span style={{ color: 'var(--text-secondary)' }}> — {c.hpo_name}</span>
-        ) : null}
-      </button>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => removeCandidate(c.hpo_id)}
-        title="Remove"
-        className="ml-0.5 p-0.5"
-        style={{ color: 'var(--text-tertiary)' }}
-      >
-        <X className="w-3 h-3" />
-      </button>
-    </div>
-  );
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => toggleCandidate(c.hpo_id)}
+          title={c.hpo_id || undefined}
+          className="text-left"
+        >
+          <span className="font-medium">
+            {c.selected ? '✓ ' : ''}
+            {label}
+          </span>
+        </button>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => removeCandidate(c.hpo_id)}
+          title="Remove"
+          className="ml-0.5 p-0.5"
+          style={{ color: 'var(--text-tertiary)' }}
+        >
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-2">
@@ -1247,8 +1247,8 @@ export default function PhenotypeInputPanel({
       </label>
       {isAutomatic ? (
         <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-          Automatic: strong disease matches (score ≥ 0.90) and high-confidence findings are
-          pre-selected — click to change.
+          Automatic: strong disease matches and high-confidence findings are pre-selected —
+          click to change.
         </p>
       ) : null}
 
@@ -1351,6 +1351,7 @@ export default function PhenotypeInputPanel({
             type="button"
             disabled={disabled || resolving}
             onClick={() => applyDisease(primaryDisease)}
+            title={primaryDisease.disease_id || undefined}
             className="w-full text-left px-2.5 py-2 rounded-md border text-2xs transition-all"
             style={{
               borderColor: isActiveDisease(primaryDisease)
@@ -1366,27 +1367,6 @@ export default function PhenotypeInputPanel({
               {isActiveDisease(primaryDisease) ? '✓ ' : ''}
               {primaryDisease.disease_name}
             </span>
-            <span style={{ color: 'var(--text-tertiary)' }}>
-              {' '}
-              ·{' '}
-              {[
-                primaryDisease.disease_id,
-                primaryDisease.annotation_hpo_count > 0
-                  ? `${primaryDisease.annotation_hpo_count} HPOs`
-                  : null,
-                primaryDisease.source ? `source ${primaryDisease.source}` : null,
-                primaryDisease.score != null
-                  ? `score ${Number(primaryDisease.score).toFixed(2)}`
-                  : null,
-                isActiveDisease(primaryDisease)
-                  ? 'selected — click to deselect'
-                  : diseaseMatches.length
-                    ? 'click to add'
-                    : 'click to use',
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </span>
           </button>
 
           {visibleAlts.map((c) => (
@@ -1395,6 +1375,7 @@ export default function PhenotypeInputPanel({
               type="button"
               disabled={disabled || resolving}
               onClick={() => applyDisease(c)}
+              title={c.disease_id || undefined}
               className="w-full text-left px-2.5 py-1.5 rounded-md border text-2xs transition-all"
               style={{
                 borderColor: isActiveDisease(c) ? 'var(--accent-teal)' : 'var(--border-default)',
@@ -1407,22 +1388,6 @@ export default function PhenotypeInputPanel({
               <span className="font-medium">
                 {isActiveDisease(c) ? '✓ ' : ''}
                 {c.disease_name}
-              </span>
-              <span style={{ color: 'var(--text-tertiary)' }}>
-                {' '}
-                ·{' '}
-                {[
-                  c.disease_id,
-                  c.annotation_hpo_count > 0 ? `${c.annotation_hpo_count} HPOs` : null,
-                  c.score != null ? `score ${Number(c.score).toFixed(2)}` : null,
-                  isActiveDisease(c)
-                    ? 'selected — click to deselect'
-                    : diseaseMatches.length
-                      ? 'click to add'
-                      : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
               </span>
             </button>
           ))}

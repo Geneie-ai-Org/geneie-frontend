@@ -141,8 +141,8 @@ const DocumentUpload = ({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showInfoForm, setShowInfoForm] = useState(false);
-  /** Sample Metadata wizard: basics first, then analysis-type-specific fields. */
-  const [metadataStep, setMetadataStep] = useState('sample'); // 'sample' | 'analysis'
+  /** Sample Metadata wizard: basics → analysis fields → (Germline) phenotype. */
+  const [metadataStep, setMetadataStep] = useState('sample'); // 'sample' | 'analysis' | 'phenotype'
   const [selectedFile, setSelectedFile] = useState(null);
   const [sampleMetadata, setSampleMetadata] = useState({
     name: '', // Auto-generated from filename
@@ -532,12 +532,24 @@ const DocumentUpload = ({
     setMetadataStep('analysis');
   };
 
+  const isGermlineFlow = sampleMetadata.analysisType === 'Germline';
+  const metadataTotalSteps = isGermlineFlow ? 3 : 2;
+  const metadataStepIndex =
+    metadataStep === 'phenotype' ? 3 : metadataStep === 'analysis' ? 2 : 1;
+
   const handleInfoFormSubmit = async (e) => {
     e.preventDefault();
 
     // Step 1: Enter / primary action advances to analysis-type fields.
     if (metadataStep === 'sample') {
       handleMetadataContinue();
+      return;
+    }
+
+    // Germline Step 2 → Step 3 (phenotype); do not upload yet.
+    if (metadataStep === 'analysis' && sampleMetadata.analysisType === 'Germline') {
+      setError('');
+      setMetadataStep('phenotype');
       return;
     }
 
@@ -576,6 +588,10 @@ const DocumentUpload = ({
                   sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode
                 ),
                 phenotype_hpo: sampleMetadata.phenotype_hpo || null,
+                selected_panels: sampleMetadata.selected_panels || [],
+                selected_panel_gene_list: sampleMetadata.selected_panel_gene_list || [],
+                selected_panel_include_amber:
+                  sampleMetadata.selected_panel_include_amber !== false,
               }
             : {
                 phenotype: '',
@@ -586,6 +602,8 @@ const DocumentUpload = ({
                 phenotype_run_mode: PIPELINE_RUN_MANUAL,
                 pipeline_run_mode: PIPELINE_RUN_MANUAL,
                 phenotype_hpo: null,
+                selected_panels: [],
+                selected_panel_gene_list: [],
                 ...EMPTY_PEDIGREE_FIELDS,
               }),
           tumorType: (sampleMetadata.analysisType === 'Somatic' || sampleMetadata.analysisType === 'Tumor-Normal Paired' || sampleMetadata.analysisType === 'Tumor-Only') ? sampleMetadata.tumorType : '',
@@ -1371,25 +1389,24 @@ const DocumentUpload = ({
             </h3>
             <p className="text-xs mb-0" style={{ color: 'var(--text-tertiary)' }}>
               {metadataStep === 'sample'
-                ? (editMode
-                  ? 'Step 1 of 2 — sample basics and analysis type.'
-                  : 'Step 1 of 2 — sample basics and analysis type.')
-                : `Step 2 of 2 — ${sampleMetadata.analysisType || 'analysis'} details.`}
+                ? `Step 1 of ${metadataTotalSteps} — sample basics and analysis type.`
+                : metadataStep === 'phenotype'
+                  ? `Step 3 of 3 — Phenotype (optional).`
+                  : `Step 2 of ${metadataTotalSteps} — ${sampleMetadata.analysisType || 'analysis'} details.`}
             </p>
             <div className="flex items-center gap-1.5 mt-3" aria-hidden="true">
-              <span
-                className="h-1 flex-1 rounded-full"
-                style={{ backgroundColor: 'var(--accent-teal)' }}
-              />
-              <span
-                className="h-1 flex-1 rounded-full"
-                style={{
-                  backgroundColor:
-                    metadataStep === 'analysis'
-                      ? 'var(--accent-teal)'
-                      : 'var(--border-default)',
-                }}
-              />
+              {Array.from({ length: metadataTotalSteps }, (_, i) => (
+                <span
+                  key={`meta-step-${i + 1}`}
+                  className="h-1 flex-1 rounded-full"
+                  style={{
+                    backgroundColor:
+                      metadataStepIndex >= i + 1
+                        ? 'var(--accent-teal)'
+                        : 'var(--border-default)',
+                  }}
+                />
+              ))}
             </div>
             {!editMode && (selectedFile || importUrlMeta) && (
               <div className="inline-flex items-center gap-2 mt-4 max-w-full pl-2.5 pr-3 py-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]" title={selectedFile ? selectedFile.name : importUrlMeta?.file_name}>
@@ -1642,9 +1659,17 @@ const DocumentUpload = ({
                     />
 
                   </div>
+                </div>
+              )}
 
-                  {/* Phenotype - Full width. Optional: the pipeline runs without it, and
-                    * only the phenotype-driven filter needs it. */}
+              {metadataStep === 'phenotype' && sampleMetadata.analysisType === 'Germline' && (
+                <div className="disclosure-enter">
+                  <h4 className="text-md font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
+                    Phenotype
+                  </h4>
+                  <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                    Optional — enables phenotype-driven prioritization and PanelApp suggestions for GA.
+                  </p>
                   <PhenotypeInputPanel
                     value={{
                       phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_NOTE,
@@ -1723,12 +1748,12 @@ const DocumentUpload = ({
             {/* Form Actions — pinned footer */}
             <div className="flex-shrink-0 flex gap-2 justify-between px-7 py-4 border-t border-[var(--border-subtle)]">
               <div className="flex gap-2">
-                {metadataStep === 'analysis' ? (
+                {metadataStep === 'analysis' || metadataStep === 'phenotype' ? (
                   <button
                     type="button"
                     onClick={() => {
                       setError('');
-                      setMetadataStep('sample');
+                      setMetadataStep(metadataStep === 'phenotype' ? 'analysis' : 'sample');
                     }}
                     disabled={isUploading}
                     className="h-10 px-3 rounded-lg transition-colors text-sm font-medium inline-flex items-center gap-1 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
@@ -1751,7 +1776,8 @@ const DocumentUpload = ({
                 >
                   Cancel
                 </button>
-                {metadataStep === 'sample' ? (
+                {metadataStep === 'sample' ||
+                (metadataStep === 'analysis' && isGermlineFlow) ? (
                   <button
                     type="submit"
                     disabled={isUploading}

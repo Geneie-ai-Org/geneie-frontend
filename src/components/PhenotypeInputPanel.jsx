@@ -1491,7 +1491,13 @@ export default function PhenotypeInputPanel({
       {selectedCount > 0 && (
         <PanelAppSuggestSection
           confirmedHpoIds={candidates.filter((c) => c.selected).map((c) => c.hpo_id)}
-          phenotypeText={value?.phenotype || value?.phenotype_disease || draft || ''}
+          // Stable text only — live `draft` was re-fetching panels on every keystroke.
+          phenotypeText={
+            value?.phenotype ||
+            value?.phenotype_note_clean ||
+            value?.phenotype_disease ||
+            ''
+          }
           value={value}
           conversationId={conversationId}
           disabled={disabled}

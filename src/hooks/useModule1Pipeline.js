@@ -85,7 +85,24 @@ export function useModule1Pipeline({
       if (convData.variant_metadata) {
         setVariantData(buildVariantDataFromConversation(convData, convData.variant_metadata));
       }
-      if (convData.document) setCurrentDocument(convData.document);
+      // Match ChatPage document shape so File Analysis / VCF checks see url+name.
+      if (convData.document?.s3_url && convData.document?.file_name) {
+        setCurrentDocument({
+          url: convData.document.s3_url,
+          name: convData.document.file_name,
+          type: convData.document.file_type || 'unknown',
+          size: convData.document.file_size || 0,
+          sample_metadata: convData.sample_metadata || null,
+          file_type: convData.document.file_type || null,
+          file_name: convData.document.file_name,
+        });
+      } else if (convData.document) {
+        setCurrentDocument({
+          ...convData.document,
+          sample_metadata: convData.sample_metadata || convData.document.sample_metadata || null,
+        });
+      }
+      // Manual → open File Analysis. Automatic → presentFileAnalysisModal no-ops the UI.
       presentFileAnalysisModal(convData);
       syncPipelineFromConversationRef.current?.(convData);
       if (convData.column_interpretation) {

@@ -876,7 +876,7 @@ const Module1UploadForm = ({
                     Phenotype
                   </h4>
                   <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
-                    Optional — enables phenotype-driven prioritization and PanelApp suggestions for GA.
+                    Optional — enables phenotype-driven prioritization and gene panel suggestions.
                   </p>
                   <PhenotypeInputPanel
                     value={{

@@ -5,6 +5,7 @@ import { MODULE1_STAGE_GROUPS, getModule1PhaseMessage, getModule1StageGroup } fr
 import RunTimer from '@/components/ui/RunTimer';
 import { useRunTimer } from '@/hooks/useRunTimer';
 import Module1QcPanel from '@/components/Module1QcPanel';
+import Module1IgvPanel from '@/components/Module1IgvPanel';
 
 const EASE = [0.23, 1, 0.32, 1];
 
@@ -164,6 +165,14 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
 
               {job.hasQc && job.conversationId && (
                 <Module1QcPanel conversationId={job.conversationId} hasQc={job.hasQc} />
+              )}
+
+              {job.hasBam && job.conversationId && (
+                <Module1IgvPanel
+                  conversationId={job.conversationId}
+                  hasBam={job.hasBam}
+                  genome={job.genome}
+                />
               )}
             </div>
           </motion.div>

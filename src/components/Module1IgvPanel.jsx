@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Maximize2 } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2, Maximize2, RotateCcw } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import { fetchModule1BamArtifacts, uploadModule1ReportFigure } from '@/services/backendApi';
 import { useTheme } from '@/hooks/useTheme';
@@ -15,6 +15,15 @@ import {
   buildGeneieJbrowseConfiguration,
   defaultLocusForGenome,
 } from '@/lib/module1JbrowseTheme';
+
+/** ~40–80 kb window — pileup stays under JBrowse’s BAM fetchSizeLimit. */
+const DEFAULT_BP_PER_PX = 1.5;
+/** Soft cap: beyond this, reads are almost always blocked by fetchSizeLimit. */
+const MAX_USEFUL_BP_PER_PX = 40;
+
+function getLgView(viewState) {
+  return viewState?.session?.view ?? viewState?.view ?? null;
+}
 
 /**
  * Geneie-themed JBrowse 2 linear genome view for retained Module 1 markdup BAM.
@@ -60,8 +69,6 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
 
     (async () => {
       try {
-        // Keep an existing viewState across re-opens so locus/zoom survive; only
-        // bootstrap when first needed or after theme/genome change.
         const [{ createViewState, JBrowseLinearGenomeView }, data] = await Promise.all([
           import('@jbrowse/react-linear-genome-view2'),
           fetchModule1BamArtifacts(conversationId),
@@ -96,6 +103,9 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
                   index: {
                     location: { uri: data.bai_url, locationType: 'UriLocation' },
                   },
+                  // Default 5 MB trips easily when zoomed out; slightly higher, with
+                  // a zoom soft-cap below so we still avoid multi-GB fetches.
+                  fetchSizeLimit: 12_000_000,
                 },
               },
             ],
@@ -105,7 +115,10 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
               view: {
                 id: 'linearGenomeView',
                 type: 'LinearGenomeView',
-                bpPerPx: 2,
+                // Overview polygon fills with tertiary.light; hide it in the embed
+                // so a bad theme never paints a black wedge over the toolbar.
+                hideHeaderOverview: true,
+                bpPerPx: DEFAULT_BP_PER_PX,
                 tracks: [
                   {
                     id: trackId,
@@ -136,6 +149,40 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
       cancelled = true;
     };
   }, [open, conversationId, hasBam, genomeHint, isDark]);
+
+  // Soft-cap zoom-out: BAM pileup cannot render chromosome-scale windows.
+  useEffect(() => {
+    if (!open || !viewState) return undefined;
+    const view = getLgView(viewState);
+    if (!view?.zoomTo) return undefined;
+
+    let cancelled = false;
+    const id = window.setInterval(() => {
+      if (cancelled) return;
+      const bp = view.bpPerPx ?? view.effectiveBpPerPx;
+      if (typeof bp === 'number' && bp > MAX_USEFUL_BP_PER_PX) {
+        view.zoomTo(MAX_USEFUL_BP_PER_PX);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [open, viewState]);
+
+  const resetView = useCallback(() => {
+    const view = getLgView(viewState);
+    const genome = bamMeta?.genome;
+    if (!view || !genome) return;
+    const locus = defaultLocusForGenome(genome);
+    if (typeof view.navToLocString === 'function') {
+      void view.navToLocString(locus, genome);
+    }
+    if (typeof view.zoomTo === 'function') {
+      view.zoomTo(DEFAULT_BP_PER_PX);
+    }
+  }, [viewState, bamMeta]);
 
   // Capture viewport → durable report (once per conversation while BAM live).
   useEffect(() => {
@@ -207,19 +254,37 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           showCloseButton
-          className="!max-w-[min(96vw,1100px)] w-full h-[min(90vh,860px)] flex flex-col p-0 gap-0 overflow-hidden"
+          className="!max-w-[min(96vw,1100px)] !min-w-[min(96vw,720px)] w-full h-[min(90vh,860px)] flex flex-col p-0 gap-0 overflow-hidden"
           style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-strong)' }}
         >
           <DialogHeader className="px-4 pt-4 pb-2 shrink-0 pr-12">
-            <DialogTitle className="text-sm" style={{ color: 'var(--text-primary)' }}>
-              Alignment browser
-              {bamMeta?.sample ? ` · ${bamMeta.sample}` : ''}
-            </DialogTitle>
-            <DialogDescription className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-              Drag the track to pan · use the toolbar to zoom or jump to a locus
-              {bamMeta?.genome ? ` · ${bamMeta.genome}` : ''}.
-              {snapshotStatus ? ` ${snapshotStatus}` : ''}
-            </DialogDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <DialogTitle className="text-sm" style={{ color: 'var(--text-primary)' }}>
+                  Alignment browser
+                  {bamMeta?.sample ? ` · ${bamMeta.sample}` : ''}
+                </DialogTitle>
+                <DialogDescription className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+                  Drag to pan · zoom in to load reads (zooming out too far is blocked for BAM size)
+                  {bamMeta?.genome ? ` · ${bamMeta.genome}` : ''}.
+                  {snapshotStatus ? ` ${snapshotStatus}` : ''}
+                </DialogDescription>
+              </div>
+              <button
+                type="button"
+                onClick={resetView}
+                disabled={!viewState || !bamMeta}
+                className="shrink-0 inline-flex items-center gap-1 text-2xs px-2 py-1 rounded-md border mt-0.5 disabled:opacity-40"
+                style={{
+                  borderColor: 'var(--border-subtle)',
+                  color: 'var(--text-secondary)',
+                  backgroundColor: 'var(--bg-elevated)',
+                }}
+              >
+                <RotateCcw className="w-3 h-3" />
+                Reset view
+              </button>
+            </div>
           </DialogHeader>
 
           <div className="flex-1 min-h-0 px-3 pb-3 flex flex-col">
@@ -239,7 +304,7 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
             {!loading && !error && Browser && viewState && (
               <div
                 ref={captureRootRef}
-                className="module1-jbrowse-root flex-1 min-h-[480px] rounded-md border overflow-auto"
+                className="module1-jbrowse-root flex-1 min-h-[480px] rounded-md border"
                 style={{
                   borderColor: 'var(--border-subtle)',
                   backgroundColor: isDark ? '#0f0f0f' : '#ffffff',

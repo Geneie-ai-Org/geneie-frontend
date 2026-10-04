@@ -74,6 +74,7 @@ export default function AutomaticPipelinePanel({
   events = [],
   showReportCta = false,
   reportGate = null,
+  reportCtaLabel = 'Generate report',
   onGenerateReport,
 }) {
   const [expanded, setExpanded] = useState(true);
@@ -122,7 +123,7 @@ export default function AutomaticPipelinePanel({
             }}
           >
             <FileText className="h-3 w-3" aria-hidden />
-            {reportBlocked ? reportGate?.label : 'Generate report'}
+            {reportBlocked ? reportGate?.label : reportCtaLabel}
           </button>
         ) : null}
         <button

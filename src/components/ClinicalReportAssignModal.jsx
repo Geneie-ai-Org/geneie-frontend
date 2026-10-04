@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  downloadGaTriageArtifact,
   fetchClinicalReportCandidates,
   generateClinicalReport,
 } from '@/services/backendApi';
@@ -18,15 +19,39 @@ function rowKeyOf(row, index) {
   return row.row_key || `${row.id || 'row'}__${index}`;
 }
 
+function assignmentsFromSuggestions(rows) {
+  const next = {};
+  rows.forEach((row, index) => {
+    const key = rowKeyOf(row, index);
+    const section = row.suggested_section;
+    if (section === INCLUDE || section === 'clinical_result') {
+      next[key] = INCLUDE;
+    } else if (section === ADDITIONAL || section === 'additional_finding') {
+      next[key] = ADDITIONAL;
+    }
+  });
+  return next;
+}
+
+function whyText(row) {
+  const caveats = Array.isArray(row.pfra_caveats) ? row.pfra_caveats : [];
+  const parts = [];
+  if (row.ga_label) parts.push(row.ga_label);
+  if (row.ga_score != null && row.ga_score !== '') parts.push(`Score ${row.ga_score}`);
+  if (row.phenotype_fit) parts.push(`Phenotype: ${row.phenotype_fit}`);
+  if (caveats.length) parts.push(`Flags: ${caveats.join(' · ')}`);
+  return parts.join('\n') || 'No GA rationale on this row';
+}
+
 /**
- * Slim assignment modal: variant id + Include / Additional only.
- * Unselected rows are excluded by default. Sorted by BE (persona workflow rules).
- * Assignments are keyed by unique row_key so duplicate variant ids don't steal clicks.
+ * One review step: GA ranking + Include / Additional + PDF.
+ * Primary/Strong pre-check Include. Analyst override always wins.
  */
 export default function ClinicalReportAssignModal({
   open,
   onOpenChange,
   conversationId,
+  automaticMode = false,
 }) {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -34,6 +59,7 @@ export default function ClinicalReportAssignModal({
   const [meta, setMeta] = useState(null);
   const [candidates, setCandidates] = useState([]);
   const [assignments, setAssignments] = useState({});
+  const [downloadingTsv, setDownloadingTsv] = useState(false);
 
   const load = useCallback(async () => {
     if (!conversationId) return;
@@ -44,7 +70,7 @@ export default function ClinicalReportAssignModal({
       setMeta(data);
       const rows = Array.isArray(data.candidates) ? data.candidates : [];
       setCandidates(rows);
-      setAssignments({});
+      setAssignments(assignmentsFromSuggestions(rows));
     } catch (err) {
       setError(err.message || 'Failed to load report candidates');
       setCandidates([]);
@@ -58,6 +84,18 @@ export default function ClinicalReportAssignModal({
   useEffect(() => {
     if (open) load();
   }, [open, load]);
+
+  const displayRows = useMemo(() => {
+    if (!automaticMode) {
+      return candidates.map((row, index) => ({ row, index }));
+    }
+    // Automatic: surface GA Include picks first.
+    const withIdx = candidates.map((row, index) => ({ row, index }));
+    return [
+      ...withIdx.filter(({ row }) => Boolean(row.suggested_section)),
+      ...withIdx.filter(({ row }) => !row.suggested_section),
+    ];
+  }, [candidates, automaticMode]);
 
   const selectedIds = useMemo(() => {
     const clinical = [];
@@ -91,8 +129,34 @@ export default function ClinicalReportAssignModal({
     });
   };
 
+  const applySuggestions = () => {
+    setAssignments(assignmentsFromSuggestions(candidates));
+  };
+
   const canProceed =
     selectedIds.clinical.length >= 1 && !generating && !loading;
+
+  const pfra = meta?.pfra || null;
+  const pfraAvailable = Boolean(pfra?.suggestions_available);
+  const suggestionCount = Number(pfra?.suggestion_count ?? 0);
+  const gaReady = Boolean(pfra?.ga_top_used && pfraAvailable);
+  const pfraGateMessage =
+    pfra?.gate?.message ||
+    (!pfraAvailable
+      ? 'GA ranking unavailable — assign Include manually, then Proceed.'
+      : null);
+  const handleDownloadTsv = async () => {
+    if (!conversationId || downloadingTsv) return;
+    setDownloadingTsv(true);
+    setError(null);
+    try {
+      await downloadGaTriageArtifact(conversationId, 'tsv');
+    } catch (err) {
+      setError(err.message || 'GA table download failed');
+    } finally {
+      setDownloadingTsv(false);
+    }
+  };
 
   const handleProceed = async () => {
     if (!canProceed || !conversationId) return;
@@ -126,17 +190,38 @@ export default function ClinicalReportAssignModal({
       >
         <div className="flex-shrink-0 px-5 py-3 border-b border-[var(--border-subtle)]">
           <DialogTitle className="text-base font-semibold text-[var(--text-primary)]">
-            Generate clinical report
+            Review ranking & report
           </DialogTitle>
           <DialogDescription className="text-xs text-[var(--text-secondary)] mt-1">
-            Select Include and/or Additional. Unselected variants are left out.
+            {gaReady
+              ? 'GA pre-checked Primary and Strong for Include. Edit if needed, then Proceed.'
+              : automaticMode
+                ? 'Automatic mode · assign Include manually (GA ranking not ready).'
+                : 'Select Include and/or Additional. Unselected variants stay out of the PDF.'}
             {meta?.workflow_display_name
               ? ` · ${meta.workflow_display_name}`
               : ''}
             {typeof meta?.working_set_count === 'number'
               ? ` · ${meta.working_set_count.toLocaleString()} under consideration`
               : ''}
+            {gaReady
+              ? ` · ${suggestionCount} Include pick${suggestionCount === 1 ? '' : 's'}`
+              : ''}
           </DialogDescription>
+          {!loading && gaReady ? (
+            <p className="text-2xs mt-2" style={{ color: 'var(--accent-teal)' }}>
+              Include: {selectedIds.clinical.length}
+              {selectedIds.additional.length
+                ? ` · Additional: ${selectedIds.additional.length}`
+                : ''}
+              {' · '}unselected stay out of the PDF
+            </p>
+          ) : null}
+          {!loading && pfraGateMessage && !pfraAvailable ? (
+            <p className="text-2xs text-[var(--text-tertiary)] mt-2">
+              {pfraGateMessage}
+            </p>
+          ) : null}
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-2">
@@ -153,21 +238,53 @@ export default function ClinicalReportAssignModal({
           )}
           {!loading && candidates.length > 0 && (
             <ul className="divide-y divide-[var(--border-subtle)]">
-              {candidates.map((row, index) => {
+              {displayRows.map(({ row, index }) => {
                 const key = rowKeyOf(row, index);
                 const selected = assignments[key];
                 const badge = (row.badge || '').trim();
+                const suggested = Boolean(row.suggested_section);
+                const preselected = selected === INCLUDE || selected === ADDITIONAL;
                 return (
                   <li
                     key={key}
-                    className="flex items-center gap-2 py-1.5 min-h-[2rem]"
+                    className="flex items-center gap-2 py-1.5 min-h-[2rem] px-1 rounded-md"
+                    style={
+                      preselected
+                        ? {
+                            background:
+                              'color-mix(in srgb, var(--accent-teal) 10%, transparent)',
+                          }
+                        : undefined
+                    }
                   >
                     <span
                       className="flex-1 min-w-0 text-xs font-mono text-[var(--text-primary)] truncate"
-                      title={rowLabel(row)}
+                      title={whyText(row)}
                     >
+                      {suggested ? (
+                        <span
+                          className="mr-1.5 text-2xs font-sans font-medium"
+                          style={{ color: 'var(--accent-teal)' }}
+                        >
+                          Include pick
+                        </span>
+                      ) : null}
                       {rowLabel(row)}
+                      {Array.isArray(row.pfra_caveats) &&
+                      row.pfra_caveats.includes('VUS_CANDIDATE_NOT_ACTIONABLE') ? (
+                        <span className="ml-1 text-2xs text-[var(--text-tertiary)]">
+                          (VUS candidate)
+                        </span>
+                      ) : null}
                     </span>
+                    {suggested ? (
+                      <span
+                        className="flex-shrink-0 text-2xs text-[var(--text-tertiary)] cursor-help"
+                        title={whyText(row)}
+                      >
+                        why
+                      </span>
+                    ) : null}
                     {badge ? (
                       <span
                         className="flex-shrink-0 text-2xs font-medium text-[var(--text-tertiary)] tabular-nums min-w-[3.25rem] text-right"
@@ -221,6 +338,32 @@ export default function ClinicalReportAssignModal({
               {selectedIds.clinical.length < 1 ? ' · select ≥1 Include' : ''}
             </p>
             <div className="flex gap-2">
+              {gaReady ? (
+                <button
+                  type="button"
+                  onClick={handleDownloadTsv}
+                  disabled={downloadingTsv}
+                  className="h-9 px-3 rounded-lg text-xs border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] inline-flex items-center gap-1.5 disabled:opacity-50"
+                  title="Download the full GA ranking table"
+                >
+                  {downloadingTsv ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )}
+                  GA table
+                </button>
+              ) : null}
+              {gaReady ? (
+                <button
+                  type="button"
+                  onClick={applySuggestions}
+                  className="h-9 px-3 rounded-lg text-xs border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
+                  title="Re-apply GA Include picks (you can still edit)"
+                >
+                  Accept GA picks
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}

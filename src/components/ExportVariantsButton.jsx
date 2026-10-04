@@ -20,6 +20,7 @@ export default function ExportVariantsButton({
   isGuest,
   downloadGate = null,
   uiCount = null,
+  onReconcileUiCount = null,
 }) {
   const [eligibility, setEligibility] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,20 +29,40 @@ export default function ExportVariantsButton({
 
   const gateBlocked = downloadGate?.blocked === true;
 
+  const applyEligibility = useCallback(
+    (data) => {
+      setEligibility(data);
+      if (
+        !gateBlocked &&
+        data?.can_export === true &&
+        data?.source === 'postgres' &&
+        uiCount != null &&
+        Number.isFinite(Number(uiCount)) &&
+        Number.isFinite(Number(data.row_count)) &&
+        Number(data.row_count) !== Number(uiCount) &&
+        typeof onReconcileUiCount === 'function'
+      ) {
+        // Postgres/export is source of truth after enrichment dedupe; sync Under consideration.
+        onReconcileUiCount(Number(data.row_count));
+      }
+    },
+    [gateBlocked, onReconcileUiCount, uiCount]
+  );
+
   const checkEligibility = useCallback(async () => {
     if (!conversationId || isGuest) return;
     setIsLoading(true);
     setError(null);
     try {
       const data = await getExportEligibility(conversationId);
-      setEligibility(data);
+      applyEligibility(data);
     } catch (err) {
       setEligibility(null);
       setError(err.message || 'Failed to check export eligibility');
     } finally {
       setIsLoading(false);
     }
-  }, [conversationId, isGuest]);
+  }, [conversationId, isGuest, applyEligibility]);
 
   useEffect(() => {
     if (conversationId && !isGuest && (variantData || filteredCount !== null)) {

@@ -21,6 +21,7 @@ export const AUTOMATIC_PIPELINE_STEPS = [
   { id: 'annotate', label: 'Annotate' },
   { id: 'phenotype', label: 'Clinical findings' },
   { id: 'prioritize', label: 'Phenotype prioritization' },
+  { id: 'ga', label: 'GA triage' },
   { id: 'report', label: 'Clinical report' },
 ];
 
@@ -39,6 +40,7 @@ export function deriveAutomaticSteps({
   isRunningAnnovar,
   isRunningExomiser,
   sawModule1 = false,
+  gaStatus = '',
 }) {
   const failed = phase === 'failed';
   const annRunning =
@@ -99,14 +101,30 @@ export function deriveAutomaticSteps({
     return { status: 'pending' };
   })();
 
+  const gaDone = gaStatus === 'completed' || gaStatus === 'ready';
+  const gaRunning = ['running', 'pending', 'queued'].includes(gaStatus);
+  const ga = (() => {
+    if (gaDone) return { status: 'done', detail: 'GA ranking ready' };
+    if (gaStatus === 'failed') return { status: 'failed', detail: 'GA triage failed' };
+    if (gaRunning || phase === 'waiting_ga') return { status: 'running', detail: 'Ranking variants…' };
+    if (exoDone) return { status: 'waiting', detail: 'Starts after enrichment' };
+    return { status: 'pending' };
+  })();
+
   const report = (() => {
-    if (phase === 'ready_report' || exoDone) {
-      return { status: 'waiting', detail: 'Generate report when ready' };
+    if (phase === 'ready_report' && gaDone) {
+      return {
+        status: 'waiting',
+        detail: 'Review GA-preselected variants, then Proceed',
+      };
+    }
+    if (exoDone && !gaDone) {
+      return { status: 'pending', detail: 'After GA triage' };
     }
     return { status: 'pending', detail: 'After prioritization' };
   })();
 
-  const byId = { calling, annotate, phenotype, prioritize, report };
+  const byId = { calling, annotate, phenotype, prioritize, ga, report };
   return AUTOMATIC_PIPELINE_STEPS.map((s) => ({
     ...s,
     status: byId[s.id]?.status || 'pending',
@@ -138,6 +156,7 @@ export function useAutomaticPipelineConductor({
   runAnnovar,
   fetchExomiserEligibility,
   runExomiser,
+  gaTriageStatus = '',
 }) {
   const [phase, setPhase] = useState(null);
   const [message, setMessage] = useState(null);
@@ -214,8 +233,19 @@ export function useAutomaticPipelineConductor({
       const annStatus = String(annovarJobStatus || '').toLowerCase();
 
       if (exoStatus === 'completed' || exoStatus === 'success') {
-        setPhase('ready_report');
-        setMessage('Prioritization complete.');
+        const ga = String(gaTriageStatus || '').toLowerCase();
+        if (ga === 'completed' || ga === 'ready') {
+          setPhase('ready_report');
+          setMessage('GA ranking ready — review Include, then generate the report.');
+          return;
+        }
+        if (ga === 'failed') {
+          setPhase('failed');
+          setMessage('GA triage failed — retry enrichment or assign the report manually.');
+          return;
+        }
+        setPhase('waiting_ga');
+        setMessage('Waiting for GA triage…');
         return;
       }
       if (exoStatus === 'running' || exoStatus === 'queued' || isRunningExomiser) {
@@ -322,6 +352,7 @@ export function useAutomaticPipelineConductor({
     runAnnovar,
     fetchExomiserEligibility,
     runExomiser,
+    gaTriageStatus,
   ]);
 
   const exoStatus = String(exomiserStatus?.status || '').toLowerCase();
@@ -340,6 +371,7 @@ export function useAutomaticPipelineConductor({
         isRunningAnnovar,
         isRunningExomiser,
         sawModule1: sawModule1Ref.current,
+        gaStatus: String(gaTriageStatus || '').toLowerCase(),
       }),
     [
       phase,
@@ -351,6 +383,7 @@ export function useAutomaticPipelineConductor({
       exoStatus,
       isRunningAnnovar,
       isRunningExomiser,
+      gaTriageStatus,
     ]
   );
 

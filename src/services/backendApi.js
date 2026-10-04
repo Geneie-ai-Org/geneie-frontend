@@ -620,6 +620,76 @@ export async function fetchModule1Status(conversationId) {
   return data;
 }
 
+/** Retained Module 1 QC files (presigned GET) — empty once BAM/QC are purged. */
+export async function fetchModule1QcArtifacts(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/module1/qc/${encodeURIComponent(conversationId)}`), {
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to fetch Module 1 QC reports');
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
+/** Retained Module 1 BAM(+BAI) presigned GET URLs for the alignment browser — gone after purge. */
+export async function fetchModule1BamArtifacts(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/module1/bam/${encodeURIComponent(conversationId)}`), {
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to fetch Module 1 BAM for IGV');
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
+/** Durable Module 1 QC report (survives BAM/QC purge; used for chat Q&A). */
+export async function fetchModule1QcReport(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/module1/report/${encodeURIComponent(conversationId)}`), {
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to fetch Module 1 QC report');
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
+/** Upload a browser/chart PNG into the durable Module 1 report. */
+export async function uploadModule1ReportFigure(conversationId, blob, {
+  fileName = 'alignment_browser.png',
+  kind = 'browser_snapshot',
+  label = 'Alignment browser',
+} = {}) {
+  const headers = await getAuthHeaders();
+  const form = new FormData();
+  form.append('file', blob, fileName);
+  form.append('kind', kind);
+  form.append('label', label);
+  const response = await fetch(apiUrl(`/api/module1/report/${encodeURIComponent(conversationId)}/figures`), {
+    method: 'POST',
+    headers,
+    body: form,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to upload Module 1 report figure');
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
 /** Fast, non-authoritative client hint only — the server /validate-bed call remains the real gate. */
 export async function precheckBedChromStyle(file) {
   const head = await file.slice(0, 64 * 1024).text();

@@ -4,6 +4,9 @@ import { AlertCircle, Check, ChevronDown, Dna, Loader2 } from 'lucide-react';
 import { MODULE1_STAGE_GROUPS, getModule1PhaseMessage, getModule1StageGroup } from '@/lib/module1PipelinePhases';
 import RunTimer from '@/components/ui/RunTimer';
 import { useRunTimer } from '@/hooks/useRunTimer';
+import Module1QcPanel from '@/components/Module1QcPanel';
+import Module1IgvPanel from '@/components/Module1IgvPanel';
+import Module1QcReportPanel from '@/components/Module1QcReportPanel';
 
 const EASE = [0.23, 1, 0.32, 1];
 
@@ -159,6 +162,25 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
                     </button>
                   )}
                 </div>
+              )}
+
+              {job.hasQc && job.conversationId && (
+                <Module1QcPanel conversationId={job.conversationId} hasQc={job.hasQc} />
+              )}
+
+              {job.hasBam && job.conversationId && (
+                <Module1IgvPanel
+                  conversationId={job.conversationId}
+                  hasBam={job.hasBam}
+                  genome={job.genome}
+                />
+              )}
+
+              {(job.bamQcPurged || job.hasQc || job.hasBam) && job.conversationId && (
+                <Module1QcReportPanel
+                  conversationId={job.conversationId}
+                  visible
+                />
               )}
             </div>
           </motion.div>

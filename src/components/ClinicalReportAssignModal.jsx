@@ -354,12 +354,12 @@ export default function ClinicalReportAssignModal({
                   GA table
                 </button>
               ) : null}
-              {gaReady ? (
+              {gaReady && suggestionCount > 0 ? (
                 <button
                   type="button"
                   onClick={applySuggestions}
                   className="h-9 px-3 rounded-lg text-xs border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
-                  title="Re-apply GA Include picks (you can still edit)"
+                  title={`Apply ${suggestionCount} GA Include pick${suggestionCount === 1 ? '' : 's'} (Primary/Strong). You can still edit.`}
                 >
                   Accept GA picks
                 </button>

@@ -27,6 +27,10 @@ import {
   PHENOTYPE_FAILED_TITLE,
   PHENOTYPE_FAILED_FALLBACK,
 } from '@/lib/filterDisplayNames';
+import {
+  normalizePipelineRunMode,
+  PIPELINE_RUN_AUTOMATIC,
+} from '@/components/PipelineRunModeToggle';
 
 /**
  * Phase F variant pipeline: chat eligibility, ANNOVAR/ACMG async jobs, background polling.
@@ -754,31 +758,33 @@ export function useVariantPipeline({
 
   const presentFileAnalysisModal = useCallback(
     (convData) => {
-      // console.log('[presentFileAnalysisModal] called', {
-      //   hasColumnInterp: !!convData?.column_interpretation,
-      //   uploadSessionConversationId: uploadSessionConversationIdRef.current,
-      //   currentDocument: !!currentDocument,
-      // });
       if (!convData?.column_interpretation) return;
       const hasDoc =
         currentDocument || (convData.document?.s3_url && convData.document?.file_name);
       if (!hasDoc) return;
 
+      // Automatic: never block the conductor on File Analysis — sync happens elsewhere.
+      // Manual: analyst should review the 3-step interpretation.
+      const meta = convData.sample_metadata || currentDocument?.sample_metadata || {};
+      const isAutomatic =
+        normalizePipelineRunMode(meta.pipeline_run_mode || meta.phenotype_run_mode) ===
+        PIPELINE_RUN_AUTOMATIC;
+      if (isAutomatic) {
+        interpretationDismissedRef.current = true;
+        setShowInterpretationModal(false);
+        return;
+      }
+
       // If an upload is still in progress, wait for it to finish before opening
       if (uploadSessionConversationIdRef.current) {
-        // console.log('[presentFileAnalysisModal] upload in progress, deferring 500ms');
         setTimeout(() => {
           if (!uploadSessionConversationIdRef.current) {
-            // console.log('[presentFileAnalysisModal] upload finished, opening modal now');
             interpretationDismissedRef.current = false;
             setShowInterpretationModal(true);
           } else {
-            // console.log('[presentFileAnalysisModal] upload still in progress, deferring again');
-            // Keep retrying until upload finishes
             const checkInterval = setInterval(() => {
               if (!uploadSessionConversationIdRef.current) {
                 clearInterval(checkInterval);
-                // console.log('[presentFileAnalysisModal] upload finished (retry), opening modal');
                 interpretationDismissedRef.current = false;
                 setShowInterpretationModal(true);
               }

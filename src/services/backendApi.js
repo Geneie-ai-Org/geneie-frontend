@@ -665,6 +665,31 @@ export async function fetchModule1QcReport(conversationId) {
   return data;
 }
 
+/** Upload a browser/chart PNG into the durable Module 1 report. */
+export async function uploadModule1ReportFigure(conversationId, blob, {
+  fileName = 'alignment_browser.png',
+  kind = 'browser_snapshot',
+  label = 'Alignment browser',
+} = {}) {
+  const headers = await getAuthHeaders();
+  const form = new FormData();
+  form.append('file', blob, fileName);
+  form.append('kind', kind);
+  form.append('label', label);
+  const response = await fetch(apiUrl(`/api/module1/report/${encodeURIComponent(conversationId)}/figures`), {
+    method: 'POST',
+    headers,
+    body: form,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to upload Module 1 report figure');
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
 /** Fast, non-authoritative client hint only — the server /validate-bed call remains the real gate. */
 export async function precheckBedChromStyle(file) {
   const head = await file.slice(0, 64 * 1024).text();

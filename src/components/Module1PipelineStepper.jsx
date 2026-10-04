@@ -176,8 +176,11 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
                 />
               )}
 
-              {job.bamQcPurged && job.conversationId && (
-                <Module1QcReportPanel conversationId={job.conversationId} visible />
+              {(job.bamQcPurged || job.hasQc || job.hasBam) && job.conversationId && (
+                <Module1QcReportPanel
+                  conversationId={job.conversationId}
+                  visible
+                />
               )}
             </div>
           </motion.div>

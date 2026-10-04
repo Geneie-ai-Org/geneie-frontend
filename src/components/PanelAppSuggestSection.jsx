@@ -68,7 +68,7 @@ export default function PanelAppSuggestSection({
       } catch (err) {
         if (seq !== seqRef.current) return;
         setSuggestions([]);
-        setError(err.message || 'Could not load PanelApp suggestions');
+        setError(err.message || 'Could not load gene panel suggestions');
       } finally {
         if (seq === seqRef.current) setLoading(false);
       }
@@ -127,10 +127,10 @@ export default function PanelAppSuggestSection({
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="font-medium" style={{ color: 'var(--text-primary)' }}>
-            PanelApp suggestions (for GA)
+            Gene panel suggestions
           </div>
           <p className="text-2xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-            Optional — select panels to boost GA ranking. Nothing is applied until you check a
+            Optional — select panels to boost ranking. Nothing is applied until you check a
             panel.
           </p>
         </div>
@@ -150,7 +150,7 @@ export default function PanelAppSuggestSection({
               }
             }}
           />
-          Include Amber genes
+          Include lower-confidence genes
         </label>
       </div>
 
@@ -162,7 +162,7 @@ export default function PanelAppSuggestSection({
 
       {!loading && suggestions.length === 0 && !error && (
         <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-          No PanelApp panels matched these findings. GA will run without a panel boost.
+          No gene panels matched these findings. Ranking will run without a panel boost.
         </p>
       )}
 
@@ -218,7 +218,7 @@ export default function PanelAppSuggestSection({
         <p className="text-2xs" style={{ color: 'var(--text-secondary)' }}>
           {selectedIds.size} panel{selectedIds.size === 1 ? '' : 's'} selected
           {Array.isArray(value?.selected_panel_gene_list) && value.selected_panel_gene_list.length
-            ? ` · ${value.selected_panel_gene_list.length} genes for GA boost`
+            ? ` · ${value.selected_panel_gene_list.length} genes for ranking boost`
             : ''}
           {saving ? ' · saving…' : ''}
         </p>

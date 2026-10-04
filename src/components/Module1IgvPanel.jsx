@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
-import { fetchModule1BamArtifacts } from '@/services/backendApi';
+import { toBlob } from 'html-to-image';
+import { fetchModule1BamArtifacts, uploadModule1ReportFigure } from '@/services/backendApi';
 import { useTheme } from '@/hooks/useTheme';
 import {
   assemblyForGenome,
@@ -10,16 +11,27 @@ import {
 
 /**
  * Geneie-themed JBrowse 2 linear genome view for retained Module 1 markdup BAM.
- * Live while BAM exists; after chat unlock the durable QC/alignment report remains.
+ * Auto-opens once to capture a PNG into the durable QC report before purge.
  */
 const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
   const { isDark } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [snapshotStatus, setSnapshotStatus] = useState(null);
   const [bamMeta, setBamMeta] = useState(null);
   const [JBrowse, setJBrowse] = useState(null);
   const [viewState, setViewState] = useState(null);
+  const captureRootRef = useRef(null);
+  const capturedRef = useRef(false);
+  const autoOpenedRef = useRef(false);
+
+  // Auto-expand once while BAM is live so we can save a browser snapshot.
+  useEffect(() => {
+    if (!hasBam || !conversationId || autoOpenedRef.current) return;
+    autoOpenedRef.current = true;
+    setExpanded(true);
+  }, [hasBam, conversationId]);
 
   useEffect(() => {
     if (!expanded || !conversationId || !hasBam) return undefined;
@@ -104,6 +116,44 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
     };
   }, [expanded, conversationId, hasBam, genomeHint, isDark]);
 
+  // Capture viewport → durable report (once per conversation while BAM live).
+  useEffect(() => {
+    if (!expanded || !viewState || !captureRootRef.current || capturedRef.current || loading || error) {
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        setSnapshotStatus('Saving alignment snapshot…');
+        const blob = await toBlob(captureRootRef.current, {
+          cacheBust: true,
+          pixelRatio: 2,
+          backgroundColor: isDark ? '#0f0f0f' : '#ffffff',
+        });
+        if (cancelled || !blob) {
+          setSnapshotStatus(null);
+          return;
+        }
+        await uploadModule1ReportFigure(conversationId, blob, {
+          fileName: `alignment_browser_${Date.now()}.png`,
+          kind: 'browser_snapshot',
+          label: bamMeta?.sample
+            ? `Alignment browser · ${bamMeta.sample}`
+            : 'Alignment browser',
+        });
+        capturedRef.current = true;
+        if (!cancelled) setSnapshotStatus('Alignment snapshot saved to QC report.');
+      } catch (err) {
+        console.warn('[Module1IgvPanel] snapshot failed:', err);
+        if (!cancelled) setSnapshotStatus('Could not save alignment snapshot (will retry next open).');
+      }
+    }, 3500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [expanded, viewState, loading, error, conversationId, isDark, bamMeta]);
+
   const Browser = useMemo(() => JBrowse, [JBrowse]);
 
   if (!hasBam) return null;
@@ -124,7 +174,7 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
             Alignment browser
           </p>
           <p className="text-2xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-            Geneie-themed view of the markdup BAM while it is retained
+            Geneie-themed view · snapshot saved into the QC report before purge
             {bamMeta?.genome ? ` · ${bamMeta.genome}` : ''}.
           </p>
         </div>
@@ -152,8 +202,16 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
               {error}
             </p>
           )}
+          {snapshotStatus && (
+            <p className="text-2xs px-1 pb-1" style={{ color: 'var(--text-tertiary)' }}>
+              {snapshotStatus}
+            </p>
+          )}
           {!loading && !error && Browser && viewState && (
-            <div className="module1-jbrowse-root rounded-md overflow-hidden min-h-[320px]">
+            <div
+              ref={captureRootRef}
+              className="module1-jbrowse-root rounded-md overflow-hidden min-h-[320px]"
+            >
               <Browser viewState={viewState} />
             </div>
           )}

@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { FileText, Loader2 } from 'lucide-react';
+import { ExternalLink, FileText, Loader2 } from 'lucide-react';
 import { fetchModule1QcReport } from '@/services/backendApi';
 
 /**
- * Durable Module 1 QC interpretation after BAM/QC purge.
- * Chat can also answer from the same saved report.
+ * Durable Module 1 QC interpretation + charts/snapshots after BAM/QC purge.
+ * Chat answers from the same saved report.
  */
 const Module1QcReportPanel = ({ conversationId, visible }) => {
   const [loading, setLoading] = useState(false);
@@ -37,6 +37,17 @@ const Module1QcReportPanel = ({ conversationId, visible }) => {
   if (!visible) return null;
   if (!loading && !report && !error) return null;
 
+  const figures = Array.isArray(report?.artifacts?.figures) ? report.artifacts.figures : [];
+  const imageFigs = figures.filter(
+    (f) =>
+      f?.url &&
+      (f.kind === 'metrics_chart' ||
+        f.kind === 'quality_curve' ||
+        f.kind === 'browser_snapshot' ||
+        (f.content_type || '').startsWith('image/'))
+  );
+  const htmlFigs = figures.filter((f) => f?.url && f.kind === 'html_report');
+
   return (
     <div
       className="mt-3 p-3 rounded-lg border"
@@ -51,7 +62,7 @@ const Module1QcReportPanel = ({ conversationId, visible }) => {
         {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: 'var(--text-tertiary)' }} />}
       </div>
       <p className="text-2xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-        Kept after BAM/QC cleanup — ask about QC in chat anytime.
+        Text, charts, and alignment snapshots kept after BAM/QC cleanup — ask in chat anytime.
       </p>
       {error && (
         <p className="text-2xs mt-2" style={{ color: 'var(--error)' }}>
@@ -62,6 +73,45 @@ const Module1QcReportPanel = ({ conversationId, visible }) => {
         <p className="text-xs mt-2 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
           {report.summary_text}
         </p>
+      )}
+
+      {imageFigs.length > 0 && (
+        <div className="mt-3 space-y-3">
+          {imageFigs.map((fig) => (
+            <figure key={fig.s3_key || fig.name} className="m-0">
+              <figcaption className="text-2xs mb-1" style={{ color: 'var(--text-tertiary)' }}>
+                {fig.label || fig.name}
+              </figcaption>
+              <a href={fig.url} target="_blank" rel="noopener noreferrer" className="block">
+                <img
+                  src={fig.url}
+                  alt={fig.label || fig.name || 'QC figure'}
+                  className="w-full rounded-md border"
+                  style={{ borderColor: 'var(--border-subtle)', backgroundColor: '#fff' }}
+                />
+              </a>
+            </figure>
+          ))}
+        </div>
+      )}
+
+      {htmlFigs.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {htmlFigs.map((fig) => (
+            <li key={fig.s3_key || fig.name}>
+              <a
+                href={fig.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-2xs inline-flex items-center gap-1"
+                style={{ color: 'var(--accent-teal)' }}
+              >
+                Open {fig.label || fig.name}
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

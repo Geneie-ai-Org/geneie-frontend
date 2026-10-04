@@ -1417,32 +1417,46 @@ export default function PhenotypeInputPanel({
               {clinicalCandidates.some((c) => c.selected && c.selected_default && isAutomatic)
                 ? ' · high-confidence pre-selected — click to undo'
                 : ''}
-              {inheritanceCandidates.length > 0
-                ? ` · ${inheritanceCandidates.length} inheritance terms hidden`
-                : ''}
             </span>
           ) : null}
         </div>
-        {clinicalCandidates.length > 0 && (
-          <div className="flex gap-2 text-2xs">
-            <button
-              type="button"
-              className="underline"
-              style={{ color: 'var(--text-secondary)' }}
-              onClick={() => setGroupSelected(clinicalCandidates, true)}
-              disabled={disabled}
-            >
-              Select clinical
-            </button>
-            <button
-              type="button"
-              className="underline"
-              style={{ color: 'var(--text-secondary)' }}
-              onClick={() => setGroupSelected(clinicalCandidates, false)}
-              disabled={disabled}
-            >
-              Clear selection
-            </button>
+        {(clinicalCandidates.length > 0 || inheritanceCandidates.length > 0) && (
+          <div className="flex flex-wrap justify-end gap-2 text-2xs">
+            {inheritanceCandidates.length > 0 && (
+              <button
+                type="button"
+                className="underline"
+                style={{ color: 'var(--text-secondary)' }}
+                onClick={() => setShowInheritance((v) => !v)}
+                disabled={disabled}
+              >
+                {showInheritance
+                  ? `Hide inheritance (${inheritanceCandidates.length})`
+                  : `Show inheritance (${inheritanceCandidates.length})`}
+              </button>
+            )}
+            {clinicalCandidates.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  className="underline"
+                  style={{ color: 'var(--text-secondary)' }}
+                  onClick={() => setGroupSelected(clinicalCandidates, true)}
+                  disabled={disabled}
+                >
+                  Select clinical
+                </button>
+                <button
+                  type="button"
+                  className="underline"
+                  style={{ color: 'var(--text-secondary)' }}
+                  onClick={() => setGroupSelected(clinicalCandidates, false)}
+                  disabled={disabled}
+                >
+                  Clear selection
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -1466,6 +1480,18 @@ export default function PhenotypeInputPanel({
         </div>
       )}
 
+      {showInheritance && inheritanceCandidates.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+            Inheritance / non-finding terms — optional, not used as clinical findings unless you
+            select them
+          </p>
+          <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto opacity-80">
+            {inheritanceCandidates.map(renderChip)}
+          </div>
+        </div>
+      )}
+
       {selectedCount > 0 && (
         <PanelAppSuggestSection
           confirmedHpoIds={candidates.filter((c) => c.selected).map((c) => c.hpo_id)}
@@ -1485,25 +1511,6 @@ export default function PhenotypeInputPanel({
             onChangeRef.current?.(panelPatch);
           }}
         />
-      )}
-
-      {inheritanceCandidates.length > 0 && (
-        <div className="space-y-1">
-          <button
-            type="button"
-            className="text-2xs underline"
-            style={{ color: 'var(--text-tertiary)' }}
-            onClick={() => setShowInheritance((v) => !v)}
-          >
-            {showInheritance ? 'Hide' : 'Show'} inheritance / non-finding terms (
-            {inheritanceCandidates.length})
-          </button>
-          {showInheritance && (
-            <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto opacity-80">
-              {inheritanceCandidates.map(renderChip)}
-            </div>
-          )}
-        </div>
       )}
     </div>
   );

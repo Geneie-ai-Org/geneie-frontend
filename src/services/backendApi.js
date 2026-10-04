@@ -635,7 +635,7 @@ export async function fetchModule1QcArtifacts(conversationId) {
   return data;
 }
 
-/** Retained Module 1 BAM(+BAI) presigned GET URLs for igv.js — gone after purge. */
+/** Retained Module 1 BAM(+BAI) presigned GET URLs for the alignment browser — gone after purge. */
 export async function fetchModule1BamArtifacts(conversationId) {
   const headers = await getAuthHeaders();
   const response = await fetch(apiUrl(`/api/module1/bam/${encodeURIComponent(conversationId)}`), {
@@ -644,6 +644,21 @@ export async function fetchModule1BamArtifacts(conversationId) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to fetch Module 1 BAM for IGV');
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
+/** Durable Module 1 QC report (survives BAM/QC purge; used for chat Q&A). */
+export async function fetchModule1QcReport(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/module1/report/${encodeURIComponent(conversationId)}`), {
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to fetch Module 1 QC report');
     err.status = response.status;
     throw err;
   }

@@ -19,35 +19,38 @@ export function getClinicalReportGate({
   const blocked = gateBlocked || chatBlocked;
   const ga = String(gaTriageStatus || '').toLowerCase();
 
+  // Keep button labels short (sidebar is narrow). Put the full reason in `title`.
   const gateLabel = () => {
-    if (downloadGate?.kind === 'enriching') return 'Report unlocks after enrichment…';
+    if (downloadGate?.kind === 'enriching') return 'Waiting for enrichment…';
     if (downloadGate?.kind === 'busy') return 'Applying filter…';
-    if (downloadGate?.kind === 'syncing') return 'Syncing latest state…';
-    return 'Report unavailable while a job runs';
+    if (downloadGate?.kind === 'syncing') return 'Syncing…';
+    return 'Report unavailable';
   };
 
   const chatLabel = () => {
-    if (chatPending) return 'Checking chat eligibility…';
+    if (chatPending) return 'Checking eligibility…';
     if (scope === 'pgx_only') {
-      return 'PGx chat is open — apply ACMG or phenotype filter for the clinical report…';
+      return 'Apply filter for report';
     }
     if (chatEligibility?.reason === 'CHAT_REQUIRES_FILTER' || chatEligibility?.reason === 'PGX_ONLY') {
-      return 'Report unlocks when chat unlocks (apply a filter)…';
+      return 'Apply filter for report';
     }
     if (chatEligibility?.reason === 'S3_LINE_COUNT_PENDING') {
       return 'Counting variants…';
     }
     if (chatEligibility?.reason === 'FILTER_JOB_RUNNING') {
-      return 'Waiting for filter job…';
+      return 'Waiting for filter…';
     }
-    return chatEligibility?.message || 'Report unlocks when chat is enabled';
+    return 'Report locked';
   };
 
   let label = gateBlocked ? gateLabel() : chatBlocked ? chatLabel() : 'Review & report';
   let title = gateBlocked
     ? downloadGate?.message || 'A job is still running'
     : chatBlocked
-    ? chatEligibility?.message || 'Chat must be enabled before generating a report'
+    ? scope === 'pgx_only'
+      ? 'PGx chat is open — apply ACMG or a phenotype filter to unlock the clinical report.'
+      : chatEligibility?.message || 'Chat must be enabled before generating a report'
     : 'Review GA Include picks, edit if needed, then generate the PDF';
   if (!blocked && (ga === 'running' || ga === 'pending' || ga === 'queued')) {
     label = 'Waiting for GA…';
@@ -92,14 +95,14 @@ export default function CaseReportDownloadButton({
         }}
         disabled={blocked}
         title={title}
-        className={`w-full h-9 rounded-lg flex items-center justify-center gap-2 text-xs font-medium whitespace-nowrap border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${
+        className={`w-full min-h-9 px-2.5 py-2 rounded-lg inline-flex items-center justify-center gap-2 text-xs font-medium text-center leading-snug border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${
           !blocked
             ? 'border-[var(--border-subtle)] bg-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]'
             : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] cursor-not-allowed'
         }`}
       >
-        <FileText className="w-3.5 h-3.5" />
-        {label}
+        <FileText className="w-3.5 h-3.5 shrink-0" />
+        <span className="min-w-0">{label}</span>
       </button>
     </div>
   );

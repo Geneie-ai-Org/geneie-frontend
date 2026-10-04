@@ -99,21 +99,19 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
         {expanded && (
           <motion.div
             key="body"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            // Collapse is quicker than expand, matching PipelineDrawer: opening is a
-            // request to read, closing is the interface getting out of the way. The exit
-            // timing must ride on `exit` itself — AnimatePresence replays the element's
-            // last props, so a `transition` branching on `expanded` never sees false.
+            // Opacity-only: height:auto + overflow:hidden locks a measured height before
+            // async QC/JBrowse content mounts, which clips the panel and kills pan/zoom.
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             exit={{
-              height: 0,
               opacity: 0,
-              transition: reduceMotion ? { duration: 0 } : { duration: 0.15, ease: EASE },
+              transition: reduceMotion ? { duration: 0 } : { duration: 0.12, ease: EASE },
             }}
-            transition={reduceMotion ? { duration: 0 } : { duration: 0.22, ease: EASE }}
-            className="overflow-hidden"
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: EASE }}
           >
-            <div className="px-3 pb-3">
+            {/* Cap height so QC + report stay inside the viewport; alignment browser
+             * opens in its own dialog (not embedded here). */}
+            <div className="px-3 pb-3 max-h-[min(55vh,560px)] overflow-y-auto overscroll-contain">
               <div className="flex items-center justify-between">
                 {MODULE1_STAGE_GROUPS.map((group, i) => {
                   const status = nodeStatus(group.id, activeGroupId, failed, groupOrder);
@@ -180,6 +178,7 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
                 <Module1QcReportPanel
                   conversationId={job.conversationId}
                   visible
+                  hideBrowserSnapshots={Boolean(job.hasBam)}
                 />
               )}
             </div>

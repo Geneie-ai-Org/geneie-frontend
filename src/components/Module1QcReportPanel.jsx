@@ -5,8 +5,11 @@ import { fetchModule1QcReport } from '@/services/backendApi';
 /**
  * Durable Module 1 QC interpretation + charts/snapshots after BAM/QC purge.
  * Chat answers from the same saved report.
+ *
+ * While the live alignment browser is still available (`hideBrowserSnapshots`),
+ * omit PNG browser captures so they are not mistaken for an interactive view.
  */
-const Module1QcReportPanel = ({ conversationId, visible }) => {
+const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = false }) => {
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState(null);
   const [error, setError] = useState(null);
@@ -38,14 +41,21 @@ const Module1QcReportPanel = ({ conversationId, visible }) => {
   if (!loading && !report && !error) return null;
 
   const figures = Array.isArray(report?.artifacts?.figures) ? report.artifacts.figures : [];
-  const imageFigs = figures.filter(
-    (f) =>
-      f?.url &&
-      (f.kind === 'metrics_chart' ||
-        f.kind === 'quality_curve' ||
-        f.kind === 'browser_snapshot' ||
-        (f.content_type || '').startsWith('image/'))
-  );
+  const imageFigs = figures
+    .filter(
+      (f) =>
+        f?.url &&
+        (f.kind === 'metrics_chart' ||
+          f.kind === 'quality_curve' ||
+          f.kind === 'browser_snapshot' ||
+          (f.content_type || '').startsWith('image/'))
+    )
+    .filter((f) => !(hideBrowserSnapshots && f.kind === 'browser_snapshot'))
+    // Charts first; browser PNG last so a frozen chrome shot never looks like the live viewer.
+    .sort((a, b) => {
+      const rank = (f) => (f.kind === 'browser_snapshot' ? 2 : f.kind === 'metrics_chart' ? 0 : 1);
+      return rank(a) - rank(b);
+    });
   const htmlFigs = figures.filter((f) => f?.url && f.kind === 'html_report');
 
   return (
@@ -77,21 +87,36 @@ const Module1QcReportPanel = ({ conversationId, visible }) => {
 
       {imageFigs.length > 0 && (
         <div className="mt-3 space-y-3">
-          {imageFigs.map((fig) => (
-            <figure key={fig.s3_key || fig.name} className="m-0">
-              <figcaption className="text-2xs mb-1" style={{ color: 'var(--text-tertiary)' }}>
-                {fig.label || fig.name}
-              </figcaption>
-              <a href={fig.url} target="_blank" rel="noopener noreferrer" className="block">
-                <img
-                  src={fig.url}
-                  alt={fig.label || fig.name || 'QC figure'}
-                  className="w-full rounded-md border"
-                  style={{ borderColor: 'var(--border-subtle)', backgroundColor: '#fff' }}
-                />
-              </a>
-            </figure>
-          ))}
+          {imageFigs.map((fig) => {
+            const isSnapshot = fig.kind === 'browser_snapshot';
+            return (
+              <figure key={fig.s3_key || fig.name} className="m-0">
+                <figcaption className="text-2xs mb-1" style={{ color: 'var(--text-tertiary)' }}>
+                  {isSnapshot
+                    ? `${fig.label || 'Alignment browser'} · static snapshot (not interactive)`
+                    : fig.label || fig.name}
+                </figcaption>
+                <a href={fig.url} target="_blank" rel="noopener noreferrer" className="block">
+                  <img
+                    src={fig.url}
+                    alt={
+                      isSnapshot
+                        ? 'Static alignment browser snapshot (not interactive)'
+                        : fig.label || fig.name || 'QC figure'
+                    }
+                    className="w-full rounded-md border"
+                    style={{
+                      borderColor: 'var(--border-subtle)',
+                      backgroundColor: '#fff',
+                      // Discourage treating the PNG as a live genome browser.
+                      ...(isSnapshot ? { pointerEvents: 'none' } : null),
+                    }}
+                    draggable={false}
+                  />
+                </a>
+              </figure>
+            );
+          })}
         </div>
       )}
 

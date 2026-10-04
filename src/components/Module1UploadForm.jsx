@@ -21,6 +21,11 @@ import { MODULE1_BED_MAX_BYTES, MODULE1_FASTQ_MAX_BYTES } from '@/services/backe
 import { isRecognizedImportUrl, module1UrlErrorMessage, precheckBedChromStyle } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
 import PhenotypeInputPanel, { PHENOTYPE_MODE_NOTE } from '@/components/PhenotypeInputPanel';
+import GermlinePedigreeFields from '@/components/GermlinePedigreeFields';
+import {
+  EMPTY_PEDIGREE_FIELDS,
+  pedigreeFieldsForSubmit,
+} from '@/components/germlinePedigreeOptions';
 import PipelineRunModeToggle, {
   PIPELINE_RUN_MANUAL,
   normalizePipelineRunMode,
@@ -93,6 +98,7 @@ const EMPTY_SAMPLE_METADATA = {
   sampleRole: '',
   affectedStatus: '',
   inheritanceModel: '',
+  ...EMPTY_PEDIGREE_FIELDS,
   phenotype: '',
   phenotype_mode: PHENOTYPE_MODE_NOTE,
   phenotype_findings: '',
@@ -472,6 +478,7 @@ const Module1UploadForm = ({
               sampleRole: sampleMetadata.sampleRole,
               affectedStatus: sampleMetadata.affectedStatus,
               inheritanceModel: sampleMetadata.inheritanceModel,
+              ...pedigreeFieldsForSubmit(sampleMetadata),
               phenotype: sampleMetadata.phenotype.trim(),
               phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_NOTE,
               phenotype_findings: sampleMetadata.phenotype_findings || '',
@@ -661,6 +668,12 @@ const Module1UploadForm = ({
                       />
                     </div>
 
+                    <GermlinePedigreeFields
+                      value={sampleMetadata}
+                      onChange={(fields) => setSampleMetadata((prev) => ({ ...prev, ...fields }))}
+                      Select={SelectWithDisabledOptions}
+                    />
+
                     <div className="md:col-span-2">
                       <PhenotypeInputPanel
                         value={{
@@ -676,6 +689,9 @@ const Module1UploadForm = ({
                           ),
                           phenotype: sampleMetadata.phenotype || '',
                           phenotype_hpo: sampleMetadata.phenotype_hpo,
+                          selected_panels: sampleMetadata.selected_panels,
+                          selected_panel_gene_list: sampleMetadata.selected_panel_gene_list,
+                          selected_panel_include_amber: sampleMetadata.selected_panel_include_amber,
                         }}
                         onChange={(fields) =>
                           setSampleMetadata((prev) => {

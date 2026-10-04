@@ -2772,6 +2772,18 @@ const VariantFilterSidebar = ({
               isGuest={isGuest}
               downloadGate={downloadGate}
               uiCount={underConsiderationCount}
+              onReconcileUiCount={(nextCount) => {
+                const n = Number(nextCount);
+                if (!Number.isFinite(n)) return;
+                setFilteredCount(n);
+                if (onFiltersChange) {
+                  onFiltersChange(
+                    hasActiveManualFilters ? filters : { proprietary: activeProprietaryFilter },
+                    n,
+                    displayTotalVariants
+                  );
+                }
+              }}
             />
             <CaseReportDownloadButton
               conversationId={conversationId}

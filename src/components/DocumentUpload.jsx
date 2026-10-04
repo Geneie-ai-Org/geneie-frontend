@@ -21,6 +21,12 @@ import PhenotypeInputPanel, {
   PHENOTYPE_MODE_NOTE,
   sampleHasPhenotype,
 } from '@/components/PhenotypeInputPanel';
+import GermlinePedigreeFields from '@/components/GermlinePedigreeFields';
+import {
+  EMPTY_PEDIGREE_FIELDS,
+  pedigreeFieldsForSubmit,
+  pickPedigreeFields,
+} from '@/components/germlinePedigreeOptions';
 import PipelineRunModeToggle, {
   PIPELINE_RUN_MANUAL,
   normalizePipelineRunMode,
@@ -151,6 +157,7 @@ const DocumentUpload = ({
     sampleRole: '', // proband / mother / father / sibling / other
     affectedStatus: '', // affected / unaffected
     inheritanceModel: '', // Autosomal Dominant / Autosomal Recessive / X-linked / De novo / Unknown
+    ...EMPTY_PEDIGREE_FIELDS,
     phenotype: '', // Canonical active-tab text (only for Germline)
     phenotype_mode: PHENOTYPE_MODE_NOTE,
     phenotype_findings: '',
@@ -194,6 +201,7 @@ const DocumentUpload = ({
         sampleRole: initialMetadata.sampleRole || '',
         affectedStatus: initialMetadata.affectedStatus || '',
         inheritanceModel: initialMetadata.inheritanceModel || '',
+        ...pickPedigreeFields(initialMetadata),
         phenotype: initialMetadata.phenotype || '',
         phenotype_mode: initialMetadata.phenotype_mode || PHENOTYPE_MODE_NOTE,
         phenotype_findings: initialMetadata.phenotype_findings || (initialMetadata.phenotype_mode === 'disease' ? '' : (initialMetadata.phenotype || '')),
@@ -552,6 +560,10 @@ const DocumentUpload = ({
           patientAge: initialMetadata?.patientAge || '',
           ...(sampleMetadata.analysisType === 'Germline'
             ? {
+                sampleRole: sampleMetadata.sampleRole || '',
+                affectedStatus: sampleMetadata.affectedStatus || '',
+                inheritanceModel: sampleMetadata.inheritanceModel || '',
+                ...pedigreeFieldsForSubmit(sampleMetadata),
                 phenotype: sampleMetadata.phenotype || '',
                 phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_NOTE,
                 phenotype_findings: sampleMetadata.phenotype_findings || '',
@@ -574,6 +586,7 @@ const DocumentUpload = ({
                 phenotype_run_mode: PIPELINE_RUN_MANUAL,
                 pipeline_run_mode: PIPELINE_RUN_MANUAL,
                 phenotype_hpo: null,
+                ...EMPTY_PEDIGREE_FIELDS,
               }),
           tumorType: (sampleMetadata.analysisType === 'Somatic' || sampleMetadata.analysisType === 'Tumor-Normal Paired' || sampleMetadata.analysisType === 'Tumor-Only') ? sampleMetadata.tumorType : '',
         });
@@ -662,6 +675,7 @@ const DocumentUpload = ({
       sampleRole: '',
       affectedStatus: '',
       inheritanceModel: '',
+      ...EMPTY_PEDIGREE_FIELDS,
       phenotype: '',
       phenotype_mode: PHENOTYPE_MODE_NOTE,
       phenotype_findings: '',
@@ -1621,6 +1635,12 @@ const DocumentUpload = ({
                       />
                     </div>
 
+                    <GermlinePedigreeFields
+                      value={sampleMetadata}
+                      onChange={(fields) => setSampleMetadata((prev) => ({ ...prev, ...fields }))}
+                      Select={CustomSelect}
+                    />
+
                   </div>
 
                   {/* Phenotype - Full width. Optional: the pipeline runs without it, and
@@ -1639,6 +1659,9 @@ const DocumentUpload = ({
                       ),
                       phenotype: sampleMetadata.phenotype || '',
                       phenotype_hpo: sampleMetadata.phenotype_hpo,
+                      selected_panels: sampleMetadata.selected_panels,
+                      selected_panel_gene_list: sampleMetadata.selected_panel_gene_list,
+                      selected_panel_include_amber: sampleMetadata.selected_panel_include_amber,
                     }}
                     onChange={(fields) =>
                       setSampleMetadata((prev) => {

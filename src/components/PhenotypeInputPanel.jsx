@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Loader2, X } from 'lucide-react';
 import { interpretPhenotypeNarrative, resolveHpoTerms } from '@/services/mongodbApi';
+import PanelAppSuggestSection from '@/components/PanelAppSuggestSection';
 
 export const PHENOTYPE_MODE_FINDINGS = 'findings';
 export const PHENOTYPE_MODE_DISEASE = 'disease';
@@ -324,31 +325,25 @@ function shouldAutoSelectDisease(d, runMode) {
 
 /**
  * High-confidence catalog rows to auto-apply.
- * Prefer diseases explicitly named by the note LLM (disease_candidates).
- * Automatic without names: top score≥0.90 rows (capped). Manual: only named.
+ * Automatic only: prefer diseases explicitly named by the note LLM
+ * (disease_candidates); otherwise top score≥0.90 rows (capped).
+ * Manual: never auto-select — analyst must click a disease match.
  */
 function diseasesToAutoApply(
   catalog,
   runMode,
-  { alreadyKeys = new Set(), fromNote = false, namedNameKeys = null } = {}
+  { alreadyKeys = new Set(), namedNameKeys = null } = {}
 ) {
-  const allow =
-    runMode === PHENOTYPE_RUN_AUTOMATIC || (fromNote && runMode === PHENOTYPE_RUN_MANUAL);
-  if (!allow) return [];
+  if (runMode !== PHENOTYPE_RUN_AUTOMATIC) return [];
 
   let pool = (catalog || []).filter((d) => {
     if (!d || alreadyKeys.has(diseaseKey(d))) return false;
-    if (!diseaseHasHpoAnnotations(d)) return false;
-    const score = diseaseScore(d);
-    return score != null && score >= AUTO_DISEASE_MIN_SCORE;
+    return shouldAutoSelectDisease(d, runMode);
   });
 
   if (namedNameKeys && namedNameKeys.size) {
     const named = pool.filter((d) => namedNameKeys.has(diseaseNameClusterKey(d.disease_name)));
     if (named.length) pool = named;
-    else if (runMode !== PHENOTYPE_RUN_AUTOMATIC) return [];
-  } else if (fromNote && runMode === PHENOTYPE_RUN_MANUAL) {
-    return [];
   }
 
   return pool.slice(0, MAX_AUTO_DISEASES);
@@ -459,7 +454,12 @@ function mergeDiseaseCatalog(existing, incoming) {
 /**
  * Clinical-note phenotype panel (pinned findings + optional disease shortcut).
  */
-export default function PhenotypeInputPanel({ value, onChange, disabled = false }) {
+export default function PhenotypeInputPanel({
+  value,
+  onChange,
+  disabled = false,
+  conversationId = null,
+}) {
   const candidates = value?.phenotype_hpo?.candidates || [];
   const diseaseMatches = hydrateDiseaseMatches(value?.phenotype_hpo);
   const diseaseMatch = diseaseMatches[0] || null;
@@ -979,7 +979,6 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
       );
       const toAuto = diseasesToAutoApply(catalog, runModeRef.current, {
         alreadyKeys,
-        fromNote: true,
         namedNameKeys,
       });
 
@@ -1072,7 +1071,7 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
           ...catalog,
         ].filter(Boolean),
         runModeRef.current,
-        { fromNote: false }
+        {}
       );
 
       // Preserve multi-select; only refresh the ranked disease list.
@@ -1522,6 +1521,20 @@ export default function PhenotypeInputPanel({ value, onChange, disabled = false 
         <div className="flex flex-wrap gap-1.5 max-h-52 overflow-y-auto">
           {clinicalCandidates.map(renderChip)}
         </div>
+      )}
+
+      {selectedCount > 0 && (
+        <PanelAppSuggestSection
+          confirmedHpoIds={candidates.filter((c) => c.selected).map((c) => c.hpo_id)}
+          phenotypeText={value?.phenotype || value?.phenotype_disease || draft || ''}
+          value={value}
+          conversationId={conversationId}
+          disabled={disabled}
+          onChange={(panelPatch) => {
+            // Parent merges into sample_metadata; send panel keys only.
+            onChangeRef.current?.(panelPatch);
+          }}
+        />
       )}
 
       {inheritanceCandidates.length > 0 && (

@@ -5,7 +5,11 @@ import { FileText } from 'lucide-react';
  * Same unlock rules as variant chat + job downloadGate.
  * Shared by the sidebar button and the Automatic pipeline banner CTA.
  */
-export function getClinicalReportGate({ downloadGate = null, chatEligibility = null } = {}) {
+export function getClinicalReportGate({
+  downloadGate = null,
+  chatEligibility = null,
+  gaTriageStatus = '',
+} = {}) {
   const gateBlocked = downloadGate?.blocked === true;
   const scope = (chatEligibility?.scope || '').toLowerCase();
   // PGx-only chat does not unlock the clinical disease report.
@@ -13,6 +17,7 @@ export function getClinicalReportGate({ downloadGate = null, chatEligibility = n
   const chatPending = chatEligibility?.allowed == null;
   const chatBlocked = !chatReady;
   const blocked = gateBlocked || chatBlocked;
+  const ga = String(gaTriageStatus || '').toLowerCase();
 
   const gateLabel = () => {
     if (downloadGate?.kind === 'enriching') return 'Report unlocks after enrichment…';
@@ -38,12 +43,19 @@ export function getClinicalReportGate({ downloadGate = null, chatEligibility = n
     return chatEligibility?.message || 'Report unlocks when chat is enabled';
   };
 
-  const label = gateBlocked ? gateLabel() : chatBlocked ? chatLabel() : 'Generate report';
-  const title = gateBlocked
+  let label = gateBlocked ? gateLabel() : chatBlocked ? chatLabel() : 'Review & report';
+  let title = gateBlocked
     ? downloadGate?.message || 'A job is still running'
     : chatBlocked
     ? chatEligibility?.message || 'Chat must be enabled before generating a report'
-    : 'Assign variants and generate Geneie clinical report PDF';
+    : 'Review GA Include picks, edit if needed, then generate the PDF';
+  if (!blocked && (ga === 'running' || ga === 'pending' || ga === 'queued')) {
+    label = 'Waiting for GA…';
+    title = 'Ranking is still running. Open to assign manually, or wait and reopen for pre-checked Include.';
+  } else if (!blocked && ga === 'failed') {
+    label = 'Generate report';
+    title = 'GA failed — assign Include manually, then generate the PDF';
+  }
 
   return { blocked, label, title };
 }
@@ -59,9 +71,14 @@ export default function CaseReportDownloadButton({
   isGuest,
   downloadGate = null,
   chatEligibility = null,
+  gaTriageStatus = '',
   onRequestOpen,
 }) {
-  const { blocked, label, title } = getClinicalReportGate({ downloadGate, chatEligibility });
+  const { blocked, label, title } = getClinicalReportGate({
+    downloadGate,
+    chatEligibility,
+    gaTriageStatus,
+  });
 
   if (isGuest) return null;
   if (!conversationId || !variantData) return null;

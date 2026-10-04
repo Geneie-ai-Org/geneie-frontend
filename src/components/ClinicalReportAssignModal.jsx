@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  downloadGaTriageArtifact,
   fetchClinicalReportCandidates,
   generateClinicalReport,
 } from '@/services/backendApi';
@@ -33,22 +34,18 @@ function assignmentsFromSuggestions(rows) {
 }
 
 function whyText(row) {
-  const reasons = Array.isArray(row.pfra_reasons) ? row.pfra_reasons : [];
   const caveats = Array.isArray(row.pfra_caveats) ? row.pfra_caveats : [];
   const parts = [];
-  if (row.suggested_bucket) parts.push(`Bucket: ${row.suggested_bucket}`);
-  if (row.phenotype_fit) parts.push(`Fit: ${row.phenotype_fit}`);
-  if (reasons.length) parts.push(reasons.slice(0, 6).join(' · '));
-  if (caveats.length) parts.push(`Caveats: ${caveats.join(' · ')}`);
-  return parts.join('\n') || 'No PFRA rationale';
+  if (row.ga_label) parts.push(row.ga_label);
+  if (row.ga_score != null && row.ga_score !== '') parts.push(`Score ${row.ga_score}`);
+  if (row.phenotype_fit) parts.push(`Phenotype: ${row.phenotype_fit}`);
+  if (caveats.length) parts.push(`Flags: ${caveats.join(' · ')}`);
+  return parts.join('\n') || 'No GA rationale on this row';
 }
 
 /**
- * Slim assignment modal: variant id + Include / Additional only.
- * Unselected rows are excluded by default. Sorted by BE (persona workflow rules).
- * Assignments are keyed by unique row_key so duplicate variant ids don't steal clicks.
- * PFRA pre-checks Include/Additional on load; analyst override always wins before PDF.
- * In Automatic mode, suggested rows are surfaced first and highlighted.
+ * One review step: GA ranking + Include / Additional + PDF.
+ * Primary/Strong pre-check Include. Analyst override always wins.
  */
 export default function ClinicalReportAssignModal({
   open,
@@ -62,6 +59,7 @@ export default function ClinicalReportAssignModal({
   const [meta, setMeta] = useState(null);
   const [candidates, setCandidates] = useState([]);
   const [assignments, setAssignments] = useState({});
+  const [downloadingTsv, setDownloadingTsv] = useState(false);
 
   const load = useCallback(async () => {
     if (!conversationId) return;
@@ -72,7 +70,6 @@ export default function ClinicalReportAssignModal({
       setMeta(data);
       const rows = Array.isArray(data.candidates) ? data.candidates : [];
       setCandidates(rows);
-      // Always apply PFRA pre-checks when present (Automatic + Manual).
       setAssignments(assignmentsFromSuggestions(rows));
     } catch (err) {
       setError(err.message || 'Failed to load report candidates');
@@ -92,7 +89,7 @@ export default function ClinicalReportAssignModal({
     if (!automaticMode) {
       return candidates.map((row, index) => ({ row, index }));
     }
-    // Automatic: surface PFRA-suggested rows first so preselection is obvious.
+    // Automatic: surface GA Include picks first.
     const withIdx = candidates.map((row, index) => ({ row, index }));
     return [
       ...withIdx.filter(({ row }) => Boolean(row.suggested_section)),
@@ -142,11 +139,24 @@ export default function ClinicalReportAssignModal({
   const pfra = meta?.pfra || null;
   const pfraAvailable = Boolean(pfra?.suggestions_available);
   const suggestionCount = Number(pfra?.suggestion_count ?? 0);
+  const gaReady = Boolean(pfra?.ga_top_used && pfraAvailable);
   const pfraGateMessage =
     pfra?.gate?.message ||
     (!pfraAvailable
-      ? 'Phenotype-driven suggestions unavailable — assign manually.'
+      ? 'GA ranking unavailable — assign Include manually, then Proceed.'
       : null);
+  const handleDownloadTsv = async () => {
+    if (!conversationId || downloadingTsv) return;
+    setDownloadingTsv(true);
+    setError(null);
+    try {
+      await downloadGaTriageArtifact(conversationId, 'tsv');
+    } catch (err) {
+      setError(err.message || 'GA table download failed');
+    } finally {
+      setDownloadingTsv(false);
+    }
+  };
 
   const handleProceed = async () => {
     if (!canProceed || !conversationId) return;
@@ -180,27 +190,27 @@ export default function ClinicalReportAssignModal({
       >
         <div className="flex-shrink-0 px-5 py-3 border-b border-[var(--border-subtle)]">
           <DialogTitle className="text-base font-semibold text-[var(--text-primary)]">
-            Generate clinical report
+            Review ranking & report
           </DialogTitle>
           <DialogDescription className="text-xs text-[var(--text-secondary)] mt-1">
-            {automaticMode && pfraAvailable
-              ? 'Automatic mode · PFRA pre-selected Include rows below — review, edit if needed, then Proceed.'
+            {gaReady
+              ? 'GA pre-checked Primary and Strong for Include. Edit if needed, then Proceed.'
               : automaticMode
-                ? 'Automatic mode · assign Clinical result manually (PFRA suggestions unavailable).'
-                : 'Select Include and/or Additional. Unselected variants are left out.'}
+                ? 'Automatic mode · assign Include manually (GA ranking not ready).'
+                : 'Select Include and/or Additional. Unselected variants stay out of the PDF.'}
             {meta?.workflow_display_name
               ? ` · ${meta.workflow_display_name}`
               : ''}
             {typeof meta?.working_set_count === 'number'
               ? ` · ${meta.working_set_count.toLocaleString()} under consideration`
               : ''}
-            {pfraAvailable
-              ? ` · ${suggestionCount} suggestion${suggestionCount === 1 ? '' : 's'} pre-checked`
+            {gaReady
+              ? ` · ${suggestionCount} Include pick${suggestionCount === 1 ? '' : 's'}`
               : ''}
           </DialogDescription>
-          {!loading && pfraAvailable ? (
+          {!loading && gaReady ? (
             <p className="text-2xs mt-2" style={{ color: 'var(--accent-teal)' }}>
-              Pre-selected for Clinical result: {selectedIds.clinical.length}
+              Include: {selectedIds.clinical.length}
               {selectedIds.additional.length
                 ? ` · Additional: ${selectedIds.additional.length}`
                 : ''}
@@ -256,7 +266,7 @@ export default function ClinicalReportAssignModal({
                           className="mr-1.5 text-2xs font-sans font-medium"
                           style={{ color: 'var(--accent-teal)' }}
                         >
-                          Suggested
+                          Include pick
                         </span>
                       ) : null}
                       {rowLabel(row)}
@@ -328,14 +338,30 @@ export default function ClinicalReportAssignModal({
               {selectedIds.clinical.length < 1 ? ' · select ≥1 Include' : ''}
             </p>
             <div className="flex gap-2">
-              {pfraAvailable ? (
+              {gaReady ? (
+                <button
+                  type="button"
+                  onClick={handleDownloadTsv}
+                  disabled={downloadingTsv}
+                  className="h-9 px-3 rounded-lg text-xs border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] inline-flex items-center gap-1.5 disabled:opacity-50"
+                  title="Download the full GA ranking table"
+                >
+                  {downloadingTsv ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )}
+                  GA table
+                </button>
+              ) : null}
+              {gaReady ? (
                 <button
                   type="button"
                   onClick={applySuggestions}
                   className="h-9 px-3 rounded-lg text-xs border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
-                  title="Re-apply PFRA pre-checks (you can still edit)"
+                  title="Re-apply GA Include picks (you can still edit)"
                 >
-                  Accept suggestions
+                  Accept GA picks
                 </button>
               ) : null}
               <button

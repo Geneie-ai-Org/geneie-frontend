@@ -1495,6 +1495,7 @@ export default function PhenotypeInputPanel({
           value={value}
           conversationId={conversationId}
           disabled={disabled}
+          isAutomatic={isAutomatic}
           onChange={(panelPatch) => {
             // Parent merges into sample_metadata; send panel keys only.
             onChangeRef.current?.(panelPatch);

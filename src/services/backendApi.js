@@ -635,6 +635,21 @@ export async function fetchModule1QcArtifacts(conversationId) {
   return data;
 }
 
+/** Retained Module 1 BAM(+BAI) presigned GET URLs for igv.js — gone after purge. */
+export async function fetchModule1BamArtifacts(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/module1/bam/${encodeURIComponent(conversationId)}`), {
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to fetch Module 1 BAM for IGV');
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
 /** Fast, non-authoritative client hint only — the server /validate-bed call remains the real gate. */
 export async function precheckBedChromStyle(file) {
   const head = await file.slice(0, 64 * 1024).text();

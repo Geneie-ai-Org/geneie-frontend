@@ -201,33 +201,12 @@ export default function PanelAppSuggestSection({
                 />
                 <span className="min-w-0">
                   <span className="font-medium">{s.panel_name || id}</span>
-                  <span style={{ color: 'var(--text-tertiary)' }}>
-                    {' '}
-                    ·{' '}
-                    {[
-                      geneN > 0 ? `${geneN} matching genes` : null,
-                      s.green_count != null ? `${s.green_count} Green` : null,
-                      includeAmber && s.amber_count != null ? `${s.amber_count} Amber` : null,
-                      s.version ? `v${s.version}` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </span>
-                  {/* Skip reason when it only repeats green/amber counts already shown above. */}
-                  {(() => {
-                    const reason = String(s.reason || '').trim();
-                    if (!reason || /^gene overlap$/i.test(reason)) return null;
-                    const onlyGeneCounts = reason
-                      .split(';')
-                      .map((p) => p.trim())
-                      .every((p) => /^\d+\s+(green|amber)\s+gene/i.test(p));
-                    if (onlyGeneCounts) return null;
-                    return (
-                      <span className="block mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-                        {reason}
-                      </span>
-                    );
-                  })()}
+                  {geneN > 0 ? (
+                    <span style={{ color: 'var(--text-tertiary)' }}>
+                      {' '}
+                      · {geneN} matching gene{geneN === 1 ? '' : 's'}
+                    </span>
+                  ) : null}
                 </span>
               </label>
             );

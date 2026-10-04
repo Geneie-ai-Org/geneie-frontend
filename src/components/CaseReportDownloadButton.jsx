@@ -16,8 +16,21 @@ export function getClinicalReportGate({
   const chatReady = chatEligibility?.allowed === true && scope !== 'pgx_only';
   const chatPending = chatEligibility?.allowed == null;
   const chatBlocked = !chatReady;
-  const blocked = gateBlocked || chatBlocked;
   const ga = String(gaTriageStatus || '').toLowerCase();
+  const gaInFlight = ga === 'running' || ga === 'pending' || ga === 'queued';
+  // Filter already applied (phenotype/ACMG) — do not keep nagging "Apply filter…"
+  // while disease chat is still pgx_only (common while GA / advanced-chat index runs).
+  const filterAlreadyApplied =
+    Number(chatEligibility?.filtered_variant_count ?? chatEligibility?.filteredVariantCount) >
+      0 ||
+    Number(
+      chatEligibility?.variants_under_consideration ??
+        chatEligibility?.variantsUnderConsideration
+    ) > 0 ||
+    Boolean(
+      chatEligibility?.active_proprietary_filter ||
+        chatEligibility?.activeProprietaryFilter
+    );
 
   // Keep button labels short (sidebar is narrow). Put the full reason in `title`.
   const gateLabel = () => {
@@ -29,11 +42,15 @@ export function getClinicalReportGate({
 
   const chatLabel = () => {
     if (chatPending) return 'Checking eligibility…';
+    if (gaInFlight) return 'Waiting for GA…';
+    if (scope === 'pgx_only' && filterAlreadyApplied) {
+      return 'Waiting for report unlock…';
+    }
     if (scope === 'pgx_only') {
       return 'Apply filter for report';
     }
     if (chatEligibility?.reason === 'CHAT_REQUIRES_FILTER' || chatEligibility?.reason === 'PGX_ONLY') {
-      return 'Apply filter for report';
+      return filterAlreadyApplied ? 'Waiting for report unlock…' : 'Apply filter for report';
     }
     if (chatEligibility?.reason === 'S3_LINE_COUNT_PENDING') {
       return 'Counting variants…';
@@ -44,18 +61,25 @@ export function getClinicalReportGate({
     return 'Report locked';
   };
 
+  // While GA runs, allow opening the modal for manual Include (title promised this).
+  const blocked = gateBlocked || (chatBlocked && !gaInFlight && ga !== 'failed');
   let label = gateBlocked ? gateLabel() : chatBlocked ? chatLabel() : 'Review & report';
   let title = gateBlocked
     ? downloadGate?.message || 'A job is still running'
     : chatBlocked
-    ? scope === 'pgx_only'
+    ? gaInFlight
+      ? 'GA ranking is still running. You can open and assign Include manually, or wait for pre-checked picks.'
+      : scope === 'pgx_only' && filterAlreadyApplied
+      ? 'Filter is applied — waiting for GA / chat unlock before the disease report is ready.'
+      : scope === 'pgx_only'
       ? 'PGx chat is open — apply ACMG or a phenotype filter to unlock the clinical report.'
       : chatEligibility?.message || 'Chat must be enabled before generating a report'
     : 'Review GA Include picks, edit if needed, then generate the PDF';
-  if (!blocked && (ga === 'running' || ga === 'pending' || ga === 'queued')) {
+  if (gaInFlight) {
     label = 'Waiting for GA…';
-    title = 'Ranking is still running. Open to assign manually, or wait and reopen for pre-checked Include.';
-  } else if (!blocked && ga === 'failed') {
+    title =
+      'Ranking is still running. Open to assign manually, or wait and reopen for pre-checked Include.';
+  } else if (!gateBlocked && ga === 'failed') {
     label = 'Generate report';
     title = 'GA failed — assign Include manually, then generate the PDF';
   }

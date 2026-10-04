@@ -6,7 +6,6 @@ import { optionalIdToken } from '@/lib/safeAuth';
 import DocumentUpload from './DocumentUpload';
 import ExportVariantsButton from './ExportVariantsButton';
 import CaseReportDownloadButton from './CaseReportDownloadButton';
-import GaTriagePanel from './GaTriagePanel';
 import TypewriterText from '@/components/ui/TypewriterText';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
@@ -516,6 +515,7 @@ const VariantFilterSidebar = ({
   chatEligibility = null,
   onEditSampleInfo = null,
   onClinicalReportOpen = null,
+  gaTriageStatus = '',
 }) => {
   /* Quota is orthogonal to filter readiness. `=== false` (rather than a falsy check) so a missing
    * gate — degraded limits, still loading — never disables anything. */
@@ -2762,7 +2762,7 @@ const VariantFilterSidebar = ({
           </div>
         </div>
 
-        {/* Sticky footer: export + GA triage + case report, always visible */}
+        {/* Sticky footer: export + one review/report action */}
         {!isGuest && variantData && (
           <div className="shrink-0 px-3.5 py-2 bg-[var(--bg-sidebar)] space-y-2">
             <ExportVariantsButton
@@ -2773,18 +2773,13 @@ const VariantFilterSidebar = ({
               downloadGate={downloadGate}
               uiCount={underConsiderationCount}
             />
-            <GaTriagePanel
-              conversationId={conversationId}
-              isGuest={isGuest}
-              variantData={variantData}
-              refreshKey={`${chatEligibility?.enrichment_status || ''}:${chatEligibility?.updated_at || ''}:${chatEligibility?.variants_under_consideration ?? ''}`}
-            />
             <CaseReportDownloadButton
               conversationId={conversationId}
               variantData={variantData}
               isGuest={isGuest}
               downloadGate={downloadGate}
               chatEligibility={chatEligibility}
+              gaTriageStatus={gaTriageStatus}
               onRequestOpen={onClinicalReportOpen}
             />
           </div>

@@ -48,7 +48,7 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 import { getClinicalReportGate } from '@/components/CaseReportDownloadButton';
 import ClinicalReportAssignModal from '@/components/ClinicalReportAssignModal';
 import AutomaticPipelinePanel from '@/components/AutomaticPipelinePanel';
-import { DEFAULT_GUEST_CHAT_LIMIT } from '@/services/backendApi';
+import { DEFAULT_GUEST_CHAT_LIMIT, fetchGaTriage } from '@/services/backendApi';
 import { formatMeterDetail, meterExhausted, meterFor, meterNearLimit, patchGuestChatUsed } from '@/services/tierLimits';
 import { describeLimitError, isEmailVerificationCode } from '@/services/limitErrors';
 import { useSeo } from '@/hooks/useSeo';
@@ -431,6 +431,29 @@ const ChatPage = () => {
   module1JobActiveRef.current = module1.module1JobActive;
   onOpenModule1UploadRef.current = module1.openModule1Form;
 
+  const [gaTriageStatus, setGaTriageStatus] = useState('');
+  useEffect(() => {
+    if (!activeConversationId || userTier === 'guest') {
+      setGaTriageStatus('');
+      return undefined;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const payload = await fetchGaTriage(activeConversationId);
+        if (!cancelled) setGaTriageStatus(String(payload?.status || '').toLowerCase());
+      } catch {
+        if (!cancelled) setGaTriageStatus('absent');
+      }
+    };
+    tick();
+    const id = setInterval(tick, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [activeConversationId, userTier]);
+
   const automaticPipeline = useAutomaticPipelineConductor({
     enabled: userTier !== 'guest' && !!activeConversationId,
     conversationId: activeConversationId,
@@ -445,6 +468,7 @@ const ChatPage = () => {
     runAnnovar: runAnnovarForCurrentConversation,
     fetchExomiserEligibility,
     runExomiser,
+    gaTriageStatus,
   });
 
   useEffect(() => {
@@ -1333,7 +1357,7 @@ const ChatPage = () => {
     />
   ) : null;
 
-  const reportGate = getClinicalReportGate({ downloadGate, chatEligibility });
+  const reportGate = getClinicalReportGate({ downloadGate, chatEligibility, gaTriageStatus });
   const showAutomaticReportCta =
     automaticPipeline.active &&
     automaticPipeline.phase === 'ready_report' &&
@@ -1341,7 +1365,7 @@ const ChatPage = () => {
     !!variantData &&
     !!activeConversationId;
 
-  // Automatic ready_report: open assign modal once with PFRA pre-checks (still confirm before PDF).
+  // Automatic ready_report: open the one review/report modal once (still confirm before PDF).
   useEffect(() => {
     if (!showAutomaticReportCta || reportGate?.blocked) return;
     if (autoOpenedReportForConvRef.current === activeConversationId) return;
@@ -1359,7 +1383,7 @@ const ChatPage = () => {
         events={automaticPipeline.events}
         showReportCta={showAutomaticReportCta}
         reportGate={reportGate}
-        reportCtaLabel="Review suggested report"
+        reportCtaLabel={reportGate.label || 'Review & report'}
         onGenerateReport={() => {
           setIsVariantSidebarOpen(true);
           setClinicalReportOpen(true);
@@ -1790,6 +1814,7 @@ const ChatPage = () => {
             downloadGate={downloadGate}
             chatEligibility={chatEligibility}
             onClinicalReportOpen={() => setClinicalReportOpen(true)}
+            gaTriageStatus={gaTriageStatus}
             onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
             onGuestRefreshMetadata={handleGuestRefreshMetadata}
           />

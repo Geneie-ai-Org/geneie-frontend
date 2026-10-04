@@ -39,22 +39,24 @@ function humanGaLabel(label) {
   return shortText(s, 40);
 }
 
-function humanEnrichment(bucket) {
-  const s = String(bucket || '').trim();
-  if (!s) return '—';
-  const map = {
-    KEEP_STRONG_REVIEW: 'Keep — strong',
-    KEEP_REVIEW: 'Keep — review',
-    FILTER_LOW_SUPPORT: 'Filtered — low support',
-    FILTER_COMMON_OR_BENIGN: 'Filtered — common/benign',
+function countLine(data) {
+  const counts = data?.ga_label_counts && typeof data.ga_label_counts === 'object' ? data.ga_label_counts : {};
+  const reviewed = data?.variant_count;
+  const parts = [];
+  if (reviewed != null) parts.push(`${reviewed} variants reviewed`);
+  const pick = (needle, label) => {
+    const n = Object.entries(counts).reduce((acc, [k, v]) => {
+      if (String(k).toLowerCase().includes(needle)) return acc + Number(v || 0);
+      return acc;
+    }, 0);
+    if (n) parts.push(`${n} ${label}`);
   };
-  if (map[s]) return map[s];
-  return s
-    .replace(/^KEEP_/i, 'Keep — ')
-    .replace(/^FILTER_/i, 'Filtered — ')
-    .replace(/_/g, ' ')
-    .toLowerCase()
-    .replace(/^\w/, (c) => c.toUpperCase());
+  pick('primary', 'Primary');
+  pick('strong clinical', 'Strong');
+  pick('follow-up', 'Follow-up');
+  pick('vus', 'VUS/weak');
+  pick('not causative', 'not causative');
+  return parts.join(' · ');
 }
 
 function MetaChip({ label, value, tone = 'neutral', title }) {
@@ -82,8 +84,8 @@ function MetaChip({ label, value, tone = 'neutral', title }) {
 }
 
 /**
- * Analyst GA triage: ranked candidates + download full ga_triage.tsv.
- * Decision-support only — does not drive Clinical result / Additional findings / PDF.
+ * Standalone GA list (not mounted). Review + TSV now live in ClinicalReportAssignModal.
+ * GA ranking for Include pre-check; analyst still confirms the PDF.
  */
 export default function GaTriagePanel({
   conversationId,
@@ -233,8 +235,8 @@ export default function GaTriagePanel({
               Top review candidates
             </DialogTitle>
             <DialogDescription className="text-xs mt-1 text-[var(--text-tertiary)]">
-              Genome Analyst ranking for review. Enrichment still leads; this does not pick
-              Clinical result, Additional findings, or the PDF.
+              Genome Analyst ranking. Primary and Strong pre-check Include; you still confirm
+              before the PDF.
             </DialogDescription>
           </div>
 
@@ -270,10 +272,9 @@ export default function GaTriagePanel({
               )}
               Download full table
             </button>
-            {data?.variant_count != null ? (
+            {ready ? (
               <span className="text-2xs text-[var(--text-tertiary)] ml-auto">
-                {candidates.length} shown
-                {data.variant_count != null ? ` · ${data.variant_count} reviewed` : ''}
+                {countLine(data) || `${candidates.length} shown`}
               </span>
             ) : null}
           </div>
@@ -296,7 +297,7 @@ export default function GaTriagePanel({
                     ? 'Triage is still running.'
                     : status === 'failed'
                       ? data?.error || 'Triage failed.'
-                      : 'Triage has not run for this case yet. It starts after enrichment when enabled.')}
+                      : 'Triage has not run for this case yet. It starts after enrichment.')}
               </p>
             ) : candidates.length === 0 ? (
               <p className="text-xs text-[var(--text-secondary)] py-6">
@@ -306,11 +307,8 @@ export default function GaTriagePanel({
               <ul className="space-y-2">
                 {candidates.map((row, index) => {
                   const change = formatChange(row.variant);
-                  const enrichment = humanEnrichment(row.final_bucket || row.final_report);
                   const gaRec = humanGaLabel(row.label);
-                  const conflict = row.has_final_ga_conflict
-                    ? row.final_ga_conflict
-                    : row.conflicts;
+                  const conflict = row.ga_conflict || row.conflicts;
                   return (
                     <li
                       key={`${row.gene || 'g'}-${row.variant_id || row.variant || index}`}
@@ -350,13 +348,13 @@ export default function GaTriagePanel({
                             />
                             <MetaChip label="Score" value={row.score != null ? String(row.score) : null} />
                             <MetaChip
-                              label="Enrichment"
-                              value={enrichment}
-                              title={row.final_bucket || row.final_report || undefined}
-                            />
-                            <MetaChip
                               label="ACMG"
                               value={row.ga_acmg_2015 || row.ga_acmg_point || null}
+                            />
+                            <MetaChip
+                              label="Phenotype"
+                              value={row.phenotype_match ? shortText(row.phenotype_match, 28) : null}
+                              title={row.phenotype_match || undefined}
                             />
                             {conflict ? (
                               <MetaChip

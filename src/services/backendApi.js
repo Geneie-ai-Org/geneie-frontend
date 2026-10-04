@@ -772,6 +772,80 @@ export async function downloadCaseReport(conversationId) {
 }
 
 /**
+ * HPO → PanelApp panel suggestions (Track 14.6).
+ * Uses conversation-scoped endpoint when conversationId is set; otherwise standalone.
+ */
+export async function fetchPanelAppSuggestions({
+  conversationId = null,
+  hpoIds = [],
+  phenotypeText = '',
+  includeAmber = true,
+  limit = 10,
+} = {}) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const body = {
+    hpo_ids: hpoIds,
+    phenotype_text: phenotypeText || '',
+    include_amber: includeAmber,
+    limit,
+  };
+  const path = conversationId
+    ? `/api/conversations/${encodeURIComponent(conversationId)}/panelapp/suggestions`
+    : '/api/panelapp/suggestions';
+  const response = await fetch(apiUrl(path), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load PanelApp suggestions');
+  }
+  return data;
+}
+
+/** Persist selected panels on conversation sample_metadata. */
+export async function persistPanelAppSelection(
+  conversationId,
+  { panelIds = [], includeAmber = true } = {}
+) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(
+    apiUrl(
+      `/api/conversations/${encodeURIComponent(conversationId)}/panelapp/selection`
+    ),
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ panel_ids: panelIds, include_amber: includeAmber }),
+    }
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to save PanelApp selection');
+  }
+  return data;
+}
+
+/** Resolve panel IDs → genes without persisting (upload forms). */
+export async function resolvePanelAppSelection({
+  panelIds = [],
+  includeAmber = true,
+} = {}) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(apiUrl('/api/panelapp/resolve'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ panel_ids: panelIds, include_amber: includeAmber }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to resolve PanelApp selection');
+  }
+  return data;
+}
+
+/**
  * GA triage status + top candidates for analyst review UI.
  * GET /api/conversations/{id}/ga-triage
  */

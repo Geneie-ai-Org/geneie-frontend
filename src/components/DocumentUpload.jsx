@@ -1639,6 +1639,9 @@ const DocumentUpload = ({
                       ),
                       phenotype: sampleMetadata.phenotype || '',
                       phenotype_hpo: sampleMetadata.phenotype_hpo,
+                      selected_panels: sampleMetadata.selected_panels,
+                      selected_panel_gene_list: sampleMetadata.selected_panel_gene_list,
+                      selected_panel_include_amber: sampleMetadata.selected_panel_include_amber,
                     }}
                     onChange={(fields) =>
                       setSampleMetadata((prev) => {

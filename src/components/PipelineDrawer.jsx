@@ -337,7 +337,11 @@ const PipelineDrawer = ({
     if (isRunningAnnovar || annovarJob?.status === 'running') return working('Annotating…');
     if (isRunningExomiser || exomiserStatus?.status === 'running') return working(PHENOTYPE_RUNNING_MESSAGE);
     if (isApplyingProprietaryFilter || filterJob?.status === 'running') return working('Applying filter…');
-    if (pgxOnlyScope) return settled('PGx chat ready');
+    // Do not advertise PGx-only unlock in the chip — Chat stays pending until full disease chat.
+    if (pgxOnlyScope && steps.annovar !== 'done' && steps.annovar !== 'skipped') {
+      return settled('Needs annotation');
+    }
+    if (pgxOnlyScope) return settled('Needs a filter');
     if (chatReady) {
       return settled(
         variantCount != null
@@ -370,6 +374,8 @@ const PipelineDrawer = ({
     if (showGuestFilterCta) return null;
     if (isGuest && chatReady && chatEligibility?.message) return chatEligibility.message;
     if (gatedMessage) return gatedMessage;
+    // Chip + CTA already say the next step (e.g. Needs annotation / Run annotation).
+    if (gatedAction) return null;
     return statusLine;
   })();
 

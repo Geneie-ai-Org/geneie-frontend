@@ -28,7 +28,7 @@ function getLgView(viewState) {
 /**
  * Geneie-themed JBrowse 2 linear genome view for retained Module 1 markdup BAM.
  * Opens in a full dialog (not the bottom drawer) so pan/zoom is not clipped.
- * Auto-opens once to capture a PNG into the durable QC report before purge.
+ * Snapshot is saved the first time the user opens the viewer (not on page load).
  */
 const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
   const { isDark } = useTheme();
@@ -41,24 +41,16 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
   const [viewState, setViewState] = useState(null);
   const captureRootRef = useRef(null);
   const capturedRef = useRef(false);
-  const autoOpenedRef = useRef(false);
 
   // Reset per conversation so a new BAM gets a fresh view + snapshot.
   useEffect(() => {
     capturedRef.current = false;
-    autoOpenedRef.current = false;
+    setOpen(false);
     setViewState(null);
     setBamMeta(null);
     setSnapshotStatus(null);
     setError(null);
   }, [conversationId]);
-
-  // Auto-open once while BAM is live so we can save a browser snapshot.
-  useEffect(() => {
-    if (!hasBam || !conversationId || autoOpenedRef.current) return;
-    autoOpenedRef.current = true;
-    setOpen(true);
-  }, [hasBam, conversationId]);
 
   useEffect(() => {
     if (!open || !conversationId || !hasBam) return undefined;

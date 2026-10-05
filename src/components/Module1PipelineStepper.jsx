@@ -10,13 +10,23 @@ import Module1QcReportPanel from '@/components/Module1QcReportPanel';
 
 const EASE = [0.23, 1, 0.32, 1];
 
-function nodeStatus(groupId, activeGroupId, failed, groupOrder) {
+function nodeStatus(groupId, activeGroupId, failed, groupOrder, finishedOk) {
+  if (finishedOk) return 'done';
   if (failed) return groupOrder.indexOf(groupId) <= groupOrder.indexOf(activeGroupId) ? 'failed' : 'pending';
   const activeIdx = groupOrder.indexOf(activeGroupId);
   const idx = groupOrder.indexOf(groupId);
   if (idx < activeIdx) return 'done';
   if (idx === activeIdx) return 'running';
   return 'pending';
+}
+
+/** Pipeline + VCF ingest landed — don't leave the Complete node spinning forever. */
+function module1FinishedSuccessfully(job) {
+  if (!job || job.status !== 'complete') return false;
+  if (job.ingestStatus === 'done') return true;
+  const msg = String(job.message || '');
+  const pctOk = typeof job.progressPercent === 'number' && job.progressPercent >= 100;
+  return pctOk && /pass vcf ready/i.test(msg);
 }
 
 /**
@@ -42,8 +52,11 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
 
   const groupOrder = MODULE1_STAGE_GROUPS.map((g) => g.id);
   const failed = job.status === 'failed';
+  const finishedOk = module1FinishedSuccessfully(job);
   const activeGroupId = failed ? getModule1StageGroup(job.phase) : getModule1StageGroup(job.phase);
-  const phaseMessage = getModule1PhaseMessage(job.phase, job.message);
+  const phaseMessage = finishedOk
+    ? job.message || 'Module 1 complete — PASS VCF is in this conversation.'
+    : getModule1PhaseMessage(job.phase, job.message);
   const pct = typeof job.progressPercent === 'number' ? Math.max(0, Math.min(100, Math.round(job.progressPercent))) : null;
 
   return (
@@ -114,7 +127,7 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
             <div className="px-3 pb-3 max-h-[min(55vh,560px)] overflow-y-auto overscroll-contain">
               <div className="flex items-center justify-between">
                 {MODULE1_STAGE_GROUPS.map((group, i) => {
-                  const status = nodeStatus(group.id, activeGroupId, failed, groupOrder);
+                  const status = nodeStatus(group.id, activeGroupId, failed, groupOrder, finishedOk);
                   return (
                     <React.Fragment key={group.id}>
                       {i > 0 && (

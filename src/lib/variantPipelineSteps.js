@@ -213,6 +213,8 @@ export function getPipelineStatusLine(props, steps) {
     s3LineCountStatus,
     isRunningExomiser,
     exomiserStatus,
+    hasAnnotatedFile,
+    requiresAnnovar,
   } = props;
 
   const interpretationReady = Boolean(columnInterpretationResult?.step1);
@@ -241,10 +243,14 @@ export function getPipelineStatusLine(props, steps) {
   }
   if (chatEligibility?.allowed) {
     if ((chatEligibility.scope || '').toLowerCase() === 'pgx_only') {
-      return (
-        chatEligibility.message ||
-        'PGx chat is enabled. Apply ACMG or phenotype-driven prioritization for disease-variant chat.'
-      );
+      // Keep this short — the long PGx/QC banner was noisy. Point at the next disease step.
+      if (requiresAnnovar && !hasAnnotatedFile) {
+        return 'PGx chat is ready. Run Annotation next for disease-variant analysis.';
+      }
+      if (steps?.annovar === 'failed') {
+        return 'Annotation did not complete. Retry Annotation to unlock disease-variant filters.';
+      }
+      return 'PGx chat is ready. Apply a filter next for disease-variant chat.';
     }
     const n = variantsUnderConsideration ?? filteredVariantCount;
     return n != null

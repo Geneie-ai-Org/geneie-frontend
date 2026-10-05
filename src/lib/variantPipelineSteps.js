@@ -244,13 +244,9 @@ export function getPipelineStatusLine(props, steps) {
   }
   if (chatEligibility?.allowed) {
     if ((chatEligibility.scope || '').toLowerCase() === 'pgx_only') {
-      if (requiresAnnovar && !hasAnnotatedFile) {
-        return 'Run Annotation next for disease-variant analysis.';
-      }
-      if (steps?.annovar === 'failed') {
-        return 'Annotation did not complete. Retry Annotation to unlock disease-variant filters.';
-      }
-      return 'Apply a filter next for disease-variant analysis.';
+      // Chip ("Needs annotation" / "Needs a filter") + CTA carry the next step — no
+      // duplicate prose under the stepper.
+      return null;
     }
     const n = variantsUnderConsideration ?? filteredVariantCount;
     return n != null

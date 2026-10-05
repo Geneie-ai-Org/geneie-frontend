@@ -374,6 +374,8 @@ const PipelineDrawer = ({
     if (showGuestFilterCta) return null;
     if (isGuest && chatReady && chatEligibility?.message) return chatEligibility.message;
     if (gatedMessage) return gatedMessage;
+    // Chip + CTA already say the next step (e.g. Needs annotation / Run annotation).
+    if (gatedAction) return null;
     return statusLine;
   })();
 

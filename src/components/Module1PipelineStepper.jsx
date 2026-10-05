@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { AlertCircle, Check, ChevronDown, Dna, Loader2 } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Dna, FileText, Loader2 } from 'lucide-react';
 import { MODULE1_STAGE_GROUPS, getModule1PhaseMessage, getModule1StageGroup } from '@/lib/module1PipelinePhases';
 import RunTimer from '@/components/ui/RunTimer';
 import { useRunTimer } from '@/hooks/useRunTimer';
@@ -36,6 +36,9 @@ function module1FinishedSuccessfully(job) {
  */
 const Module1PipelineStepper = ({ job, onStartOver }) => {
   const [expanded, setExpanded] = useState(true);
+  // QC / browser / saved report stay behind a single control — default closed so the
+  // drawer does not dominate the composer area after Module 1 finishes.
+  const [qcOpen, setQcOpen] = useState(false);
   const reduceMotion = useReducedMotion();
   // This is the long one — hours, not minutes — so it carries its own clock: ticking
   // while the pipeline runs, total once it lands.
@@ -58,6 +61,14 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
     ? job.message || 'Module 1 complete — PASS VCF is in this conversation.'
     : getModule1PhaseMessage(job.phase, job.message);
   const pct = typeof job.progressPercent === 'number' ? Math.max(0, Math.min(100, Math.round(job.progressPercent))) : null;
+  const hasQcArtifacts =
+    Boolean(job.conversationId) &&
+    Boolean(job.hasQc || job.hasBam || job.bamQcPurged);
+  const qcButtonBits = [
+    job.hasQc ? 'live reports' : null,
+    job.hasBam ? 'alignment browser' : null,
+    job.hasQc || job.hasBam || job.bamQcPurged ? 'saved report' : null,
+  ].filter(Boolean);
 
   return (
     <section
@@ -122,9 +133,7 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
             }}
             transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: EASE }}
           >
-            {/* Cap height so QC + report stay inside the viewport; alignment browser
-             * opens in its own dialog (not embedded here). */}
-            <div className="px-3 pb-3 max-h-[min(55vh,560px)] overflow-y-auto overscroll-contain">
+            <div className="px-3 pb-3">
               <div className="flex items-center justify-between">
                 {MODULE1_STAGE_GROUPS.map((group, i) => {
                   const status = nodeStatus(group.id, activeGroupId, failed, groupOrder, finishedOk);
@@ -175,24 +184,76 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
                 </div>
               )}
 
-              {job.hasQc && job.conversationId && (
-                <Module1QcPanel conversationId={job.conversationId} hasQc={job.hasQc} />
-              )}
+              {hasQcArtifacts && (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setQcOpen((v) => !v)}
+                    aria-expanded={qcOpen}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-left"
+                    style={{
+                      backgroundColor: 'var(--bg-elevated)',
+                      borderColor: 'var(--border-subtle)',
+                    }}
+                  >
+                    <div className="min-w-0 flex items-center gap-2">
+                      <FileText className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--accent-teal)' }} />
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                          QC & alignment
+                        </p>
+                        <p className="text-2xs truncate" style={{ color: 'var(--text-tertiary)' }}>
+                          {qcOpen
+                            ? 'Hide reports and browser'
+                            : `Open ${qcButtonBits.join(' · ')}`}
+                        </p>
+                      </div>
+                    </div>
+                    <motion.span
+                      className="shrink-0 flex items-center"
+                      animate={{ rotate: qcOpen ? 180 : 0 }}
+                      transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: EASE }}
+                    >
+                      <ChevronDown className="w-4 h-4" style={{ color: 'var(--text-tertiary)' }} />
+                    </motion.span>
+                  </button>
 
-              {job.hasBam && job.conversationId && (
-                <Module1IgvPanel
-                  conversationId={job.conversationId}
-                  hasBam={job.hasBam}
-                  genome={job.genome}
-                />
-              )}
+                  <AnimatePresence initial={false}>
+                    {qcOpen && (
+                      <motion.div
+                        key="qc-body"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{
+                          opacity: 0,
+                          transition: reduceMotion ? { duration: 0 } : { duration: 0.12, ease: EASE },
+                        }}
+                        transition={reduceMotion ? { duration: 0 } : { duration: 0.16, ease: EASE }}
+                        className="max-h-[min(50vh,480px)] overflow-y-auto overscroll-contain"
+                      >
+                        {job.hasQc && job.conversationId && (
+                          <Module1QcPanel conversationId={job.conversationId} hasQc={job.hasQc} />
+                        )}
 
-              {(job.bamQcPurged || job.hasQc || job.hasBam) && job.conversationId && (
-                <Module1QcReportPanel
-                  conversationId={job.conversationId}
-                  visible
-                  hideBrowserSnapshots={Boolean(job.hasBam)}
-                />
+                        {job.hasBam && job.conversationId && (
+                          <Module1IgvPanel
+                            conversationId={job.conversationId}
+                            hasBam={job.hasBam}
+                            genome={job.genome}
+                          />
+                        )}
+
+                        {(job.bamQcPurged || job.hasQc || job.hasBam) && job.conversationId && (
+                          <Module1QcReportPanel
+                            conversationId={job.conversationId}
+                            visible
+                            hideBrowserSnapshots={Boolean(job.hasBam)}
+                          />
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               )}
             </div>
           </motion.div>

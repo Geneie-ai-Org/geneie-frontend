@@ -26,19 +26,25 @@ export function buildGeneieJbrowseConfiguration(isDark) {
   const secondary = brandColor('--accent-teal', cssVar('--chart-2', '174 43% 55%'));
   const error = brandColor('--error', cssVar('--destructive', '6 74% 73%'));
 
+  // JBrowse overview polygon fills with `palette.tertiary.light`. If `light` is
+  // missing it paints solid black — the wedge seen when zoomed way out.
+  const brand = { main: primary, light: primary, dark: primary };
+  const brandSecondary = { main: secondary, light: secondary, dark: secondary };
+  const brandError = { main: error, light: error, dark: error };
+
   return {
     theme: {
       palette: {
         mode: isDark ? 'dark' : 'light',
-        primary: { main: primary },
-        secondary: { main: secondary },
-        tertiary: { main: primary },
-        quaternary: { main: error },
+        primary: brand,
+        secondary: brandSecondary,
+        tertiary: brand,
+        quaternary: brandError,
         ...(isDark
           ? {
               dark: {
-                primary: { main: primary },
-                secondary: { main: secondary },
+                primary: brand,
+                secondary: brandSecondary,
               },
             }
           : {}),

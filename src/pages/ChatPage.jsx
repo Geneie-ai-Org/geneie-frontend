@@ -1278,7 +1278,7 @@ const ChatPage = () => {
     chatEligibility.allowed === true &&
     (chatEligibility.scope || '').toLowerCase() === 'pgx_only'
   ) {
-    inputPlaceholder = 'Ask about PGx (metabolizer status, CPIC, PharmGKB)…';
+    inputPlaceholder = 'Ask about pharmacogenes (metabolizer status, CPIC, PharmGKB)…';
   } else if (isChatLimitReached) {
     inputPlaceholder = userTier === 'guest'
       ? `Limit reached (${DEFAULT_GUEST_CHAT_LIMIT} exchanges). Please Sign Up or Log In.`
@@ -1304,8 +1304,7 @@ const ChatPage = () => {
     isChatPipelineGated && !annovarRunning && !pipelineOwnsMessage && !guestFilterGateBlocked
       ? chatEligibility.message || inputPlaceholder
       : null;
-  // Do not surface the long PGx/Module-1-QC banner under the stepper — chat already
-  // reflects PGx-only via the chip ("PGx chat ready") and the composer placeholder.
+  // No separate scope banner under the stepper (composer stays usable when unlocked).
   const pipelineScopeMessage = null;
   const needsAnnotationCta =
     !pipelineSnapshot.hasAnnotatedFile &&

@@ -1304,23 +1304,28 @@ const ChatPage = () => {
     isChatPipelineGated && !annovarRunning && !pipelineOwnsMessage && !guestFilterGateBlocked
       ? chatEligibility.message || inputPlaceholder
       : null;
-  // When PGx-only unlocks chat, keep a non-blocking banner (not a hard gate).
-  const pipelineScopeMessage =
-    !isChatPipelineGated && isPgxOnlyScope
-      ? chatEligibility.message ||
-        'PGx results are ready. You can ask about pharmacogenes now. For disease-variant chat, apply ACMG or phenotype-driven prioritization.'
-      : null;
+  // Do not surface the long PGx/Module-1-QC banner under the stepper — chat already
+  // reflects PGx-only via the chip ("PGx chat ready") and the composer placeholder.
+  const pipelineScopeMessage = null;
+  const needsAnnotationCta =
+    !pipelineSnapshot.hasAnnotatedFile &&
+    Boolean(chatEligibility.requires_annovar) &&
+    !annovarRunning &&
+    (pipelineSnapshot.annovarJob?.status || '').toLowerCase() !== 'failed';
   // Signed-in only — guests use guestPipelineCta (single row, no duplicate button).
+  // Prefer Annotation when it is still pending; only push filters after annotation.
   const gatedAction =
     !annovarRunning &&
     userTier !== 'guest' &&
-    (isChatPipelineGated
-      ? chatEligibility.reason === 'CHAT_REQUIRES_FILTER'
-        ? { label: 'Apply a filter', onClick: () => setIsVariantSidebarOpen(true) }
-        : null
-      : isPgxOnlyScope
-        ? { label: 'Open filters', onClick: () => setIsVariantSidebarOpen(true) }
-        : null);
+    (needsAnnotationCta
+      ? { label: 'Run annotation', onClick: () => runAnnovarForCurrentConversation() }
+      : isChatPipelineGated
+        ? chatEligibility.reason === 'CHAT_REQUIRES_FILTER'
+          ? { label: 'Apply a filter', onClick: () => setIsVariantSidebarOpen(true) }
+          : null
+        : isPgxOnlyScope
+          ? { label: 'Open filters', onClick: () => setIsVariantSidebarOpen(true) }
+          : null);
 
   const guestPipelineCta =
     userTier === 'guest' && showAnalysisPipeline

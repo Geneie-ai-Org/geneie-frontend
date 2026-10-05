@@ -26,7 +26,7 @@ function module1FinishedSuccessfully(job) {
   if (job.ingestStatus === 'done') return true;
   const msg = String(job.message || '');
   const pctOk = typeof job.progressPercent === 'number' && job.progressPercent >= 100;
-  return pctOk && /pass vcf ready/i.test(msg);
+  return pctOk && /(pass\s+)?vcf\s+ready/i.test(msg);
 }
 
 /**
@@ -58,7 +58,10 @@ const Module1PipelineStepper = ({ job, onStartOver }) => {
   const finishedOk = module1FinishedSuccessfully(job);
   const activeGroupId = failed ? getModule1StageGroup(job.phase) : getModule1StageGroup(job.phase);
   const phaseMessage = finishedOk
-    ? job.message || 'Module 1 complete — PASS VCF is in this conversation.'
+    ? (job.message || 'Module 1 complete — VCF is in this conversation.').replace(
+        /PASS\s+VCF\s+ready\.?/i,
+        'VCF Ready'
+      )
     : getModule1PhaseMessage(job.phase, job.message);
   const pct = typeof job.progressPercent === 'number' ? Math.max(0, Math.min(100, Math.round(job.progressPercent))) : null;
   const hasQcArtifacts =

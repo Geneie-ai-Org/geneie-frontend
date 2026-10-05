@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText } from 'lucide-react';
+import { FileText, Loader2 } from 'lucide-react';
 
 /**
  * Same unlock rules as variant chat + job downloadGate.
@@ -42,7 +42,6 @@ export function getClinicalReportGate({
 
   const chatLabel = () => {
     if (chatPending) return 'Checking eligibility…';
-    if (gaInFlight) return 'Waiting for GA…';
     if (scope === 'pgx_only' && filterAlreadyApplied) {
       return 'Waiting for report unlock…';
     }
@@ -61,30 +60,33 @@ export function getClinicalReportGate({
     return 'Report locked';
   };
 
-  // While GA runs, allow opening the modal for manual Include (title promised this).
+  // While GA runs, allow opening the modal for manual Include (do not soft-lock the CTA).
+  // Label must stay action-like — "Waiting for GA…" looked disabled but still opened the list.
   const blocked = gateBlocked || (chatBlocked && !gaInFlight && ga !== 'failed');
-  let label = gateBlocked ? gateLabel() : chatBlocked ? chatLabel() : 'Review & report';
+  let label = gateBlocked
+    ? gateLabel()
+    : chatBlocked && !gaInFlight
+      ? chatLabel()
+      : 'Review & report';
   let title = gateBlocked
     ? downloadGate?.message || 'A job is still running'
-    : chatBlocked
-    ? gaInFlight
-      ? 'GA ranking is still running. You can open and assign Include manually, or wait for pre-checked picks.'
-      : scope === 'pgx_only' && filterAlreadyApplied
-      ? 'Filter is applied — waiting for GA / chat unlock before the disease report is ready.'
-      : scope === 'pgx_only'
-      ? 'PGx chat is open — apply ACMG or a phenotype filter to unlock the clinical report.'
-      : chatEligibility?.message || 'Chat must be enabled before generating a report'
-    : 'Review GA Include picks, edit if needed, then generate the PDF';
-  if (gaInFlight) {
-    label = 'Waiting for GA…';
+    : chatBlocked && !gaInFlight
+      ? scope === 'pgx_only' && filterAlreadyApplied
+        ? 'Filter is applied — waiting for GA / chat unlock before the disease report is ready.'
+        : scope === 'pgx_only'
+          ? 'PGx chat is open — apply ACMG or a phenotype filter to unlock the clinical report.'
+          : chatEligibility?.message || 'Chat must be enabled before generating a report'
+      : 'Review GA Include picks, edit if needed, then generate the PDF';
+  if (gaInFlight && !gateBlocked) {
+    label = 'Review & report';
     title =
-      'Ranking is still running. Open to assign manually, or wait and reopen for pre-checked Include.';
+      'GA ranking still running. Open to assign Include manually now, or wait and reopen for pre-checked picks.';
   } else if (!gateBlocked && ga === 'failed') {
     label = 'Generate report';
     title = 'GA failed — assign Include manually, then generate the PDF';
   }
 
-  return { blocked, label, title };
+  return { blocked, label, title, gaInFlight: gaInFlight && !gateBlocked };
 }
 
 /**
@@ -101,7 +103,7 @@ export default function CaseReportDownloadButton({
   gaTriageStatus = '',
   onRequestOpen,
 }) {
-  const { blocked, label, title } = getClinicalReportGate({
+  const { blocked, label, title, gaInFlight } = getClinicalReportGate({
     downloadGate,
     chatEligibility,
     gaTriageStatus,
@@ -125,7 +127,11 @@ export default function CaseReportDownloadButton({
             : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] cursor-not-allowed'
         }`}
       >
-        <FileText className="w-3.5 h-3.5 shrink-0" />
+        {gaInFlight && !blocked ? (
+          <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-[var(--accent-teal)]" aria-hidden />
+        ) : (
+          <FileText className="w-3.5 h-3.5 shrink-0" />
+        )}
         <span className="min-w-0">{label}</span>
       </button>
     </div>

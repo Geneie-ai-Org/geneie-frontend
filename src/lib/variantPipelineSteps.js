@@ -145,8 +145,9 @@ export function computePipelineSteps({
 
   const chat = (() => {
     if (chatEligibility?.allowed) {
-      // PGx-only unlock opens the composer but disease prioritization may still be pending.
-      if ((chatEligibility.scope || '').toLowerCase() === 'pgx_only') return 'done';
+      // pgx_only unlocks the composer but disease pipeline is incomplete — keep Chat
+      // pending so the stepper does not show a green Chat node for PGx alone.
+      if ((chatEligibility.scope || '').toLowerCase() === 'pgx_only') return 'pending';
       return 'done';
     }
     if (chatEligibility?.reason === 'S3_LINE_COUNT_PENDING') return 'pending';
@@ -243,14 +244,13 @@ export function getPipelineStatusLine(props, steps) {
   }
   if (chatEligibility?.allowed) {
     if ((chatEligibility.scope || '').toLowerCase() === 'pgx_only') {
-      // Keep this short — the long PGx/QC banner was noisy. Point at the next disease step.
       if (requiresAnnovar && !hasAnnotatedFile) {
-        return 'PGx chat is ready. Run Annotation next for disease-variant analysis.';
+        return 'Run Annotation next for disease-variant analysis.';
       }
       if (steps?.annovar === 'failed') {
         return 'Annotation did not complete. Retry Annotation to unlock disease-variant filters.';
       }
-      return 'PGx chat is ready. Apply a filter next for disease-variant chat.';
+      return 'Apply a filter next for disease-variant analysis.';
     }
     const n = variantsUnderConsideration ?? filteredVariantCount;
     return n != null

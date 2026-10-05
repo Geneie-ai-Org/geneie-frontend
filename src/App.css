@@ -936,6 +936,20 @@ textarea:-webkit-autofill {
   color: var(--error);
 }
 
+/* Embedded JBrowse: keep canvas width in sync with the dialog; avoid scroll
+ * desync that warps the overview polygon into a solid wedge. */
+.module1-jbrowse-root {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  contain: layout paint;
+}
+
+.module1-jbrowse-root > * {
+  width: 100% !important;
+  max-width: 100%;
+}
+
 .variant-filter-sidebar .sidebar-feedback-warning {
   background-color: var(--warning-soft);
   border-color: var(--warning);

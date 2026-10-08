@@ -1,4 +1,5 @@
 import React from 'react';
+import { capture } from '@/lib/analytics';
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -12,6 +13,16 @@ export default class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error('[ErrorBoundary] Uncaught render error:', error, errorInfo);
+    // Match the app's convention: surface broken renders in analytics the way
+    // NotFoundPage reports bad routes, so these stop being invisible.
+    try {
+      capture('render_error', {
+        message: String(error?.message || error).slice(0, 300),
+        path: typeof window !== 'undefined' ? window.location?.pathname : undefined,
+      });
+    } catch {
+      /* analytics must never mask the original error */
+    }
   }
 
   render() {
@@ -20,50 +31,29 @@ export default class ErrorBoundary extends React.Component {
     return (
       <div
         role="alert"
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '1rem',
-          padding: '2rem',
-          textAlign: 'center',
-          background: 'var(--bg-app)',
-          color: 'var(--text-primary)',
-        }}
+        className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[var(--bg-app)] px-6 py-8 text-center text-[var(--text-primary)]"
       >
-        <p style={{ fontSize: '1rem', margin: 0 }}>Something went wrong.</p>
-        <p style={{ fontSize: '0.875rem', margin: 0, color: 'var(--text-secondary)' }}>
+        <p className="m-0 text-base font-medium">Something went wrong.</p>
+        <p className="m-0 max-w-sm text-sm text-[var(--text-secondary)]">
           The page hit an unexpected error. Reloading usually clears it.
         </p>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          style={{
-            marginTop: '0.5rem',
-            padding: '0.5rem 1.25rem',
-            fontSize: '0.875rem',
-            borderRadius: '9999px',
-            border: '1px solid var(--border-default)',
-            background: 'var(--bg-surface)',
-            color: 'var(--text-primary)',
-            cursor: 'pointer',
-          }}
-        >
-          Reload page
-        </button>
-        {import.meta.env.DEV && (
-          <pre
-            style={{
-              marginTop: '1rem',
-              maxWidth: '48rem',
-              overflowX: 'auto',
-              textAlign: 'left',
-              fontSize: '13px',
-              color: 'var(--error)',
-            }}
+        <div className="mt-2 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="inline-flex h-10 items-center justify-center rounded-full bg-[var(--text-primary)] px-5 text-sm font-medium text-[var(--bg-app)] transition-opacity hover:opacity-85"
           >
+            Reload page
+          </button>
+          <a
+            href="/app"
+            className="inline-flex h-10 items-center justify-center rounded-full border border-[var(--border-subtle)] px-5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+          >
+            Back to app
+          </a>
+        </div>
+        {import.meta.env.DEV && (
+          <pre className="mt-4 max-w-3xl overflow-x-auto text-left text-[13px] text-[var(--error)]">
             {this.state.error?.stack || String(this.state.error)}
           </pre>
         )}

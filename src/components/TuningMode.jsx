@@ -1,35 +1,22 @@
 /**
- * Admin tuning mode: a toggle, an override panel, and the side-by-side two-column answer view.
+ * Admin tuning mode — the floating CONTROLS panel (toggle, override editor, Run/Copy/Reset).
  *
- * Scope discipline:
- *  - ADMIN-ONLY. The toggle is not rendered at all unless /api/admin/whoami resolves, so a non-admin
- *    never sees the affordance. The backend independently 403s the compare endpoints, so hiding the
- *    UI is convenience, not the security boundary.
- *  - WHEN OFF, NOTHING CHANGES. No header, no different endpoint, no second column - the normal chat
- *    path runs untouched. Tuning mode is additive, not a mode switch over the whole app.
- *  - The panel edits the OVERRIDE SET only. It never writes global config. Promotion to global stays
- *    a deliberate, separate action via the existing admin PUT (see "Copy candidate config").
+ * The side-by-side ANSWER does NOT live here anymore: it renders inline in the chat thread
+ * (see TuningCompareColumns), so a compare reads like the conversation ran twice. This component
+ * is purely the controls, driven by the shared `useTuningCompare` hook instance owned by ChatPage.
  *
- * The presentation uses the app's design tokens (CSS vars + Tailwind) so it tracks light/dark theme
- * and matches the rest of the surface. Hardcoded hex was dark-mode-broken and looked bolted-on.
+ * Scope discipline (unchanged):
+ *  - ADMIN-ONLY. Renders nothing unless the hook reports isAdmin. The backend independently 403s the
+ *    compare endpoint, so hiding the UI is convenience, not the security boundary.
+ *  - WHEN OFF, NOTHING CHANGES. No header, no different endpoint, no second column — normal chat runs
+ *    untouched. Tuning mode is additive.
+ *  - The panel edits the OVERRIDE SET only; promotion to global config stays a separate admin PUT
+ *    ("Copy candidate config").
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { Sliders, Play, Loader2, Copy, Check, RotateCcw, X, ChevronDown } from 'lucide-react';
-import { adminWhoAmI, getAuthHeaders } from '@/services/backendApi';
-import { fetchTunableConfig } from '@/services/tuningConfig';
-import { streamCompare, createColumnState, COLUMN_LABELS, buildOverridesHeader } from '@/services/streamCompare';
-import { getDeviceId } from '@/lib/deviceId';
-
-const PANEL_KEY = 'geneie.tuning.overrides.v1';
-
-function loadSaved() {
-  try {
-    return JSON.parse(localStorage.getItem(PANEL_KEY) || '{}') || {};
-  } catch {
-    return {};
-  }
-}
+import { buildOverridesHeader } from '@/services/streamCompare';
 
 const fmtVal = (v) => (typeof v === 'object' ? JSON.stringify(v) : String(v ?? ''));
 
@@ -53,157 +40,31 @@ function PillButton({ children, active, disabled, title, onClick, icon: Icon, to
         active ? tones.primary : tones[tone]
       }`}
     >
-      {Icon ? <Icon className="h-3.5 w-3.5" aria-hidden /> : null}
+      {Icon ? <Icon className={`h-3.5 w-3.5 ${active && Icon === Loader2 ? 'animate-spin' : ''}`} aria-hidden /> : null}
       {children}
     </button>
   );
 }
 
-/** `Baseline | Your config` — the only new render path; the single-column chat is untouched. */
-function TwoColumnView({ acc, running, error }) {
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {['baseline', 'candidate'].map((col) => {
-        const c = acc.state[col];
-        const isCandidate = col === 'candidate';
-        return (
-          <div
-            key={col}
-            className={`flex min-h-[8rem] flex-col rounded-xl border bg-[var(--bg-surface)] p-3 ${
-              isCandidate ? 'border-[var(--accent-teal)]/40' : 'border-[var(--border-subtle)]'
-            }`}
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--text-secondary)]">
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    isCandidate ? 'bg-[var(--accent-teal)]' : 'bg-[var(--text-tertiary)]'
-                  }`}
-                  aria-hidden
-                />
-                {COLUMN_LABELS[col]}
-              </span>
-              {c.done ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-[var(--success-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--success)]">
-                  <Check className="h-3 w-3" aria-hidden /> done
-                </span>
-              ) : running ? (
-                <span className="inline-flex items-center gap-1 text-[11px] text-[var(--text-tertiary)]">
-                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> streaming
-                </span>
-              ) : null}
-            </div>
-            {c.error ? (
-              <div className="whitespace-pre-wrap rounded-lg bg-[var(--error-soft)] p-2 text-[13px] text-[var(--error)]">
-                {typeof c.error === 'string' ? c.error : JSON.stringify(c.error)}
-              </div>
-            ) : (
-              <div className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-primary)]">
-                {c.text || (running ? '' : <span className="text-[var(--text-tertiary)]">(no output yet)</span>)}
-              </div>
-            )}
-          </div>
-        );
-      })}
-      {error ? (
-        <div className="whitespace-pre-wrap rounded-lg bg-[var(--error-soft)] p-2 text-[13px] text-[var(--error)] sm:col-span-2">
-          {error}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-export default function TuningMode({ question, onClose }) {
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [active, setActive] = useState(false);
-  const [overrides, setOverrides] = useState(loadSaved);
-  const [baseline, setBaseline] = useState(null);
+/**
+ * @param tuning  the shared useTuningCompare() instance (owned by ChatPage).
+ * @param onClose optional close handler for the whole affordance.
+ */
+export default function TuningMode({ tuning, onClose }) {
+  const {
+    isAdmin, active, setActive, overrides, setOverride, resetAll,
+    baseline, dirtyKeys, running, run, hasColumns, canRun,
+  } = tuning;
   const [panelOpen, setPanelOpen] = useState(false);
-  const [acc, setAcc] = useState(() => createColumnState());
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
-  const abortRef = useRef(null);
-
-  // Admin gate. A 403 here is the expected non-admin path, not an error to surface.
-  useEffect(() => {
-    let alive = true;
-    adminWhoAmI()
-      .then((d) => { if (alive && d?.isAdmin) setIsAdmin(true); })
-      .catch(() => { if (alive) setIsAdmin(false); });
-    return () => { alive = false; };
-  }, []);
-
-  useEffect(() => {
-    if (!isAdmin || !active) return;
-    fetchTunableConfig().then(setBaseline).catch((e) => setError(`Could not load config: ${e.message}`));
-  }, [isAdmin, active]);
-
-  useEffect(() => {
-    try { localStorage.setItem(PANEL_KEY, JSON.stringify(overrides)); } catch { /* non-fatal */ }
-  }, [overrides]);
-
-  const keys = baseline?.keys || [];
-  const setOverride = useCallback((k, v) => {
-    setOverrides((prev) => {
-      const next = { ...prev };
-      if (v === '' || v === null || v === undefined) delete next[k];
-      else next[k] = v;
-      return next;
-    });
-  }, []);
-
-  const dirtyKeys = useMemo(
-    () => Object.entries(overrides).filter(([, v]) => v !== '' && v !== null && v !== undefined),
-    [overrides],
-  );
-
-  const run = useCallback(async () => {
-    if (!question?.trim()) return;
-    setRunning(true);
-    setError(null);
-    const next = createColumnState();
-    setAcc(next);
-    const controller = new AbortController();
-    abortRef.current = controller;
-    try {
-      const authHeaders = await getAuthHeaders();
-      await streamCompare({
-        path: '/api/chat/stream/compare',
-        body: { message: question, conversationId: null },
-        overrides,
-        authHeaders,
-        deviceId: getDeviceId(),
-        signal: controller.signal,
-        onEvent: (evt) => {
-          next.apply(evt);
-          // Re-render with a shallow-copied state so React sees the change.
-          setAcc({ state: { ...next.state, baseline: { ...next.state.baseline }, candidate: { ...next.state.candidate } } });
-        },
-      });
-    } catch (e) {
-      if (e.name !== 'AbortError') setError(e.message);
-    } finally {
-      setRunning(false);
-      abortRef.current = null;
-    }
-  }, [question, overrides]);
-
-  // Cancel an in-flight comparison if the panel is closed or unmounted.
-  useEffect(() => () => abortRef.current?.abort(), []);
-  useEffect(() => { if (!active) abortRef.current?.abort(); }, [active]);
 
   if (!isAdmin) return null; // non-admins never see this at all
 
-  // This component is a DIRECT child of .chat-app-shell, which is a 3-column CSS grid
-  // (--shell-left-col / minmax(0,1fr) / --shell-right-col). An unpositioned grid child is
-  // auto-placed into an implicit cell, which is how this ended up squeezed into the ~64px icon
-  // rail with its label wrapping one word per line. position:fixed takes it out of the grid
-  // entirely, so it can never reflow the chat shell - same escape hatch ExploratoryModeToggle uses.
-  // Anchored bottom-right, sitting ABOVE that toggle (which owns bottom:14) so the two never overlap.
-  const expanded = active && (panelOpen || running || acc.baseline || acc.candidate);
-  const canRun = !running && Boolean(question?.trim());
+  // This panel is a DIRECT child of .chat-app-shell (a 3-column CSS grid). position:fixed takes it
+  // out of the grid entirely so it can never reflow the chat shell — same escape hatch
+  // ExploratoryModeToggle uses. Anchored bottom-right, ABOVE that toggle (bottom:14) so they never
+  // overlap. The ANSWER columns now live in the thread, so this stays compact.
+  const expanded = active && panelOpen;
 
   return (
     <div
@@ -213,15 +74,13 @@ export default function TuningMode({ question, onClose }) {
         right: 14,
         bottom: 58,
         zIndex: 9998,
-        width: expanded ? 'min(920px, calc(100vw - 28px))' : 'auto',
+        width: expanded ? 'min(460px, calc(100vw - 28px))' : 'auto',
         maxWidth: 'calc(100vw - 28px)',
         maxHeight: 'min(72vh, 720px)',
         overflowY: 'auto',
-        // When tuning mode is OFF, the panel must not sit as an opaque box over the
-        // results/download area and swallow clicks (Alfu 2026-09-29: the download
-        // button was unclickable behind this). Inactive => no fill/shadow and the
-        // container itself is click-through; only the toggle row (below) re-enables
-        // pointer events. Active => full panel chrome as before.
+        // When OFF the panel must not sit as an opaque box over the results/download area and swallow
+        // clicks (Alfu 2026-09-29: the download button was unclickable behind this). Inactive => the
+        // container is click-through; only the toggle row re-enables pointer events.
         pointerEvents: active ? 'auto' : 'none',
       }}
     >
@@ -233,7 +92,7 @@ export default function TuningMode({ question, onClose }) {
         }
       >
         {/* Toggle row. Parent is click-through when inactive; this row re-enables pointer events and
-            carries its own compact chrome so the switch is visible without overlaying the results. */}
+            carries its own compact chrome so the switch is visible without overlaying results. */}
         <div
           className={
             active
@@ -281,8 +140,15 @@ export default function TuningMode({ question, onClose }) {
                   {dirtyKeys.length}
                 </span>
               </PillButton>
-              <PillButton onClick={run} disabled={!canRun} icon={running ? Loader2 : Play} tone="primary" active>
-                <span className={running ? 'inline-flex items-center' : ''}>{running ? 'Comparing…' : 'Run comparison'}</span>
+              <PillButton
+                onClick={run}
+                disabled={!canRun}
+                icon={running ? Loader2 : Play}
+                tone="primary"
+                active
+                title={canRun ? undefined : 'Type a question in the composer first.'}
+              >
+                {running ? 'Comparing…' : 'Run comparison'}
               </PillButton>
               <PillButton
                 disabled={!dirtyKeys.length}
@@ -298,10 +164,10 @@ export default function TuningMode({ question, onClose }) {
                 {copied ? 'Copied' : 'Copy config'}
               </PillButton>
               <PillButton
-                onClick={() => { setOverrides({}); setAcc(createColumnState()); }}
+                onClick={resetAll}
                 icon={RotateCcw}
                 tone="ghost"
-                disabled={!dirtyKeys.length && !acc.baseline && !acc.candidate}
+                disabled={!dirtyKeys.length && !hasColumns}
               >
                 Reset all
               </PillButton>
@@ -315,14 +181,18 @@ export default function TuningMode({ question, onClose }) {
         </div>
 
         {active && panelOpen ? (
-          <div className="mt-3 max-h-64 overflow-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3">
+          <div className="mt-3 max-h-80 overflow-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3">
+            <div className="mb-2 text-[11px] text-[var(--text-tertiary)]">
+              Edits apply to the <span className="text-[var(--text-secondary)]">candidate</span> column only. Run a
+              comparison to see baseline vs candidate side by side in the chat.
+            </div>
             {baseline ? null : (
               <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Loading current config…
               </div>
             )}
             <div className="space-y-2.5">
-              {keys.map((k) => {
+              {(baseline?.keys || []).map((k) => {
                 const b = baseline.byKey[k];
                 const cur = overrides[k] ?? '';
                 const overridden = cur !== '';
@@ -362,18 +232,12 @@ export default function TuningMode({ question, onClose }) {
                 );
               })}
             </div>
-            {keys.length ? null : (
+            {baseline && !baseline.keys?.length ? (
               <div className="text-xs leading-relaxed text-[var(--text-secondary)]">
                 No tunable backend keys loaded. Sidecar persona/pack/agent keys are not prefillable yet (they live in
                 the S3 manifest, not this collection) — you can still set them by hand and they will travel in the header.
               </div>
-            )}
-          </div>
-        ) : null}
-
-        {active ? (
-          <div className="mt-3">
-            <TwoColumnView acc={acc} running={running} error={error} />
+            ) : null}
           </div>
         ) : null}
       </div>

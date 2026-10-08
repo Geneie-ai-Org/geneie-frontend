@@ -6,6 +6,8 @@ import * as mongodbApi from '../services/mongodbApi';
 import { toast } from 'sonner';
 import ExploratoryModeToggle from '../components/ExploratoryModeToggle';
 import TuningMode from '../components/TuningMode';
+import TuningCompareColumns from '../components/chat/TuningCompareColumns';
+import { useTuningCompare } from '@/hooks/useTuningCompare';
 
 import { useStickToBottom } from 'use-stick-to-bottom';
 import { Markdown } from '../components/chat/ChatMarkdown';
@@ -400,6 +402,11 @@ const ChatPage = () => {
     // Guest meters live in Redis, so the count has to come back from the server after a send.
     onGuestExchange: userTier === 'guest' ? refreshGuestStatus : undefined,
   });
+
+  // Admin tuning compare (one instance, shared). The CONTROLS render in the floating TuningMode
+  // panel; the ANSWER renders inline in the thread as two markdown columns (TuningCompareColumns).
+  // Gates on /api/admin/whoami internally, so it is a no-op render for non-admins.
+  const tuning = useTuningCompare({ question: input });
 
   const syncAfterColumnInterpretation = useCallback(
     async (conversationId, columnInterpretation) => {
@@ -1768,6 +1775,18 @@ const ChatPage = () => {
                       </div>
                     ))}
 
+                    {/* Admin tuning compare, inline in the thread: baseline vs candidate as two real
+                        markdown columns, so a compare reads like the chat ran twice. Only mounts for
+                        admins with tuning active and output present (hook gates all of that). */}
+                    {tuning.isAdmin && tuning.active && tuning.hasColumns && (
+                      <TuningCompareColumns
+                        acc={tuning.acc}
+                        running={tuning.running}
+                        error={tuning.error}
+                        question={tuning.lastQuestion}
+                      />
+                    )}
+
                     {isCurrentlyActive && (
                       <div className="flex w-full gap-3">
                         <div className="flex-1 min-w-0">
@@ -2220,8 +2239,9 @@ const ChatPage = () => {
 
       {/* Admin tuning mode. Renders NOTHING for non-admins (it gates on /api/admin/whoami),
           and while it is off it changes nothing: no header, no compare endpoint, no second
-          column. The normal single-column chat path above is untouched either way. */}
-      <TuningMode question={input} />
+          column. The CONTROLS float here; the side-by-side ANSWER renders inline in the thread
+          above (see TuningCompareColumns). The normal single-column chat path is untouched. */}
+      <TuningMode tuning={tuning} />
     </div>
   );
 };

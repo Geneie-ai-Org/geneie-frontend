@@ -53,7 +53,7 @@ function PillButton({ children, active, disabled, title, onClick, icon: Icon, to
 export default function TuningMode({ tuning, onClose }) {
   const {
     isAdmin, active, setActive, overrides, setOverride, resetAll,
-    baseline, dirtyKeys, running, run, hasColumns, canRun,
+    baseline, configError, reloadConfig, dirtyKeys, running, run, hasColumns, canRun,
   } = tuning;
   const [panelOpen, setPanelOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -186,11 +186,25 @@ export default function TuningMode({ tuning, onClose }) {
               Edits apply to the <span className="text-[var(--text-secondary)]">candidate</span> column only. Run a
               comparison to see baseline vs candidate side by side in the chat.
             </div>
-            {baseline ? null : (
+            {/* Honest state: loading / failed / loaded. "No config?" was this panel stuck on the
+                loading line when the fetch failed, with the error swallowed. */}
+            {configError ? (
+              <div className="rounded-lg bg-[var(--error-soft)] p-2.5 text-[12px] text-[var(--error)]">
+                <div className="font-medium">Could not load config</div>
+                <div className="mt-0.5 break-words opacity-90">{configError}</div>
+                <button
+                  type="button"
+                  onClick={reloadConfig}
+                  className="mt-2 inline-flex h-7 items-center rounded-full border border-[var(--error)]/40 px-3 text-[11px] font-medium text-[var(--error)] transition-colors hover:bg-[var(--error)]/10"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : !baseline ? (
               <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Loading current config…
               </div>
-            )}
+            ) : null}
             <div className="space-y-2.5">
               {(baseline?.keys || []).map((k) => {
                 const b = baseline.byKey[k];

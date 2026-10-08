@@ -50,10 +50,20 @@ export function useTuningCompare({ question } = {}) {
     return () => { alive = false; };
   }, []);
 
+  const [configError, setConfigError] = useState(null);
+  const [reloadTick, setReloadTick] = useState(0);
+  const reloadConfig = useCallback(() => setReloadTick((n) => n + 1), []);
+
   useEffect(() => {
     if (!isAdmin || !active) return;
-    fetchTunableConfig().then(setBaseline).catch((e) => setError(`Could not load config: ${e.message}`));
-  }, [isAdmin, active]);
+    let alive = true;
+    setConfigError(null);
+    setBaseline(null); // show the loading state on (re)load, not a stale list
+    fetchTunableConfig()
+      .then((b) => { if (alive) setBaseline(b); })
+      .catch((e) => { if (alive) setConfigError(e?.message || 'Could not load config'); });
+    return () => { alive = false; };
+  }, [isAdmin, active, reloadTick]);
 
   useEffect(() => {
     try { localStorage.setItem(PANEL_KEY, JSON.stringify(overrides)); } catch { /* non-fatal */ }
@@ -132,6 +142,8 @@ export function useTuningCompare({ question } = {}) {
     setOverride,
     resetAll,
     baseline,
+    configError,
+    reloadConfig,
     dirtyKeys,
     acc,
     running,

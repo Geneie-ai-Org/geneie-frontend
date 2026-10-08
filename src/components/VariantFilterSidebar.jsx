@@ -515,6 +515,7 @@ const VariantFilterSidebar = ({
   chatEligibility = null,
   onEditSampleInfo = null,
   onClinicalReportOpen = null,
+  gaTriageStatus = '',
 }) => {
   /* Quota is orthogonal to filter readiness. `=== false` (rather than a falsy check) so a missing
    * gate — degraded limits, still loading — never disables anything. */
@@ -2761,7 +2762,7 @@ const VariantFilterSidebar = ({
           </div>
         </div>
 
-        {/* Sticky footer: export + case report, always visible */}
+        {/* Sticky footer: export + one review/report action */}
         {!isGuest && variantData && (
           <div className="shrink-0 px-3.5 py-2 bg-[var(--bg-sidebar)] space-y-2">
             <ExportVariantsButton
@@ -2771,6 +2772,18 @@ const VariantFilterSidebar = ({
               isGuest={isGuest}
               downloadGate={downloadGate}
               uiCount={underConsiderationCount}
+              onReconcileUiCount={(nextCount) => {
+                const n = Number(nextCount);
+                if (!Number.isFinite(n)) return;
+                setFilteredCount(n);
+                if (onFiltersChange) {
+                  onFiltersChange(
+                    hasActiveManualFilters ? filters : { proprietary: activeProprietaryFilter },
+                    n,
+                    displayTotalVariants
+                  );
+                }
+              }}
             />
             <CaseReportDownloadButton
               conversationId={conversationId}
@@ -2778,6 +2791,7 @@ const VariantFilterSidebar = ({
               isGuest={isGuest}
               downloadGate={downloadGate}
               chatEligibility={chatEligibility}
+              gaTriageStatus={gaTriageStatus}
               onRequestOpen={onClinicalReportOpen}
             />
           </div>

@@ -20,9 +20,10 @@ import {
 
 const NON_TERMINAL_STATUSES = new Set(['queued', 'running']);
 
-function jobFromStatusPayload(data) {
+function jobFromStatusPayload(data, conversationId = null) {
   return {
     jobId: data.job_id ?? null,
+    conversationId: conversationId ?? data.conversation_id ?? null,
     status: data.status ?? null,
     phase: data.phase ?? null,
     progressPercent: data.progress_percent ?? null,
@@ -32,6 +33,9 @@ function jobFromStatusPayload(data) {
     genome: data.genome ?? null,
     sampleName: data.sample_name ?? null,
     ingestStatus: data.ingest_status ?? null,
+    hasBam: Boolean(data.has_bam),
+    hasQc: Boolean(data.has_qc),
+    bamQcPurged: Boolean(data.bam_qc_purged),
     startedAt: data.started_at ?? null,
     completedAt: data.completed_at ?? null,
     durationSeconds: data.duration_seconds ?? null,
@@ -85,7 +89,24 @@ export function useModule1Pipeline({
       if (convData.variant_metadata) {
         setVariantData(buildVariantDataFromConversation(convData, convData.variant_metadata));
       }
-      if (convData.document) setCurrentDocument(convData.document);
+      // Match ChatPage document shape so File Analysis / VCF checks see url+name.
+      if (convData.document?.s3_url && convData.document?.file_name) {
+        setCurrentDocument({
+          url: convData.document.s3_url,
+          name: convData.document.file_name,
+          type: convData.document.file_type || 'unknown',
+          size: convData.document.file_size || 0,
+          sample_metadata: convData.sample_metadata || null,
+          file_type: convData.document.file_type || null,
+          file_name: convData.document.file_name,
+        });
+      } else if (convData.document) {
+        setCurrentDocument({
+          ...convData.document,
+          sample_metadata: convData.sample_metadata || convData.document.sample_metadata || null,
+        });
+      }
+      // Manual → open File Analysis. Automatic → presentFileAnalysisModal no-ops the UI.
       presentFileAnalysisModal(convData);
       syncPipelineFromConversationRef.current?.(convData);
       if (convData.column_interpretation) {
@@ -128,7 +149,7 @@ export function useModule1Pipeline({
         }
         if (abort.aborted) return;
 
-        const nextJob = jobFromStatusPayload(data);
+        const nextJob = jobFromStatusPayload(data, conversationId);
         setModule1Job((prev) => ({ ...prev, ...nextJob }));
 
         if (nextJob.status === 'failed') {
@@ -176,6 +197,7 @@ export function useModule1Pipeline({
     ingestHandledRef.current = false;
     setModule1Job({
       jobId,
+      conversationId,
       status: initial.status ?? 'queued',
       phase: initial.phase ?? 'queued',
       progressPercent: initial.progressPercent ?? null,
@@ -185,12 +207,15 @@ export function useModule1Pipeline({
       genome: initial.genome ?? null,
       sampleName: initial.sampleName ?? null,
       ingestStatus: null,
+      hasBam: false,
+      hasQc: false,
+      bamQcPurged: false,
     });
     pollModule1StatusRef.current(conversationId);
   }, []);
 
   // Resume on mount / conversation switch — a job survives page reloads only if we
-  // re-check /status and re-adopt it here.
+  // re-check /status and re-adopt it here. Also re-surface retained QC after ingest.
   useEffect(() => {
     stopPolling();
     ingestHandledRef.current = false;
@@ -204,9 +229,12 @@ export function useModule1Pipeline({
         if (cancelled || !data?.status) return;
         const completeNotIngested =
           data.status === 'complete' && data.ingest_status !== 'done' && data.ingest_status !== 'failed';
-        if (NON_TERMINAL_STATUSES.has(data.status) || completeNotIngested) {
-          setModule1Job(jobFromStatusPayload(data));
-          pollModule1StatusRef.current(activeConversationId);
+        const stillRunning = NON_TERMINAL_STATUSES.has(data.status) || completeNotIngested;
+        if (stillRunning || data.has_qc || data.has_bam || data.bam_qc_purged) {
+          setModule1Job(jobFromStatusPayload(data, activeConversationId));
+          if (stillRunning) {
+            pollModule1StatusRef.current(activeConversationId);
+          }
         }
       } catch (error) {
         console.warn('[useModule1Pipeline] resume status check failed:', error);
@@ -487,6 +515,12 @@ export function useModule1Pipeline({
     module1Job.status !== 'failed' &&
     !(module1Job.status === 'complete' && (module1Job.ingestStatus === 'done' || module1Job.ingestStatus === 'failed'));
 
+  // QC / IGV stay visible after the stepper would otherwise dismiss, until purge.
+  const module1QcVisible = Boolean(module1Job?.hasQc && module1Job?.conversationId);
+  const module1BamVisible = Boolean(module1Job?.hasBam && module1Job?.conversationId);
+  const module1ReportVisible = Boolean(module1Job?.bamQcPurged && module1Job?.conversationId);
+  const module1ArtifactsVisible = module1QcVisible || module1BamVisible || module1ReportVisible;
+
   return {
     bedCatalog,
     bedCatalogLoading,
@@ -504,6 +538,10 @@ export function useModule1Pipeline({
     startModule1Run,
     module1Job,
     module1JobActive,
+    module1QcVisible,
+    module1BamVisible,
+    module1ReportVisible,
+    module1ArtifactsVisible,
     module1Gate,
     module1StageGate,
     module1EntryGate,

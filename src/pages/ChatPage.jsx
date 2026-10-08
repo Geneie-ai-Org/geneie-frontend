@@ -50,7 +50,11 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 import { getClinicalReportGate } from '@/components/CaseReportDownloadButton';
 import ClinicalReportAssignModal from '@/components/ClinicalReportAssignModal';
 import AutomaticPipelinePanel from '@/components/AutomaticPipelinePanel';
-import { DEFAULT_GUEST_CHAT_LIMIT } from '@/services/backendApi';
+import {
+  normalizePipelineRunMode,
+  PIPELINE_RUN_AUTOMATIC,
+} from '@/components/PipelineRunModeToggle';
+import { DEFAULT_GUEST_CHAT_LIMIT, fetchGaTriage } from '@/services/backendApi';
 import { formatMeterDetail, meterExhausted, meterFor, meterNearLimit, patchGuestChatUsed } from '@/services/tierLimits';
 import { describeLimitError, isEmailVerificationCode } from '@/services/limitErrors';
 import { useSeo } from '@/hooks/useSeo';
@@ -70,6 +74,7 @@ const ChatPage = () => {
   const [conversations, setConversations] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [clinicalReportOpen, setClinicalReportOpen] = useState(false);
+  const autoOpenedReportForConvRef = useRef(null);
   const [currentDocument, setCurrentDocument] = useState(null);
   const [variantData, setVariantData] = useState(null);
   const [isVariantSidebarOpen, setIsVariantSidebarOpen] = useState(false);
@@ -432,6 +437,29 @@ const ChatPage = () => {
   module1JobActiveRef.current = module1.module1JobActive;
   onOpenModule1UploadRef.current = module1.openModule1Form;
 
+  const [gaTriageStatus, setGaTriageStatus] = useState('');
+  useEffect(() => {
+    if (!activeConversationId || userTier === 'guest') {
+      setGaTriageStatus('');
+      return undefined;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const payload = await fetchGaTriage(activeConversationId);
+        if (!cancelled) setGaTriageStatus(String(payload?.status || '').toLowerCase());
+      } catch {
+        if (!cancelled) setGaTriageStatus('absent');
+      }
+    };
+    tick();
+    const id = setInterval(tick, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [activeConversationId, userTier]);
+
   const automaticPipeline = useAutomaticPipelineConductor({
     enabled: userTier !== 'guest' && !!activeConversationId,
     conversationId: activeConversationId,
@@ -446,10 +474,16 @@ const ChatPage = () => {
     runAnnovar: runAnnovarForCurrentConversation,
     fetchExomiserEligibility,
     runExomiser,
+    gaTriageStatus,
+    activeProprietaryFilter: conversationFilterState.activeProprietaryFilter,
+    enrichmentStatus: chatEligibility?.enrichment_status,
+    // Wait for conversation document before kicking any Automatic stage.
+    statusHydrated: Boolean(currentDocument),
   });
 
   useEffect(() => {
     setClinicalReportOpen(false);
+    autoOpenedReportForConvRef.current = null;
   }, [activeConversationId]);
 
   const { handleDocumentUpload } = useDocumentUpload({
@@ -1062,8 +1096,16 @@ const ChatPage = () => {
     setIsAnnovarRecommended(recommendAnnovar);
   }, [columnInterpretationResult]);
 
+  const isAutomaticCase =
+    normalizePipelineRunMode(
+      currentDocument?.sample_metadata?.pipeline_run_mode ||
+        currentDocument?.sample_metadata?.phenotype_run_mode
+    ) === PIPELINE_RUN_AUTOMATIC;
+
+  // Manual: show File Analysis for analyst review. Automatic: never block the conductor.
   const showFileAnalysisModal =
     showInterpretationModal &&
+    !isAutomaticCase &&
     !interpretationDismissedRef.current &&
     !pipelineJobActive &&
     !annovarMessageModal &&
@@ -1129,9 +1171,10 @@ const ChatPage = () => {
     [runAnnovarForCurrentConversation]
   );
 
-  const module1PipelineBlock = module1.module1JobActive ? (
-    <Module1PipelineStepper job={module1.module1Job} onStartOver={module1.openModule1Form} />
-  ) : null;
+  const module1PipelineBlock =
+    module1.module1JobActive || module1.module1ArtifactsVisible ? (
+      <Module1PipelineStepper job={module1.module1Job} onStartOver={module1.openModule1Form} />
+    ) : null;
 
 
   // --- MAIN RENDER GATING LOGIC ---
@@ -1233,11 +1276,19 @@ const ChatPage = () => {
     } else {
       inputPlaceholder = 'Chat disabled, see above message';
     }
+  } else if (
+    chatEligibility.allowed === true &&
+    (chatEligibility.scope || '').toLowerCase() === 'pgx_only'
+  ) {
+    inputPlaceholder = 'Ask about pharmacogenes (metabolizer status, CPIC, PharmGKB)…';
   } else if (isChatLimitReached) {
     inputPlaceholder = userTier === 'guest'
       ? `Limit reached (${DEFAULT_GUEST_CHAT_LIMIT} exchanges). Please Sign Up or Log In.`
       : `Limit reached${chatMeter.limit != null ? ` (${chatMeter.limit} exchanges)` : ''}. Please upgrade to Pro.`;
   }
+
+  const isPgxOnlyScope =
+    chatEligibility.allowed === true && (chatEligibility.scope || '').toLowerCase() === 'pgx_only';
 
   const pipelineOwnsMessage = enrichmentState.active || enrichmentState.failed || indexingState.active || indexingState.failed;
   const pipelineVariantsUnderConsideration = resolveVariantsUnderConsideration({
@@ -1255,14 +1306,27 @@ const ChatPage = () => {
     isChatPipelineGated && !annovarRunning && !pipelineOwnsMessage && !guestFilterGateBlocked
       ? chatEligibility.message || inputPlaceholder
       : null;
-  // Signed-in only — guests use guestPipelineCta (single row, no duplicate button).
-  const gatedAction =
-    isChatPipelineGated &&
+  // No separate scope banner under the stepper (composer stays usable when unlocked).
+  const pipelineScopeMessage = null;
+  const needsAnnotationCta =
+    !pipelineSnapshot.hasAnnotatedFile &&
+    Boolean(chatEligibility.requires_annovar) &&
     !annovarRunning &&
-    chatEligibility.reason === 'CHAT_REQUIRES_FILTER' &&
-    userTier !== 'guest'
-      ? { label: 'Apply a filter', onClick: () => setIsVariantSidebarOpen(true) }
-      : null;
+    (pipelineSnapshot.annovarJob?.status || '').toLowerCase() !== 'failed';
+  // Signed-in only — guests use guestPipelineCta (single row, no duplicate button).
+  // Prefer Annotation when it is still pending; only push filters after annotation.
+  const gatedAction =
+    !annovarRunning &&
+    userTier !== 'guest' &&
+    (needsAnnotationCta
+      ? { label: 'Run annotation', onClick: () => runAnnovarForCurrentConversation() }
+      : isChatPipelineGated
+        ? chatEligibility.reason === 'CHAT_REQUIRES_FILTER'
+          ? { label: 'Apply a filter', onClick: () => setIsVariantSidebarOpen(true) }
+          : null
+        : isPgxOnlyScope
+          ? { label: 'Open filters', onClick: () => setIsVariantSidebarOpen(true) }
+          : null);
 
   const guestPipelineCta =
     userTier === 'guest' && showAnalysisPipeline
@@ -1310,19 +1374,28 @@ const ChatPage = () => {
       indexingState={indexingState}
       isRunningExomiser={isRunningExomiser}
       exomiserStatus={exomiserStatus}
-      gatedMessage={pipelineGatedMessage}
+      gatedMessage={pipelineGatedMessage || pipelineScopeMessage}
       gatedAction={gatedAction}
       guestPipelineCta={guestPipelineCta}
     />
   ) : null;
 
-  const reportGate = getClinicalReportGate({ downloadGate, chatEligibility });
+  const reportGate = getClinicalReportGate({ downloadGate, chatEligibility, gaTriageStatus });
   const showAutomaticReportCta =
     automaticPipeline.active &&
     automaticPipeline.phase === 'ready_report' &&
     userTier !== 'guest' &&
     !!variantData &&
     !!activeConversationId;
+
+  // Automatic ready_report: open the one review/report modal once (still confirm before PDF).
+  useEffect(() => {
+    if (!showAutomaticReportCta || reportGate?.blocked) return;
+    if (autoOpenedReportForConvRef.current === activeConversationId) return;
+    autoOpenedReportForConvRef.current = activeConversationId;
+    setIsVariantSidebarOpen(true);
+    setClinicalReportOpen(true);
+  }, [showAutomaticReportCta, reportGate?.blocked, activeConversationId]);
 
   const automaticPipelineBanner =
     automaticPipeline.active && automaticPipeline.message ? (
@@ -1333,6 +1406,7 @@ const ChatPage = () => {
         events={automaticPipeline.events}
         showReportCta={showAutomaticReportCta}
         reportGate={reportGate}
+        reportCtaLabel={reportGate.label || 'Review & report'}
         onGenerateReport={() => {
           setIsVariantSidebarOpen(true);
           setClinicalReportOpen(true);
@@ -1844,6 +1918,7 @@ const ChatPage = () => {
             downloadGate={downloadGate}
             chatEligibility={chatEligibility}
             onClinicalReportOpen={() => setClinicalReportOpen(true)}
+            gaTriageStatus={gaTriageStatus}
             onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
             onGuestRefreshMetadata={handleGuestRefreshMetadata}
           />
@@ -1854,6 +1929,7 @@ const ChatPage = () => {
           open={clinicalReportOpen}
           onOpenChange={setClinicalReportOpen}
           conversationId={activeConversationId}
+          automaticMode={automaticPipeline.active}
         />
       ) : null}
 

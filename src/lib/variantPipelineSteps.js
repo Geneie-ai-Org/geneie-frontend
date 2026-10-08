@@ -144,7 +144,12 @@ export function computePipelineSteps({
   });
 
   const chat = (() => {
-    if (chatEligibility?.allowed) return 'done';
+    if (chatEligibility?.allowed) {
+      // pgx_only unlocks the composer but disease pipeline is incomplete — keep Chat
+      // pending so the stepper does not show a green Chat node for PGx alone.
+      if ((chatEligibility.scope || '').toLowerCase() === 'pgx_only') return 'pending';
+      return 'done';
+    }
     if (chatEligibility?.reason === 'S3_LINE_COUNT_PENDING') return 'pending';
     if (reduce === 'done' && filteredVariantCount != null) return 'pending';
     return 'pending';
@@ -209,6 +214,8 @@ export function getPipelineStatusLine(props, steps) {
     s3LineCountStatus,
     isRunningExomiser,
     exomiserStatus,
+    hasAnnotatedFile,
+    requiresAnnovar,
   } = props;
 
   const interpretationReady = Boolean(columnInterpretationResult?.step1);
@@ -236,6 +243,11 @@ export function getPipelineStatusLine(props, steps) {
     return sanitizePhenotypeStatusMessage(exomiserStatus?.message, PHENOTYPE_RUNNING_MESSAGE);
   }
   if (chatEligibility?.allowed) {
+    if ((chatEligibility.scope || '').toLowerCase() === 'pgx_only') {
+      // Chip ("Needs annotation" / "Needs a filter") + CTA carry the next step — no
+      // duplicate prose under the stepper.
+      return null;
+    }
     const n = variantsUnderConsideration ?? filteredVariantCount;
     return n != null
       ? `Chat is enabled (${Number(n).toLocaleString()} variants under consideration).`

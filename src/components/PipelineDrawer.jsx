@@ -258,6 +258,7 @@ const PipelineDrawer = ({
   const statusLine = getPipelineStatusLine(pipelineProps, steps);
   const summary = getPipelineChipSummary(steps, hasUploadedFile);
   const chatReady = chatEligibility?.allowed === true;
+  const pgxOnlyScope = chatReady && (chatEligibility?.scope || '').toLowerCase() === 'pgx_only';
   const variantCount = variantsUnderConsideration ?? filteredVariantCount;
   const displayName = fileName || 'Variant file';
   const guestFilterGateBlocked =
@@ -302,6 +303,10 @@ const PipelineDrawer = ({
     if (failed) expandRef.current?.(true);
   }, [failed]);
 
+  useEffect(() => {
+    if (pgxOnlyScope) expandRef.current?.(true);
+  }, [pgxOnlyScope]);
+
   const toggle = () => {
     userIntentRef.current = expanded ? 'closed' : 'open';
     onExpandedChange?.(!expanded);
@@ -332,6 +337,11 @@ const PipelineDrawer = ({
     if (isRunningAnnovar || annovarJob?.status === 'running') return working('Annotating…');
     if (isRunningExomiser || exomiserStatus?.status === 'running') return working(PHENOTYPE_RUNNING_MESSAGE);
     if (isApplyingProprietaryFilter || filterJob?.status === 'running') return working('Applying filter…');
+    // Do not advertise PGx-only unlock in the chip — Chat stays pending until full disease chat.
+    if (pgxOnlyScope && steps.annovar !== 'done' && steps.annovar !== 'skipped') {
+      return settled('Needs annotation');
+    }
+    if (pgxOnlyScope) return settled('Needs a filter');
     if (chatReady) {
       return settled(
         variantCount != null
@@ -364,6 +374,8 @@ const PipelineDrawer = ({
     if (showGuestFilterCta) return null;
     if (isGuest && chatReady && chatEligibility?.message) return chatEligibility.message;
     if (gatedMessage) return gatedMessage;
+    // Chip + CTA already say the next step (e.g. Needs annotation / Run annotation).
+    if (gatedAction) return null;
     return statusLine;
   })();
 

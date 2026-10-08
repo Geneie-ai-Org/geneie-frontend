@@ -61,16 +61,29 @@
         "@type": "Organization",
         "@id": "https://geneie.chat/#organization",
         "name": "Geneie",
+        "alternateName": ["Geneie AI", "Geneie Chat"],
         "url": "https://geneie.chat/",
-        "logo": "https://geneie.chat/geneie-g.svg",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://geneie.chat/geneie-logo-512.png",
+          "width": 512,
+          "height": 512
+        },
         "description": "AI-powered genomic variant analysis for researchers and clinicians.",
-        "email": "support@geneie.chat"
+        "email": "support@geneie.chat",
+        "parentOrganization": {
+          "@type": "Organization",
+          "name": "Omixir Bioinformatics",
+          "url": "https://omixir.com/",
+          "sameAs": ["https://www.linkedin.com/company/omixir/"]
+        }
       },
       {
         "@type": "WebSite",
         "@id": "https://geneie.chat/#website",
         "url": "https://geneie.chat/",
         "name": "Geneie",
+        "alternateName": ["Geneie AI", "geneie.chat"],
         "publisher": { "@id": "https://geneie.chat/#organization" },
         "inLanguage": "en"
       },

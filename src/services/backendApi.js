@@ -634,6 +634,76 @@ export async function fetchModule1Status(conversationId) {
   return data;
 }
 
+/** Retained Module 1 QC files (presigned GET) — empty once BAM/QC are purged. */
+export async function fetchModule1QcArtifacts(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/module1/qc/${encodeURIComponent(conversationId)}`), {
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to fetch Module 1 QC reports');
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
+/** Retained Module 1 BAM(+BAI) presigned GET URLs for the alignment browser — gone after purge. */
+export async function fetchModule1BamArtifacts(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/module1/bam/${encodeURIComponent(conversationId)}`), {
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to fetch Module 1 BAM for IGV');
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
+/** Durable Module 1 QC report (survives BAM/QC purge; used for chat Q&A). */
+export async function fetchModule1QcReport(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/module1/report/${encodeURIComponent(conversationId)}`), {
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to fetch Module 1 QC report');
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
+/** Upload a browser/chart PNG into the durable Module 1 report. */
+export async function uploadModule1ReportFigure(conversationId, blob, {
+  fileName = 'alignment_browser.png',
+  kind = 'browser_snapshot',
+  label = 'Alignment browser',
+} = {}) {
+  const headers = await getAuthHeaders();
+  const form = new FormData();
+  form.append('file', blob, fileName);
+  form.append('kind', kind);
+  form.append('label', label);
+  const response = await fetch(apiUrl(`/api/module1/report/${encodeURIComponent(conversationId)}/figures`), {
+    method: 'POST',
+    headers,
+    body: form,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to upload Module 1 report figure');
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
 /** Fast, non-authoritative client hint only — the server /validate-bed call remains the real gate. */
 export async function precheckBedChromStyle(file) {
   const head = await file.slice(0, 64 * 1024).text();
@@ -783,6 +853,153 @@ export async function downloadCaseReport(conversationId) {
     variantRows: response.headers.get('X-Case-Report-Variant-Rows'),
     variantsShown: response.headers.get('X-Case-Report-Variants-Shown'),
   };
+}
+
+/**
+ * HPO → PanelApp panel suggestions (Track 14.6).
+ * Uses conversation-scoped endpoint when conversationId is set; otherwise standalone.
+ */
+export async function fetchPanelAppSuggestions({
+  conversationId = null,
+  hpoIds = [],
+  phenotypeText = '',
+  includeAmber = true,
+  limit = 10,
+} = {}) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const body = {
+    hpo_ids: hpoIds,
+    phenotype_text: phenotypeText || '',
+    include_amber: includeAmber,
+    limit,
+  };
+  const path = conversationId
+    ? `/api/conversations/${encodeURIComponent(conversationId)}/panelapp/suggestions`
+    : '/api/panelapp/suggestions';
+  const response = await fetch(apiUrl(path), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load PanelApp suggestions');
+  }
+  return data;
+}
+
+/** Persist selected panels on conversation sample_metadata. */
+export async function persistPanelAppSelection(
+  conversationId,
+  { panelIds = [], includeAmber = true } = {}
+) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(
+    apiUrl(
+      `/api/conversations/${encodeURIComponent(conversationId)}/panelapp/selection`
+    ),
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ panel_ids: panelIds, include_amber: includeAmber }),
+    }
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to save PanelApp selection');
+  }
+  return data;
+}
+
+/** Resolve panel IDs → genes without persisting (upload forms). */
+export async function resolvePanelAppSelection({
+  panelIds = [],
+  includeAmber = true,
+} = {}) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(apiUrl('/api/panelapp/resolve'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ panel_ids: panelIds, include_amber: includeAmber }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to resolve PanelApp selection');
+  }
+  return data;
+}
+
+/** Catalog search by panel name (Manual picker). */
+export async function searchPanelAppPanels({
+  query = '',
+  includeAmber = true,
+  limit = 20,
+} = {}) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(apiUrl('/api/panelapp/search'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      query: query || '',
+      include_amber: includeAmber,
+      limit,
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to search gene panels');
+  }
+  return data;
+}
+
+/**
+ * GA triage status + top candidates for analyst review UI.
+ * GET /api/conversations/{id}/ga-triage
+ */
+export async function fetchGaTriage(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(
+    apiUrl(`/api/conversations/${encodeURIComponent(conversationId)}/ga-triage`),
+    { headers },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load GA triage');
+  }
+  return data;
+}
+
+/**
+ * Download GA triage artifact (default: full ga_triage.tsv).
+ * GET /api/conversations/{id}/ga-triage/download?artifact=tsv
+ */
+export async function downloadGaTriageArtifact(conversationId, artifact = 'tsv') {
+  const headers = await getAuthHeaders();
+  const qs = new URLSearchParams({ artifact: artifact || 'tsv' });
+  const response = await fetch(
+    apiUrl(
+      `/api/conversations/${encodeURIComponent(conversationId)}/ga-triage/download?${qs}`,
+    ),
+    { headers },
+  );
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(parseApiErrorDetail(data.detail) || 'GA triage download failed');
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const filenameMatch = disposition.match(/filename="(.+?)"/);
+  const filename =
+    filenameMatch?.[1] || `ga_triage_${conversationId}.${artifact === 'tsv' ? 'tsv' : 'bin'}`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return true;
 }
 
 /**

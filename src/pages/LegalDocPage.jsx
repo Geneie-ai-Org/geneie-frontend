@@ -3,10 +3,21 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useSeo } from '@/hooks/useSeo';
 
 const DOCS = {
-  terms: { file: '/legal/terms.md', title: 'Terms of Use', path: '/legal/terms' },
-  privacy: { file: '/legal/privacy.md', title: 'Privacy Policy', path: '/legal/privacy' },
+  terms: {
+    file: '/legal/terms.md',
+    title: 'Terms of Use',
+    path: '/legal/terms',
+    description: 'The terms that govern access to and use of Geneie during closed beta.',
+  },
+  privacy: {
+    file: '/legal/privacy.md',
+    title: 'Privacy Policy',
+    path: '/legal/privacy',
+    description: 'What Geneie collects, how it is used and processed, and your choices during closed beta.',
+  },
 };
 
 /**
@@ -110,6 +121,10 @@ export default function LegalDocPage({ doc }) {
   const active = DOCS[doc] || DOCS.terms;
   const [raw, setRaw] = useState('');
   const [error, setError] = useState('');
+
+  // Without this the page keeps index.html's canonical (the landing page), which tells
+  // search engines these documents are duplicates of `/` and keeps them out of the index.
+  useSeo({ title: `${active.title} · Geneie`, description: active.description, path: active.path });
 
   useEffect(() => {
     let cancelled = false;

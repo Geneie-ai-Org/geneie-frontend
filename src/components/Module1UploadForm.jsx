@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, FileText, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronLeft, FileText, Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,11 @@ import { MODULE1_BED_MAX_BYTES, MODULE1_FASTQ_MAX_BYTES } from '@/services/backe
 import { isRecognizedImportUrl, module1UrlErrorMessage, precheckBedChromStyle } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
 import PhenotypeInputPanel, { PHENOTYPE_MODE_NOTE } from '@/components/PhenotypeInputPanel';
+import GermlinePedigreeFields from '@/components/GermlinePedigreeFields';
+import {
+  EMPTY_PEDIGREE_FIELDS,
+  pedigreeFieldsForSubmit,
+} from '@/components/germlinePedigreeOptions';
 import PipelineRunModeToggle, {
   PIPELINE_RUN_MANUAL,
   normalizePipelineRunMode,
@@ -93,6 +98,7 @@ const EMPTY_SAMPLE_METADATA = {
   sampleRole: '',
   affectedStatus: '',
   inheritanceModel: '',
+  ...EMPTY_PEDIGREE_FIELDS,
   phenotype: '',
   phenotype_mode: PHENOTYPE_MODE_NOTE,
   phenotype_findings: '',
@@ -289,6 +295,8 @@ const Module1UploadForm = ({
   const [urlState, setUrlState] = useState(EMPTY_URL_STATE);
   const [sampleMetadata, setSampleMetadata] = useState(EMPTY_SAMPLE_METADATA);
   const [validationAttempted, setValidationAttempted] = useState(false);
+  /** Germline wizard: sample (+ files) → germline fields → phenotype. Non-Germline stays one page. */
+  const [metadataStep, setMetadataStep] = useState('sample'); // 'sample' | 'analysis' | 'phenotype'
 
   useEffect(() => {
     if (!open) return;
@@ -307,6 +315,7 @@ const Module1UploadForm = ({
     setUrlState(EMPTY_URL_STATE);
     setSampleMetadata(EMPTY_SAMPLE_METADATA);
     setValidationAttempted(false);
+    setMetadataStep('sample');
     loadBedCatalog?.('hg38');
   }, [open, loadBedCatalog]);
 
@@ -450,13 +459,40 @@ const Module1UploadForm = ({
 
   const isGermline = sampleMetadata.analysisType === 'Germline';
   const analysisTypeMissing = !sampleMetadata.analysisType;
+  const germlineWizard = isGermline;
+  const metadataTotalSteps = germlineWizard ? 3 : 1;
+  const metadataStepIndex =
+    metadataStep === 'phenotype' ? 3 : metadataStep === 'analysis' ? 2 : 1;
+
+  const setAnalysisType = (val) => {
+    setSampleMetadata((prev) => ({ ...prev, analysisType: val }));
+    // Leaving Germline drops the multi-step path; entering Germline starts at sample.
+    if (val !== 'Germline') {
+      setMetadataStep('sample');
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!canSubmit) return;
-
     setValidationAttempted(true);
     if (analysisTypeMissing) return;
+
+    if (germlineWizard) {
+      if (metadataStep === 'sample') {
+        if (!canSubmit) return;
+        setMetadataStep('analysis');
+        return;
+      }
+      if (metadataStep === 'analysis') {
+        setMetadataStep('phenotype');
+        return;
+      }
+      // phenotype → start pipeline
+      if (!canSubmit) return;
+    } else if (!canSubmit) {
+      return;
+    }
+
     const useCustomBed = bedMode === 'custom';
     startModule1Run({
       sampleName: sampleName.trim(),
@@ -472,6 +508,7 @@ const Module1UploadForm = ({
               sampleRole: sampleMetadata.sampleRole,
               affectedStatus: sampleMetadata.affectedStatus,
               inheritanceModel: sampleMetadata.inheritanceModel,
+              ...pedigreeFieldsForSubmit(sampleMetadata),
               phenotype: sampleMetadata.phenotype.trim(),
               phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_NOTE,
               phenotype_findings: sampleMetadata.phenotype_findings || '',
@@ -484,6 +521,10 @@ const Module1UploadForm = ({
                 sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode
               ),
               phenotype_hpo: sampleMetadata.phenotype_hpo || null,
+              selected_panels: sampleMetadata.selected_panels || [],
+              selected_panel_gene_list: sampleMetadata.selected_panel_gene_list || [],
+              selected_panel_include_amber:
+                sampleMetadata.selected_panel_include_amber !== false,
             }
           : {}),
       },
@@ -522,15 +563,39 @@ const Module1UploadForm = ({
               Upload raw sequencing data
             </h3>
             <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-              Upload paired FASTQ files (R1 + R2). Typical runtime: 2–4 hours — you can close this and keep using the app.
+              {germlineWizard
+                ? metadataStep === 'sample'
+                  ? 'Step 1 of 3 — sample basics and FASTQ files.'
+                  : metadataStep === 'analysis'
+                    ? 'Step 2 of 3 — Germline details.'
+                    : 'Step 3 of 3 — Phenotype (optional).'
+                : 'Upload paired FASTQ files (R1 + R2). Typical runtime: 2–4 hours — you can close this and keep using the app.'}
             </p>
-            <PipelineRunModeToggle
-              className="mt-4"
-              value={sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode}
-              onChange={(mode) =>
-                setSampleMetadata((prev) => applyPipelineRunModeChange(prev, mode))
-              }
-            />
+            {germlineWizard && (
+              <div className="flex items-center gap-1.5 mt-3" aria-hidden="true">
+                {Array.from({ length: metadataTotalSteps }, (_, i) => (
+                  <span
+                    key={`m1-step-${i + 1}`}
+                    className="h-1 flex-1 rounded-full"
+                    style={{
+                      backgroundColor:
+                        metadataStepIndex >= i + 1
+                          ? 'var(--accent-teal)'
+                          : 'var(--border-default)',
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+            {(metadataStep === 'sample' || !germlineWizard) && (
+              <PipelineRunModeToggle
+                className="mt-4"
+                value={sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode}
+                onChange={(mode) =>
+                  setSampleMetadata((prev) => applyPipelineRunModeChange(prev, mode))
+                }
+              />
+            )}
             {module1SubmitError && (
               <div className="mt-4 p-3 border rounded-lg flex items-start gap-2" style={{ backgroundColor: 'var(--error-soft)', borderColor: 'var(--error)' }}>
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--error)' }} />
@@ -541,6 +606,8 @@ const Module1UploadForm = ({
 
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
             <div className="flex-1 overflow-y-auto px-7 pb-4 space-y-5">
+              {(metadataStep === 'sample' || !germlineWizard) && (
+              <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
                 <div>
                   <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
@@ -593,7 +660,7 @@ const Module1UploadForm = ({
                   </label>
                   <SelectWithDisabledOptions
                     value={sampleMetadata.analysisType}
-                    onChange={(val) => setSampleMetadata((prev) => ({ ...prev, analysisType: val }))}
+                    onChange={setAnalysisType}
                     placeholder="Choose one"
                     options={ANALYSIS_TYPE_OPTIONS}
                     error={validationAttempted && analysisTypeMissing}
@@ -618,86 +685,6 @@ const Module1UploadForm = ({
                 </div>
 
               </div>
-
-              {isGermline && (
-                <div className="disclosure-enter border-t pt-4" style={{ borderColor: 'var(--border-default)' }}>
-                  <h4 className="text-xs font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
-                    Germline analysis fields
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                        Sample role
-                      </label>
-                      <SelectWithDisabledOptions
-                        value={sampleMetadata.sampleRole}
-                        onChange={(val) => setSampleMetadata((prev) => ({ ...prev, sampleRole: val }))}
-                        placeholder="Choose one"
-                        options={SAMPLE_ROLE_OPTIONS}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                        Affected status
-                      </label>
-                      <SelectWithDisabledOptions
-                        value={sampleMetadata.affectedStatus}
-                        onChange={(val) => setSampleMetadata((prev) => ({ ...prev, affectedStatus: val }))}
-                        placeholder="Choose one"
-                        options={AFFECTED_STATUS_OPTIONS}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                        Inheritance model
-                      </label>
-                      <SelectWithDisabledOptions
-                        value={sampleMetadata.inheritanceModel}
-                        onChange={(val) => setSampleMetadata((prev) => ({ ...prev, inheritanceModel: val }))}
-                        placeholder="Choose one"
-                        options={INHERITANCE_MODEL_OPTIONS}
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <PhenotypeInputPanel
-                        value={{
-                          phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_NOTE,
-                          phenotype_findings: sampleMetadata.phenotype_findings || '',
-                          phenotype_disease: sampleMetadata.phenotype_disease || '',
-                          phenotype_note_clean: sampleMetadata.phenotype_note_clean || '',
-                          phenotype_run_mode: normalizePipelineRunMode(
-                            sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode
-                          ),
-                          pipeline_run_mode: normalizePipelineRunMode(
-                            sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode
-                          ),
-                          phenotype: sampleMetadata.phenotype || '',
-                          phenotype_hpo: sampleMetadata.phenotype_hpo,
-                        }}
-                        onChange={(fields) =>
-                          setSampleMetadata((prev) => {
-                            const mode = normalizePipelineRunMode(
-                              prev.pipeline_run_mode ||
-                                prev.phenotype_run_mode ||
-                                fields.pipeline_run_mode ||
-                                fields.phenotype_run_mode
-                            );
-                            return {
-                              ...prev,
-                              ...fields,
-                              pipeline_run_mode: mode,
-                              phenotype_run_mode: mode,
-                            };
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
 
               <div>
                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
@@ -829,54 +816,182 @@ const Module1UploadForm = ({
                   </div>
                 )}
               </div>
-            </div>
-
-            <div className="flex-shrink-0 px-7 py-4 border-t flex items-center justify-end gap-2" style={{ borderColor: 'var(--border-default)' }}>
-              {(quotaBlocked || gateMeterLabel || oversizedRead) && (
-                <p
-                  className="text-2xs mr-auto min-w-0"
-                  style={{ color: (quotaBlocked || oversizedRead) ? 'var(--error)' : 'var(--text-tertiary)' }}
-                >
-                  {oversizedRead
-                    ? `${oversizedRead.name} is larger than the ${MODULE1_FASTQ_MAX_BYTES / 1024 ** 3} GB limit per FASTQ.`
-                    : quotaBlocked ? gate.reason : gateMeterLabel}
-                  {!oversizedRead && !quotaBlocked && gateMeterDetail && ` · ${gateMeterDetail}`}
-                </p>
+              </>
               )}
-              {module1Submitting && module1ImportStatus && (
-                <div className="flex items-center gap-1.5 mr-auto min-w-0">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" style={{ color: 'var(--accent-teal)' }} />
-                  <span className="text-2xs truncate" style={{ color: 'var(--text-tertiary)' }}>{module1ImportStatus}</span>
-                  {/* A multi-GB import can run for many minutes*/}
-                  {cancelModule1Import && isUrlMode && (
-                    <button
-                      type="button"
-                      onClick={cancelModule1Import}
-                      className="text-2xs underline flex-shrink-0"
-                      style={{ color: 'var(--text-secondary)' }}
-                    >
-                      Cancel
-                    </button>
-                  )}
+
+              {germlineWizard && metadataStep === 'analysis' && (
+                <div className="disclosure-enter">
+                  <h4 className="text-xs font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
+                    Germline analysis fields
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                        Sample role
+                      </label>
+                      <SelectWithDisabledOptions
+                        value={sampleMetadata.sampleRole}
+                        onChange={(val) => setSampleMetadata((prev) => ({ ...prev, sampleRole: val }))}
+                        placeholder="Choose one"
+                        options={SAMPLE_ROLE_OPTIONS}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                        Affected status
+                      </label>
+                      <SelectWithDisabledOptions
+                        value={sampleMetadata.affectedStatus}
+                        onChange={(val) => setSampleMetadata((prev) => ({ ...prev, affectedStatus: val }))}
+                        placeholder="Choose one"
+                        options={AFFECTED_STATUS_OPTIONS}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                        Inheritance model
+                      </label>
+                      <SelectWithDisabledOptions
+                        value={sampleMetadata.inheritanceModel}
+                        onChange={(val) => setSampleMetadata((prev) => ({ ...prev, inheritanceModel: val }))}
+                        placeholder="Choose one"
+                        options={INHERITANCE_MODEL_OPTIONS}
+                      />
+                    </div>
+
+                    <GermlinePedigreeFields
+                      value={sampleMetadata}
+                      onChange={(fields) => setSampleMetadata((prev) => ({ ...prev, ...fields }))}
+                      Select={SelectWithDisabledOptions}
+                    />
+                  </div>
                 </div>
               )}
-              <button
-                type="button"
-                onClick={() => { cancelModule1Import?.(); onClose(); }}
-                className="px-4 py-2 text-sm font-medium rounded-lg border"
-                style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                title={quotaBlocked ? gate.reason : undefined}
-                className="px-4 py-2 text-sm font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
-              >
-                {module1Submitting ? (isUrlMode ? 'Importing…' : 'Starting…') : submitLabel}
-              </button>
+
+              {germlineWizard && metadataStep === 'phenotype' && (
+                <div className="disclosure-enter">
+                  <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
+                    Phenotype
+                  </h4>
+                  <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                    Optional — enables phenotype-driven prioritization and gene panel suggestions.
+                  </p>
+                  <PhenotypeInputPanel
+                    value={{
+                      phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_NOTE,
+                      phenotype_findings: sampleMetadata.phenotype_findings || '',
+                      phenotype_disease: sampleMetadata.phenotype_disease || '',
+                      phenotype_note_clean: sampleMetadata.phenotype_note_clean || '',
+                      phenotype_run_mode: normalizePipelineRunMode(
+                        sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode
+                      ),
+                      pipeline_run_mode: normalizePipelineRunMode(
+                        sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode
+                      ),
+                      phenotype: sampleMetadata.phenotype || '',
+                      phenotype_hpo: sampleMetadata.phenotype_hpo,
+                      selected_panels: sampleMetadata.selected_panels,
+                      selected_panel_gene_list: sampleMetadata.selected_panel_gene_list,
+                      selected_panel_include_amber: sampleMetadata.selected_panel_include_amber,
+                    }}
+                    onChange={(fields) =>
+                      setSampleMetadata((prev) => {
+                        const mode = normalizePipelineRunMode(
+                          prev.pipeline_run_mode ||
+                            prev.phenotype_run_mode ||
+                            fields.pipeline_run_mode ||
+                            fields.phenotype_run_mode
+                        );
+                        return {
+                          ...prev,
+                          ...fields,
+                          pipeline_run_mode: mode,
+                          phenotype_run_mode: mode,
+                        };
+                      })
+                    }
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex-shrink-0 px-7 py-4 border-t flex items-center justify-between gap-2" style={{ borderColor: 'var(--border-default)' }}>
+              <div className="flex items-center gap-2 min-w-0">
+                {germlineWizard && (metadataStep === 'analysis' || metadataStep === 'phenotype') ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMetadataStep(metadataStep === 'phenotype' ? 'analysis' : 'sample')
+                    }
+                    disabled={module1Submitting}
+                    className="h-10 px-3 rounded-lg text-sm font-medium inline-flex items-center gap-1 disabled:opacity-40"
+                    style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Back
+                  </button>
+                ) : null}
+                {(quotaBlocked || gateMeterLabel || oversizedRead) && (
+                  <p
+                    className="text-2xs min-w-0"
+                    style={{ color: (quotaBlocked || oversizedRead) ? 'var(--error)' : 'var(--text-tertiary)' }}
+                  >
+                    {oversizedRead
+                      ? `${oversizedRead.name} is larger than the ${MODULE1_FASTQ_MAX_BYTES / 1024 ** 3} GB limit per FASTQ.`
+                      : quotaBlocked ? gate.reason : gateMeterLabel}
+                    {!oversizedRead && !quotaBlocked && gateMeterDetail && ` · ${gateMeterDetail}`}
+                  </p>
+                )}
+                {module1Submitting && module1ImportStatus && (
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" style={{ color: 'var(--accent-teal)' }} />
+                    <span className="text-2xs truncate" style={{ color: 'var(--text-tertiary)' }}>{module1ImportStatus}</span>
+                    {cancelModule1Import && isUrlMode && (
+                      <button
+                        type="button"
+                        onClick={cancelModule1Import}
+                        className="text-2xs underline flex-shrink-0"
+                        style={{ color: 'var(--text-secondary)' }}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { cancelModule1Import?.(); onClose(); }}
+                  className="px-4 py-2 text-sm font-medium rounded-lg border"
+                  style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
+                >
+                  Cancel
+                </button>
+                {germlineWizard && (metadataStep === 'sample' || metadataStep === 'analysis') ? (
+                  <button
+                    type="submit"
+                    disabled={metadataStep === 'sample' ? (!canSubmit || analysisTypeMissing) : false}
+                    title={quotaBlocked ? gate.reason : undefined}
+                    className="px-4 py-2 text-sm font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
+                  >
+                    Continue
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!canSubmit}
+                    title={quotaBlocked ? gate.reason : undefined}
+                    className="px-4 py-2 text-sm font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
+                  >
+                    {module1Submitting ? (isUrlMode ? 'Importing…' : 'Starting…') : submitLabel}
+                  </button>
+                )}
+              </div>
             </div>
           </form>
         </DialogContent>

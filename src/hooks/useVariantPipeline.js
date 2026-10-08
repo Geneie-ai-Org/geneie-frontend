@@ -27,6 +27,10 @@ import {
   PHENOTYPE_FAILED_TITLE,
   PHENOTYPE_FAILED_FALLBACK,
 } from '@/lib/filterDisplayNames';
+import {
+  normalizePipelineRunMode,
+  PIPELINE_RUN_AUTOMATIC,
+} from '@/components/PipelineRunModeToggle';
 
 /**
  * Phase F variant pipeline: chat eligibility, ANNOVAR/ACMG async jobs, background polling.
@@ -69,6 +73,9 @@ export function useVariantPipeline({
     enrichment_progress_percent: null,
     literature_status: null,
     advanced_chat_status: null,
+    scope: null,
+    pgx_status: null,
+    redirect_hints: null,
   });
   const [pipelineSnapshot, setPipelineSnapshot] = useState({
     hasAnnotatedFile: false,
@@ -136,6 +143,9 @@ export function useVariantPipeline({
       enrichment_progress_percent: null,
       literature_status: null,
       advanced_chat_status: null,
+      scope: null,
+      pgx_status: null,
+      redirect_hints: null,
     }),
     []
   );
@@ -542,6 +552,9 @@ export function useVariantPipeline({
           enrichment_progress_percent: ce.enrichment_progress_percent ?? null,
           literature_status: ce.literature_status || null,
           advanced_chat_status: ce.advanced_chat_status || null,
+          scope: ce.scope || null,
+          pgx_status: ce.pgx_status || null,
+          redirect_hints: ce.redirect_hints || null,
         });
       } else {
         setChatEligibility(defaultChatEligibility());
@@ -585,6 +598,9 @@ export function useVariantPipeline({
           enrichment_progress_percent: data.enrichment_progress_percent ?? null,
           literature_status: data.literature_status || null,
           advanced_chat_status: data.advanced_chat_status || null,
+          scope: data.scope || null,
+          pgx_status: data.pgx_status || null,
+          redirect_hints: data.redirect_hints || null,
         });
         setDownloadValidatedGeneration(downloadValidationGenerationRef.current);
         return data;
@@ -742,31 +758,33 @@ export function useVariantPipeline({
 
   const presentFileAnalysisModal = useCallback(
     (convData) => {
-      // console.log('[presentFileAnalysisModal] called', {
-      //   hasColumnInterp: !!convData?.column_interpretation,
-      //   uploadSessionConversationId: uploadSessionConversationIdRef.current,
-      //   currentDocument: !!currentDocument,
-      // });
       if (!convData?.column_interpretation) return;
       const hasDoc =
         currentDocument || (convData.document?.s3_url && convData.document?.file_name);
       if (!hasDoc) return;
 
+      // Automatic: never block the conductor on File Analysis — sync happens elsewhere.
+      // Manual: analyst should review the 3-step interpretation.
+      const meta = convData.sample_metadata || currentDocument?.sample_metadata || {};
+      const isAutomatic =
+        normalizePipelineRunMode(meta.pipeline_run_mode || meta.phenotype_run_mode) ===
+        PIPELINE_RUN_AUTOMATIC;
+      if (isAutomatic) {
+        interpretationDismissedRef.current = true;
+        setShowInterpretationModal(false);
+        return;
+      }
+
       // If an upload is still in progress, wait for it to finish before opening
       if (uploadSessionConversationIdRef.current) {
-        // console.log('[presentFileAnalysisModal] upload in progress, deferring 500ms');
         setTimeout(() => {
           if (!uploadSessionConversationIdRef.current) {
-            // console.log('[presentFileAnalysisModal] upload finished, opening modal now');
             interpretationDismissedRef.current = false;
             setShowInterpretationModal(true);
           } else {
-            // console.log('[presentFileAnalysisModal] upload still in progress, deferring again');
-            // Keep retrying until upload finishes
             const checkInterval = setInterval(() => {
               if (!uploadSessionConversationIdRef.current) {
                 clearInterval(checkInterval);
-                // console.log('[presentFileAnalysisModal] upload finished (retry), opening modal');
                 interpretationDismissedRef.current = false;
                 setShowInterpretationModal(true);
               }
@@ -1239,6 +1257,20 @@ export function useVariantPipeline({
     };
   })();
 
+  /**
+   * Case B (>1000): after ACMG / Exomiser the BE may briefly return CHAT_REQUIRES_FILTER
+   * ("filtered set not loaded yet") while Postgres catches up. Keep polling eligibility
+   * until chat unlocks or a terminal failure — not only during Enriching…/Indexing….
+   */
+  const filterLoadPending = (() => {
+    const reason = chatEligibility.reason;
+    if (reason === 'FILTER_JOB_RUNNING') return true;
+    if (reason !== 'CHAT_REQUIRES_FILTER') return false;
+    const pf = conversationFilterState?.activeProprietaryFilter;
+    if (pf === 'filter_1' || pf === 'filter_3') return true;
+    return /not loaded yet/i.test(String(chatEligibility.message || ''));
+  })();
+
   /** Single busy flag shared by the pipeline stepper and the sidebar so dual applies can't race (F6). */
   const pipelineBusy =
     isRunningAnnovar || isApplyingProprietaryFilter || isRunningExomiser || pipelineJobActive;
@@ -1283,11 +1315,21 @@ export function useVariantPipeline({
   const enrichmentActive = enrichmentState.active;
   const indexingActive = indexingState.active;
   useEffect(() => {
-    if ((!enrichmentActive && !indexingActive) || !activeConversationId || userTier === 'guest') return;
+    const shouldPoll = enrichmentActive || indexingActive || filterLoadPending;
+    if (!shouldPoll || !activeConversationId || userTier === 'guest') return;
     let cancelled = false;
     let timer = null;
+    let ticks = 0;
+    // Cap recovery polling for post-filter PG lag (~10 min at 4s). Enrichment/indexing
+    // may legitimately run longer; those reasons keep the poll via enrichmentActive.
+    const maxTicks = filterLoadPending && !enrichmentActive && !indexingActive ? 150 : Infinity;
     const tick = async () => {
       if (cancelled) return;
+      ticks += 1;
+      if (ticks > maxTicks) {
+        console.warn('[useVariantPipeline] stopping filter-load eligibility poll after max ticks');
+        return;
+      }
       try {
         await refreshChatEligibilityFromApiRef.current?.(activeConversationId, { announceReady: true });
       } catch (e) {
@@ -1300,7 +1342,13 @@ export function useVariantPipeline({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [enrichmentActive, indexingActive, activeConversationId, userTier]);
+  }, [
+    enrichmentActive,
+    indexingActive,
+    filterLoadPending,
+    activeConversationId,
+    userTier,
+  ]);
 
   const promptChatBlocked = useCallback(() => {
     if (!isChatPipelineGated) return false;

@@ -4,6 +4,10 @@
  *   annotate (if needed) → phenotype prioritization (when eligible)
  *   → ready_report (analyst opens assignment modal via banner CTA).
  * Also exposes a step timeline + event log for the Automatic activity panel.
+ *
+ * Important: never re-kick Annovar / Exomiser / GA on refresh when those stages
+ * already completed or are in-flight. Empty status means "not hydrated yet", not
+ * "not started".
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { normalizePipelineRunMode, PIPELINE_RUN_AUTOMATIC } from '@/components/PipelineRunModeToggle';
@@ -15,12 +19,39 @@ function confirmedHpoCount(sampleMetadata) {
   return ids.filter((id) => String(id || '').toUpperCase().startsWith('HP:')).length;
 }
 
+function normStatus(value) {
+  return String(value || '').toLowerCase().trim();
+}
+
+function isGaDone(ga) {
+  return ga === 'completed' || ga === 'ready';
+}
+
+function isGaRunning(ga) {
+  return ga === 'running' || ga === 'pending' || ga === 'queued';
+}
+
+function isExoDone(exo) {
+  return exo === 'completed' || exo === 'success';
+}
+
+function isExoRunning(exo, isRunningExomiser) {
+  return exo === 'running' || exo === 'queued' || Boolean(isRunningExomiser);
+}
+
+/** Phenotype filter already applied ⇒ do not auto re-run Exomiser. */
+function phenotypeFilterAlreadyApplied(activeProprietaryFilter) {
+  const f = normStatus(activeProprietaryFilter);
+  return f === 'filter_3' || f === 'exomiser';
+}
+
 /** Fixed Automatic stages shown in the activity panel (order matters). */
 export const AUTOMATIC_PIPELINE_STEPS = [
   { id: 'calling', label: 'Call variants' },
   { id: 'annotate', label: 'Annotate' },
   { id: 'phenotype', label: 'Clinical findings' },
   { id: 'prioritize', label: 'Phenotype prioritization' },
+  { id: 'ga', label: 'GA triage' },
   { id: 'report', label: 'Clinical report' },
 ];
 
@@ -39,18 +70,17 @@ export function deriveAutomaticSteps({
   isRunningAnnovar,
   isRunningExomiser,
   sawModule1 = false,
+  gaStatus = '',
 }) {
   const failed = phase === 'failed';
   const annRunning =
     annStatus === 'running' || annStatus === 'queued' || isRunningAnnovar || phase === 'annotating';
   const annFailed = annStatus === 'failed' || annStatus === 'error';
   const exoRunning =
-    exoStatus === 'running' ||
-    exoStatus === 'queued' ||
-    isRunningExomiser ||
+    isExoRunning(exoStatus, isRunningExomiser) ||
     phase === 'prioritizing' ||
     phase === 'checking_prioritization';
-  const exoDone = exoStatus === 'completed' || exoStatus === 'success' || phase === 'ready_report';
+  const exoDone = isExoDone(exoStatus) || phase === 'ready_report';
   const exoFailed = exoStatus === 'failed' || exoStatus === 'error';
 
   const calling = (() => {
@@ -58,7 +88,6 @@ export function deriveAutomaticSteps({
       return { status: 'running', detail: 'Calling variants…' };
     }
     if (hasAnnotatedFile || exoDone || exoRunning || hasPhenotype) {
-      // Upload path or past calling — mark done if we saw M1, else skipped.
       return sawModule1
         ? { status: 'done', detail: 'Variants ready' }
         : { status: 'skipped', detail: 'Uploaded annotated / VCF path' };
@@ -99,14 +128,34 @@ export function deriveAutomaticSteps({
     return { status: 'pending' };
   })();
 
+  const gaDone = isGaDone(gaStatus);
+  const gaRunning = isGaRunning(gaStatus);
+  const ga = (() => {
+    if (gaDone) return { status: 'done', detail: 'GA ranking ready' };
+    if (gaStatus === 'failed') return { status: 'failed', detail: 'GA triage failed' };
+    // Only show "Ranking…" when GA is actually running — not while status is still hydrating.
+    if (gaRunning) return { status: 'running', detail: 'Ranking variants…' };
+    if (phase === 'waiting_ga' || phase === 'checking_ga') {
+      return { status: 'waiting', detail: message || 'Checking GA status…' };
+    }
+    if (exoDone) return { status: 'waiting', detail: 'Starts after enrichment' };
+    return { status: 'pending' };
+  })();
+
   const report = (() => {
-    if (phase === 'ready_report' || exoDone) {
-      return { status: 'waiting', detail: 'Generate report when ready' };
+    if (phase === 'ready_report' && gaDone) {
+      return {
+        status: 'waiting',
+        detail: 'Review GA-preselected variants, then Proceed',
+      };
+    }
+    if (exoDone && !gaDone) {
+      return { status: 'pending', detail: 'After GA triage' };
     }
     return { status: 'pending', detail: 'After prioritization' };
   })();
 
-  const byId = { calling, annotate, phenotype, prioritize, report };
+  const byId = { calling, annotate, phenotype, prioritize, ga, report };
   return AUTOMATIC_PIPELINE_STEPS.map((s) => ({
     ...s,
     status: byId[s.id]?.status || 'pending',
@@ -138,6 +187,10 @@ export function useAutomaticPipelineConductor({
   runAnnovar,
   fetchExomiserEligibility,
   runExomiser,
+  gaTriageStatus = '',
+  activeProprietaryFilter = null,
+  enrichmentStatus = null,
+  statusHydrated = true,
 }) {
   const [phase, setPhase] = useState(null);
   const [message, setMessage] = useState(null);
@@ -182,6 +235,30 @@ export function useAutomaticPipelineConductor({
     if (module1JobActive) sawModule1Ref.current = true;
   }, [module1JobActive]);
 
+  // Seed kick guards from already-settled backend state (survives refresh).
+  useEffect(() => {
+    if (!active) return;
+    const exo = normStatus(exomiserStatus?.status);
+    const ga = normStatus(gaTriageStatus);
+    if (hasAnnotatedFile) kickedRef.current.annovar = true;
+    if (
+      isExoDone(exo) ||
+      isExoRunning(exo, isRunningExomiser) ||
+      phenotypeFilterAlreadyApplied(activeProprietaryFilter) ||
+      isGaDone(ga) ||
+      isGaRunning(ga)
+    ) {
+      kickedRef.current.exomiser = true;
+    }
+  }, [
+    active,
+    hasAnnotatedFile,
+    exomiserStatus?.status,
+    isRunningExomiser,
+    activeProprietaryFilter,
+    gaTriageStatus,
+  ]);
+
   // Append timeline events when phase/message changes (deduped).
   useEffect(() => {
     if (!active || !phase || !message) return;
@@ -210,20 +287,68 @@ export function useAutomaticPipelineConductor({
     let cancelled = false;
 
     const tick = async () => {
-      const exoStatus = String(exomiserStatus?.status || '').toLowerCase();
-      const annStatus = String(annovarJobStatus || '').toLowerCase();
+      const exoStatus = normStatus(exomiserStatus?.status);
+      const annStatus = normStatus(annovarJobStatus);
+      const ga = normStatus(gaTriageStatus);
+      const enrich = normStatus(enrichmentStatus);
+      const filterDone = phenotypeFilterAlreadyApplied(activeProprietaryFilter);
 
-      if (exoStatus === 'completed' || exoStatus === 'success') {
-        setPhase('ready_report');
-        setMessage('Prioritization complete.');
+      // Conversation / job blobs not loaded yet — never start work.
+      if (!statusHydrated) {
+        setPhase('checking_prioritization');
+        setMessage('Loading case status…');
         return;
       }
-      if (exoStatus === 'running' || exoStatus === 'queued' || isRunningExomiser) {
+
+      // GA already finished → report step only. Never re-kick Exomiser.
+      if (isGaDone(ga)) {
+        kickedRef.current.exomiser = true;
+        kickedRef.current.annovar = true;
+        setPhase('ready_report');
+        setMessage('GA ranking ready — review Include, then generate the report.');
+        return;
+      }
+
+      if (ga === 'failed') {
+        kickedRef.current.exomiser = true;
+        setPhase('failed');
+        setMessage('GA triage failed — retry enrichment or assign the report manually.');
+        return;
+      }
+
+      if (isGaRunning(ga)) {
+        kickedRef.current.exomiser = true;
+        setPhase('waiting_ga');
+        setMessage('Waiting for GA triage…');
+        return;
+      }
+
+      // Exomiser / phenotype filter already done → wait for GA (or enrichment→GA).
+      if (isExoDone(exoStatus) || filterDone || enrich === 'completed' || enrich === 'success') {
+        kickedRef.current.exomiser = true;
+        if (!ga) {
+          setPhase('checking_ga');
+          setMessage('Checking GA status…');
+          return;
+        }
+        if (ga === 'absent' || ga === '') {
+          setPhase('waiting_ga');
+          setMessage('Waiting for GA triage…');
+          return;
+        }
+        setPhase('waiting_ga');
+        setMessage('Waiting for GA triage…');
+        return;
+      }
+
+      if (isExoRunning(exoStatus, isRunningExomiser)) {
+        kickedRef.current.exomiser = true;
         setPhase('prioritizing');
         setMessage('Running phenotype prioritization…');
         return;
       }
       if (exoStatus === 'failed' || exoStatus === 'error') {
+        kickedRef.current.exomiser = true;
         setPhase('failed');
         setMessage('Prioritization failed — retry or switch to Manual.');
         return;
@@ -268,6 +393,13 @@ export function useAutomaticPipelineConductor({
         return;
       }
 
+      // Exomiser status still empty after hydrate — wait; do NOT treat as "not started".
+      if (!exoStatus && !filterDone) {
+        setPhase('checking_prioritization');
+        setMessage('Checking prioritization status…');
+        return;
+      }
+
       if (typeof fetchExomiserEligibility !== 'function' || typeof runExomiser !== 'function') {
         return;
       }
@@ -278,6 +410,19 @@ export function useAutomaticPipelineConductor({
       try {
         const eligibility = await fetchExomiserEligibility();
         if (cancelled) return;
+        // Re-check kick guard after await (status may have hydrated meanwhile).
+        if (kickedRef.current.exomiser) return;
+        const exoNow = normStatus(exomiserStatus?.status);
+        const gaNow = normStatus(gaTriageStatus);
+        if (
+          isExoDone(exoNow) ||
+          isGaDone(gaNow) ||
+          isGaRunning(gaNow) ||
+          phenotypeFilterAlreadyApplied(activeProprietaryFilter)
+        ) {
+          kickedRef.current.exomiser = true;
+          return;
+        }
         if (eligibility?.can_run === true) {
           kickedRef.current.exomiser = true;
           setPhase('prioritizing');
@@ -322,10 +467,14 @@ export function useAutomaticPipelineConductor({
     runAnnovar,
     fetchExomiserEligibility,
     runExomiser,
+    gaTriageStatus,
+    activeProprietaryFilter,
+    enrichmentStatus,
+    statusHydrated,
   ]);
 
-  const exoStatus = String(exomiserStatus?.status || '').toLowerCase();
-  const annStatus = String(annovarJobStatus || '').toLowerCase();
+  const exoStatus = normStatus(exomiserStatus?.status);
+  const annStatus = normStatus(annovarJobStatus);
 
   const steps = useMemo(
     () =>
@@ -340,6 +489,7 @@ export function useAutomaticPipelineConductor({
         isRunningAnnovar,
         isRunningExomiser,
         sawModule1: sawModule1Ref.current,
+        gaStatus: normStatus(gaTriageStatus),
       }),
     [
       phase,
@@ -351,6 +501,7 @@ export function useAutomaticPipelineConductor({
       exoStatus,
       isRunningAnnovar,
       isRunningExomiser,
+      gaTriageStatus,
     ]
   );
 

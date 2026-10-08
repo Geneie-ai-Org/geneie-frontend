@@ -20,6 +20,7 @@ const AuthActionPage = React.lazy(() => import('./pages/AuthActionPage'));
 const ChatPage = React.lazy(() => import('./pages/ChatPage'));
 const AdminPage = React.lazy(() => import('./pages/AdminPage'));
 const LegalDocPage = React.lazy(() => import('./pages/LegalDocPage'));
+const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage'));
 const LegalConsentGate = React.lazy(() => import('./components/LegalConsentGate'));
 
 function ThemedToaster() {
@@ -94,7 +95,7 @@ root.render(
           <Route path="/subscription-success" element={<Navigate to="/app" replace />} />
           <Route path="/subscription-canceled" element={<Navigate to="/app" replace />} />
 
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
         </React.Suspense>
         <ThemedToaster />

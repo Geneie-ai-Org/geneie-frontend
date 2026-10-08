@@ -9,9 +9,13 @@
  *    path runs untouched. Tuning mode is additive, not a mode switch over the whole app.
  *  - The panel edits the OVERRIDE SET only. It never writes global config. Promotion to global stays
  *    a deliberate, separate action via the existing admin PUT (see "Copy candidate config").
+ *
+ * The presentation uses the app's design tokens (CSS vars + Tailwind) so it tracks light/dark theme
+ * and matches the rest of the surface. Hardcoded hex was dark-mode-broken and looked bolted-on.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Sliders, Play, Loader2, Copy, Check, RotateCcw, X, ChevronDown } from 'lucide-react';
 import { adminWhoAmI, getAuthHeaders } from '@/services/backendApi';
 import { fetchTunableConfig } from '@/services/tuningConfig';
 import { streamCompare, createColumnState, COLUMN_LABELS, buildOverridesHeader } from '@/services/streamCompare';
@@ -27,29 +31,85 @@ function loadSaved() {
   }
 }
 
+const fmtVal = (v) => (typeof v === 'object' ? JSON.stringify(v) : String(v ?? ''));
+
+/** Small pill button that matches the app's control styling. */
+function PillButton({ children, active, disabled, title, onClick, icon: Icon, tone = 'default' }) {
+  const tones = {
+    default:
+      'border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]',
+    primary:
+      'border-transparent bg-[var(--accent-teal)] text-[var(--accent-teal-contrast)] hover:bg-[var(--accent-teal-hover)]',
+    ghost:
+      'border-transparent bg-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]',
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+        active ? tones.primary : tones[tone]
+      }`}
+    >
+      {Icon ? <Icon className="h-3.5 w-3.5" aria-hidden /> : null}
+      {children}
+    </button>
+  );
+}
+
 /** `Baseline | Your config` — the only new render path; the single-column chat is untouched. */
 function TwoColumnView({ acc, running, error }) {
   return (
-    <div className="tune-cols" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {['baseline', 'candidate'].map((col) => {
         const c = acc.state[col];
+        const isCandidate = col === 'candidate';
         return (
-          <div key={col} className="tune-col" style={{ border: '1px solid #d5d8dd', borderRadius: 8, padding: 12, minHeight: 120 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#5b6472', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
-              <span>{COLUMN_LABELS[col]}</span>
-              {c.done ? <span style={{ color: '#2e7d32' }}>done</span> : running ? <span>streaming…</span> : null}
+          <div
+            key={col}
+            className={`flex min-h-[8rem] flex-col rounded-xl border bg-[var(--bg-surface)] p-3 ${
+              isCandidate ? 'border-[var(--accent-teal)]/40' : 'border-[var(--border-subtle)]'
+            }`}
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--text-secondary)]">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    isCandidate ? 'bg-[var(--accent-teal)]' : 'bg-[var(--text-tertiary)]'
+                  }`}
+                  aria-hidden
+                />
+                {COLUMN_LABELS[col]}
+              </span>
+              {c.done ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[var(--success-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--success)]">
+                  <Check className="h-3 w-3" aria-hidden /> done
+                </span>
+              ) : running ? (
+                <span className="inline-flex items-center gap-1 text-[11px] text-[var(--text-tertiary)]">
+                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> streaming
+                </span>
+              ) : null}
             </div>
             {c.error ? (
-              <div style={{ color: '#b3261e', fontSize: 13, whiteSpace: 'pre-wrap' }}>
+              <div className="whitespace-pre-wrap rounded-lg bg-[var(--error-soft)] p-2 text-[13px] text-[var(--error)]">
                 {typeof c.error === 'string' ? c.error : JSON.stringify(c.error)}
               </div>
             ) : (
-              <div style={{ fontSize: 14, whiteSpace: 'pre-wrap' }}>{c.text || (running ? '' : '(no output)')}</div>
+              <div className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-primary)]">
+                {c.text || (running ? '' : <span className="text-[var(--text-tertiary)]">(no output yet)</span>)}
+              </div>
             )}
           </div>
         );
       })}
-      {error ? <div style={{ gridColumn: '1 / -1', color: '#b3261e', fontSize: 13 }}>{error}</div> : null}
+      {error ? (
+        <div className="whitespace-pre-wrap rounded-lg bg-[var(--error-soft)] p-2 text-[13px] text-[var(--error)] sm:col-span-2">
+          {error}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -143,6 +203,7 @@ export default function TuningMode({ question, onClose }) {
   // entirely, so it can never reflow the chat shell - same escape hatch ExploratoryModeToggle uses.
   // Anchored bottom-right, sitting ABOVE that toggle (which owns bottom:14) so the two never overlap.
   const expanded = active && (panelOpen || running || acc.baseline || acc.candidate);
+  const canRun = !running && Boolean(question?.trim());
 
   return (
     <div
@@ -162,104 +223,160 @@ export default function TuningMode({ question, onClose }) {
         // container itself is click-through; only the toggle row (below) re-enables
         // pointer events. Active => full panel chrome as before.
         pointerEvents: active ? 'auto' : 'none',
-        background: active ? 'var(--bg-app, #fff)' : 'transparent',
-        border: active ? '1px solid #c9ced6' : 'none',
-        borderRadius: 10,
-        padding: active ? 12 : 0,
-        boxShadow: active ? '0 8px 28px rgba(0,0,0,0.18)' : 'none',
       }}
     >
       <div
-        style={{
-          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-          // Parent is click-through when inactive; the toggle row itself must stay
-          // interactive AND carry its own compact chrome so the checkbox is visible
-          // and clickable without the panel overlaying the results beneath it.
-          pointerEvents: 'auto',
-          background: active ? 'transparent' : 'var(--bg-app, #fff)',
-          border: active ? 'none' : '1px solid #c9ced6',
-          borderRadius: active ? 0 : 8,
-          padding: active ? 0 : '6px 10px',
-          boxShadow: active ? 'none' : '0 4px 14px rgba(0,0,0,0.12)',
-        }}
+        className={
+          active
+            ? 'rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface-raised)] p-3 shadow-[var(--shadow-xl)]'
+            : ''
+        }
       >
-        <label
-          title={active ? undefined : 'Off — chat behaves exactly as it does normally (no header, no second column).'}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600 }}
+        {/* Toggle row. Parent is click-through when inactive; this row re-enables pointer events and
+            carries its own compact chrome so the switch is visible without overlaying the results. */}
+        <div
+          className={
+            active
+              ? 'flex flex-wrap items-center gap-2'
+              : 'inline-flex flex-wrap items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface-raised)] px-3 py-1.5 shadow-[var(--shadow-md)]'
+          }
+          style={{ pointerEvents: 'auto' }}
         >
-          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
-          Tuning mode (side-by-side)
-        </label>
-        {active ? (
-          <>
-            <button type="button" onClick={() => setPanelOpen((v) => !v)} style={{ fontSize: 12 }}>
-              {panelOpen ? 'Hide' : 'Show'} config ({dirtyKeys.length} override{dirtyKeys.length === 1 ? '' : 's'})
-            </button>
-            <button type="button" onClick={run} disabled={running || !question?.trim()} style={{ fontSize: 12 }}>
-              {running ? 'Comparing…' : 'Run comparison'}
-            </button>
-            <button
-              type="button"
-              disabled={!dirtyKeys.length}
-              onClick={() => {
-                const h = buildOverridesHeader(overrides);
-                navigator.clipboard?.writeText(h || '');
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
-              }}
-              style={{ fontSize: 12 }}
-              title="Copy the override JSON. Promoting it to global is a separate, deliberate admin PUT."
+          <button
+            type="button"
+            role="switch"
+            aria-checked={active}
+            onClick={() => setActive((v) => !v)}
+            title={active ? undefined : 'Off — chat behaves exactly as it does normally (no header, no second column).'}
+            className="inline-flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]"
+          >
+            <span
+              className={`relative inline-flex h-[18px] w-8 items-center rounded-full transition-colors ${
+                active ? 'bg-[var(--accent-teal)]' : 'bg-[var(--segment-track)]'
+              }`}
+              aria-hidden
             >
-              {copied ? 'Copied' : 'Copy candidate config'}
-            </button>
-            <button type="button" onClick={() => { setOverrides({}); setAcc(createColumnState()); }} style={{ fontSize: 12 }}>
-              Reset all
-            </button>
-          </>
-        ) : null}
-        {onClose ? <button type="button" onClick={onClose} style={{ fontSize: 12, marginLeft: 'auto' }}>Close</button> : null}
-      </div>
+              <span
+                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                  active ? 'translate-x-[15px]' : 'translate-x-[3px]'
+                }`}
+              />
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Sliders className="h-3.5 w-3.5 text-[var(--accent-teal)]" aria-hidden />
+              Tuning mode
+            </span>
+          </button>
 
-      {active && panelOpen ? (
-        <div style={{ marginTop: 10, maxHeight: 260, overflow: 'auto', borderTop: '1px solid #e6e9ee', paddingTop: 8 }}>
-          {baseline ? null : <div style={{ fontSize: 12, color: '#5b6472' }}>Loading current config…</div>}
-          {keys.map((k) => {
-            const b = baseline.byKey[k];
-            const cur = overrides[k] ?? '';
-            return (
-              <label key={k} style={{ display: 'block', fontSize: 12, marginBottom: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontFamily: 'monospace' }}>{k}</span>
-                  <span style={{ color: '#5b6472' }}>
-                    baseline: {typeof b.value === 'object' ? JSON.stringify(b.value) : String(b.value)}
-                    {cur !== '' ? ' · overridden' : ''}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
-                  <input
-                    style={{ flex: 1, fontSize: 12, fontFamily: 'monospace' }}
-                    value={cur}
-                    placeholder={typeof b.value === 'object' ? JSON.stringify(b.value) : String(b.value ?? '')}
-                    onChange={(e) => setOverride(k, e.target.value)}
-                  />
-                  <button type="button" onClick={() => setOverride(k, '')} disabled={cur === ''} style={{ fontSize: 11 }}>
-                    reset
-                  </button>
-                </div>
-                {b.description ? <div style={{ color: '#7a828f', fontSize: 11 }}>{b.description}</div> : null}
-              </label>
-            );
-          })}
-          {keys.length ? null : (
-            <div style={{ fontSize: 12, color: '#5b6472' }}>
-              No tunable backend keys loaded. Sidecar persona/pack/agent keys are not prefillable yet (they live in
-              the S3 manifest, not this collection) — you can still set them by hand and they will travel in the header.
-            </div>
-          )}
+          {active ? (
+            <>
+              <span className="mx-0.5 h-5 w-px bg-[var(--border-subtle)]" aria-hidden />
+              <PillButton onClick={() => setPanelOpen((v) => !v)}>
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform ${panelOpen ? 'rotate-180' : ''}`}
+                  aria-hidden
+                />
+                {panelOpen ? 'Hide' : 'Show'} config
+                <span className="ml-0.5 rounded-full bg-[var(--bg-surface-sunken)] px-1.5 py-px text-[10px] text-[var(--text-secondary)]">
+                  {dirtyKeys.length}
+                </span>
+              </PillButton>
+              <PillButton onClick={run} disabled={!canRun} icon={running ? Loader2 : Play} tone="primary" active>
+                <span className={running ? 'inline-flex items-center' : ''}>{running ? 'Comparing…' : 'Run comparison'}</span>
+              </PillButton>
+              <PillButton
+                disabled={!dirtyKeys.length}
+                onClick={() => {
+                  const h = buildOverridesHeader(overrides);
+                  navigator.clipboard?.writeText(h || '');
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                }}
+                icon={copied ? Check : Copy}
+                title="Copy the override JSON. Promoting it to global is a separate, deliberate admin PUT."
+              >
+                {copied ? 'Copied' : 'Copy config'}
+              </PillButton>
+              <PillButton
+                onClick={() => { setOverrides({}); setAcc(createColumnState()); }}
+                icon={RotateCcw}
+                tone="ghost"
+                disabled={!dirtyKeys.length && !acc.baseline && !acc.candidate}
+              >
+                Reset all
+              </PillButton>
+            </>
+          ) : null}
+          {onClose ? (
+            <PillButton onClick={onClose} icon={X} tone="ghost">
+              <span className="sr-only">Close tuning mode</span>
+            </PillButton>
+          ) : null}
         </div>
-      ) : null}
 
-      {active ? <div style={{ marginTop: 12 }}><TwoColumnView acc={acc} running={running} error={error} /></div> : null}
+        {active && panelOpen ? (
+          <div className="mt-3 max-h-64 overflow-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3">
+            {baseline ? null : (
+              <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Loading current config…
+              </div>
+            )}
+            <div className="space-y-2.5">
+              {keys.map((k) => {
+                const b = baseline.byKey[k];
+                const cur = overrides[k] ?? '';
+                const overridden = cur !== '';
+                return (
+                  <div key={k} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-raised)] p-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <code className="break-all font-mono text-[12px] text-[var(--text-primary)]">{k}</code>
+                      {overridden ? (
+                        <span className="shrink-0 rounded-full bg-[var(--accent-teal-soft)] px-2 py-0.5 text-[10px] font-medium text-[var(--accent-teal)]">
+                          overridden
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-1 text-[11px] text-[var(--text-tertiary)]">
+                      baseline: <span className="font-mono">{fmtVal(b.value)}</span>
+                    </div>
+                    <div className="mt-1.5 flex gap-1.5">
+                      <input
+                        className="h-7 flex-1 rounded-md border border-[var(--border-default)] bg-[var(--bg-input)] px-2 font-mono text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--border-focus)] focus:bg-[var(--bg-input-focus)]"
+                        value={cur}
+                        placeholder={fmtVal(b.value)}
+                        onChange={(e) => setOverride(k, e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setOverride(k, '')}
+                        disabled={!overridden}
+                        className="inline-flex h-7 items-center rounded-md px-2 text-[11px] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-30"
+                      >
+                        reset
+                      </button>
+                    </div>
+                    {b.description ? (
+                      <div className="mt-1 text-[11px] text-[var(--text-tertiary)]">{b.description}</div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+            {keys.length ? null : (
+              <div className="text-xs leading-relaxed text-[var(--text-secondary)]">
+                No tunable backend keys loaded. Sidecar persona/pack/agent keys are not prefillable yet (they live in
+                the S3 manifest, not this collection) — you can still set them by hand and they will travel in the header.
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {active ? (
+          <div className="mt-3">
+            <TwoColumnView acc={acc} running={running} error={error} />
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

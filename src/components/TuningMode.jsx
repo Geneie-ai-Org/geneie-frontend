@@ -15,10 +15,9 @@
  */
 
 import React, { useState } from 'react';
-import { Sliders, Play, Loader2, Copy, Check, RotateCcw, X, ChevronDown } from 'lucide-react';
+import { Sliders, Play, Loader2, Copy, Check, RotateCcw, X, SlidersHorizontal } from 'lucide-react';
 import { buildOverridesHeader } from '@/services/streamCompare';
-
-const fmtVal = (v) => (typeof v === 'object' ? JSON.stringify(v) : String(v ?? ''));
+import TuningConfigModal from '@/components/TuningConfigModal';
 
 /** Small pill button that matches the app's control styling. */
 function PillButton({ children, active, disabled, title, onClick, icon: Icon, tone = 'default' }) {
@@ -55,7 +54,7 @@ export default function TuningMode({ tuning, onClose }) {
     isAdmin, active, setActive, overrides, setOverride, resetAll,
     baseline, configError, reloadConfig, dirtyKeys, running, run, hasColumns, canRun,
   } = tuning;
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   if (!isAdmin) return null; // non-admins never see this at all
@@ -63,10 +62,11 @@ export default function TuningMode({ tuning, onClose }) {
   // This panel is a DIRECT child of .chat-app-shell (a 3-column CSS grid). position:fixed takes it
   // out of the grid entirely so it can never reflow the chat shell — same escape hatch
   // ExploratoryModeToggle uses. Anchored bottom-right, ABOVE that toggle (bottom:14) so they never
-  // overlap. The ANSWER columns now live in the thread, so this stays compact.
-  const expanded = active && panelOpen;
+  // overlap. The ANSWER columns live in the thread and config editing lives in a full-screen modal,
+  // so this panel stays compact (just the switch + actions).
 
   return (
+   <>
     <div
       className="tune-root"
       style={{
@@ -74,7 +74,7 @@ export default function TuningMode({ tuning, onClose }) {
         right: 14,
         bottom: 58,
         zIndex: 9998,
-        width: expanded ? 'min(460px, calc(100vw - 28px))' : 'auto',
+        width: 'auto',
         maxWidth: 'calc(100vw - 28px)',
         maxHeight: 'min(72vh, 720px)',
         overflowY: 'auto',
@@ -130,15 +130,13 @@ export default function TuningMode({ tuning, onClose }) {
           {active ? (
             <>
               <span className="mx-0.5 h-5 w-px bg-[var(--border-subtle)]" aria-hidden />
-              <PillButton onClick={() => setPanelOpen((v) => !v)}>
-                <ChevronDown
-                  className={`h-3.5 w-3.5 transition-transform ${panelOpen ? 'rotate-180' : ''}`}
-                  aria-hidden
-                />
-                {panelOpen ? 'Hide' : 'Show'} config
-                <span className="ml-0.5 rounded-full bg-[var(--bg-surface-sunken)] px-1.5 py-px text-[10px] text-[var(--text-secondary)]">
-                  {dirtyKeys.length}
-                </span>
+              <PillButton onClick={() => setEditorOpen(true)} icon={SlidersHorizontal}>
+                Edit config
+                {dirtyKeys.length ? (
+                  <span className="ml-0.5 rounded-full bg-[var(--accent-teal-soft)] px-1.5 py-px text-[10px] text-[var(--accent-teal)]">
+                    {dirtyKeys.length}
+                  </span>
+                ) : null}
               </PillButton>
               <PillButton
                 onClick={run}
@@ -179,82 +177,19 @@ export default function TuningMode({ tuning, onClose }) {
             </PillButton>
           ) : null}
         </div>
-
-        {active && panelOpen ? (
-          <div className="mt-3 max-h-80 overflow-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3">
-            <div className="mb-2 text-[11px] text-[var(--text-tertiary)]">
-              Edits apply to the <span className="text-[var(--text-secondary)]">candidate</span> column only. Run a
-              comparison to see baseline vs candidate side by side in the chat.
-            </div>
-            {/* Honest state: loading / failed / loaded. "No config?" was this panel stuck on the
-                loading line when the fetch failed, with the error swallowed. */}
-            {configError ? (
-              <div className="rounded-lg bg-[var(--error-soft)] p-2.5 text-[12px] text-[var(--error)]">
-                <div className="font-medium">Could not load config</div>
-                <div className="mt-0.5 break-words opacity-90">{configError}</div>
-                <button
-                  type="button"
-                  onClick={reloadConfig}
-                  className="mt-2 inline-flex h-7 items-center rounded-full border border-[var(--error)]/40 px-3 text-[11px] font-medium text-[var(--error)] transition-colors hover:bg-[var(--error)]/10"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : !baseline ? (
-              <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Loading current config…
-              </div>
-            ) : null}
-            <div className="space-y-2.5">
-              {(baseline?.keys || []).map((k) => {
-                const b = baseline.byKey[k];
-                const cur = overrides[k] ?? '';
-                const overridden = cur !== '';
-                return (
-                  <div key={k} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-raised)] p-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <code className="break-all font-mono text-[12px] text-[var(--text-primary)]">{k}</code>
-                      {overridden ? (
-                        <span className="shrink-0 rounded-full bg-[var(--accent-teal-soft)] px-2 py-0.5 text-[10px] font-medium text-[var(--accent-teal)]">
-                          overridden
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="mt-1 text-[11px] text-[var(--text-tertiary)]">
-                      baseline: <span className="font-mono">{fmtVal(b.value)}</span>
-                    </div>
-                    <div className="mt-1.5 flex gap-1.5">
-                      <input
-                        className="h-7 flex-1 rounded-md border border-[var(--border-default)] bg-[var(--bg-input)] px-2 font-mono text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--border-focus)] focus:bg-[var(--bg-input-focus)]"
-                        value={cur}
-                        placeholder={fmtVal(b.value)}
-                        onChange={(e) => setOverride(k, e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setOverride(k, '')}
-                        disabled={!overridden}
-                        className="inline-flex h-7 items-center rounded-md px-2 text-[11px] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-30"
-                      >
-                        reset
-                      </button>
-                    </div>
-                    {b.description ? (
-                      <div className="mt-1 text-[11px] text-[var(--text-tertiary)]">{b.description}</div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-            {baseline && !baseline.keys?.length ? (
-              <div className="text-xs leading-relaxed text-[var(--text-secondary)]">
-                No tunable backend keys loaded. Sidecar persona/pack/agent keys are not prefillable yet (they live in
-                the S3 manifest, not this collection) — you can still set them by hand and they will travel in the header.
-              </div>
-            ) : null}
-          </div>
-        ) : null}
       </div>
     </div>
+
+    {/* Full-screen config editor. Opened from "Edit config"; edits the same session override set. */}
+    <TuningConfigModal
+      open={editorOpen}
+      onClose={() => setEditorOpen(false)}
+      baseline={baseline}
+      configError={configError}
+      reloadConfig={reloadConfig}
+      overrides={overrides}
+      setOverride={setOverride}
+    />
+   </>
   );
 }

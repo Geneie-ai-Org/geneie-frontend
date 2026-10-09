@@ -1421,7 +1421,7 @@ export default function PhenotypeInputPanel({
                   onClick={() => setGroupSelected(clinicalCandidates, true)}
                   disabled={disabled}
                 >
-                  Select clinical
+                  Select all
                 </button>
                 <button
                   type="button"

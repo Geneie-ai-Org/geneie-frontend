@@ -48,3 +48,12 @@ export function getModule1StageGroup(phase) {
 export function getModule1PhaseMessage(phase, backendMessage) {
   return backendMessage || MODULE1_PHASE_MESSAGES[phase] || 'Processing…';
 }
+
+/** Pipeline + VCF ingest landed — don't leave the last node spinning forever. */
+export function module1FinishedSuccessfully(job) {
+  if (!job || job.status !== 'complete') return false;
+  if (job.ingestStatus === 'done') return true;
+  const msg = String(job.message || '');
+  const pctOk = typeof job.progressPercent === 'number' && job.progressPercent >= 100;
+  return pctOk && /(pass\s+)?vcf\s+ready/i.test(msg);
+}

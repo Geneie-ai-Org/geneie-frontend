@@ -55,8 +55,8 @@ const SAMPLE_SEX_OPTIONS = [
 const ANALYSIS_TYPE_OPTIONS = [
   { value: 'Germline', label: 'Germline' },
   { value: 'Somatic', label: 'Somatic' },
-  { value: 'Tumor-Normal Paired', label: 'Tumor-Normal Paired' },
-  { value: 'Tumor-Only', label: 'Tumor-Only' },
+  { value: 'Tumor-Normal Paired', label: 'Tumor-Normal Paired', disabled: true, disabledReason: 'Tumor-Normal Paired analysis is coming soon.' },
+  { value: 'Tumor-Only', label: 'Tumor-Only', disabled: true, disabledReason: 'Tumor-Only analysis is coming soon.' },
   { value: 'IVF', label: 'IVF', disabled: true, disabledReason: 'IVF analysis is coming soon.' },
   { value: 'PGT', label: 'PGT', disabled: true, disabledReason: 'PGT analysis is coming soon.' },
   { value: 'Unknown', label: 'Unknown', disabled: true, disabledReason: 'Unknown analysis type is not supported yet.' },

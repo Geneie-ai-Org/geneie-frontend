@@ -30,7 +30,6 @@ import SubscriptionCanceled from '../components/SubscriptionCanceled';
 import ColumnInterpretationResults from '../components/ColumnInterpretationResults';
 import PipelineDrawer from '../components/PipelineDrawer';
 import Module1UploadForm from '../components/Module1UploadForm';
-import Module1PipelineStepper from '../components/Module1PipelineStepper';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
 import VariantUploadLoadingModal from '@/components/VariantUploadLoadingModal';
 import ThinkingIndicator from '@/components/chat/ThinkingIndicator';
@@ -1169,10 +1168,10 @@ const ChatPage = () => {
     [runAnnovarForCurrentConversation]
   );
 
-  const module1PipelineBlock =
-    module1.module1JobActive || module1.module1ArtifactsVisible ? (
-      <Module1PipelineStepper job={module1.module1Job} onStartOver={module1.openModule1Form} />
-    ) : null;
+  // A FASTQ run shows as the first phase of the same pipeline card as its VCF.
+  const showModule1Phase = Boolean(
+    module1.module1Job && (module1.module1JobActive || module1.module1ArtifactsVisible)
+  );
 
 
   // --- MAIN RENDER GATING LOGIC ---
@@ -1341,8 +1340,10 @@ const ChatPage = () => {
         })
       : null;
 
-  const pipelineDrawer = showAnalysisPipeline ? (
+  const pipelineDrawer = showAnalysisPipeline || showModule1Phase ? (
     <PipelineDrawer
+      module1Job={showModule1Phase ? module1.module1Job : null}
+      onModule1StartOver={module1.openModule1Form}
       fileName={currentDocument?.name ?? currentDocument?.file_name}
       conversationId={activeConversationId}
       expanded={pipelineExpanded}
@@ -1351,7 +1352,7 @@ const ChatPage = () => {
       onStepAction={handlePipelineStepAction}
       uploadInProgress={variantUploadInProgress}
       uploadProgress={uploadProgress}
-      hasUploadedFile={!!currentDocument || variantUploadInProgress}
+      hasUploadedFile={Boolean(showAnalysisPipeline && (currentDocument || variantUploadInProgress))}
       columnInterpretationResult={columnInterpretationResult}
       hasAnnotatedFile={pipelineSnapshot.hasAnnotatedFile}
       vcfAnnotated={pipelineSnapshot.vcfAnnotated}
@@ -1431,12 +1432,9 @@ const ChatPage = () => {
     isVariantSidebarOpen,
     onToggleVariantSidebar: () => setIsVariantSidebarOpen(!isVariantSidebarOpen),
     hasDocument: !!currentDocument,
-    // Module 1's stepper shares the drawer slot with the variant pipeline; only one of
-    // the two is ever non-null for a given conversation.
     pipelineDrawer: (
       <>
         {automaticPipelineBanner}
-        {module1PipelineBlock}
         {pipelineDrawer}
       </>
     ),

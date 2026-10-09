@@ -703,16 +703,6 @@ export default function PhenotypeInputPanel({
     });
   };
 
-  const removeCandidate = (hpoId) => {
-    const next = (candidates || []).filter(
-      (c) => String(c.hpo_id || '').toUpperCase() !== String(hpoId || '').toUpperCase()
-    );
-    emit({
-      candidates: next,
-      phenotype_findings: findingsLabelFrom(next),
-    });
-  };
-
   const setGroupSelected = (group, selected) => {
     const ids = new Set(group.map((c) => c.hpo_id));
     const next = candidates.map((c) => (ids.has(c.hpo_id) ? { ...c, selected } : c));
@@ -1199,9 +1189,14 @@ export default function PhenotypeInputPanel({
   const renderChip = (c) => {
     const label = c.hpo_name || c.matched_phrase || c.hpo_id;
     return (
-      <div
+      <button
         key={c.hpo_id}
-        className="inline-flex items-center gap-1 px-2 py-1 text-2xs rounded-md border text-left"
+        type="button"
+        disabled={disabled}
+        onClick={() => toggleCandidate(c.hpo_id)}
+        title={c.hpo_id || undefined}
+        aria-pressed={!!c.selected}
+        className="inline-flex items-center px-2 py-1 text-2xs rounded-md border text-left"
         style={{
           borderColor: c.selected ? 'var(--accent-teal)' : 'var(--border-default)',
           background: c.selected
@@ -1211,29 +1206,11 @@ export default function PhenotypeInputPanel({
           opacity: c.selected ? 1 : 0.75,
         }}
       >
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => toggleCandidate(c.hpo_id)}
-          title={c.hpo_id || undefined}
-          className="text-left"
-        >
-          <span className="font-medium">
-            {c.selected ? '✓ ' : ''}
-            {label}
-          </span>
-        </button>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => removeCandidate(c.hpo_id)}
-          title="Remove"
-          className="ml-0.5 p-0.5"
-          style={{ color: 'var(--text-tertiary)' }}
-        >
-          <X className="w-3 h-3" />
-        </button>
-      </div>
+        <span className="font-medium">
+          {c.selected ? '✓ ' : ''}
+          {label}
+        </span>
+      </button>
     );
   };
 

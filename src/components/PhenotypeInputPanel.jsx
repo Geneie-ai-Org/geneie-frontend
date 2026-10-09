@@ -4,7 +4,7 @@
  * Disease matches are a shortcut to load annotated findings for review.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Loader2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Info, Loader2, X } from 'lucide-react';
 import { interpretPhenotypeNarrative, resolveHpoTerms } from '@/services/mongodbApi';
 import PanelAppSuggestSection from '@/components/PanelAppSuggestSection';
 
@@ -454,6 +454,60 @@ function mergeDiseaseCatalog(existing, incoming) {
 /**
  * Clinical-note phenotype panel (pinned findings + optional disease shortcut).
  */
+/** Small (i) button that opens a short explanation on click; closes on outside click or Escape. */
+function InfoHint({ label, children }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (e) => {
+      if (!wrapRef.current?.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <span className="relative inline-flex align-middle" ref={wrapRef}>
+      <button
+        type="button"
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
+        style={{ color: open ? 'var(--text-primary)' : 'var(--text-tertiary)' }}
+        aria-label={label}
+        aria-expanded={open}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <Info className="h-3 w-3" aria-hidden />
+      </button>
+      {open ? (
+        <div
+          role="tooltip"
+          className="absolute left-0 top-full z-50 mt-1.5 w-60 rounded-md border px-2.5 py-2 text-2xs font-normal leading-snug shadow-md space-y-1"
+          style={{
+            color: 'var(--text-secondary)',
+            background: 'var(--bg-surface-raised)',
+            borderColor: 'var(--border-default)',
+          }}
+        >
+          {children}
+        </div>
+      ) : null}
+    </span>
+  );
+}
+
 export default function PhenotypeInputPanel({
   value,
   onChange,
@@ -696,16 +750,6 @@ export default function PhenotypeInputPanel({
   const toggleCandidate = (hpoId) => {
     const next = candidates.map((c) =>
       c.hpo_id === hpoId ? { ...c, selected: !c.selected } : c
-    );
-    emit({
-      candidates: next,
-      phenotype_findings: findingsLabelFrom(next),
-    });
-  };
-
-  const removeCandidate = (hpoId) => {
-    const next = (candidates || []).filter(
-      (c) => String(c.hpo_id || '').toUpperCase() !== String(hpoId || '').toUpperCase()
     );
     emit({
       candidates: next,
@@ -1199,9 +1243,14 @@ export default function PhenotypeInputPanel({
   const renderChip = (c) => {
     const label = c.hpo_name || c.matched_phrase || c.hpo_id;
     return (
-      <div
+      <button
         key={c.hpo_id}
-        className="inline-flex items-center gap-1 px-2 py-1 text-2xs rounded-md border text-left"
+        type="button"
+        disabled={disabled}
+        onClick={() => toggleCandidate(c.hpo_id)}
+        title={c.hpo_id || undefined}
+        aria-pressed={!!c.selected}
+        className="inline-flex items-center px-2 py-1 text-2xs rounded-md border text-left"
         style={{
           borderColor: c.selected ? 'var(--accent-teal)' : 'var(--border-default)',
           background: c.selected
@@ -1211,46 +1260,30 @@ export default function PhenotypeInputPanel({
           opacity: c.selected ? 1 : 0.75,
         }}
       >
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => toggleCandidate(c.hpo_id)}
-          title={c.hpo_id || undefined}
-          className="text-left"
-        >
-          <span className="font-medium">
-            {c.selected ? '✓ ' : ''}
-            {label}
-          </span>
-        </button>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => removeCandidate(c.hpo_id)}
-          title="Remove"
-          className="ml-0.5 p-0.5"
-          style={{ color: 'var(--text-tertiary)' }}
-        >
-          <X className="w-3 h-3" />
-        </button>
-      </div>
+        <span className="font-medium">
+          {c.selected ? '✓ ' : ''}
+          {label}
+        </span>
+      </button>
     );
   };
 
   return (
     <div className="space-y-2">
-      <label className="flex items-baseline gap-1.5 text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-        Phenotype
-        <span className="text-2xs font-normal" style={{ color: 'var(--text-tertiary)' }}>
-          (enables phenotype-driven prioritization)
-        </span>
-      </label>
-      {isAutomatic ? (
-        <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-          Automatic: strong disease matches and high-confidence findings are pre-selected —
-          click to change.
-        </p>
-      ) : null}
+      <div className="flex items-center gap-1">
+        <label className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+          Phenotype
+        </label>
+        <InfoHint label="About phenotype">
+          <p>Clinical findings are used to rank variants by how well they fit the patient.</p>
+          {isAutomatic ? (
+            <p>
+              Automatic mode pre-selects strong disease matches and high-confidence findings.
+              Click any of them to change it.
+            </p>
+          ) : null}
+        </InfoHint>
+      </div>
 
       <div className="relative">
         <textarea
@@ -1318,12 +1351,12 @@ export default function PhenotypeInputPanel({
           className="px-2.5 py-2 rounded-lg border text-xs space-y-1.5"
           style={{ borderColor: 'var(--border-default)', background: 'var(--bg-muted)' }}
         >
-          <div className="font-medium" style={{ color: 'var(--text-primary)' }}>
+          <div className="flex items-center gap-1 font-medium" style={{ color: 'var(--text-primary)' }}>
             Disease matches
+            <InfoHint label="About disease matches">
+              <p>Pick one or more. Their clinical findings are combined below.</p>
+            </InfoHint>
           </div>
-          <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-            Select one or more — clinical findings are combined
-          </p>
 
           <button
             type="button"
@@ -1414,9 +1447,6 @@ export default function PhenotypeInputPanel({
             <span>
               Clinical findings ({clinicalCandidates.filter((c) => c.selected).length}/
               {clinicalCandidates.length} selected)
-              {clinicalCandidates.some((c) => c.selected && c.selected_default && isAutomatic)
-                ? ' · high-confidence pre-selected — click to undo'
-                : ''}
             </span>
           ) : null}
         </div>
@@ -1444,7 +1474,7 @@ export default function PhenotypeInputPanel({
                   onClick={() => setGroupSelected(clinicalCandidates, true)}
                   disabled={disabled}
                 >
-                  Select clinical
+                  Select all
                 </button>
                 <button
                   type="button"
@@ -1482,10 +1512,12 @@ export default function PhenotypeInputPanel({
 
       {showInheritance && inheritanceCandidates.length > 0 && (
         <div className="space-y-1">
-          <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-            Inheritance / non-finding terms — optional, not used as clinical findings unless you
-            select them
-          </p>
+          <div className="flex items-center gap-1 text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+            Inheritance terms
+            <InfoHint label="About inheritance terms">
+              <p>Optional. These aren't used as clinical findings unless you select them.</p>
+            </InfoHint>
+          </div>
           <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto opacity-80">
             {inheritanceCandidates.map(renderChip)}
           </div>

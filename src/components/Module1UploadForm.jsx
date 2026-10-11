@@ -26,6 +26,10 @@ import {
   EMPTY_PEDIGREE_FIELDS,
   pedigreeFieldsForSubmit,
 } from '@/components/germlinePedigreeOptions';
+import Module1ComputeChoice, {
+  deriveModule1ComputeState,
+  module1ComputeSubmitLabel,
+} from '@/components/Module1ComputeChoice';
 import PipelineRunModeToggle, {
   PIPELINE_RUN_MANUAL,
   normalizePipelineRunMode,
@@ -278,6 +282,8 @@ const Module1UploadForm = ({
   cancelModule1Import,
   gate,
   gateMeterDetail,
+  capacity = null,
+  capacityStatus = 'unavailable',
 }) => {
   const [sampleName, setSampleName] = useState('');
   const [genome, setGenome] = useState('hg38');
@@ -297,6 +303,8 @@ const Module1UploadForm = ({
   const [validationAttempted, setValidationAttempted] = useState(false);
   /** Germline wizard: sample (+ files) → germline fields → phenotype. Non-Germline stays one page. */
   const [metadataStep, setMetadataStep] = useState('sample'); // 'sample' | 'analysis' | 'phenotype'
+  /** GPU/CPU card the user picked; null until they touch the cards (the live default applies). */
+  const [computeChoice, setComputeChoice] = useState(null);
 
   useEffect(() => {
     if (!open) return;
@@ -316,6 +324,7 @@ const Module1UploadForm = ({
     setSampleMetadata(EMPTY_SAMPLE_METADATA);
     setValidationAttempted(false);
     setMetadataStep('sample');
+    setComputeChoice(null);
     loadBedCatalog?.('hg38');
   }, [open, loadBedCatalog]);
 
@@ -432,8 +441,13 @@ const Module1UploadForm = ({
   const gateMeterLabel = gateMeter?.tracked && !gateMeter.unlimited && gateMeter.remaining != null
     ? `${gateMeter.remaining} of ${gateMeter.limit} Module 1 runs left`
     : null;
-  // Free stages the files and runs after upgrading, so the button says what will happen.
-  const submitLabel = gate?.staging ? 'Stage files' : 'Start pipeline';
+  // Free stages the files and runs after upgrading — nothing is queued now, so there is no
+  // compute choice or credit line on that path, and the button says what will happen.
+  const isStaging = Boolean(gate?.staging);
+  const computeState = deriveModule1ComputeState(capacity, capacityStatus);
+  // Until the user touches the cards, follow the live default (re-derived on every 15 s poll).
+  const effectiveComputeChoice = computeChoice ?? computeState.defaultChoice;
+  const submitLabel = isStaging ? 'Stage files' : module1ComputeSubmitLabel(effectiveComputeChoice, computeState);
   const oversizedRead = [r1File, r2File].find((f) => f && f.size > MODULE1_FASTQ_MAX_BYTES) || null;
 
   // Honor backend MODULE1_GENOMES_READY via bed-catalog.genome_ready (hg38 + hg19).
@@ -463,6 +477,8 @@ const Module1UploadForm = ({
   const metadataTotalSteps = germlineWizard ? 3 : 1;
   const metadataStepIndex =
     metadataStep === 'phenotype' ? 3 : metadataStep === 'analysis' ? 2 : 1;
+  const onFinalStep = !germlineWizard || metadataStep === 'phenotype';
+  const showComputeChoice = onFinalStep && !isStaging;
 
   const setAnalysisType = (val) => {
     setSampleMetadata((prev) => ({ ...prev, analysisType: val }));
@@ -542,6 +558,8 @@ const Module1UploadForm = ({
           }
         : { r1File, r2File, customBedS3Key: useCustomBed ? customBedS3Key : undefined }),
       bedCatalogId: bedMode === 'catalog' ? bedCatalogId : undefined,
+      // "auto" only when live queue info is missing and the user left the cards alone.
+      ...(isStaging ? {} : { computePreference: effectiveComputeChoice || 'auto' }),
     });
   };
 
@@ -569,7 +587,7 @@ const Module1UploadForm = ({
                   : metadataStep === 'analysis'
                     ? 'Step 2 of 3 — Germline details.'
                     : 'Step 3 of 3 — Phenotype (optional).'
-                : 'Upload paired FASTQ files (R1 + R2). Typical runtime: 2–4 hours — you can close this and keep using the app.'}
+                : 'Upload paired FASTQ files (R1 + R2). Typical runtime: 20–30 min on GPU, about 2 h on CPU. You can close this tab; we will notify you.'}
             </p>
             {germlineWizard && (
               <div className="flex items-center gap-1.5 mt-3" aria-hidden="true">
@@ -915,6 +933,15 @@ const Module1UploadForm = ({
                   />
                 </div>
               )}
+
+              {showComputeChoice && (
+                <Module1ComputeChoice
+                  value={effectiveComputeChoice}
+                  onChange={setComputeChoice}
+                  state={computeState}
+                  disabled={module1Submitting}
+                />
+              )}
             </div>
 
             <div className="flex-shrink-0 px-7 py-4 border-t flex items-center justify-between gap-2" style={{ borderColor: 'var(--border-default)' }}>
@@ -961,35 +988,42 @@ const Module1UploadForm = ({
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => { cancelModule1Import?.(); onClose(); }}
-                  className="px-4 py-2 text-sm font-medium rounded-lg border"
-                  style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-                >
-                  Cancel
-                </button>
-                {germlineWizard && (metadataStep === 'sample' || metadataStep === 'analysis') ? (
+              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                <div className="flex items-center gap-2">
                   <button
-                    type="submit"
-                    disabled={metadataStep === 'sample' ? (!canSubmit || analysisTypeMissing) : false}
-                    title={quotaBlocked ? gate.reason : undefined}
-                    className="px-4 py-2 text-sm font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
+                    type="button"
+                    onClick={() => { cancelModule1Import?.(); onClose(); }}
+                    className="px-4 py-2 text-sm font-medium rounded-lg border"
+                    style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
                   >
-                    Continue
+                    Cancel
                   </button>
-                ) : (
-                  <button
-                    type="submit"
-                    disabled={!canSubmit}
-                    title={quotaBlocked ? gate.reason : undefined}
-                    className="px-4 py-2 text-sm font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
-                  >
-                    {module1Submitting ? (isUrlMode ? 'Importing…' : 'Starting…') : submitLabel}
-                  </button>
+                  {germlineWizard && (metadataStep === 'sample' || metadataStep === 'analysis') ? (
+                    <button
+                      type="submit"
+                      disabled={metadataStep === 'sample' ? (!canSubmit || analysisTypeMissing) : false}
+                      title={quotaBlocked ? gate.reason : undefined}
+                      className="px-4 py-2 text-sm font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
+                    >
+                      Continue
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={!canSubmit}
+                      title={quotaBlocked ? gate.reason : undefined}
+                      className="px-4 py-2 text-sm font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
+                    >
+                      {module1Submitting ? (isUrlMode ? 'Importing…' : 'Starting…') : submitLabel}
+                    </button>
+                  )}
+                </div>
+                {showComputeChoice && (
+                  <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+                    Uses 1 run credit when results are delivered.
+                  </p>
                 )}
               </div>
             </div>

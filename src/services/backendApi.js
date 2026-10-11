@@ -634,6 +634,52 @@ export async function fetchModule1Status(conversationId) {
   return data;
 }
 
+function module1ApiError(data, response, fallback) {
+  const detail = data.detail;
+  const err = new Error(parseApiErrorDetail(detail) || fallback);
+  err.status = response.status;
+  err.code = detail && typeof detail === 'object' ? detail.code : undefined;
+  return err;
+}
+
+/**
+ * GPU/CPU queue snapshot for the compute choice on the upload form. Older backends do not
+ * have this route (404) — callers treat any error as "live queue info unavailable".
+ */
+export async function fetchModule1Capacity() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl('/api/module1/capacity'), { headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw module1ApiError(data, response, 'Failed to fetch Module 1 capacity');
+  return data;
+}
+
+/** Leave the queue / stop a running job. 200 → `{ status: 'cancelled' | 'cancelling' }`. */
+export async function cancelModule1Job(conversationId, jobId) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(apiUrl(`/api/module1/cancel/${encodeURIComponent(conversationId)}`), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ job_id: jobId }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw module1ApiError(data, response, 'Failed to cancel Module 1 run');
+  return data;
+}
+
+/** Switch a still-queued job between the GPU and CPU lanes. 409 MODULE1_ALREADY_STARTED once picked up. */
+export async function setModule1ComputePreference(conversationId, computePreference) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(apiUrl(`/api/module1/preference/${encodeURIComponent(conversationId)}`), {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ compute_preference: computePreference }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw module1ApiError(data, response, 'Failed to change compute preference');
+  return data;
+}
+
 /** Retained Module 1 QC files (presigned GET) — empty once BAM/QC are purged. */
 export async function fetchModule1QcArtifacts(conversationId) {
   const headers = await getAuthHeaders();

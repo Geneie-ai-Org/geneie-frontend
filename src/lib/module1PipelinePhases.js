@@ -8,6 +8,8 @@
 
 export const MODULE1_PHASE_ORDER = [
   'queued',
+  'waiting_gpu',
+  'launching',
   'staging',
   'running',
   'trimming',
@@ -19,6 +21,8 @@ export const MODULE1_PHASE_ORDER = [
 
 export const MODULE1_PHASE_MESSAGES = {
   queued: 'Queued — waiting for a worker to pick up your job…',
+  waiting_gpu: 'Waiting for a GPU…',
+  launching: 'Starting the GPU machine…',
   staging: 'Staging your FASTQ files on the analysis cluster…',
   running: 'Preparing the variant-calling pipeline…',
   trimming: 'Trimming and QC-checking raw reads…',
@@ -27,11 +31,13 @@ export const MODULE1_PHASE_MESSAGES = {
   finalizing: 'Finalizing your VCF…',
   complete: 'Pipeline complete — importing results…',
   failed: 'The pipeline did not complete successfully.',
+  cancelling: 'Stopping…',
+  cancelled: 'Cancelled',
 };
 
 const STAGE_GROUPS = [
-  { id: 'queued', label: 'Queued', phases: ['queued'] },
-  { id: 'staging', label: 'Staging', phases: ['staging'] },
+  { id: 'queued', label: 'Queued', phases: ['queued', 'waiting_gpu'] },
+  { id: 'staging', label: 'Staging', phases: ['launching', 'staging'] },
   { id: 'aligning', label: 'Aligning', phases: ['running', 'trimming', 'aligning'] },
   { id: 'calling', label: 'Calling variants', phases: ['calling', 'finalizing'] },
   { id: 'complete', label: 'Complete', phases: ['complete'] },

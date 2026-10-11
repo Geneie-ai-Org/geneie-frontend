@@ -47,6 +47,7 @@ import { conversationPath, isValidConversationId } from '@/lib/conversationRoute
 import { getDeviceId } from '@/lib/deviceId';
 import { useVariantPipeline } from '@/hooks/useVariantPipeline';
 import { useModule1Pipeline } from '@/hooks/useModule1Pipeline';
+import { useModule1Capacity } from '@/hooks/useModule1Capacity';
 import { useAutomaticPipelineConductor } from '@/hooks/useAutomaticPipelineConductor';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { getClinicalReportGate } from '@/components/CaseReportDownloadButton';
@@ -443,6 +444,11 @@ const ChatPage = () => {
   });
   module1JobActiveRef.current = module1.module1JobActive;
   onOpenModule1UploadRef.current = module1.openModule1Form;
+  // GPU/CPU queue snapshot: drives the compute cards on the form, and the CPU estimate next to
+  // "Switch to CPU now" while a job is queued. Polls only while one of those is on screen.
+  const module1Capacity = useModule1Capacity({
+    enabled: module1.module1FormOpen || module1.module1JobQueued,
+  });
 
   const [gaTriageStatus, setGaTriageStatus] = useState('');
   useEffect(() => {
@@ -1179,8 +1185,14 @@ const ChatPage = () => {
   );
 
   const module1PipelineBlock =
-    module1.module1JobActive || module1.module1ArtifactsVisible ? (
-      <Module1PipelineStepper job={module1.module1Job} onStartOver={module1.openModule1Form} />
+    module1.module1JobActive || module1.module1ArtifactsVisible || module1.module1CancelledVisible ? (
+      <Module1PipelineStepper
+        job={module1.module1Job}
+        onStartOver={module1.openModule1Form}
+        onCancel={module1.cancelModule1Run}
+        onSwitchCompute={module1.switchModule1Compute}
+        cpuEstimateMin={module1Capacity.status === 'ok' ? module1Capacity.capacity?.est_cpu_total_min ?? null : null}
+      />
     ) : null;
 
 
@@ -2060,6 +2072,8 @@ const ChatPage = () => {
           cancelModule1Import={module1.cancelModule1Import}
           gate={module1.module1EntryGate}
           gateMeterDetail={formatMeterDetail(limits, module1.module1EntryGate?.meter)}
+          capacity={module1Capacity.capacity}
+          capacityStatus={module1Capacity.status}
         />
       )}
 

@@ -14,6 +14,7 @@ const JOB_TYPE_CONFIG = {
   annovar: { label: 'Annotation', color: 'var(--accent-teal)' },
   acmg: { label: 'ACMG', color: 'var(--accent-purple, #7c3aed)' },
   exomiser: { label: PHENOTYPE_FILTER_DISPLAY_NAME, color: 'var(--warning)' },
+  module1: { label: 'Raw data', color: 'var(--accent-teal)' },
 };
 
 function getJobColor(jobType) {

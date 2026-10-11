@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { actionGate } from '@/services/tierLimits';
 import { describeLimitError, isEmailVerificationCode } from '@/services/limitErrors';
 import {
+  cancelModule1Job,
   fetchModule1BedCatalog,
   fetchModule1Status,
   isAllowedModule1RoleFilename,
@@ -15,10 +16,19 @@ import {
   presignModule1Upload,
   putFileToPresignedUrl,
   runModule1Pipeline,
+  setModule1ComputePreference,
   validateModule1Bed,
 } from '@/services/backendApi';
 
 const NON_TERMINAL_STATUSES = new Set(['queued', 'running']);
+// Queue position moves faster than pipeline phases, so a queued job is polled more often.
+const QUEUED_POLL_MS = 10000;
+const RUNNING_POLL_MS = 20000;
+const RUN_STOPPED_TOAST = 'Run stopped. No Module 1 run was deducted.';
+
+function pollDelayFor(job) {
+  return job?.status === 'queued' || job?.phase === 'waiting_gpu' ? QUEUED_POLL_MS : RUNNING_POLL_MS;
+}
 
 function jobFromStatusPayload(data, conversationId = null) {
   return {
@@ -39,6 +49,18 @@ function jobFromStatusPayload(data, conversationId = null) {
     startedAt: data.started_at ?? null,
     completedAt: data.completed_at ?? null,
     durationSeconds: data.duration_seconds ?? null,
+    // Queue/compute fields are optional: older backends omit them and the UI falls back.
+    computePreference: data.compute_preference ?? null,
+    compute: data.compute ?? null,
+    computeReason: data.compute_reason ?? null,
+    queueLane: data.queue_lane ?? null,
+    queuePosition: data.queue_position ?? null,
+    queueLength: data.queue_length ?? null,
+    estStartMin: data.est_start_min ?? null, // [lo, hi] minutes
+    estTotalMin: data.est_total_min ?? null,
+    cancellable: data.cancellable === true,
+    switchable: data.switchable === true,
+    instanceType: data.instance_type ?? null,
   };
 }
 
@@ -80,6 +102,14 @@ export function useModule1Pipeline({
   const importAbortRef = useRef(null);
   const ingestHandledRef = useRef(false);
   const pollAbortRef = useRef(null);
+  // Last `compute` seen for the polled job — the CPU-fallback toast fires only on an observed
+  // pending → cpu flip, never on a resume where the job was already on CPU.
+  const lastComputeRef = useRef({ jobId: null, compute: null });
+  const cpuFallbackToastedRef = useRef(new Set());
+  const cancelToastedRef = useRef(new Set());
+  // Holds a cancelled job on screen for one poll cycle; cleared on conversation switch so it
+  // cannot null out a different conversation's job.
+  const cancelledDismissTimerRef = useRef(null);
 
   const runIngestDoneSequence = useCallback(
     async (conversationId) => {
@@ -127,10 +157,52 @@ export function useModule1Pipeline({
     if (pollAbortRef.current) pollAbortRef.current.aborted = true;
   }, []);
 
-  // Self-rescheduling setTimeout loop (steady 20s, 30s backoff on error) — matches the
-  // poll convention used everywhere else in this app (see useVariantPipeline.js).
+  const clearCancelledDismissTimer = useCallback(() => {
+    if (cancelledDismissTimerRef.current) {
+      clearTimeout(cancelledDismissTimerRef.current);
+      cancelledDismissTimerRef.current = null;
+    }
+  }, []);
+
+  /** Show "Cancelled · …" for one poll cycle, toast once per job, then drop the job. */
+  const handleCancelled = useCallback(
+    (jobId, delayMs = RUNNING_POLL_MS) => {
+      stopPolling();
+      const toastKey = jobId || 'unknown';
+      if (!cancelToastedRef.current.has(toastKey)) {
+        cancelToastedRef.current.add(toastKey);
+        toast.success(RUN_STOPPED_TOAST);
+      }
+      clearCancelledDismissTimer();
+      cancelledDismissTimerRef.current = setTimeout(() => {
+        cancelledDismissTimerRef.current = null;
+        setModule1Job((prev) => (prev && prev.status === 'cancelled' && (!jobId || prev.jobId === jobId) ? null : prev));
+      }, delayMs);
+    },
+    [stopPolling, clearCancelledDismissTimer]
+  );
+
+  const noteComputeTransition = useCallback((nextJob) => {
+    const last = lastComputeRef.current;
+    const prevCompute = last.jobId === nextJob.jobId ? last.compute : null;
+    lastComputeRef.current = { jobId: nextJob.jobId, compute: nextJob.compute };
+    if (
+      prevCompute === 'pending' &&
+      nextJob.compute === 'cpu' &&
+      nextJob.computeReason === 'gpu_capacity_unavailable' &&
+      nextJob.jobId &&
+      !cpuFallbackToastedRef.current.has(nextJob.jobId)
+    ) {
+      cpuFallbackToastedRef.current.add(nextJob.jobId);
+      toast.info('Your Module 1 run started on CPU because no GPU was free. Expect about 2 h.');
+    }
+  }, []);
+
+  // Self-rescheduling setTimeout loop (10s while queued, 20s otherwise, 30s backoff on error)
+  // — matches the poll convention used everywhere else in this app (see useVariantPipeline.js).
+  // `initialDelayMs` 0 is an immediate refresh (after cancel / switch).
   const pollModule1Status = useCallback(
-    (conversationId) => {
+    (conversationId, initialDelayMs = RUNNING_POLL_MS) => {
       stopPolling();
       const abort = { aborted: false };
       pollAbortRef.current = abort;
@@ -151,6 +223,12 @@ export function useModule1Pipeline({
 
         const nextJob = jobFromStatusPayload(data, conversationId);
         setModule1Job((prev) => ({ ...prev, ...nextJob }));
+        noteComputeTransition(nextJob);
+
+        if (nextJob.status === 'cancelled') {
+          handleCancelled(nextJob.jobId);
+          return;
+        }
 
         if (nextJob.status === 'failed') {
           setAnnovarMessageModal({
@@ -182,12 +260,13 @@ export function useModule1Pipeline({
 
         // Critical: keep polling past status==="complete" while ingest_status is still
         // null/"running" — the backend only advances it as a side effect of this GET.
-        tick(20000);
+        // Phase "cancelling" arrives with a non-terminal status, so it keeps polling too.
+        tick(pollDelayFor(nextJob));
       };
 
-      tick(20000);
+      tick(initialDelayMs);
     },
-    [stopPolling, runIngestDoneSequence, setAnnovarMessageModal]
+    [stopPolling, runIngestDoneSequence, setAnnovarMessageModal, noteComputeTransition, handleCancelled]
   );
 
   const pollModule1StatusRef = useRef(pollModule1Status);
@@ -195,6 +274,8 @@ export function useModule1Pipeline({
 
   const adoptJob = useCallback((jobId, conversationId, initial = {}) => {
     ingestHandledRef.current = false;
+    clearCancelledDismissTimer();
+    lastComputeRef.current = { jobId, compute: initial.compute ?? 'pending' };
     setModule1Job({
       jobId,
       conversationId,
@@ -210,14 +291,27 @@ export function useModule1Pipeline({
       hasBam: false,
       hasQc: false,
       bamQcPurged: false,
+      computePreference: initial.computePreference ?? null,
+      compute: initial.compute ?? null,
+      computeReason: null,
+      queueLane: null,
+      queuePosition: null,
+      queueLength: null,
+      estStartMin: null,
+      estTotalMin: null,
+      cancellable: false,
+      switchable: false,
+      instanceType: null,
     });
-    pollModule1StatusRef.current(conversationId);
-  }, []);
+    // First check sooner than the steady interval: queue position is what the user is waiting on.
+    pollModule1StatusRef.current(conversationId, QUEUED_POLL_MS);
+  }, [clearCancelledDismissTimer]);
 
   // Resume on mount / conversation switch — a job survives page reloads only if we
   // re-check /status and re-adopt it here. Also re-surface retained QC after ingest.
   useEffect(() => {
     stopPolling();
+    clearCancelledDismissTimer();
     ingestHandledRef.current = false;
     setModule1Job(null);
     if (!activeConversationId || userTier === 'guest') return undefined;
@@ -231,9 +325,11 @@ export function useModule1Pipeline({
           data.status === 'complete' && data.ingest_status !== 'done' && data.ingest_status !== 'failed';
         const stillRunning = NON_TERMINAL_STATUSES.has(data.status) || completeNotIngested;
         if (stillRunning || data.has_qc || data.has_bam || data.bam_qc_purged) {
-          setModule1Job(jobFromStatusPayload(data, activeConversationId));
+          const resumed = jobFromStatusPayload(data, activeConversationId);
+          lastComputeRef.current = { jobId: resumed.jobId, compute: resumed.compute };
+          setModule1Job(resumed);
           if (stillRunning) {
-            pollModule1StatusRef.current(activeConversationId);
+            pollModule1StatusRef.current(activeConversationId, pollDelayFor(resumed));
           }
         }
       } catch (error) {
@@ -247,7 +343,10 @@ export function useModule1Pipeline({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConversationId, userTier]);
 
-  useEffect(() => stopPolling, [stopPolling]);
+  useEffect(() => () => {
+    stopPolling();
+    clearCancelledDismissTimer();
+  }, [stopPolling, clearCancelledDismissTimer]);
 
   const openModule1Form = useCallback(() => {
     if (userTier === 'guest') {
@@ -356,6 +455,7 @@ export function useModule1Pipeline({
       bedFileName,
       bedCatalogId,
       customBedS3Key,
+      computePreference,
     }) => {
       if (userTier === 'guest') {
         setModule1SubmitError('Please sign in to run Module 1.');
@@ -449,12 +549,15 @@ export function useModule1Pipeline({
           ...(resolvedCustomBedS3Key
             ? { custom_bed_s3_key: resolvedCustomBedS3Key }
             : { bed_catalog_id: bedCatalogId }),
+          ...(computePreference ? { compute_preference: computePreference } : {}),
         });
 
         adoptJob(result.job_id, conversationId, {
           status: result.status,
           phase: result.phase,
           message: result.message,
+          computePreference: result.compute_preference ?? computePreference ?? null,
+          compute: result.compute ?? null,
         });
         setModule1FormOpen(false);
         refreshSubscriptionStatus?.();
@@ -510,10 +613,86 @@ export function useModule1Pipeline({
     ]
   );
 
+  /** Re-read /status now and resume the normal cadence (after cancel / switch / a 409). */
+  const refreshModule1Status = useCallback(() => {
+    const conversationId = module1Job?.conversationId;
+    if (conversationId) pollModule1StatusRef.current(conversationId, 0);
+  }, [module1Job?.conversationId]);
+
+  /**
+   * "Leave queue" (queued) and "Stop run" (running) share one endpoint. Resolves true when the
+   * request went through (or was moot), false on a real failure the user should retry.
+   */
+  const cancelModule1Run = useCallback(async () => {
+    const job = module1Job;
+    if (!job?.conversationId || !job.jobId) return false;
+    try {
+      const result = await cancelModule1Job(job.conversationId, job.jobId);
+      if (result?.status === 'cancelled') {
+        setModule1Job((prev) => (prev && prev.jobId === job.jobId
+          ? { ...prev, status: 'cancelled', phase: 'cancelled', cancellable: false, switchable: false }
+          : prev));
+        handleCancelled(job.jobId);
+      } else {
+        // "cancelling": the GPU box is being shut down; /status reports when it is done.
+        setModule1Job((prev) => (prev && prev.jobId === job.jobId
+          ? { ...prev, phase: 'cancelling', cancellable: false, switchable: false }
+          : prev));
+        refreshModule1Status();
+      }
+      return true;
+    } catch (error) {
+      if (error?.status === 409) {
+        // MODULE1_NOT_CANCELLABLE (already finished or already stopping) — just show the truth.
+        refreshModule1Status();
+        return true;
+      }
+      console.warn('[useModule1Pipeline] cancel failed:', error);
+      toast.error(error?.message && error.status !== 404
+        ? error.message
+        : "Couldn't stop the run right now. Try again in a moment.");
+      return false;
+    }
+  }, [module1Job, handleCancelled, refreshModule1Status]);
+
+  /** Move a still-queued job between lanes. Only offered while `switchable`. */
+  const switchModule1Compute = useCallback(async (computePreference) => {
+    const job = module1Job;
+    if (!job?.conversationId) return false;
+    try {
+      await setModule1ComputePreference(job.conversationId, computePreference);
+      setModule1Job((prev) => (prev && prev.jobId === job.jobId ? { ...prev, computePreference } : prev));
+      toast.success(computePreference === 'cpu'
+        ? 'Switched to CPU. Your run will start on the CPU cluster.'
+        : 'Switched back to the GPU queue.');
+      refreshModule1Status();
+      return true;
+    } catch (error) {
+      if (error?.status === 409 && error.code === 'MODULE1_ALREADY_STARTED') {
+        toast.info('Your run already started, so it can no longer be switched.');
+        refreshModule1Status();
+        return true;
+      }
+      if (error?.status === 409) {
+        refreshModule1Status();
+        return true;
+      }
+      console.warn('[useModule1Pipeline] compute switch failed:', error);
+      toast.error(error?.message && error.status !== 404
+        ? error.message
+        : "Couldn't switch right now. Try again in a moment.");
+      return false;
+    }
+  }, [module1Job, refreshModule1Status]);
+
   const module1JobActive =
     !!module1Job &&
     module1Job.status !== 'failed' &&
+    module1Job.status !== 'cancelled' &&
     !(module1Job.status === 'complete' && (module1Job.ingestStatus === 'done' || module1Job.ingestStatus === 'failed'));
+  // A cancelled job stays on screen ("Cancelled · …") for one poll cycle, then drops.
+  const module1CancelledVisible = module1Job?.status === 'cancelled';
+  const module1JobQueued = module1JobActive && (module1Job.status === 'queued' || module1Job.phase === 'waiting_gpu');
 
   // QC / IGV stay visible after the stepper would otherwise dismiss, until purge.
   const module1QcVisible = Boolean(module1Job?.hasQc && module1Job?.conversationId);
@@ -538,6 +717,10 @@ export function useModule1Pipeline({
     startModule1Run,
     module1Job,
     module1JobActive,
+    module1JobQueued,
+    module1CancelledVisible,
+    cancelModule1Run,
+    switchModule1Compute,
     module1QcVisible,
     module1BamVisible,
     module1ReportVisible,

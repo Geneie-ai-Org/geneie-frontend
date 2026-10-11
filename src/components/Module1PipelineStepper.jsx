@@ -102,17 +102,16 @@ const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, c
       durationSeconds: job?.durationSeconds ?? null,
     }
   );
-  const confirmOpen = Boolean(confirm);
   useEffect(() => {
     // Opening the confirm moves focus to the safe choice; closing it returns focus to the trigger.
-    if (confirmOpen) {
+    if (confirm) {
       confirmSafeRef.current?.focus();
     } else if (restoreFocusRef.current) {
       const target = restoreFocusRef.current === 'trigger' ? confirmTriggerRef.current : null;
       restoreFocusRef.current = null;
       (target || headerButtonRef.current)?.focus();
     }
-  }, [confirmOpen]);
+  }, [confirm]);
 
   if (!job) return null;
 
@@ -120,8 +119,11 @@ const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, c
   const failed = job.status === 'failed';
   const cancelled = job.status === 'cancelled';
   const cancelling = !cancelled && job.phase === 'cancelling';
-  const queued = !failed && !cancelled && !cancelling && (job.status === 'queued' || job.phase === 'waiting_gpu');
-  const running = !failed && !cancelled && !cancelling && !queued && job.status === 'running';
+  // "launching" (GPU box booting) has left the queue even if status still says queued.
+  const queued = !failed && !cancelled && !cancelling && job.phase !== 'launching'
+    && (job.status === 'queued' || job.phase === 'waiting_gpu');
+  const running = !failed && !cancelled && !cancelling && !queued
+    && (job.status === 'running' || job.phase === 'launching');
   const lane = jobLane(job);
   const chip = computeChip(job);
   const finishedOk = module1FinishedSuccessfully(job);

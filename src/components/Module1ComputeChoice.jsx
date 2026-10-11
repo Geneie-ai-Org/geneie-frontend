@@ -166,6 +166,9 @@ function ComputeCard({ name, value, checked, onSelect, disabled, title, badge, d
         checked={checked}
         disabled={disabled}
         onChange={() => onSelect(value)}
+        // onChange skips a click on the already-checked card, but that click is still the
+        // user's choice and must stop the live default from flipping it later.
+        onClick={() => onSelect(value)}
         className="sr-only"
       />
       <span

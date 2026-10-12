@@ -991,12 +991,12 @@ const ColumnInterpretationResults = ({
                     annovarActionable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
                   }`}
                   style={{
-                  // Primary outline while it can run: annotating is what unblocks the missing columns.
+                  // Primary outline only on a step that needs columns (annotating unblocks it); otherwise Next leads.
                     backgroundColor: annovarActionable ? C.surfaceCard : C.surfaceHover,
-                    border: `1px solid ${genomeMismatch ? C.error : annovarActionable ? C.teal : C.borderStrong}`,
-                    color: annovarActionable ? C.teal : C.textDim,
+                    border: `1px solid ${genomeMismatch ? C.error : annovarActionable && !nextIsPrimary ? C.teal : C.borderStrong}`,
+                    color: annovarActionable ? (nextIsPrimary ? C.textMuted : C.teal) : C.textDim,
                   }}
-                  onMouseEnter={(e) => { if (annovarActionable) e.currentTarget.style.backgroundColor = C.tealSoft; }}
+                  onMouseEnter={(e) => { if (annovarActionable) e.currentTarget.style.backgroundColor = nextIsPrimary ? C.surfaceHover : C.tealSoft; }}
                   onMouseLeave={(e) => { if (annovarActionable) e.currentTarget.style.backgroundColor = C.surfaceCard; }}
                 >
                   <Tags className="w-4 h-4 shrink-0" aria-hidden style={{ color: annovarActionable ? 'var(--accent-teal)' : 'var(--text-disabled)' }} />

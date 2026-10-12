@@ -541,7 +541,9 @@ export default function PhenotypeInputPanel({
   // Reopening the step (Back → Continue, or editing a saved case) remounts this panel.
   // Start from the saved note, and leave the saved results alone until the user edits it —
   // otherwise the empty/unchanged draft reads as "note cleared" and wipes them.
-  const [draft, setDraft] = useState(() => value?.phenotype_note_clean || value?.phenotype || '');
+  // Only the cleaned note: `phenotype` falls back to a findings/disease label the user never
+  // typed, and editing that would re-interpret it and replace their picks.
+  const [draft, setDraft] = useState(() => value?.phenotype_note_clean || '');
   const untouchedDraftRef = useRef(draft);
   const isUntouchedDraft = (text) => {
     if (untouchedDraftRef.current === null) return false;

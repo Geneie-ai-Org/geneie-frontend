@@ -1406,7 +1406,12 @@ const ChatPage = () => {
     />
   ) : null;
 
-  const reportGate = getClinicalReportGate({ downloadGate, chatEligibility, gaTriageStatus });
+  const reportGate = getClinicalReportGate({
+    downloadGate,
+    chatEligibility,
+    gaTriageStatus,
+    gaStartedAt: gaTriageUpdatedAt,
+  });
   const showAutomaticReportCta =
     automaticPipeline.active &&
     automaticPipeline.phase === 'ready_report' &&

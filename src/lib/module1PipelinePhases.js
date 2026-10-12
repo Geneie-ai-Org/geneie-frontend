@@ -49,7 +49,7 @@ export function getModule1StageGroup(phase) {
 // exceptions). None of that helps the user, so it is replaced with a plain message; text
 // that is about their data (bad FASTQ, BED mismatch…) is still shown as-is.
 const INFRA_DETAIL_RE =
-  /\b(gpu|cpu|instance|region|us-[a-z]+-\d|quota|capacity|ec2|ecs|batch|s3|bucket|run script|subprocess|traceback|exception|errno|timeout|timed out|no detail|launcher|spot)\b/i;
+  /\b(gpu|instance|home-region|us-[a-z]+-\d|capacity|ec2|ecs|run script|subprocess|traceback|errno|no detail|launcher)\b/i;
 
 const MODULE1_FAILED_FALLBACK =
   "The pipeline couldn't finish. Start over to try again — if it keeps failing, contact support.";

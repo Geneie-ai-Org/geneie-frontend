@@ -47,7 +47,7 @@ const TypingText = React.memo(({ text, speed = 30, className, startDelay = 0 }) 
 const CHAT_TABLE_COMPONENTS = {
   table: ({ node, ...props }) => (
     <div
-      className="my-4 max-h-[420px] overflow-auto rounded-lg border"
+      className="isolate my-4 max-h-[420px] overflow-auto rounded-lg border"
       style={{ borderColor: 'var(--border-default)' }}
     >
       <table

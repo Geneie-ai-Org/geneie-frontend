@@ -451,27 +451,40 @@ const ChatPage = () => {
   });
 
   const [gaTriageStatus, setGaTriageStatus] = useState('');
+  const gaFilterKey = conversationFilterState.activeProprietaryFilter
+    ? JSON.stringify(conversationFilterState.activeProprietaryFilter)
+    : '';
+  const gaEnrichmentActive = Boolean(enrichmentState.active);
   useEffect(() => {
     if (!activeConversationId || userTier === 'guest') {
       setGaTriageStatus('');
       return undefined;
     }
     let cancelled = false;
+    let timer = null;
+    const armedAt = Date.now();
     const tick = async () => {
+      let status = 'absent';
       try {
         const payload = await fetchGaTriage(activeConversationId);
-        if (!cancelled) setGaTriageStatus(String(payload?.status || '').toLowerCase());
+        status = String(payload?.status || '').toLowerCase() || 'absent';
       } catch {
-        if (!cancelled) setGaTriageStatus('absent');
+        // Treated as absent; the window / enrichment rules below decide whether to retry.
+      }
+      if (cancelled) return;
+      setGaTriageStatus(status);
+      const inFlight = status === 'pending' || status === 'running' || status === 'queued';
+      const expectingRun = (gaFilterKey || gaEnrichmentActive) && Date.now() - armedAt < 20000;
+      if (inFlight || gaEnrichmentActive || expectingRun) {
+        timer = setTimeout(tick, 4000);
       }
     };
     tick();
-    const id = setInterval(tick, 4000);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      clearTimeout(timer);
     };
-  }, [activeConversationId, userTier]);
+  }, [activeConversationId, userTier, gaFilterKey, gaEnrichmentActive]);
 
   const automaticPipeline = useAutomaticPipelineConductor({
     enabled: userTier !== 'guest' && !!activeConversationId,
@@ -1306,9 +1319,6 @@ const ChatPage = () => {
       : `Limit reached${chatMeter.limit != null ? ` (${chatMeter.limit} exchanges)` : ''}. Please upgrade to Pro.`;
   }
 
-  const isPgxOnlyScope =
-    chatEligibility.allowed === true && (chatEligibility.scope || '').toLowerCase() === 'pgx_only';
-
   const pipelineOwnsMessage = enrichmentState.active || enrichmentState.failed || indexingState.active || indexingState.failed;
   const pipelineVariantsUnderConsideration = resolveVariantsUnderConsideration({
     activeProprietaryFilter: conversationFilterState.activeProprietaryFilter,
@@ -1343,9 +1353,7 @@ const ChatPage = () => {
         ? chatEligibility.reason === 'CHAT_REQUIRES_FILTER'
           ? { label: 'Apply a filter', onClick: () => setIsVariantSidebarOpen(true) }
           : null
-        : isPgxOnlyScope
-          ? { label: 'Open filters', onClick: () => setIsVariantSidebarOpen(true) }
-          : null);
+        : null);
 
   const guestPipelineCta =
     userTier === 'guest' && showAnalysisPipeline

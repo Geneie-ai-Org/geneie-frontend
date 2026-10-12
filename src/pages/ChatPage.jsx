@@ -437,6 +437,13 @@ const ChatPage = () => {
   const [gaTriageStatus, setGaTriageStatus] = useState('');
   // When the current GA status was set (≈ start time while it runs) — drives the elapsed timer.
   const [gaTriageUpdatedAt, setGaTriageUpdatedAt] = useState(null);
+  const gaFilterKey = conversationFilterState.activeProprietaryFilter
+    ? JSON.stringify(conversationFilterState.activeProprietaryFilter)
+    : '';
+  const gaEnrichmentActive = Boolean(enrichmentState.active);
+  // Indexing can overlap GA, and re-applying the same filter re-runs GA without changing
+  // the filter key — keep watching while it runs, and re-check when the tab regains focus.
+  const gaIndexingActive = Boolean(indexingState.active);
   useEffect(() => {
     if (!activeConversationId || userTier === 'guest') {
       setGaTriageStatus('');
@@ -444,24 +451,43 @@ const ChatPage = () => {
       return undefined;
     }
     let cancelled = false;
+    let timer = null;
+    const armedAt = Date.now();
+    let fetching = false;
     const tick = async () => {
+      if (fetching) return;
+      fetching = true;
+      clearTimeout(timer);
+      let status = 'absent';
+      let updatedAt = null;
       try {
         const payload = await fetchGaTriage(activeConversationId);
-        if (!cancelled) {
-          setGaTriageStatus(String(payload?.status || '').toLowerCase());
-          setGaTriageUpdatedAt(payload?.updated_at || null);
-        }
+        status = String(payload?.status || '').toLowerCase();
+        updatedAt = payload?.updated_at || null;
       } catch {
-        if (!cancelled) setGaTriageStatus('absent');
+        // Treated as absent; the window / enrichment rules below decide whether to retry.
+      }
+      fetching = false;
+      if (cancelled) return;
+      setGaTriageStatus(status);
+      setGaTriageUpdatedAt(updatedAt);
+      const inFlight = status === 'pending' || status === 'running' || status === 'queued';
+      const expectingRun = (gaFilterKey || gaEnrichmentActive) && Date.now() - armedAt < 20000;
+      if (inFlight || gaEnrichmentActive || gaIndexingActive || expectingRun) {
+        timer = setTimeout(tick, 4000);
       }
     };
     tick();
-    const id = setInterval(tick, 4000);
+    const onFocus = () => {
+      if (!cancelled) tick();
+    };
+    window.addEventListener('focus', onFocus);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      clearTimeout(timer);
+      window.removeEventListener('focus', onFocus);
     };
-  }, [activeConversationId, userTier]);
+  }, [activeConversationId, userTier, gaFilterKey, gaEnrichmentActive, gaIndexingActive]);
 
   const automaticPipeline = useAutomaticPipelineConductor({
     enabled: userTier !== 'guest' && !!activeConversationId,
@@ -1290,9 +1316,6 @@ const ChatPage = () => {
       : `Limit reached${chatMeter.limit != null ? ` (${chatMeter.limit} exchanges)` : ''}. Please upgrade to Pro.`;
   }
 
-  const isPgxOnlyScope =
-    chatEligibility.allowed === true && (chatEligibility.scope || '').toLowerCase() === 'pgx_only';
-
   const pipelineOwnsMessage = enrichmentState.active || enrichmentState.failed || indexingState.active || indexingState.failed;
   const pipelineVariantsUnderConsideration = resolveVariantsUnderConsideration({
     activeProprietaryFilter: conversationFilterState.activeProprietaryFilter,
@@ -1327,9 +1350,7 @@ const ChatPage = () => {
         ? chatEligibility.reason === 'CHAT_REQUIRES_FILTER'
           ? { label: 'Apply a filter', onClick: () => setIsVariantSidebarOpen(true) }
           : null
-        : isPgxOnlyScope
-          ? { label: 'Open filters', onClick: () => setIsVariantSidebarOpen(true) }
-          : null);
+        : null);
 
   const guestPipelineCta =
     userTier === 'guest' && showAnalysisPipeline

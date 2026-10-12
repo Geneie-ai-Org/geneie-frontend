@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { FileText, X, RotateCcw, CheckCircle, Upload, Trash2, Info, Zap, Search, Sprout, PencilLine, ChevronDown, PanelRightClose, Tags } from 'lucide-react';
 import { getDeviceId } from '@/lib/deviceId';
 import { doc, getDoc } from 'firebase/firestore';
@@ -6,7 +7,6 @@ import { optionalIdToken } from '@/lib/safeAuth';
 import DocumentUpload from './DocumentUpload';
 import ExportVariantsButton from './ExportVariantsButton';
 import CaseReportDownloadButton from './CaseReportDownloadButton';
-import TypewriterText from '@/components/ui/TypewriterText';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -518,6 +518,7 @@ const VariantFilterSidebar = ({
   gaTriageStatus = '',
   gaTriageUpdatedAt = null,
 }) => {
+  const reduceMotion = useReducedMotion();
   /* Quota is orthogonal to filter readiness. `=== false` (rather than a falsy check) so a missing
    * gate — degraded limits, still loading — never disables anything. */
   const annovarQuotaBlocked = annovarGate?.allowed === false;
@@ -2276,17 +2277,27 @@ const VariantFilterSidebar = ({
                     {PHENOTYPE_FILTER_DESCRIPTION}
                   </p>
 
-                  {/* Progress area while running. The status line types itself out and keeps
-                    * its dots moving, which is liveness enough — the pipeline drawer already
-                    * runs a travelling stroke for this same job, and a second one here just
-                    * competed with it. */}
+                  {/* Progress area while running. The status line is static on purpose — the
+                    * pipeline drawer already animates for this same job, so this card stays
+                    * plain. Trailing dots are normalised to a single ellipsis. A new message
+                    * crossfades over the old one in a single grid cell, and the cell holds two
+                    * lines (text-xs is 18px) so the card doesn't jump when wrapping changes. */}
                   {running && (
                     <div className="mb-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
-                      <TypewriterText
-                        key={runningStatusMessage}
-                        text={runningStatusMessage}
-                        className="text-xs font-medium text-[var(--text-primary)]"
-                      />
+                      <div className="grid min-h-[36px]">
+                        <AnimatePresence initial={false}>
+                          <motion.p
+                            key={runningStatusMessage}
+                            className="col-start-1 row-start-1 text-xs font-medium text-[var(--text-primary)]"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: reduceMotion ? 0 : 0.15, ease: 'easeOut' }}
+                          >
+                            {`${runningStatusMessage.replace(/[.…\s]+$/, '')}…`}
+                          </motion.p>
+                        </AnimatePresence>
+                      </div>
                       <p className="text-2xs text-[var(--text-tertiary)] mt-1.5">
                         This can take several minutes. You can leave this tab open or come back later.
                       </p>

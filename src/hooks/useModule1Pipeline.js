@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import * as mongodbApi from '../services/mongodbApi';
 import { buildVariantDataFromConversation } from '@/lib/variantPipelineUtils';
+import { getModule1FailureMessage } from '@/lib/module1PipelinePhases';
 import { useAuth } from '@/hooks/useAuth';
 import { actionGate } from '@/services/tierLimits';
 import { describeLimitError, isEmailVerificationCode } from '@/services/limitErrors';
@@ -154,8 +155,8 @@ export function useModule1Pipeline({
 
         if (nextJob.status === 'failed') {
           setAnnovarMessageModal({
-            title: 'Module 1 failed',
-            message: nextJob.error || nextJob.message || 'The pipeline did not complete.',
+            title: 'Pipeline failed',
+            message: getModule1FailureMessage(nextJob),
             variant: 'error',
           });
           return;

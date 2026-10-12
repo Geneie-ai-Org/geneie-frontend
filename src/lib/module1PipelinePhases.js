@@ -45,6 +45,25 @@ export function getModule1StageGroup(phase) {
   return group?.id || 'queued';
 }
 
+// Backend job text often describes infrastructure (GPU region, instances, S3, scripts,
+// exceptions). None of that helps the user, so it is replaced with a plain message; text
+// that is about their data (bad FASTQ, BED mismatch…) is still shown as-is.
+const INFRA_DETAIL_RE =
+  /\b(gpu|cpu|instance|region|us-[a-z]+-\d|quota|capacity|ec2|ecs|batch|s3|bucket|run script|subprocess|traceback|exception|errno|timeout|timed out|no detail|launcher|spot)\b/i;
+
+const MODULE1_FAILED_FALLBACK =
+  "The pipeline couldn't finish. Start over to try again — if it keeps failing, contact support.";
+
+/** User-facing failure text for a Module 1 job; never exposes infrastructure detail. */
+export function getModule1FailureMessage(job) {
+  const raw = String(job?.error || job?.message || '').trim();
+  if (!raw || INFRA_DETAIL_RE.test(raw)) {
+    if (raw) console.warn('[Module1] failure detail hidden from user:', raw);
+    return MODULE1_FAILED_FALLBACK;
+  }
+  return raw;
+}
+
 export function getModule1PhaseMessage(phase, backendMessage) {
   return backendMessage || MODULE1_PHASE_MESSAGES[phase] || 'Processing…';
 }

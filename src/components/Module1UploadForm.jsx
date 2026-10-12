@@ -14,6 +14,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
 import { PillToggle } from '@/components/ui/pill-toggle';
@@ -280,6 +290,9 @@ const Module1UploadForm = ({
   gateMeterDetail,
 }) => {
   const [sampleName, setSampleName] = useState('');
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  // Live text in the phenotype box, for the "Skip & start" label.
+  const [phenotypeDraft, setPhenotypeDraft] = useState('');
   const [genome, setGenome] = useState('hg38');
   const [sequencingType, setSequencingType] = useState('WES');
   const [r1File, setR1File] = useState(null);
@@ -547,10 +560,23 @@ const Module1UploadForm = ({
 
   return (
     <TooltipProvider>
-      <Dialog open={open} onOpenChange={(next) => { if (!next) onClose?.(); }}>
+      {/* Outside click / Esc ask before dropping the form; the × and Cancel close directly. */}
+      <Dialog
+        open={open}
+        onOpenChange={(next, details) => {
+          if (next) return;
+          if (details?.reason === 'outside-press' || details?.reason === 'escape-key') {
+            setShowDiscardConfirm(true);
+            return;
+          }
+          onClose?.();
+        }}
+      >
+        {/* Pinned to the top rather than centred: the steps grow as results load, and a
+          * centred dialog jumped up each time it did. */}
         <DialogContent
           showCloseButton
-          className="!max-w-2xl w-full max-h-[min(96vh,900px)] flex flex-col p-0 gap-0 overflow-hidden ring-0 border"
+          className="!max-w-2xl w-full top-[5vh] translate-y-0 max-h-[min(90vh,900px)] flex flex-col p-0 gap-0 overflow-hidden ring-0 border"
           style={{ backgroundColor: 'var(--bg-surface-raised)', boxShadow: 'var(--shadow-lg)', borderColor: 'var(--border-default)' }}
         >
           <DialogTitle className="sr-only">Upload raw sequencing data (FASTQ)</DialogTitle>
@@ -562,15 +588,11 @@ const Module1UploadForm = ({
             <h3 className="text-base font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
               Upload raw sequencing data
             </h3>
-            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-              {germlineWizard
-                ? metadataStep === 'sample'
-                  ? 'Step 1 of 3 — sample basics and FASTQ files.'
-                  : metadataStep === 'analysis'
-                    ? 'Step 2 of 3 — Germline details.'
-                    : 'Step 3 of 3 — Phenotype (optional).'
-                : 'Upload paired FASTQ files (R1 + R2). Typical runtime: 2–4 hours — you can close this and keep using the app.'}
-            </p>
+            {!germlineWizard && (
+              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                Upload paired FASTQ files (R1 + R2). Typical runtime: 2–4 hours — you can close this and keep using the app.
+              </p>
+            )}
             {germlineWizard && (
               <div className="flex items-center gap-1.5 mt-3" aria-hidden="true">
                 {Array.from({ length: metadataTotalSteps }, (_, i) => (
@@ -586,6 +608,22 @@ const Module1UploadForm = ({
                   />
                 ))}
               </div>
+            )}
+            {germlineWizard && (
+            <div className="flex items-baseline justify-between gap-3 mt-2.5">
+              <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                {metadataStep === 'sample' ? (
+                  'Sample & files'
+                ) : metadataStep === 'analysis' ? (
+                  'Germline details'
+                ) : (
+                  <>Phenotype <span className="text-2xs font-normal" style={{ color: 'var(--text-tertiary)' }}>(optional)</span></>
+                )}
+              </p>
+              <span className="text-2xs shrink-0" style={{ color: 'var(--text-tertiary)' }}>
+                {metadataStepIndex} of {metadataTotalSteps}
+              </span>
+            </div>
             )}
             {(metadataStep === 'sample' || !germlineWizard) && (
               <PipelineRunModeToggle
@@ -821,9 +859,6 @@ const Module1UploadForm = ({
 
               {germlineWizard && metadataStep === 'analysis' && (
                 <div className="disclosure-enter">
-                  <h4 className="text-xs font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
-                    Germline analysis fields
-                  </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
                     <div>
                       <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
@@ -872,13 +907,9 @@ const Module1UploadForm = ({
 
               {germlineWizard && metadataStep === 'phenotype' && (
                 <div className="disclosure-enter">
-                  <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
-                    Phenotype
-                  </h4>
-                  <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
-                    Optional — enables phenotype-driven prioritization and gene panel suggestions.
-                  </p>
                   <PhenotypeInputPanel
+                    hideLabel
+                    onDraftChange={setPhenotypeDraft}
                     value={{
                       phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_NOTE,
                       phenotype_findings: sampleMetadata.phenotype_findings || '',
@@ -988,7 +1019,15 @@ const Module1UploadForm = ({
                     className="px-4 py-2 text-sm font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
                   >
-                    {module1Submitting ? (isUrlMode ? 'Importing…' : 'Starting…') : submitLabel}
+                    {module1Submitting
+                      ? (isUrlMode ? 'Importing…' : 'Starting…')
+                      : germlineWizard &&
+                          metadataStep === 'phenotype' &&
+                          !gate?.staging &&
+                          !phenotypeDraft.trim() &&
+                          !(sampleMetadata.phenotype || '').trim()
+                        ? 'Skip & start pipeline'
+                        : submitLabel}
                   </button>
                 )}
               </div>
@@ -996,6 +1035,28 @@ const Module1UploadForm = ({
           </form>
         </DialogContent>
       </Dialog>
+      <AlertDialog open={showDiscardConfirm} onOpenChange={(next) => { if (!next) setShowDiscardConfirm(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard this upload?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The files and the details you entered will be cleared.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[var(--error)] text-white hover:brightness-110"
+              onClick={() => {
+                setShowDiscardConfirm(false);
+                onClose?.();
+              }}
+            >
+              Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </TooltipProvider>
   );
 };

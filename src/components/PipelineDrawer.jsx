@@ -7,6 +7,7 @@ import { useRunTimer } from '@/hooks/useRunTimer';
 import { formatDuration } from '@/lib/formatDuration';
 import {
   MODULE1_STAGE_GROUPS,
+  getModule1FailureMessage,
   getModule1StageGroup,
   module1FinishedSuccessfully,
 } from '@/lib/module1PipelinePhases';
@@ -723,17 +724,36 @@ const PipelineDrawer = ({
                   })}
                 </ol>
               ) : isFastqRoute ? (
-                <ol className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-1 px-1">
-                  {MODULE1_STEP_GROUPS.map((group) => {
+                <ol className="flex flex-wrap items-center gap-x-2 gap-y-2 py-0.5 w-full">
+                  {MODULE1_STEP_GROUPS.map((group, index) => {
                     const status = module1GroupStatus(group.id);
+                    const isLast = index === MODULE1_STEP_GROUPS.length - 1;
                     return (
                       <li
                         key={group.id}
-                        className="flex items-center gap-1.5 text-2xs sm:text-xs"
-                        style={stepTextStyle(status === 'running' ? 'running' : status, false)}
+                        className={`flex items-center${isLast ? '' : ' flex-1'}`}
                       >
-                        <StepGlyph status={status} />
-                        {group.label}
+                        <span
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-[10px] text-2xs sm:text-xs shrink-0"
+                          style={{
+                            ...stepTextStyle(status, false),
+                            ...(status === 'running' ? { backgroundColor: 'var(--accent-teal-soft)' } : null),
+                          }}
+                        >
+                          <StepGlyph status={status} />
+                          {group.label}
+                        </span>
+                        {!isLast && (
+                          <span
+                            className="h-px flex-1 min-w-[0.75rem] mx-2 shrink-0"
+                            style={{
+                              backgroundColor: isStepPassed(status)
+                                ? 'var(--text-disabled)'
+                                : 'var(--border-default)',
+                            }}
+                            aria-hidden
+                          />
+                        )}
                       </li>
                     );
                   })}
@@ -764,7 +784,7 @@ const PipelineDrawer = ({
             style={{ backgroundColor: 'var(--error-soft)', borderColor: 'var(--error)' }}
           >
             <span className="text-xs" style={{ color: 'var(--error)' }}>
-              {module1Job.error || module1Job.message || 'The pipeline did not complete successfully.'}
+              {getModule1FailureMessage(module1Job)}
             </span>
             {onModule1StartOver && (
               <button

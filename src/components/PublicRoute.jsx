@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { postLoginPath } from '@/lib/postLoginPath';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
 
 const PublicRoute = ({ children }) => {
@@ -11,10 +12,10 @@ const PublicRoute = ({ children }) => {
     // If auth is ready and user is logged in, redirect to app
     if (isAuthReady && !userLoading && userId) {
       if (!location.pathname.startsWith('/app')) {
-        window.location.replace('/app');
+        window.location.replace(postLoginPath(location));
       }
     }
-  }, [userId, isAuthReady, userLoading, location.pathname]);
+  }, [userId, isAuthReady, userLoading, location]);
 
   if (!isAuthReady || userLoading) {
     return <SessionLoadingScreen message="Loading..." />;

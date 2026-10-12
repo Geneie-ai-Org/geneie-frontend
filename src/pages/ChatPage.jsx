@@ -1229,6 +1229,31 @@ const ChatPage = () => {
 
 
   // --- MAIN RENDER GATING LOGIC ---
+  // Must stay above the early returns below: when a guest hits the chat limit the page
+  // switches to the sign-up screen mid-session, and a hook below a return then changes the
+  // hook count and crashes the page ("Something went wrong").
+  const reportGate = getClinicalReportGate({
+    downloadGate,
+    chatEligibility,
+    gaTriageStatus,
+    gaStartedAt: gaTriageUpdatedAt,
+  });
+  const showAutomaticReportCta =
+    automaticPipeline.active &&
+    automaticPipeline.phase === 'ready_report' &&
+    userTier !== 'guest' &&
+    !!variantData &&
+    !!activeConversationId;
+
+  // Automatic ready_report: open the one review/report modal once (still confirm before PDF).
+  useEffect(() => {
+    if (!showAutomaticReportCta || reportGate?.blocked) return;
+    if (autoOpenedReportForConvRef.current === activeConversationId) return;
+    autoOpenedReportForConvRef.current = activeConversationId;
+    setIsVariantSidebarOpen(true);
+    setClinicalReportOpen(true);
+  }, [showAutomaticReportCta, reportGate?.blocked, activeConversationId]);
+
   if (!isAuthReady || userLoading) {
     return <SessionLoadingScreen />;
   }
@@ -1426,28 +1451,6 @@ const ChatPage = () => {
     />
   ) : null;
 
-  const reportGate = getClinicalReportGate({
-    downloadGate,
-    chatEligibility,
-    gaTriageStatus,
-    gaStartedAt: gaTriageUpdatedAt,
-  });
-  const showAutomaticReportCta =
-    automaticPipeline.active &&
-    automaticPipeline.phase === 'ready_report' &&
-    userTier !== 'guest' &&
-    !!variantData &&
-    !!activeConversationId;
-
-  // Automatic ready_report: open the one review/report modal once (still confirm before PDF).
-  useEffect(() => {
-    if (!showAutomaticReportCta || reportGate?.blocked) return;
-    if (autoOpenedReportForConvRef.current === activeConversationId) return;
-    autoOpenedReportForConvRef.current = activeConversationId;
-    setIsVariantSidebarOpen(true);
-    setClinicalReportOpen(true);
-  }, [showAutomaticReportCta, reportGate?.blocked, activeConversationId]);
-
   const automaticPipelineBanner =
     automaticPipeline.active && automaticPipeline.message ? (
       <AutomaticPipelinePanel
@@ -1636,7 +1639,7 @@ const ChatPage = () => {
 
               {userTier === 'guest' && guestExchangesUsed >= 3 && !guestLimitExceeded && (
                 <div className="mb-4 w-full max-w-2xl px-4 py-3 rounded-xl border flex items-center justify-between gap-3"
-                  style={{ backgroundColor: 'rgba(245, 158, 11, 0.06)', borderColor: 'rgba(245, 158, 11, 0.2)' }}>
+                  style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)' }}>
                   <span className="text-xs font-medium" style={{ color: 'var(--warning)' }}>
                     Only {DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed} free message{DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed === 1 ? '' : 's'} left. Sign up for more and save your history.
                   </span>
@@ -1855,7 +1858,8 @@ const ChatPage = () => {
                   scroll region; nothing rectangular clips the messages any more. */}
               <div ref={composerDockRef} className="chat-column-inner chat-composer-dock pb-3 pt-0.5">
                 {/* The only guest usage counter in a conversation: next to where the next message
-                  * is typed. It turns amber on the last free message instead of a banner up top. */}
+                  * is typed. On the last free message it gets bolder and the CTA changes, instead of
+                  * a banner up top. */}
                 {userTier === 'guest' && (() => {
                   const left = Math.max(0, DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed);
                   const low = left <= 1;

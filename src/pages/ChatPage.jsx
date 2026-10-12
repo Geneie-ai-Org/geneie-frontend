@@ -1616,7 +1616,7 @@ const ChatPage = () => {
 
               {userTier === 'guest' && guestExchangesUsed >= 3 && !guestLimitExceeded && (
                 <div className="mb-4 w-full max-w-2xl px-4 py-3 rounded-xl border flex items-center justify-between gap-3"
-                  style={{ backgroundColor: 'rgba(245, 158, 11, 0.06)', borderColor: 'rgba(245, 158, 11, 0.2)' }}>
+                  style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)' }}>
                   <span className="text-xs font-medium" style={{ color: 'var(--warning)' }}>
                     Only {DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed} free message{DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed === 1 ? '' : 's'} left. Sign up for more and save your history.
                   </span>
@@ -1742,7 +1742,8 @@ const ChatPage = () => {
                   scroll region; nothing rectangular clips the messages any more. */}
               <div ref={composerDockRef} className="chat-column-inner chat-composer-dock pb-3 pt-0.5">
                 {/* The only guest usage counter in a conversation: next to where the next message
-                  * is typed. It turns amber on the last free message instead of a banner up top. */}
+                  * is typed. On the last free message it gets bolder and the CTA changes, instead of
+                  * a banner up top. */}
                 {userTier === 'guest' && (() => {
                   const left = Math.max(0, DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed);
                   const low = left <= 1;

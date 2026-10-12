@@ -439,6 +439,9 @@ const ChatPage = () => {
     ? JSON.stringify(conversationFilterState.activeProprietaryFilter)
     : '';
   const gaEnrichmentActive = Boolean(enrichmentState.active);
+  // Indexing can overlap GA, and re-applying the same filter re-runs GA without changing
+  // the filter key — keep watching while it runs, and re-check when the tab regains focus.
+  const gaIndexingActive = Boolean(indexingState.active);
   useEffect(() => {
     if (!activeConversationId || userTier === 'guest') {
       setGaTriageStatus('');
@@ -447,28 +450,38 @@ const ChatPage = () => {
     let cancelled = false;
     let timer = null;
     const armedAt = Date.now();
+    let fetching = false;
     const tick = async () => {
+      if (fetching) return;
+      fetching = true;
+      clearTimeout(timer);
       let status = 'absent';
       try {
         const payload = await fetchGaTriage(activeConversationId);
-        status = String(payload?.status || '').toLowerCase() || 'absent';
+        status = String(payload?.status || '').toLowerCase();
       } catch {
         // Treated as absent; the window / enrichment rules below decide whether to retry.
       }
+      fetching = false;
       if (cancelled) return;
       setGaTriageStatus(status);
       const inFlight = status === 'pending' || status === 'running' || status === 'queued';
       const expectingRun = (gaFilterKey || gaEnrichmentActive) && Date.now() - armedAt < 20000;
-      if (inFlight || gaEnrichmentActive || expectingRun) {
+      if (inFlight || gaEnrichmentActive || gaIndexingActive || expectingRun) {
         timer = setTimeout(tick, 4000);
       }
     };
     tick();
+    const onFocus = () => {
+      if (!cancelled) tick();
+    };
+    window.addEventListener('focus', onFocus);
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      window.removeEventListener('focus', onFocus);
     };
-  }, [activeConversationId, userTier, gaFilterKey, gaEnrichmentActive]);
+  }, [activeConversationId, userTier, gaFilterKey, gaEnrichmentActive, gaIndexingActive]);
 
   const automaticPipeline = useAutomaticPipelineConductor({
     enabled: userTier !== 'guest' && !!activeConversationId,

@@ -16,6 +16,7 @@ const C = {
   surfaceCard: 'var(--bg-surface)',
   surfaceHover: 'var(--bg-surface-hover)',
   border: 'var(--border-default)',
+  borderStrong: 'var(--border-strong)',
   text: 'var(--text-primary)',
   textMuted: 'var(--text-secondary)',
   textDim: 'var(--text-tertiary)',
@@ -36,6 +37,10 @@ const C = {
   tooltip: 'var(--bg-surface-hover)',
   shadow: 'var(--shadow-xl)',
 };
+
+// Tokens are CSS variables, so a hex alpha suffix (tint(C.success, 40)) is invalid CSS and the
+// browser drops it. Mix with transparent instead.
+const tint = (color, pct) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
 
 const ColumnInterpretationResults = ({
   interpretationResult,
@@ -273,10 +278,12 @@ const ColumnInterpretationResults = ({
     const entries = Object.entries(columns);
     if (!entries.length) return null;
 
-    // Missing/not-found columns are rendered muted (gray) rather than accent-colored.
-    const missingColor = opts.missingColor || C.textDim;
-
     const found = entries.filter(([, c]) => c.found);
+
+    // Missing columns that block the step read as errors. For "any N of these" groups
+    // (`minFound`), they only do until enough are found; past that, the rest are extras.
+    const groupSatisfied = opts.minFound != null && found.length >= opts.minFound;
+    const missingColor = opts.missingColor || (groupSatisfied ? C.textDim : C.error);
     const issues = entries.filter(([colName, c]) => !c.found);
     const allFound = issues.length === 0;
 
@@ -286,15 +293,12 @@ const ColumnInterpretationResults = ({
         <Accordion>
           <AccordionItem value={sectionKey} className="border-0">
             <AccordionTrigger className="py-0 text-xs font-normal hover:no-underline items-center">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" style={{ color: C.success }} />
-                <span className="text-xs" style={{ color: C.textMuted }}>
-                  {label}: {found.length}/{entries.length} columns found
-                </span>
+              <span className="text-xs" style={{ color: C.textMuted }}>
+                {label}: {found.length}/{entries.length} columns found
               </span>
             </AccordionTrigger>
             <AccordionContent className="pb-0">
-              <div className="mt-2 ml-5 flex flex-wrap gap-1.5">
+              <div className="mt-2 flex flex-wrap gap-1.5">
                 {entries.map(([colName, colInfo]) => {
                   const label = colInfo.matched_column || colName;
                   const roleDiffers = colInfo.matched_column && colInfo.matched_column !== colName;
@@ -304,8 +308,8 @@ const ColumnInterpretationResults = ({
                       title={roleDiffers ? `Role: ${colName}` : label}
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
                       style={{
-                        backgroundColor: C.successSoft || `${C.success}18`,
-                        borderColor: `${C.success}40`,
+                        backgroundColor: C.successSoft,
+                        borderColor: tint(C.success, 40),
                         color: C.success,
                       }}
                     >
@@ -336,8 +340,8 @@ const ColumnInterpretationResults = ({
               key={colName}
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
               style={{
-                backgroundColor: `${missingColor}14`,
-                borderColor: `${missingColor}40`,
+                backgroundColor: tint(missingColor, 8),
+                borderColor: tint(missingColor, 40),
                 color: missingColor,
               }}
             >
@@ -352,8 +356,8 @@ const ColumnInterpretationResults = ({
                 title={colInfo.matched_column && colInfo.matched_column !== colName ? `Role: ${colName}` : pillLabel}
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
                 style={{
-                  backgroundColor: C.successSoft || `${C.success}18`,
-                  borderColor: `${C.success}40`,
+                  backgroundColor: C.successSoft,
+                  borderColor: tint(C.success, 40),
                   color: C.success,
                 }}
               >
@@ -381,15 +385,12 @@ const ColumnInterpretationResults = ({
         <Accordion>
           <AccordionItem value={sectionKey} className="border-0">
             <AccordionTrigger className="py-0 text-xs font-normal hover:no-underline items-center">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" style={{ color: C.success }} />
-                <span className="text-xs" style={{ color: C.textMuted }}>
-                  {label}: {found.length}/{entries.length} columns found
-                </span>
+              <span className="text-xs" style={{ color: C.textMuted }}>
+                {label}: {found.length}/{entries.length} columns found
               </span>
             </AccordionTrigger>
             <AccordionContent className="pb-0">
-              <div className="mt-2 ml-5 flex flex-wrap gap-1.5">
+              <div className="mt-2 flex flex-wrap gap-1.5">
                 {entries.map(([colName, colInfo]) => {
                   const pillLabel = colInfo.matched_column || colName;
                   const roleDiffers = colInfo.matched_column && colInfo.matched_column !== colName;
@@ -404,8 +405,8 @@ const ColumnInterpretationResults = ({
                       title={tip}
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
                       style={{
-                        backgroundColor: C.successSoft || `${C.success}18`,
-                        borderColor: `${C.success}40`,
+                        backgroundColor: C.successSoft,
+                        borderColor: tint(C.success, 40),
                         color: C.success,
                       }}
                     >
@@ -425,7 +426,7 @@ const ColumnInterpretationResults = ({
     return (
       <div>
         <div className="flex items-center gap-1.5 mb-1.5">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" style={{ color: C.warning }} />
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" style={{ color: issues.some(([, c]) => c.required) ? C.error : C.textDim }} />
           <span className="text-xs font-medium" style={{ color: C.text }}>
             {label}: {found.length}/{entries.length} found
           </span>
@@ -436,9 +437,9 @@ const ColumnInterpretationResults = ({
               key={colName}
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
               style={{
-                backgroundColor: colInfo.required ? (C.warningSoft || `${C.warning}18`) : 'transparent',
-                borderColor: colInfo.required ? `${C.warning}40` : C.border,
-                color: colInfo.required ? C.warning : C.textDim,
+                backgroundColor: colInfo.required ? tint(C.error, 8) : 'transparent',
+                borderColor: colInfo.required ? tint(C.error, 40) : C.border,
+                color: colInfo.required ? C.error : C.textDim,
               }}
             >
               {colInfo.required ? 'Missing' : 'Optional'} · {colName}
@@ -452,8 +453,8 @@ const ColumnInterpretationResults = ({
                 title={colInfo.required ? `${pillLabel} (Required)` : pillLabel}
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
                 style={{
-                  backgroundColor: C.successSoft || `${C.success}18`,
-                  borderColor: `${C.success}40`,
+                  backgroundColor: C.successSoft,
+                  borderColor: tint(C.success, 40),
                   color: C.success,
                 }}
               >
@@ -493,12 +494,12 @@ const ColumnInterpretationResults = ({
       return (
         <div className="space-y-3 text-sm">
           {renderColumnGroup(`step2_required`, 'Required Columns', required, columnsNoValidValues)}
-          {renderColumnGroup(`step2_pathogenicity`, 'Pathogenicity Predictors (At Least 2 Required)', pathogenicity_group, columnsNoValidValues, { missingLabel: 'Not found', missingColor: C.textDim })}
+          {renderColumnGroup(`step2_pathogenicity`, 'Pathogenicity Predictors (At Least 2 Required)', pathogenicity_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 2 })}
 
           {missing_groups.length > 0 && (
-            <div className="p-2 rounded" style={{ backgroundColor: C.warningSoft, border: `1px solid ${C.warning}` }}>
-              <p className="mb-1" style={{ color: C.warning }}>Missing Groups</p>
-              <ul className="list-inside" style={{ color: C.warningText }}>
+            <div className="p-2 rounded" style={{ backgroundColor: C.errorSoft, border: `1px solid ${tint(C.error, 40)}` }}>
+              <p className="mb-1 font-medium" style={{ color: C.error }}>Missing Groups</p>
+              <ul className="list-inside" style={{ color: C.error }}>
                 {missing_groups.map((group, idx) => (
                   <li key={idx}>{group}</li>
                 ))}
@@ -523,8 +524,8 @@ const ColumnInterpretationResults = ({
       return (
         <div className="space-y-3 text-sm">
           {renderColumnGroup(`step3_required`, 'Required Columns', required, columnsNoValidValues)}
-          {renderColumnGroup(`step3_genotype`, 'Sample Genotype (Any One Required)', sample_genotype_group, columnsNoValidValues, { missingLabel: 'Not found', missingColor: C.textDim })}
-          {renderColumnGroup(`step3_pathscore`, 'Pathogenicity Scores (Any One Required)', pathogenicity_score_group, columnsNoValidValues, { missingLabel: 'Not found', missingColor: C.textDim })}
+          {renderColumnGroup(`step3_genotype`, 'Sample Genotype (Any One Required)', sample_genotype_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 1 })}
+          {renderColumnGroup(`step3_pathscore`, 'Pathogenicity Scores (Any One Required)', pathogenicity_score_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 1 })}
           {renderConditionalGroup(`step3_conditional`, 'Conditional Columns', conditional)}
           {renderColumnGroup(`step3_optional`, 'Optional Columns', optional, [], { missingLabel: 'Not found', missingColor: C.textDim })}
 
@@ -594,6 +595,7 @@ const ColumnInterpretationResults = ({
   const selectedStepData = stepperSteps.find((s) => s.n === selectedStep);
   const canGoBack = selectedStep > 1;
   const canGoForward = selectedStep < stepperSteps.length;
+  const nextIsPrimary = selectedStepData?.status !== 'failed';
   const goToStep = (n) => setExpandedStep(Math.max(1, Math.min(stepperSteps.length, n)));
 
   return (
@@ -687,7 +689,7 @@ const ColumnInterpretationResults = ({
               <button
                 onClick={() => setShowAnnovarConfirm(false)}
                 className="px-6 py-2 text-sm font-semibold rounded-xl transition-colors shadow-sm"
-                style={{ backgroundColor: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted }}
+                style={{ backgroundColor: 'transparent', border: `1px solid ${C.borderStrong}`, color: C.textMuted }}
               >
                 Cancel
               </button>
@@ -807,12 +809,12 @@ const ColumnInterpretationResults = ({
                 nodeStyle = { backgroundColor: C.teal, border: 'none' };
                 iconColor = C.onAccent;
                 NodeGlyph = Check;
+              } else if (failed) {
+                nodeStyle = { backgroundColor: C.error, border: 'none' };
+                iconColor = C.surfaceCard;
               } else if (isSel) {
                 nodeStyle = { backgroundColor: C.teal, border: 'none' };
                 iconColor = C.onAccent;
-              } else if (failed) {
-                nodeStyle = { backgroundColor: 'transparent', border: `1.5px solid ${C.error}` };
-                iconColor = C.error;
               } else {
                 nodeStyle = { backgroundColor: C.surfaceCard, border: `1.5px solid ${C.border}` };
                 iconColor = C.textDim;
@@ -957,8 +959,8 @@ const ColumnInterpretationResults = ({
                   {/* <span
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border"
                     style={{
-                      backgroundColor: C.successSoft || `${C.success}18`,
-                      borderColor: `${C.success}40`,
+                      backgroundColor: C.successSoft,
+                      borderColor: tint(C.success, 40),
                       color: C.success,
                     }}
                   >
@@ -989,12 +991,13 @@ const ColumnInterpretationResults = ({
                     annovarActionable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
                   }`}
                   style={{
+                  // Primary outline while it can run: annotating is what unblocks the missing columns.
                     backgroundColor: annovarActionable ? C.surfaceCard : C.surfaceHover,
-                    border: `1px solid ${genomeMismatch ? C.error : C.border}`,
-                    color: annovarActionable ? C.textMuted : C.textDim,
+                    border: `1px solid ${genomeMismatch ? C.error : annovarActionable ? C.teal : C.borderStrong}`,
+                    color: annovarActionable ? C.teal : C.textDim,
                   }}
-                  onMouseEnter={(e) => { if (annovarActionable) { e.target.style.backgroundColor = C.surfaceHover; e.target.style.color = C.text; } }}
-                  onMouseLeave={(e) => { if (annovarActionable) { e.target.style.backgroundColor = C.surfaceCard; e.target.style.color = C.textMuted; } }}
+                  onMouseEnter={(e) => { if (annovarActionable) e.currentTarget.style.backgroundColor = C.tealSoft; }}
+                  onMouseLeave={(e) => { if (annovarActionable) e.currentTarget.style.backgroundColor = C.surfaceCard; }}
                 >
                   <Tags className="w-4 h-4 shrink-0" aria-hidden style={{ color: annovarActionable ? 'var(--accent-teal)' : 'var(--text-disabled)' }} />
                   {annovarAlreadyRun ? 'Annotation complete' : 'Run Annotation'}
@@ -1098,7 +1101,7 @@ const ColumnInterpretationResults = ({
                       }`}
                       style={{
                         backgroundColor: exomiserEnabled ? C.surfaceCard : C.surfaceHover,
-                        border: `1px solid ${genomeMismatch ? C.error : C.border}`,
+                        border: `1px solid ${genomeMismatch ? C.error : C.borderStrong}`,
                         color: exomiserEnabled ? C.teal : C.textDim,
                       }}
                       onMouseEnter={(e) => { if (exomiserEnabled) e.currentTarget.style.backgroundColor = C.surfaceHover; }}
@@ -1136,7 +1139,7 @@ const ColumnInterpretationResults = ({
             onClick={() => goToStep(selectedStep - 1)}
             disabled={!canGoBack}
             className="px-4 py-2 text-sm font-medium rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ backgroundColor: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted }}
+            style={{ backgroundColor: 'transparent', border: `1px solid ${C.borderStrong}`, color: C.textMuted }}
             onMouseEnter={(e) => { if (canGoBack) e.currentTarget.style.backgroundColor = C.surfaceHover; }}
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
@@ -1148,8 +1151,12 @@ const ColumnInterpretationResults = ({
                 type="button"
                 onClick={() => goToStep(selectedStep + 1)}
                 className="px-4 py-2 text-sm font-medium rounded-xl transition-colors"
-                style={{ backgroundColor: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = C.surfaceHover; }}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: `1px solid ${nextIsPrimary ? C.teal : C.borderStrong}`,
+                  color: nextIsPrimary ? C.teal : C.textMuted,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = nextIsPrimary ? C.tealSoft : C.surfaceHover; }}
                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 Next →

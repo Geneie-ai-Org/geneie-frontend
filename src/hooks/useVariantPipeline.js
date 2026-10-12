@@ -1314,15 +1314,28 @@ export function useVariantPipeline({
 
   const enrichmentActive = enrichmentState.active;
   const indexingActive = indexingState.active;
+  // The BE reports reason PGX_ONLY (allowed, scope pgx_only) while disease chat is still being
+  // prepared (enrichment / advanced-chat index) once PGx is done, which hides the ENRICHMENT_*/
+  // ADVANCED_CHAT_INDEXING reasons the loop above keys on. Keep polling in that state, capped,
+  // so the UI upgrades to full variant chat without a reload.
+  const pgxOnlyPending =
+    chatEligibility.allowed === true &&
+    (chatEligibility.scope || '').toLowerCase() === 'pgx_only' &&
+    !enrichmentActive &&
+    !indexingActive;
   useEffect(() => {
-    const shouldPoll = enrichmentActive || indexingActive || filterLoadPending;
+    const shouldPoll = enrichmentActive || indexingActive || filterLoadPending || pgxOnlyPending;
     if (!shouldPoll || !activeConversationId || userTier === 'guest') return;
     let cancelled = false;
     let timer = null;
     let ticks = 0;
     // Cap recovery polling for post-filter PG lag (~10 min at 4s). Enrichment/indexing
     // may legitimately run longer; those reasons keep the poll via enrichmentActive.
-    const maxTicks = filterLoadPending && !enrichmentActive && !indexingActive ? 150 : Infinity;
+    const maxTicks = pgxOnlyPending
+      ? 450 // ~30 min at 4s
+      : filterLoadPending && !enrichmentActive && !indexingActive
+        ? 150
+        : Infinity;
     const tick = async () => {
       if (cancelled) return;
       ticks += 1;
@@ -1346,6 +1359,7 @@ export function useVariantPipeline({
     enrichmentActive,
     indexingActive,
     filterLoadPending,
+    pgxOnlyPending,
     activeConversationId,
     userTier,
   ]);

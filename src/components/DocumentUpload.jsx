@@ -746,7 +746,7 @@ const DocumentUpload = ({
           const detail = errorData.detail;
           if (detail && typeof detail === 'object') {
             const code = detail.code;
-            if (code === 'GUEST_LIMIT_REACHED' || code === 'FREE_TIER_LIMIT_REACHED') {
+            if (code === 'GUEST_LIMIT_REACHED' || code === 'GUEST_UPLOAD_LIMIT_REACHED' || code === 'FREE_TIER_LIMIT_REACHED') {
               errorMsg = detail.message || 'Upload limit reached. Please upgrade to continue.';
             } else if (
               code === 'GUEST_FILE_SIZE_EXCEEDED' ||

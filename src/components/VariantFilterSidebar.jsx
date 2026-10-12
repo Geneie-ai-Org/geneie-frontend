@@ -943,6 +943,8 @@ const VariantFilterSidebar = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          // Lets the backend verify a guest owns this conversation (guests have no token).
+          'X-Device-Id': getDeviceId(),
           ...(token && { 'Authorization': `Bearer ${token}` })
         },
         body: JSON.stringify({
@@ -1086,6 +1088,8 @@ const VariantFilterSidebar = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          // Lets the backend verify a guest owns this conversation (guests have no token).
+          'X-Device-Id': getDeviceId(),
           ...(token && { 'Authorization': `Bearer ${token}` })
         },
         body: JSON.stringify({

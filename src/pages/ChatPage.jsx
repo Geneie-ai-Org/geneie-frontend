@@ -1229,6 +1229,31 @@ const ChatPage = () => {
 
 
   // --- MAIN RENDER GATING LOGIC ---
+  // Must stay above the early returns below: when a guest hits the chat limit the page
+  // switches to the sign-up screen mid-session, and a hook below a return then changes the
+  // hook count and crashes the page ("Something went wrong").
+  const reportGate = getClinicalReportGate({
+    downloadGate,
+    chatEligibility,
+    gaTriageStatus,
+    gaStartedAt: gaTriageUpdatedAt,
+  });
+  const showAutomaticReportCta =
+    automaticPipeline.active &&
+    automaticPipeline.phase === 'ready_report' &&
+    userTier !== 'guest' &&
+    !!variantData &&
+    !!activeConversationId;
+
+  // Automatic ready_report: open the one review/report modal once (still confirm before PDF).
+  useEffect(() => {
+    if (!showAutomaticReportCta || reportGate?.blocked) return;
+    if (autoOpenedReportForConvRef.current === activeConversationId) return;
+    autoOpenedReportForConvRef.current = activeConversationId;
+    setIsVariantSidebarOpen(true);
+    setClinicalReportOpen(true);
+  }, [showAutomaticReportCta, reportGate?.blocked, activeConversationId]);
+
   if (!isAuthReady || userLoading) {
     return <SessionLoadingScreen />;
   }
@@ -1425,28 +1450,6 @@ const ChatPage = () => {
       guestPipelineCta={guestPipelineCta}
     />
   ) : null;
-
-  const reportGate = getClinicalReportGate({
-    downloadGate,
-    chatEligibility,
-    gaTriageStatus,
-    gaStartedAt: gaTriageUpdatedAt,
-  });
-  const showAutomaticReportCta =
-    automaticPipeline.active &&
-    automaticPipeline.phase === 'ready_report' &&
-    userTier !== 'guest' &&
-    !!variantData &&
-    !!activeConversationId;
-
-  // Automatic ready_report: open the one review/report modal once (still confirm before PDF).
-  useEffect(() => {
-    if (!showAutomaticReportCta || reportGate?.blocked) return;
-    if (autoOpenedReportForConvRef.current === activeConversationId) return;
-    autoOpenedReportForConvRef.current = activeConversationId;
-    setIsVariantSidebarOpen(true);
-    setClinicalReportOpen(true);
-  }, [showAutomaticReportCta, reportGate?.blocked, activeConversationId]);
 
   const automaticPipelineBanner =
     automaticPipeline.active && automaticPipeline.message ? (

@@ -516,6 +516,7 @@ const VariantFilterSidebar = ({
   onEditSampleInfo = null,
   onClinicalReportOpen = null,
   gaTriageStatus = '',
+  gaTriageUpdatedAt = null,
 }) => {
   /* Quota is orthogonal to filter readiness. `=== false` (rather than a falsy check) so a missing
    * gate — degraded limits, still loading — never disables anything. */
@@ -2792,6 +2793,7 @@ const VariantFilterSidebar = ({
               downloadGate={downloadGate}
               chatEligibility={chatEligibility}
               gaTriageStatus={gaTriageStatus}
+              gaTriageUpdatedAt={gaTriageUpdatedAt}
               onRequestOpen={onClinicalReportOpen}
             />
           </div>

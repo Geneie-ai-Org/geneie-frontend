@@ -435,16 +435,22 @@ const ChatPage = () => {
   onOpenModule1UploadRef.current = module1.openModule1Form;
 
   const [gaTriageStatus, setGaTriageStatus] = useState('');
+  // When the current GA status was set (≈ start time while it runs) — drives the elapsed timer.
+  const [gaTriageUpdatedAt, setGaTriageUpdatedAt] = useState(null);
   useEffect(() => {
     if (!activeConversationId || userTier === 'guest') {
       setGaTriageStatus('');
+      setGaTriageUpdatedAt(null);
       return undefined;
     }
     let cancelled = false;
     const tick = async () => {
       try {
         const payload = await fetchGaTriage(activeConversationId);
-        if (!cancelled) setGaTriageStatus(String(payload?.status || '').toLowerCase());
+        if (!cancelled) {
+          setGaTriageStatus(String(payload?.status || '').toLowerCase());
+          setGaTriageUpdatedAt(payload?.updated_at || null);
+        }
       } catch {
         if (!cancelled) setGaTriageStatus('absent');
       }
@@ -1834,6 +1840,7 @@ const ChatPage = () => {
             chatEligibility={chatEligibility}
             onClinicalReportOpen={() => setClinicalReportOpen(true)}
             gaTriageStatus={gaTriageStatus}
+            gaTriageUpdatedAt={gaTriageUpdatedAt}
             onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
             onGuestRefreshMetadata={handleGuestRefreshMetadata}
           />

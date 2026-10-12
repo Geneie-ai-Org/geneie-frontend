@@ -1,5 +1,7 @@
 import React from 'react';
-import { FileText, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileText, Loader2 } from 'lucide-react';
+import RunTimer from '@/components/ui/RunTimer';
+import { useRunTimer } from '@/hooks/useRunTimer';
 
 /**
  * Same unlock rules as variant chat + job downloadGate.
@@ -60,9 +62,9 @@ export function getClinicalReportGate({
     return 'Report locked';
   };
 
-  // While GA runs, allow opening the modal for manual Include (do not soft-lock the CTA).
-  // Label must stay action-like — "Waiting for GA…" looked disabled but still opened the list.
-  const blocked = gateBlocked || (chatBlocked && !gaInFlight && ga !== 'failed');
+  // Locked while GA ranks so the report is always reviewed against the finished ranking.
+  // The status line under the button says why and for how long.
+  const blocked = gateBlocked || gaInFlight || (chatBlocked && ga !== 'failed');
   let label = gateBlocked
     ? gateLabel()
     : chatBlocked && !gaInFlight
@@ -79,8 +81,7 @@ export function getClinicalReportGate({
       : 'Review GA Include picks, edit if needed, then generate the PDF';
   if (gaInFlight && !gateBlocked) {
     label = 'Review & report';
-    title =
-      'GA ranking still running. Open to assign Include manually now, or wait and reopen for pre-checked picks.';
+    title = 'Ranking variants — the report opens when ranking finishes.';
   } else if (!gateBlocked && ga === 'failed') {
     label = 'Generate report';
     title = 'GA failed — assign Include manually, then generate the PDF';
@@ -101,6 +102,7 @@ export default function CaseReportDownloadButton({
   downloadGate = null,
   chatEligibility = null,
   gaTriageStatus = '',
+  gaTriageUpdatedAt = null,
   onRequestOpen,
 }) {
   const { blocked, label, title, gaInFlight } = getClinicalReportGate({
@@ -108,6 +110,12 @@ export default function CaseReportDownloadButton({
     chatEligibility,
     gaTriageStatus,
   });
+  const ga = String(gaTriageStatus || '').toLowerCase();
+  const gaTimer = useRunTimer(
+    conversationId ? `${conversationId}:ga-triage` : null,
+    gaInFlight,
+    gaInFlight ? { startedAt: gaTriageUpdatedAt } : {}
+  );
 
   if (isGuest) return null;
   if (!conversationId || !variantData) return null;
@@ -127,13 +135,33 @@ export default function CaseReportDownloadButton({
             : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] cursor-not-allowed'
         }`}
       >
-        {gaInFlight && !blocked ? (
-          <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-[var(--accent-teal)]" aria-hidden />
-        ) : (
-          <FileText className="w-3.5 h-3.5 shrink-0" />
-        )}
+        <FileText className="w-3.5 h-3.5 shrink-0" />
         <span className="min-w-0">{label}</span>
       </button>
+      {/* Ranking status sits beside the button, not as a spinner inside it: the line says
+        * what's running, for how long, and what waiting buys. */}
+      {gaInFlight && (
+        <div className="px-0.5 text-2xs leading-snug" style={{ color: 'var(--text-tertiary)' }} aria-live="polite">
+          <div className="flex items-center gap-1" style={{ color: 'var(--text-secondary)' }}>
+            <Loader2 className="w-3 h-3 shrink-0 animate-spin text-[var(--accent-teal)]" aria-hidden />
+            <span>Ranking variants</span>
+            <RunTimer running elapsedMs={gaTimer.elapsedMs} startMs={gaTimer.startMs} prefix="· " />
+          </div>
+          <p className="mt-0.5">The report opens when it finishes, with top picks pre-checked.</p>
+        </div>
+      )}
+      {!gaInFlight && ga === 'completed' && (
+        <p className="px-0.5 text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
+          <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: 'var(--success)' }} aria-hidden />
+          Ranked · top picks pre-checked
+        </p>
+      )}
+      {!gaInFlight && ga === 'failed' && (
+        <p className="px-0.5 text-2xs inline-flex items-center gap-1" style={{ color: 'var(--error)' }}>
+          <AlertCircle className="w-3 h-3 shrink-0" aria-hidden />
+          Ranking failed — you can still pick variants manually.
+        </p>
+      )}
     </div>
   );
 }

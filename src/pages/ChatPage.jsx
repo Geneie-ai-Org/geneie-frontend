@@ -451,6 +451,8 @@ const ChatPage = () => {
   });
 
   const [gaTriageStatus, setGaTriageStatus] = useState('');
+  // When the current GA status was set (≈ start time while it runs) — drives the elapsed timer.
+  const [gaTriageUpdatedAt, setGaTriageUpdatedAt] = useState(null);
   const gaFilterKey = conversationFilterState.activeProprietaryFilter
     ? JSON.stringify(conversationFilterState.activeProprietaryFilter)
     : '';
@@ -458,6 +460,7 @@ const ChatPage = () => {
   useEffect(() => {
     if (!activeConversationId || userTier === 'guest') {
       setGaTriageStatus('');
+      setGaTriageUpdatedAt(null);
       return undefined;
     }
     let cancelled = false;
@@ -465,14 +468,17 @@ const ChatPage = () => {
     const armedAt = Date.now();
     const tick = async () => {
       let status = 'absent';
+      let updatedAt = null;
       try {
         const payload = await fetchGaTriage(activeConversationId);
         status = String(payload?.status || '').toLowerCase() || 'absent';
+        updatedAt = payload?.updated_at || null;
       } catch {
         // Treated as absent; the window / enrichment rules below decide whether to retry.
       }
       if (cancelled) return;
       setGaTriageStatus(status);
+      setGaTriageUpdatedAt(updatedAt);
       const inFlight = status === 'pending' || status === 'running' || status === 'queued';
       const expectingRun = (gaFilterKey || gaEnrichmentActive) && Date.now() - armedAt < 20000;
       if (inFlight || gaEnrichmentActive || expectingRun) {
@@ -1958,6 +1964,7 @@ const ChatPage = () => {
             chatEligibility={chatEligibility}
             onClinicalReportOpen={() => setClinicalReportOpen(true)}
             gaTriageStatus={gaTriageStatus}
+            gaTriageUpdatedAt={gaTriageUpdatedAt}
             onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
             onGuestRefreshMetadata={handleGuestRefreshMetadata}
           />

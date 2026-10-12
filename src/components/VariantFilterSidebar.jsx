@@ -516,6 +516,7 @@ const VariantFilterSidebar = ({
   onEditSampleInfo = null,
   onClinicalReportOpen = null,
   gaTriageStatus = '',
+  gaTriageUpdatedAt = null,
 }) => {
   const reduceMotion = useReducedMotion();
   /* Quota is orthogonal to filter readiness. `=== false` (rather than a falsy check) so a missing
@@ -2803,6 +2804,7 @@ const VariantFilterSidebar = ({
               downloadGate={downloadGate}
               chatEligibility={chatEligibility}
               gaTriageStatus={gaTriageStatus}
+              gaTriageUpdatedAt={gaTriageUpdatedAt}
               onRequestOpen={onClinicalReportOpen}
             />
           </div>

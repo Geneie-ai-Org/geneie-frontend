@@ -137,6 +137,9 @@ const DocumentUpload = ({
   const isGuestUser = userTier === 'guest' || userId === 'guest';
   const uploadLimits = isGuestUser ? guestLimits() : limits;
   const [isUploading, setIsUploading] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  // Live text in the phenotype box, for the "Skip & upload" label.
+  const [phenotypeDraft, setPhenotypeDraft] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -214,6 +217,10 @@ const DocumentUpload = ({
           initialMetadata.pipeline_run_mode || initialMetadata.phenotype_run_mode
         ),
         phenotype_hpo: initialMetadata.phenotype_hpo || null,
+        // Save sends these back, so they must be loaded or an untouched edit clears them.
+        selected_panels: initialMetadata.selected_panels || [],
+        selected_panel_gene_list: initialMetadata.selected_panel_gene_list || [],
+        selected_panel_include_amber: initialMetadata.selected_panel_include_amber !== false,
         tumorType: initialMetadata.tumorType || '',
       });
       setEditImpact(null);
@@ -1369,10 +1376,24 @@ const DocumentUpload = ({
       )}
 
       {/* Sample Metadata — always a centered popup (portal), never inline in sidebar/parent */}
-      <Dialog open={showInfoForm} onOpenChange={(open) => { if (!open) handleInfoFormCancel(); }}>
+      {/* A stray click outside or Esc used to drop the whole three-step form. Those now ask
+        * first; Cancel stays immediate because it's a deliberate choice. */}
+      <Dialog
+        open={showInfoForm}
+        onOpenChange={(open, details) => {
+          if (open) return;
+          if (details?.reason === 'outside-press' || details?.reason === 'escape-key') {
+            setShowDiscardConfirm(true);
+            return;
+          }
+          handleInfoFormCancel();
+        }}
+      >
+        {/* Pinned to the top rather than centred: the steps grow as results load, and a
+          * centred dialog jumped up each time it did. */}
         <DialogContent
           showCloseButton={false}
-          className="!max-w-2xl w-full max-h-[min(96vh,900px)] flex flex-col p-0 gap-0 overflow-hidden ring-0 border"
+          className="!max-w-2xl w-full top-[5vh] translate-y-0 max-h-[min(90vh,900px)] flex flex-col p-0 gap-0 overflow-hidden ring-0 border"
           style={{
             backgroundColor: 'var(--bg-surface-raised)',
             boxShadow: 'var(--shadow-lg)',
@@ -1384,16 +1405,24 @@ const DocumentUpload = ({
             {editMode ? 'Update metadata for this variant file.' : 'Provide details about your variant file for better analysis.'}
           </DialogDescription>
           <div className="flex-shrink-0 px-7 pt-6 pb-4 relative">
-            <h3 id="sample-metadata-title" className="text-base font-semibold mb-1 pr-8" style={{ color: 'var(--text-primary)' }}>
-              {editMode ? 'Edit Sample Information' : 'Sample Metadata'}
+            {/* Header: what + which file on one line (constant across steps), the bar, then
+              * the current step's name, which doubles as the heading for the fields below. */}
+            <h3
+              id="sample-metadata-title"
+              className="flex items-baseline gap-1.5 min-w-0 text-base font-semibold pr-8"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              <span className="shrink-0">{editMode ? 'Edit sample information' : 'Sample metadata'}</span>
+              {!editMode && (selectedFile || importUrlMeta) && (
+                <span
+                  className="truncate text-sm font-normal"
+                  style={{ color: 'var(--text-secondary)' }}
+                  title={selectedFile ? selectedFile.name : importUrlMeta?.file_name}
+                >
+                  · {selectedFile ? selectedFile.name : importUrlMeta?.file_name}
+                </span>
+              )}
             </h3>
-            <p className="text-xs mb-0" style={{ color: 'var(--text-tertiary)' }}>
-              {metadataStep === 'sample'
-                ? `Step 1 of ${metadataTotalSteps} — sample basics and analysis type.`
-                : metadataStep === 'phenotype'
-                  ? `Step 3 of 3 — Phenotype (optional).`
-                  : `Step 2 of ${metadataTotalSteps} — ${sampleMetadata.analysisType || 'analysis'} details.`}
-            </p>
             <div className="flex items-center gap-1.5 mt-3" aria-hidden="true">
               {Array.from({ length: metadataTotalSteps }, (_, i) => (
                 <span
@@ -1408,14 +1437,20 @@ const DocumentUpload = ({
                 />
               ))}
             </div>
-            {!editMode && (selectedFile || importUrlMeta) && (
-              <div className="inline-flex items-center gap-2 mt-4 max-w-full pl-2.5 pr-3 py-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]" title={selectedFile ? selectedFile.name : importUrlMeta?.file_name}>
-                <FileText className="w-3.5 h-3.5 shrink-0 text-[var(--accent-teal)]" />
-                <span className="text-xs font-medium truncate text-[var(--text-secondary)]">
-                  {selectedFile ? selectedFile.name : (importUrlMeta ? `URL: ${importUrlMeta.file_name}` : '')}
-                </span>
-              </div>
-            )}
+            <div className="flex items-baseline justify-between gap-3 mt-2.5">
+              <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                {metadataStep === 'sample' ? (
+                  'Sample'
+                ) : metadataStep === 'phenotype' ? (
+                  <>Phenotype <span className="text-2xs font-normal" style={{ color: 'var(--text-tertiary)' }}>(optional)</span></>
+                ) : (
+                  `${sampleMetadata.analysisType || 'Analysis'} details`
+                )}
+              </p>
+              <span className="text-2xs shrink-0" style={{ color: 'var(--text-tertiary)' }}>
+                {metadataStepIndex} of {metadataTotalSteps}
+              </span>
+            </div>
             {error && showInfoForm && (
               <div className="mt-4 p-3 border rounded-lg flex items-start gap-2" style={{ backgroundColor: 'var(--error-soft)', borderColor: 'var(--error)' }}>
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--error)' }} />
@@ -1594,9 +1629,6 @@ const DocumentUpload = ({
 
               {metadataStep === 'analysis' && sampleMetadata.analysisType === 'Germline' && (
                 <div className="disclosure-enter">
-                  <h4 className="text-md font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
-                    Germline Analysis Fields
-                  </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                     {/* Sample Role */}
                     <div>
@@ -1664,13 +1696,9 @@ const DocumentUpload = ({
 
               {metadataStep === 'phenotype' && sampleMetadata.analysisType === 'Germline' && (
                 <div className="disclosure-enter">
-                  <h4 className="text-md font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
-                    Phenotype
-                  </h4>
-                  <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
-                    Optional — enables phenotype-driven prioritization and gene panel suggestions.
-                  </p>
                   <PhenotypeInputPanel
+                    hideLabel
+                    onDraftChange={setPhenotypeDraft}
                     value={{
                       phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_NOTE,
                       phenotype_findings: sampleMetadata.phenotype_findings || '',
@@ -1713,9 +1741,6 @@ const DocumentUpload = ({
                   sampleMetadata.analysisType === 'Tumor-Normal Paired' ||
                   sampleMetadata.analysisType === 'Tumor-Only') && (
                   <div className="disclosure-enter">
-                    <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
-                      Tumor Analysis Fields
-                    </h4>
                     <div>
                       <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Tumor Type
@@ -1801,7 +1826,14 @@ const DocumentUpload = ({
                         {editMode ? 'Saving…' : 'Processing…'}
                       </>
                     ) : (
-                      editMode ? 'Save Changes' : (importMode === 'url' ? 'Import File' : 'Upload File')
+                      editMode
+                        ? 'Save Changes'
+                        : metadataStep === 'phenotype' &&
+                            sampleMetadata.analysisType === 'Germline' &&
+                            !phenotypeDraft.trim() &&
+                            !(sampleMetadata.phenotype || '').trim()
+                          ? (importMode === 'url' ? 'Skip & import' : 'Skip & upload')
+                          : (importMode === 'url' ? 'Import file' : 'Upload file')
                     )}
                   </button>
                 )}
@@ -1862,6 +1894,31 @@ const DocumentUpload = ({
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog open={showDiscardConfirm} onOpenChange={(open) => { if (!open) setShowDiscardConfirm(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{editMode ? 'Discard your edits?' : 'Discard this upload?'}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {editMode
+                ? 'Changes to the sample information will not be saved.'
+                : 'The file and the details you entered will be cleared.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[var(--error)] text-white hover:brightness-110"
+              onClick={() => {
+                setShowDiscardConfirm(false);
+                handleInfoFormCancel();
+              }}
+            >
+              Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Replace Document Confirmation Modal */}
       <AlertDialog
         open={showReplaceConfirm && !!existingDocument}
@@ -1872,6 +1929,10 @@ const DocumentUpload = ({
             if (fileInputRef.current) {
               fileInputRef.current.value = '';
             }
+            // A file handed in by the parent (guest upload button) hides this card's own UI,
+            // so declining the replace has to close the whole modal — otherwise an empty
+            // frame is left open.
+            if (preSelectedFile) onCancel?.();
           }
         }}
       >

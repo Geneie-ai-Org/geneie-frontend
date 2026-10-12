@@ -1,14 +1,19 @@
 import React from 'react';
-import { FileText, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileText, Loader2 } from 'lucide-react';
+import RunTimer from '@/components/ui/RunTimer';
+import { useRunTimer } from '@/hooks/useRunTimer';
 
 /**
  * Same unlock rules as variant chat + job downloadGate.
  * Shared by the sidebar button and the Automatic pipeline banner CTA.
  */
+const GA_STALL_MS = 15 * 60 * 1000;
+
 export function getClinicalReportGate({
   downloadGate = null,
   chatEligibility = null,
   gaTriageStatus = '',
+  gaStartedAt = null,
 } = {}) {
   const gateBlocked = downloadGate?.blocked === true;
   const scope = (chatEligibility?.scope || '').toLowerCase();
@@ -18,6 +23,10 @@ export function getClinicalReportGate({
   const chatBlocked = !chatReady;
   const ga = String(gaTriageStatus || '').toLowerCase();
   const gaInFlight = ga === 'running' || ga === 'pending' || ga === 'queued';
+  // A GA job that never finishes must not lock the report forever: past this, manual picks open up.
+  const gaStartedMs = gaStartedAt ? Date.parse(gaStartedAt) : NaN;
+  const gaStalled =
+    gaInFlight && Number.isFinite(gaStartedMs) && Date.now() - gaStartedMs > GA_STALL_MS;
   // Filter already applied (phenotype/ACMG) — do not keep nagging "Apply filter…"
   // while disease chat is still pgx_only (common while GA / advanced-chat index runs).
   const filterAlreadyApplied =
@@ -60,9 +69,10 @@ export function getClinicalReportGate({
     return 'Report locked';
   };
 
-  // While GA runs, allow opening the modal for manual Include (do not soft-lock the CTA).
-  // Label must stay action-like — "Waiting for GA…" looked disabled but still opened the list.
-  const blocked = gateBlocked || (chatBlocked && !gaInFlight && ga !== 'failed');
+  // Locked while GA ranks so the report is always reviewed against the finished ranking.
+  // The status line under the button says why and for how long.
+  const blocked =
+    gateBlocked || (gaInFlight && !gaStalled) || (chatBlocked && !gaInFlight && ga !== 'failed');
   let label = gateBlocked
     ? gateLabel()
     : chatBlocked && !gaInFlight
@@ -77,16 +87,18 @@ export function getClinicalReportGate({
           ? 'PGx chat is open — apply ACMG or a phenotype filter to unlock the clinical report.'
           : chatEligibility?.message || 'Chat must be enabled before generating a report'
       : 'Review GA Include picks, edit if needed, then generate the PDF';
-  if (gaInFlight && !gateBlocked) {
+  if (gaStalled && !gateBlocked) {
     label = 'Review & report';
-    title =
-      'GA ranking still running. Open to assign Include manually now, or wait and reopen for pre-checked picks.';
+    title = 'Ranking is taking longer than usual — open the report to pick variants manually.';
+  } else if (gaInFlight && !gateBlocked) {
+    label = 'Review & report';
+    title = 'Ranking variants — you can open the report when ranking finishes.';
   } else if (!gateBlocked && ga === 'failed') {
     label = 'Generate report';
     title = 'GA failed — assign Include manually, then generate the PDF';
   }
 
-  return { blocked, label, title, gaInFlight: gaInFlight && !gateBlocked };
+  return { blocked, label, title, gaInFlight: gaInFlight && !gateBlocked, gaStalled };
 }
 
 /**
@@ -101,13 +113,21 @@ export default function CaseReportDownloadButton({
   downloadGate = null,
   chatEligibility = null,
   gaTriageStatus = '',
+  gaTriageUpdatedAt = null,
   onRequestOpen,
 }) {
-  const { blocked, label, title, gaInFlight } = getClinicalReportGate({
+  const { blocked, label, title, gaInFlight, gaStalled } = getClinicalReportGate({
     downloadGate,
     chatEligibility,
     gaTriageStatus,
+    gaStartedAt: gaTriageUpdatedAt,
   });
+  const ga = String(gaTriageStatus || '').toLowerCase();
+  const gaTimer = useRunTimer(
+    conversationId ? `${conversationId}:ga-triage` : null,
+    gaInFlight,
+    gaInFlight ? { startedAt: gaTriageUpdatedAt } : {}
+  );
 
   if (isGuest) return null;
   if (!conversationId || !variantData) return null;
@@ -127,13 +147,37 @@ export default function CaseReportDownloadButton({
             : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] cursor-not-allowed'
         }`}
       >
-        {gaInFlight && !blocked ? (
-          <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-[var(--accent-teal)]" aria-hidden />
-        ) : (
-          <FileText className="w-3.5 h-3.5 shrink-0" />
-        )}
+        <FileText className="w-3.5 h-3.5 shrink-0" />
         <span className="min-w-0">{label}</span>
       </button>
+      {/* Ranking status sits beside the button, not as a spinner inside it: the line says
+        * what's running, for how long, and what waiting buys. */}
+      {gaInFlight && (
+        <div className="px-0.5 text-2xs leading-snug" style={{ color: 'var(--text-tertiary)' }} aria-live="polite">
+          <div className="flex items-center gap-1" style={{ color: 'var(--text-secondary)' }}>
+            <Loader2 className="w-3 h-3 shrink-0 animate-spin text-[var(--accent-teal)]" aria-hidden />
+            <span>Ranking variants</span>
+            <RunTimer running elapsedMs={gaTimer.elapsedMs} startMs={gaTimer.startMs} prefix="· " />
+          </div>
+          <p className="mt-0.5">
+            {gaStalled
+              ? 'Taking longer than usual — you can open the report and pick variants manually.'
+              : 'You can open the report when it finishes, with top picks pre-checked.'}
+          </p>
+        </div>
+      )}
+      {!gaInFlight && ga === 'completed' && (
+        <p className="px-0.5 text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
+          <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: 'var(--success)' }} aria-hidden />
+          Ranked · top picks pre-checked
+        </p>
+      )}
+      {!gaInFlight && ga === 'failed' && (
+        <p className="px-0.5 text-2xs inline-flex items-center gap-1" style={{ color: 'var(--error)' }}>
+          <AlertCircle className="w-3 h-3 shrink-0" aria-hidden />
+          Ranking failed — you can still pick variants manually.
+        </p>
+      )}
     </div>
   );
 }

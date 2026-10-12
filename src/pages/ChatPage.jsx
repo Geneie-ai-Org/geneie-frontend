@@ -435,6 +435,8 @@ const ChatPage = () => {
   onOpenModule1UploadRef.current = module1.openModule1Form;
 
   const [gaTriageStatus, setGaTriageStatus] = useState('');
+  // When the current GA status was set (≈ start time while it runs) — drives the elapsed timer.
+  const [gaTriageUpdatedAt, setGaTriageUpdatedAt] = useState(null);
   const gaFilterKey = conversationFilterState.activeProprietaryFilter
     ? JSON.stringify(conversationFilterState.activeProprietaryFilter)
     : '';
@@ -445,6 +447,7 @@ const ChatPage = () => {
   useEffect(() => {
     if (!activeConversationId || userTier === 'guest') {
       setGaTriageStatus('');
+      setGaTriageUpdatedAt(null);
       return undefined;
     }
     let cancelled = false;
@@ -456,15 +459,18 @@ const ChatPage = () => {
       fetching = true;
       clearTimeout(timer);
       let status = 'absent';
+      let updatedAt = null;
       try {
         const payload = await fetchGaTriage(activeConversationId);
         status = String(payload?.status || '').toLowerCase();
+        updatedAt = payload?.updated_at || null;
       } catch {
         // Treated as absent; the window / enrichment rules below decide whether to retry.
       }
       fetching = false;
       if (cancelled) return;
       setGaTriageStatus(status);
+      setGaTriageUpdatedAt(updatedAt);
       const inFlight = status === 'pending' || status === 'running' || status === 'queued';
       const expectingRun = (gaFilterKey || gaEnrichmentActive) && Date.now() - armedAt < 20000;
       if (inFlight || gaEnrichmentActive || gaIndexingActive || expectingRun) {
@@ -1400,7 +1406,12 @@ const ChatPage = () => {
     />
   ) : null;
 
-  const reportGate = getClinicalReportGate({ downloadGate, chatEligibility, gaTriageStatus });
+  const reportGate = getClinicalReportGate({
+    downloadGate,
+    chatEligibility,
+    gaTriageStatus,
+    gaStartedAt: gaTriageUpdatedAt,
+  });
   const showAutomaticReportCta =
     automaticPipeline.active &&
     automaticPipeline.phase === 'ready_report' &&
@@ -1855,6 +1866,7 @@ const ChatPage = () => {
             chatEligibility={chatEligibility}
             onClinicalReportOpen={() => setClinicalReportOpen(true)}
             gaTriageStatus={gaTriageStatus}
+            gaTriageUpdatedAt={gaTriageUpdatedAt}
             onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
             onGuestRefreshMetadata={handleGuestRefreshMetadata}
           />

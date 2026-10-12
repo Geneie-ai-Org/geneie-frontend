@@ -1207,6 +1207,31 @@ const ChatPage = () => {
 
 
   // --- MAIN RENDER GATING LOGIC ---
+  // Must stay above the early returns below: when a guest hits the chat limit the page
+  // switches to the sign-up screen mid-session, and a hook below a return then changes the
+  // hook count and crashes the page ("Something went wrong").
+  const reportGate = getClinicalReportGate({
+    downloadGate,
+    chatEligibility,
+    gaTriageStatus,
+    gaStartedAt: gaTriageUpdatedAt,
+  });
+  const showAutomaticReportCta =
+    automaticPipeline.active &&
+    automaticPipeline.phase === 'ready_report' &&
+    userTier !== 'guest' &&
+    !!variantData &&
+    !!activeConversationId;
+
+  // Automatic ready_report: open the one review/report modal once (still confirm before PDF).
+  useEffect(() => {
+    if (!showAutomaticReportCta || reportGate?.blocked) return;
+    if (autoOpenedReportForConvRef.current === activeConversationId) return;
+    autoOpenedReportForConvRef.current = activeConversationId;
+    setIsVariantSidebarOpen(true);
+    setClinicalReportOpen(true);
+  }, [showAutomaticReportCta, reportGate?.blocked, activeConversationId]);
+
   if (!isAuthReady || userLoading) {
     return <SessionLoadingScreen />;
   }
@@ -1406,28 +1431,6 @@ const ChatPage = () => {
     />
   ) : null;
 
-  const reportGate = getClinicalReportGate({
-    downloadGate,
-    chatEligibility,
-    gaTriageStatus,
-    gaStartedAt: gaTriageUpdatedAt,
-  });
-  const showAutomaticReportCta =
-    automaticPipeline.active &&
-    automaticPipeline.phase === 'ready_report' &&
-    userTier !== 'guest' &&
-    !!variantData &&
-    !!activeConversationId;
-
-  // Automatic ready_report: open the one review/report modal once (still confirm before PDF).
-  useEffect(() => {
-    if (!showAutomaticReportCta || reportGate?.blocked) return;
-    if (autoOpenedReportForConvRef.current === activeConversationId) return;
-    autoOpenedReportForConvRef.current = activeConversationId;
-    setIsVariantSidebarOpen(true);
-    setClinicalReportOpen(true);
-  }, [showAutomaticReportCta, reportGate?.blocked, activeConversationId]);
-
   const automaticPipelineBanner =
     automaticPipeline.active && automaticPipeline.message ? (
       <AutomaticPipelinePanel
@@ -1574,9 +1577,6 @@ const ChatPage = () => {
       {/* Desktop guest login — hide when filter sidebar is open (counter lives above composer). */}
       {userTier === 'guest' && !isMobile && !isVariantSidebarOpen && (
         <div className="fixed top-3 right-4 z-50 flex items-center gap-3">
-          <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>
-            {DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed}/{DEFAULT_GUEST_CHAT_LIMIT} free
-          </span>
           <button
             type="button"
             onClick={() => {
@@ -1616,9 +1616,9 @@ const ChatPage = () => {
 
               {userTier === 'guest' && guestExchangesUsed >= 3 && !guestLimitExceeded && (
                 <div className="mb-4 w-full max-w-2xl px-4 py-3 rounded-xl border flex items-center justify-between gap-3"
-                  style={{ backgroundColor: 'rgba(245, 158, 11, 0.06)', borderColor: 'rgba(245, 158, 11, 0.2)' }}>
+                  style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)' }}>
                   <span className="text-xs font-medium" style={{ color: 'var(--warning)' }}>
-                    Only {DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed} exchange{DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed === 1 ? '' : 's'} left. Sign up for more and save your history.
+                    Only {DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed} free message{DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed === 1 ? '' : 's'} left. Sign up for more and save your history.
                   </span>
                   <button
                     type="button"
@@ -1646,23 +1646,6 @@ const ChatPage = () => {
           ) : (
             /* ===== ACTIVE CONVERSATION — messages + bottom input ===== */
             <>
-              {userTier === 'guest' && guestExchangesUsed >= 3 && !guestLimitExceeded && (
-                <div className="flex items-center justify-between gap-3 px-4 py-2 border-b mx-4"
-                  style={{ borderColor: 'rgba(245, 158, 11, 0.2)', backgroundColor: 'rgba(245, 158, 11, 0.04)' }}>
-                  <span className="text-xs font-medium" style={{ color: 'var(--warning)' }}>
-                    {DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed} exchange{DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed === 1 ? '' : 's'} remaining — sign up to get more and save your history.
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => { setIsShowingAuthForm(true); setJustSignedUp(false); }}
-                    className="text-xs px-3 py-1.5 rounded-lg font-medium border shrink-0 transition-colors hover:opacity-90"
-                    style={{ borderColor: 'var(--accent-teal)', color: 'var(--accent-teal)' }}
-                  >
-                    Sign up free
-                  </button>
-                </div>
-              )}
-
               <UsageNudge
                 message={usageNudgeMessage}
                 layout="strip"
@@ -1758,22 +1741,34 @@ const ChatPage = () => {
               {/* Bottom input — conversation mode. Absolutely placed so it overlaps the
                   scroll region; nothing rectangular clips the messages any more. */}
               <div ref={composerDockRef} className="chat-column-inner chat-composer-dock pb-3 pt-0.5">
-                {userTier === 'guest' && (
-                  <div className="relative z-10 flex items-center justify-center gap-2.5 mb-2">
-                    <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                      {DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed} of {DEFAULT_GUEST_CHAT_LIMIT} free exchanges remaining
-                    </span>
-                    <span className="text-xs" style={{ color: 'var(--text-disabled)' }} aria-hidden>·</span>
-                    <button
-                      type="button"
-                      onClick={() => { setIsShowingAuthForm(true); setJustSignedUp(false); }}
-                      className="text-xs font-medium hover:underline"
-                      style={{ color: 'var(--accent-teal)' }}
-                    >
-                      Sign up to save history
-                    </button>
-                  </div>
-                )}
+                {/* The only guest usage counter in a conversation: next to where the next message
+                  * is typed. On the last free message it gets bolder and the CTA changes, instead of
+                  * a banner up top. */}
+                {userTier === 'guest' && (() => {
+                  const left = Math.max(0, DEFAULT_GUEST_CHAT_LIMIT - guestExchangesUsed);
+                  const low = left <= 1;
+                  return (
+                    <div className="relative z-10 flex items-center justify-center gap-2.5 mb-2" aria-live="polite">
+                      <span
+                        className={`text-xs${low ? ' font-medium' : ''}`}
+                        style={{ color: low ? 'var(--warning)' : 'var(--text-tertiary)' }}
+                      >
+                        {left === 0
+                          ? 'No free messages left'
+                          : `${left} of ${DEFAULT_GUEST_CHAT_LIMIT} free message${left === 1 ? '' : 's'} left`}
+                      </span>
+                      <span className="text-xs" style={{ color: 'var(--text-disabled)' }} aria-hidden>·</span>
+                      <button
+                        type="button"
+                        onClick={() => { setIsShowingAuthForm(true); setJustSignedUp(false); }}
+                        className="text-xs font-medium hover:underline"
+                        style={{ color: 'var(--accent-teal)' }}
+                      >
+                        {low ? 'Sign up free to keep chatting' : 'Sign up to save history'}
+                      </button>
+                    </div>
+                  );
+                })()}
                 <ChatComposer {...composerProps} layout="inline" dropdownSource="conversation" />
               </div>
             </>

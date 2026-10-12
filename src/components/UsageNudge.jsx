@@ -6,8 +6,8 @@
  */
 const TONES = {
   warning: {
-    card: { backgroundColor: 'rgba(245, 158, 11, 0.06)', borderColor: 'rgba(245, 158, 11, 0.2)' },
-    strip: { backgroundColor: 'rgba(245, 158, 11, 0.04)', borderColor: 'rgba(245, 158, 11, 0.2)' },
+    card: { backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)' },
+    strip: { backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)' },
     text: 'var(--warning)',
   },
   info: {

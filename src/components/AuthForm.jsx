@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { postLoginPath } from '@/lib/postLoginPath';
 import { auth, GoogleAuthProvider, OAuthProvider } from '../services/firebase';
 import {
     createUserWithEmailAndPassword,
@@ -18,6 +19,7 @@ import { authErrorMessage } from '@/lib/authErrors';
 
 const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificationPending }) => {
     const navigate = useNavigate();
+    const location = useLocation();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -86,7 +88,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
             if (onSignupSuccess) {
                 onSignupSuccess(true);
             }
-            navigate('/app');
+            navigate(postLoginPath(location));
         } catch (err) {
             if (err.code === 'auth/account-exists-with-different-credential') {
                 // Handle account linking
@@ -133,7 +135,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
             if (onSignupSuccess) {
                 onSignupSuccess(true);
             }
-            navigate('/app');
+            navigate(postLoginPath(location));
         } catch (err) {
             if (err.code === 'auth/account-exists-with-different-credential') {
                 // Handle account linking
@@ -188,7 +190,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
             if (onSignupSuccess) {
                 onSignupSuccess(true);
             }
-            navigate('/app');
+            navigate(postLoginPath(location));
         } catch (err) {
             let friendlyError = 'Failed to link accounts.';
             if (err.code) {
@@ -264,7 +266,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                 if (onSignupSuccess) {
                     onSignupSuccess(true);
                 }
-                navigate('/app');
+                navigate(postLoginPath(location));
 
             } else {
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -364,10 +366,10 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
 
             {/* === Account Linking Prompt === */}
             {showLinkingPrompt && (
-                <div className="mb-6 p-4 rounded-lg border border-amber-500/30 bg-amber-500/10">
+                <div className="mb-6 p-4 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)]">
                     <div className="flex items-start gap-3">
                         <div className="flex-shrink-0">
-                            <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5 text-[var(--text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                             </svg>
                         </div>

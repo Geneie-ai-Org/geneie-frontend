@@ -4,7 +4,7 @@
  * Disease matches are a shortcut to load annotated findings for review.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Loader2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Circle, Info, Loader2, Lock, X } from 'lucide-react';
 import { interpretPhenotypeNarrative, resolveHpoTerms } from '@/services/mongodbApi';
 import PanelAppSuggestSection from '@/components/PanelAppSuggestSection';
 
@@ -454,11 +454,70 @@ function mergeDiseaseCatalog(existing, incoming) {
 /**
  * Clinical-note phenotype panel (pinned findings + optional disease shortcut).
  */
+/** Small (i) button that opens a short explanation on click; closes on outside click or Escape. */
+function InfoHint({ label, children }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (e) => {
+      if (!wrapRef.current?.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <span className="relative inline-flex align-middle" ref={wrapRef}>
+      <button
+        type="button"
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
+        style={{ color: open ? 'var(--text-primary)' : 'var(--text-tertiary)' }}
+        aria-label={label}
+        aria-expanded={open}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <Info className="h-3 w-3" aria-hidden />
+      </button>
+      {open ? (
+        <div
+          role="tooltip"
+          className="absolute left-0 top-full z-50 mt-1.5 w-60 rounded-md border px-2.5 py-2 text-2xs font-normal leading-snug shadow-md space-y-1"
+          style={{
+            color: 'var(--text-secondary)',
+            background: 'var(--bg-surface-raised)',
+            borderColor: 'var(--border-default)',
+          }}
+        >
+          {children}
+        </div>
+      ) : null}
+    </span>
+  );
+}
+
 export default function PhenotypeInputPanel({
   value,
   onChange,
   disabled = false,
   conversationId = null,
+  // The note only reaches `onChange` once it has been de-identified, so a parent that
+  // needs to know whether anything is typed yet (e.g. a "Skip" label) listens here.
+  onDraftChange,
+  // The upload forms name the step "Phenotype (optional)" in their header already.
+  hideLabel = false,
 }) {
   const candidates = value?.phenotype_hpo?.candidates || [];
   const diseaseMatches = hydrateDiseaseMatches(value?.phenotype_hpo);
@@ -479,7 +538,24 @@ export default function PhenotypeInputPanel({
   const runModeRef = useRef(runMode);
   runModeRef.current = runMode;
 
-  const [draft, setDraft] = useState('');
+  // Reopening the step (Back → Continue, or editing a saved case) remounts this panel.
+  // Start from the saved note, and leave the saved results alone until the user edits it —
+  // otherwise the empty/unchanged draft reads as "note cleared" and wipes them.
+  // Only the cleaned note: `phenotype` falls back to a findings/disease label the user never
+  // typed, and editing that would re-interpret it and replace their picks.
+  const [draft, setDraft] = useState(() => value?.phenotype_note_clean || '');
+  const untouchedDraftRef = useRef(draft);
+  const isUntouchedDraft = (text) => {
+    if (untouchedDraftRef.current === null) return false;
+    if (text === untouchedDraftRef.current) return true;
+    untouchedDraftRef.current = null;
+    return false;
+  };
+  const onDraftChangeRef = useRef(onDraftChange);
+  onDraftChangeRef.current = onDraftChange;
+  useEffect(() => {
+    onDraftChangeRef.current?.(draft);
+  }, [draft]);
   const [resolving, setResolving] = useState(false);
   const [interpreting, setInterpreting] = useState(false);
   const [resolveError, setResolveError] = useState('');
@@ -652,7 +728,6 @@ export default function PhenotypeInputPanel({
 
   const primaryDisease = diseaseOptions[0] || null;
   const altDiseases = diseaseOptions.slice(1);
-  const visibleAlts = showMoreDiseases ? altDiseases : [];
 
   const clearInterpretUi = useCallback(() => {
     setNotePreview(null);
@@ -696,16 +771,6 @@ export default function PhenotypeInputPanel({
   const toggleCandidate = (hpoId) => {
     const next = candidates.map((c) =>
       c.hpo_id === hpoId ? { ...c, selected: !c.selected } : c
-    );
-    emit({
-      candidates: next,
-      phenotype_findings: findingsLabelFrom(next),
-    });
-  };
-
-  const removeCandidate = (hpoId) => {
-    const next = (candidates || []).filter(
-      (c) => String(c.hpo_id || '').toUpperCase() !== String(hpoId || '').toUpperCase()
     );
     emit({
       candidates: next,
@@ -1119,6 +1184,7 @@ export default function PhenotypeInputPanel({
   // Fast disease matches on every edit (short debounce) — scores refresh from the current text.
   useEffect(() => {
     if (disabled) return undefined;
+    if (isUntouchedDraft(draft)) return undefined;
     if (diseaseDebounceRef.current) clearTimeout(diseaseDebounceRef.current);
     const trimmed = String(draft || '').trim();
     if (trimmed.length < 3) {
@@ -1155,6 +1221,7 @@ export default function PhenotypeInputPanel({
   // Live interpret while typing. Do NOT depend on notePreview — that re-fired interpret forever.
   useEffect(() => {
     if (disabled) return undefined;
+    if (isUntouchedDraft(draft)) return undefined;
     if (interpretDebounceRef.current) clearTimeout(interpretDebounceRef.current);
     const trimmed = String(draft || '').trim();
     if (trimmed.length < 8) {
@@ -1196,61 +1263,64 @@ export default function PhenotypeInputPanel({
     color: 'var(--text-primary)',
   };
 
+  // One toggle per finding, styled like the condition chips. There's no separate remove:
+  // an unselected finding is already left out of ranking, and removing one could only be
+  // undone by re-applying the disease.
   const renderChip = (c) => {
     const label = c.hpo_name || c.matched_phrase || c.hpo_id;
     return (
-      <div
+      <button
         key={c.hpo_id}
-        className="inline-flex items-center gap-1 px-2 py-1 text-2xs rounded-md border text-left"
+        type="button"
+        disabled={disabled}
+        onClick={() => toggleCandidate(c.hpo_id)}
+        aria-pressed={!!c.selected}
+        title={c.hpo_id ? `${label} · ${c.hpo_id}` : label}
+        className="inline-flex items-center gap-1 max-w-full px-2 py-1 rounded-full border text-2xs font-medium transition-colors disabled:opacity-60"
         style={{
-          borderColor: c.selected ? 'var(--accent-teal)' : 'var(--border-default)',
+          borderColor: c.selected ? 'var(--accent-teal)' : 'var(--border-strong)',
           background: c.selected
             ? 'color-mix(in srgb, var(--accent-teal) 12%, transparent)'
             : 'var(--bg-surface-raised)',
-          color: 'var(--text-primary)',
-          opacity: c.selected ? 1 : 0.75,
+          color: c.selected ? 'var(--accent-teal)' : 'var(--text-primary)',
         }}
       >
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => toggleCandidate(c.hpo_id)}
-          title={c.hpo_id || undefined}
-          className="text-left"
-        >
-          <span className="font-medium">
-            {c.selected ? '✓ ' : ''}
-            {label}
-          </span>
-        </button>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => removeCandidate(c.hpo_id)}
-          title="Remove"
-          className="ml-0.5 p-0.5"
-          style={{ color: 'var(--text-tertiary)' }}
-        >
-          <X className="w-3 h-3" />
-        </button>
-      </div>
+        {c.selected ? (
+          <Check className="w-3 h-3 shrink-0" aria-hidden />
+        ) : (
+          <Circle className="w-3 h-3 shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
+        )}
+        <span className="truncate">{label}</span>
+      </button>
     );
   };
 
   return (
     <div className="space-y-2">
-      <label className="flex items-baseline gap-1.5 text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-        Phenotype
-        <span className="text-2xs font-normal" style={{ color: 'var(--text-tertiary)' }}>
-          (enables phenotype-driven prioritization)
-        </span>
-      </label>
-      {isAutomatic ? (
-        <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-          Automatic: strong disease matches and high-confidence findings are pre-selected —
-          click to change.
-        </p>
-      ) : null}
+      <div className="flex items-center gap-1">
+        {hideLabel ? (
+          // The upload forms already title the step "Phenotype (optional)"; one line says why.
+          <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+            Describe symptoms to rank variants by disease fit.
+          </p>
+        ) : (
+          <label className="flex items-baseline gap-1.5 text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+            Phenotype
+            <span className="text-2xs font-normal" style={{ color: 'var(--text-tertiary)' }}>
+              (optional)
+            </span>
+          </label>
+        )}
+        <InfoHint label="About phenotype">
+          <p>Clinical findings are used to rank variants by how well they fit the patient.</p>
+          {isAutomatic ? (
+            <p>
+              Automatic mode pre-selects strong disease matches and high-confidence findings.
+              Click any of them to change it.
+            </p>
+          ) : null}
+        </InfoHint>
+      </div>
 
       <div className="relative">
         <textarea
@@ -1265,7 +1335,7 @@ export default function PhenotypeInputPanel({
             }, 150);
           }}
           disabled={disabled}
-          placeholder="Paste clinical note (e.g. painful raw blisters in skin folds, armpits and groin…)"
+          placeholder="e.g. painful blisters in skin folds, armpits and groin since childhood"
           rows={5}
           className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all pr-9"
           style={inputStyle}
@@ -1287,19 +1357,21 @@ export default function PhenotypeInputPanel({
         {searchingDiseases || interpreting ? (
           <span className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
             <Loader2 className="w-3 h-3 animate-spin" />
-            {searchingDiseases ? 'Updating disease matches…' : 'Updating findings…'}
+            {searchingDiseases ? 'Finding matches…' : 'Reading note…'}
           </span>
         ) : draft.trim().length >= 3 ? (
-          <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-            Patient names are removed before chat
+          <span className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
+            <Lock className="w-3 h-3" aria-hidden />
+            Patient names are removed automatically.
           </span>
         ) : draft.trim().length > 0 ? (
           <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
             Keep typing to search…
           </span>
         ) : (
-          <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-            Patient names are removed before chat
+          <span className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
+            <Lock className="w-3 h-3" aria-hidden />
+            Patient names are removed automatically.
           </span>
         )}
       </div>
@@ -1313,110 +1385,111 @@ export default function PhenotypeInputPanel({
         </div>
       )}
 
-      {primaryDisease && (
-        <div
-          className="px-2.5 py-2 rounded-lg border text-xs space-y-1.5"
-          style={{ borderColor: 'var(--border-default)', background: 'var(--bg-muted)' }}
-        >
-          <div className="font-medium" style={{ color: 'var(--text-primary)' }}>
-            Disease matches
-          </div>
-          <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-            Select one or more — clinical findings are combined
-          </p>
-
-          <button
-            type="button"
-            disabled={disabled || resolving}
-            onClick={() => applyDisease(primaryDisease)}
-            title={primaryDisease.disease_id || undefined}
-            className="w-full text-left px-2.5 py-2 rounded-md border text-2xs transition-all"
-            style={{
-              borderColor: isActiveDisease(primaryDisease)
-                ? 'var(--accent-teal)'
-                : 'var(--border-default)',
-              background: isActiveDisease(primaryDisease)
-                ? 'color-mix(in srgb, var(--accent-teal) 12%, transparent)'
-                : 'var(--bg-surface-raised)',
-              color: 'var(--text-primary)',
-            }}
+      {primaryDisease && (() => {
+        // Chips that wrap: the first few matches stay visible, the rest sit behind "+N more".
+        // Long names truncate; the full name and ID are in the tooltip.
+        const VISIBLE = 4;
+        const all = [primaryDisease, ...altDiseases];
+        // Collapsed still keeps every selected match on screen, wherever it ranks.
+        const collapsed = all.filter((c, i) => i < VISIBLE || isActiveDisease(c));
+        const shown = showMoreDiseases ? all : collapsed;
+        const hiddenCount = all.length - collapsed.length;
+        const activeCount = all.filter(isActiveDisease).length;
+        return (
+          <div
+            className="px-2.5 py-2 rounded-lg border text-xs space-y-2"
+            style={{ borderColor: 'var(--border-default)', background: 'var(--bg-muted)' }}
           >
-            <span className="font-medium">
-              {isActiveDisease(primaryDisease) ? '✓ ' : ''}
-              {primaryDisease.disease_name}
-            </span>
-          </button>
-
-          {visibleAlts.map((c) => (
-            <button
-              key={diseaseKey(c)}
-              type="button"
-              disabled={disabled || resolving}
-              onClick={() => applyDisease(c)}
-              title={c.disease_id || undefined}
-              className="w-full text-left px-2.5 py-1.5 rounded-md border text-2xs transition-all"
-              style={{
-                borderColor: isActiveDisease(c) ? 'var(--accent-teal)' : 'var(--border-default)',
-                background: isActiveDisease(c)
-                  ? 'color-mix(in srgb, var(--accent-teal) 12%, transparent)'
-                  : 'var(--bg-surface-raised)',
-                color: 'var(--text-primary)',
-              }}
-            >
-              <span className="font-medium">
-                {isActiveDisease(c) ? '✓ ' : ''}
-                {c.disease_name}
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="inline-flex items-center gap-1 font-medium" style={{ color: 'var(--text-primary)' }}>
+                Likely condition
+                <InfoHint label="About disease matches">
+                  <p>Pick one or more. Their clinical findings are combined below.</p>
+                </InfoHint>
               </span>
-            </button>
-          ))}
+              <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+                {activeCount > 0 ? `${activeCount} selected` : 'Pick one or more'}
+              </span>
+            </div>
 
-          {altDiseases.length > 0 && (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => setShowMoreDiseases((v) => !v)}
-              className="inline-flex items-center gap-1 text-2xs underline"
-              style={{ color: 'var(--text-secondary)' }}
-            >
-              {showMoreDiseases ? (
-                <>
-                  <ChevronUp className="w-3 h-3" /> Hide other matches
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="w-3 h-3" /> Show more ({altDiseases.length})
-                </>
+            <div className="flex flex-wrap gap-1.5">
+              {shown.map((c) => {
+                const active = isActiveDisease(c);
+                return (
+                  <button
+                    key={diseaseKey(c)}
+                    type="button"
+                    disabled={disabled || resolving}
+                    onClick={() => applyDisease(c)}
+                    aria-pressed={active}
+                    title={c.disease_id ? `${c.disease_name} · ${c.disease_id}` : c.disease_name}
+                    className="inline-flex items-center gap-1 max-w-full px-2 py-1 rounded-full border text-2xs font-medium transition-colors disabled:opacity-60"
+                    style={{
+                      borderColor: active ? 'var(--accent-teal)' : 'var(--border-strong)',
+                      background: active
+                        ? 'color-mix(in srgb, var(--accent-teal) 12%, transparent)'
+                        : 'var(--bg-surface-raised)',
+                      color: active ? 'var(--accent-teal)' : 'var(--text-primary)',
+                    }}
+                  >
+                    {active ? (
+                      <Check className="w-3 h-3 shrink-0" aria-hidden />
+                    ) : (
+                      <Circle className="w-3 h-3 shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
+                    )}
+                    <span className="truncate">{c.disease_name}</span>
+                  </button>
+                );
+              })}
+              {hiddenCount > 0 && (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setShowMoreDiseases((v) => !v)}
+                  className="inline-flex items-center gap-0.5 px-2 py-1 rounded-full text-2xs"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  {showMoreDiseases ? (
+                    <>
+                      Show fewer <ChevronUp className="w-3 h-3" />
+                    </>
+                  ) : (
+                    <>
+                      +{hiddenCount} more <ChevronDown className="w-3 h-3" />
+                    </>
+                  )}
+                </button>
               )}
-            </button>
-          )}
+            </div>
 
-          {propagatedFromRelated?.length > 0 && isActiveDisease(primaryDisease) && (
-            <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-              Includes annotations from {propagatedFromRelated.length} related subtype
-              {propagatedFromRelated.length === 1 ? '' : 's'}.
-            </p>
-          )}
-          {resolving && (
-            <p className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
-              <Loader2 className="w-3 h-3 animate-spin" /> Loading findings for disease…
-            </p>
-          )}
-        </div>
-      )}
+            {/* Says what picking does, until something is picked. */}
+            {activeCount === 0 && !resolving && (
+              <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+                Pick a condition to see its findings.
+              </p>
+            )}
+            {propagatedFromRelated?.length > 0 && isActiveDisease(primaryDisease) && (
+              <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+                Includes annotations from {propagatedFromRelated.length} related subtype
+                {propagatedFromRelated.length === 1 ? '' : 's'}.
+              </p>
+            )}
+            {resolving && (
+              <p className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
+                <Loader2 className="w-3 h-3 animate-spin" /> Loading findings for disease…
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       <div className="flex items-center justify-between gap-2">
         <div className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-          {interpreting ? (
-            <span className="inline-flex items-center gap-1">
-              <Loader2 className="w-3 h-3 animate-spin" /> Interpreting note…
-            </span>
-          ) : candidates.length > 0 ? (
+          {/* The note's progress shows once, under the text box — not again here. */}
+          {!interpreting && candidates.length > 0 ? (
             <span>
               Clinical findings ({clinicalCandidates.filter((c) => c.selected).length}/
               {clinicalCandidates.length} selected)
-              {clinicalCandidates.some((c) => c.selected && c.selected_default && isAutomatic)
-                ? ' · high-confidence pre-selected — click to undo'
-                : ''}
             </span>
           ) : null}
         </div>
@@ -1444,7 +1517,7 @@ export default function PhenotypeInputPanel({
                   onClick={() => setGroupSelected(clinicalCandidates, true)}
                   disabled={disabled}
                 >
-                  Select clinical
+                  Select all
                 </button>
                 <button
                   type="button"
@@ -1461,10 +1534,14 @@ export default function PhenotypeInputPanel({
         )}
       </div>
 
-      {!resolving && !interpreting && selectedCount === 0 && candidates.length > 0 && (
-        <p className="text-2xs" style={{ color: 'var(--warning, #b45309)' }}>
-          Select at least one clinical finding for this patient before running phenotype
-          prioritization.
+      {/* A prompt, not a warning: nothing is wrong yet, and the step is optional. The line
+        * stays while findings are listed and only its wording changes, so the chips below
+        * don't jump up on the first pick. */}
+      {clinicalCandidates.length > 0 && (
+        <p className="text-2xs" style={{ color: 'var(--text-secondary)' }}>
+          {selectedCount === 0
+            ? 'Pick the findings that match this patient. Phenotype ranking uses only the ones you select.'
+            : `Phenotype ranking will use the ${selectedCount} finding${selectedCount === 1 ? '' : 's'} you picked.`}
         </p>
       )}
 
@@ -1482,17 +1559,21 @@ export default function PhenotypeInputPanel({
 
       {showInheritance && inheritanceCandidates.length > 0 && (
         <div className="space-y-1">
-          <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-            Inheritance / non-finding terms — optional, not used as clinical findings unless you
-            select them
-          </p>
+          <div className="flex items-center gap-1 text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+            Inheritance terms
+            <InfoHint label="About inheritance terms">
+              <p>Optional. These aren't used as clinical findings unless you select them.</p>
+            </InfoHint>
+          </div>
           <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto opacity-80">
             {inheritanceCandidates.map(renderChip)}
           </div>
         </div>
       )}
 
-      {selectedCount > 0 && (
+      {/* Also shown while a panel is still chosen: its genes are sent with the upload,
+        * so it must stay visible (and removable) even with no findings selected. */}
+      {(selectedCount > 0 || (value?.selected_panels || []).length > 0) && (
         <PanelAppSuggestSection
           confirmedHpoIds={candidates.filter((c) => c.selected).map((c) => c.hpo_id)}
           // Stable text only — live `draft` was re-fetching panels on every keystroke.

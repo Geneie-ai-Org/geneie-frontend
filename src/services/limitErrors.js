@@ -28,6 +28,8 @@ const FAMILIES = {
 const UNPREFIXED = {
   ANNOVAR_ALREADY_RUN: 'annovarAlreadyRun',
   GUEST_LIMIT_REACHED: 'guestChat',
+  // The backend's actual code for the guest chat cap (the unprefixed name above never fired).
+  GUEST_CHAT_LIMIT_REACHED: 'guestChat',
   FREE_TIER_LIMIT_REACHED: 'legacyFreeLimit',
   // Retired backend-side in favour of the monthly pool. Keeping the alias costs one line and
   // avoids a regression window if any deploy still emits it.

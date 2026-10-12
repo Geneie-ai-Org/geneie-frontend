@@ -20,7 +20,9 @@ import {
   validateModule1Bed,
 } from '@/services/backendApi';
 
-const NON_TERMINAL_STATUSES = new Set(['queued', 'running']);
+// 'cancelling' (GPU box shutting down, 20-80 s) is still in flight: a reload in that window must
+// resume polling instead of showing no job.
+const NON_TERMINAL_STATUSES = new Set(['queued', 'running', 'cancelling']);
 // Queue position moves faster than pipeline phases, so a queued job is polled more often.
 const QUEUED_POLL_MS = 10000;
 const RUNNING_POLL_MS = 20000;

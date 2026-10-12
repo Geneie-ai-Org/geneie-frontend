@@ -7,7 +7,9 @@ const ProtectedRoute = ({ children }) => {
   const { isAuthReady, userLoading, userId } = useAuth();
   const location = useLocation();
 
-  if (userLoading && !isAuthReady) {
+  // Wait for Firebase to settle: redirecting while auth is still loading would bounce a
+  // signed-in user to /auth on every hard refresh.
+  if (!isAuthReady || userLoading) {
     return <SessionLoadingScreen message="Loading..." />;
   }
 

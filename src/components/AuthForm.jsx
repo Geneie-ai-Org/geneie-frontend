@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { postLoginPath } from '@/lib/postLoginPath';
 import { auth, GoogleAuthProvider, OAuthProvider } from '../services/firebase';
 import {
     createUserWithEmailAndPassword,
@@ -18,6 +19,7 @@ import { authErrorMessage } from '@/lib/authErrors';
 
 const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificationPending }) => {
     const navigate = useNavigate();
+    const location = useLocation();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -86,7 +88,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
             if (onSignupSuccess) {
                 onSignupSuccess(true);
             }
-            navigate('/app');
+            navigate(postLoginPath(location));
         } catch (err) {
             if (err.code === 'auth/account-exists-with-different-credential') {
                 // Handle account linking
@@ -133,7 +135,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
             if (onSignupSuccess) {
                 onSignupSuccess(true);
             }
-            navigate('/app');
+            navigate(postLoginPath(location));
         } catch (err) {
             if (err.code === 'auth/account-exists-with-different-credential') {
                 // Handle account linking
@@ -188,7 +190,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
             if (onSignupSuccess) {
                 onSignupSuccess(true);
             }
-            navigate('/app');
+            navigate(postLoginPath(location));
         } catch (err) {
             let friendlyError = 'Failed to link accounts.';
             if (err.code) {
@@ -264,7 +266,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                 if (onSignupSuccess) {
                     onSignupSuccess(true);
                 }
-                navigate('/app');
+                navigate(postLoginPath(location));
 
             } else {
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);

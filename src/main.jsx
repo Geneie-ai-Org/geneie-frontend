@@ -5,6 +5,7 @@ import { MotionConfig } from 'motion/react';
 import { AuthProvider } from './hooks/useAuth';
 import { ThemeProvider, useTheme } from './hooks/useTheme';
 import PublicRoute from './components/PublicRoute';
+import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import SessionLoadingScreen from './components/SessionLoadingScreen';
 import { initAnalytics } from './lib/analytics';
@@ -72,21 +73,26 @@ root.render(
               discard the oobCode for anyone resetting on a device they are signed in on. */}
           <Route path="/auth/action" element={<AuthActionPage />} />
 
-          {/* Chat — guests and authenticated users; legal gate first */}
+          {/* Chat — signed-in users only (signed-out visitors go to /auth and come back after
+              signing in); legal gate first */}
           <Route
             path="/app"
             element={
-              <LegalConsentGate>
-                <ChatPage />
-              </LegalConsentGate>
+              <ProtectedRoute>
+                <LegalConsentGate>
+                  <ChatPage />
+                </LegalConsentGate>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/app/:conversationId"
             element={
-              <LegalConsentGate>
-                <ChatPage />
-              </LegalConsentGate>
+              <ProtectedRoute>
+                <LegalConsentGate>
+                  <ChatPage />
+                </LegalConsentGate>
+              </ProtectedRoute>
             }
           />
           <Route path="/legal/terms" element={<LegalDocPage doc="terms" />} />

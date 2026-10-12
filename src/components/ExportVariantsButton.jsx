@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Download, Loader2, RefreshCw } from 'lucide-react';
 import { getExportEligibility, exportVariants } from '@/services/backendApi';
 
@@ -29,25 +29,29 @@ export default function ExportVariantsButton({
 
   const gateBlocked = downloadGate?.blocked === true;
 
-  const applyEligibility = useCallback(
-    (data) => {
-      setEligibility(data);
-      if (
-        !gateBlocked &&
-        data?.can_export === true &&
-        data?.source === 'postgres' &&
-        uiCount != null &&
-        Number.isFinite(Number(uiCount)) &&
-        Number.isFinite(Number(data.row_count)) &&
-        Number(data.row_count) !== Number(uiCount) &&
-        typeof onReconcileUiCount === 'function'
-      ) {
-        // Postgres/export is source of truth after enrichment dedupe; sync Under consideration.
-        onReconcileUiCount(Number(data.row_count));
-      }
-    },
-    [gateBlocked, onReconcileUiCount, uiCount]
-  );
+  // Read through refs: the parent passes a new `onReconcileUiCount` on every render, and as a
+  // dependency it re-created checkEligibility each time — re-fetching eligibility on every
+  // sidebar re-render (several per second while jobs poll).
+  const latestRef = useRef({ gateBlocked, uiCount, onReconcileUiCount });
+  latestRef.current = { gateBlocked, uiCount, onReconcileUiCount };
+
+  const applyEligibility = useCallback((data) => {
+    setEligibility(data);
+    const { gateBlocked: blocked, uiCount: count, onReconcileUiCount: reconcile } = latestRef.current;
+    if (
+      !blocked &&
+      data?.can_export === true &&
+      data?.source === 'postgres' &&
+      count != null &&
+      Number.isFinite(Number(count)) &&
+      Number.isFinite(Number(data.row_count)) &&
+      Number(data.row_count) !== Number(count) &&
+      typeof reconcile === 'function'
+    ) {
+      // Postgres/export is source of truth after enrichment dedupe; sync Under consideration.
+      reconcile(Number(data.row_count));
+    }
+  }, []);
 
   const checkEligibility = useCallback(async () => {
     if (!conversationId || isGuest) return;
@@ -64,14 +68,17 @@ export default function ExportVariantsButton({
     }
   }, [conversationId, isGuest, applyEligibility]);
 
+  // `hasVariantData` (a boolean), not `variantData`: the parent replaces that object on every
+  // pipeline tick, which re-fetched eligibility each time.
+  const hasVariantData = Boolean(variantData);
   useEffect(() => {
-    if (conversationId && !isGuest && (variantData || filteredCount !== null)) {
+    if (conversationId && !isGuest && (hasVariantData || filteredCount !== null)) {
       // `gateBlocked` is a dep so eligibility is re-fetched the moment a job finishes.
       checkEligibility();
     } else {
       setEligibility(null);
     }
-  }, [conversationId, isGuest, variantData, filteredCount, gateBlocked, checkEligibility]);
+  }, [conversationId, isGuest, hasVariantData, filteredCount, gateBlocked, checkEligibility]);
 
   const handleExport = useCallback(async () => {
     if (!conversationId || isExporting) return;

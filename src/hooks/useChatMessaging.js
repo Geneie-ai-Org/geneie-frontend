@@ -128,8 +128,31 @@ export function useChatMessaging({
     }
   }, []);
 
+  // Save the turn to the DB. Started the moment the reply ARRIVES, independent of the typing animation:
+  // the animation is one setTimeout per character, which browsers throttle to ~1/s in a background tab
+  // (and which never finishes if the user reloads or sends the next message first), so persisting only
+  // from its completion callback silently lost replies. Resolves to the created ai message (or null).
+  const persistTurn = useCallback(
+    async (wasFirstInConversation, userTextForTitle, aiText, sources, mode = 'full', convId = null, durationMs = null) => {
+      if (userTier === 'guest' || !userId || !convId) return null;
+      try {
+        if (mode === 'full') {
+          await mongodbApi.createMessage(convId, 'user', userTextForTitle, []);
+          if (wasFirstInConversation) {
+            await updateConversationTitle(convId, userTextForTitle);
+          }
+        }
+        return await mongodbApi.createMessage(convId, 'ai', aiText, sources || [], { durationMs });
+      } catch (error) {
+        console.error('MongoDB Save Error:', error);
+        return null;
+      }
+    },
+    [userId, userTier, updateConversationTitle]
+  );
+
   const appendAssistantAndPersist = useCallback(
-    async (wasFirstInConversation, userTextForTitle, aiText, sources, mode = 'full', originConversationId = null, durationMs = null) => {
+    async (wasFirstInConversation, userTextForTitle, aiText, sources, mode = 'full', originConversationId = null, durationMs = null, prePersisted = null) => {
       const src = sources || [];
       const optimisticId = `temp-ai-${Date.now()}`;
       // The answer belongs to the conversation it was asked in. Persist to that origin
@@ -171,13 +194,10 @@ export function useChatMessaging({
       if (stillActive()) addAssistantMessage(optimisticId);
 
       try {
-        if (mode === 'full') {
-          await mongodbApi.createMessage(convId, 'user', userTextForTitle, []);
-          if (wasFirstInConversation) {
-            await updateConversationTitle(convId, userTextForTitle);
-          }
-        }
-        const created = await mongodbApi.createMessage(convId, 'ai', aiText, src, { durationMs });
+        // Reuse the save that was started when the reply arrived; otherwise save now.
+        const created = prePersisted
+          ? await prePersisted
+          : await persistTurn(wasFirstInConversation, userTextForTitle, aiText, src, mode, convId, durationMs);
         const mid = created?.message_id;
         if (mid && stillActive()) {
           setMessages((prev) =>
@@ -190,7 +210,7 @@ export function useChatMessaging({
         console.error('MongoDB Save Error:', error);
       }
     },
-    [userId, userTier, guestExchangesUsed, updateConversationTitle, setGuestExchangesUsed, setGuestLimitExceeded]
+    [userId, userTier, guestExchangesUsed, persistTurn, setGuestExchangesUsed, setGuestLimitExceeded]
   );
 
   const persistFailureTurn = useCallback(
@@ -456,9 +476,10 @@ export function useChatMessaging({
         // Still on the origin conversation: animate the reply in, then persist.
         // Pass origin so the animation stops (and fast-forwards to persist) if the user
         // switches conversations mid-animation, instead of leaking the stream into the new one.
+        const persisted = persistTurn(wasFirstInConversation, userMessageText, data.response, data.sources || [], 'full', originConversationId, thinkingMs);
         typeMessage(data.response, async (finalText, finalSources) => {
           pendingTurnRef.current = null;
-          await appendAssistantAndPersist(wasFirstInConversation, userMessageText, finalText, finalSources || [], 'full', originConversationId, thinkingMs);
+          await appendAssistantAndPersist(wasFirstInConversation, userMessageText, finalText, finalSources || [], 'full', originConversationId, thinkingMs, persisted);
         }, data.sources || [], originConversationId);
       } else {
         // User navigated away mid-reply: skip the typing animation entirely and persist
@@ -518,6 +539,7 @@ export function useChatMessaging({
     runChatCompletion,
     typeMessage,
     appendAssistantAndPersist,
+    persistTurn,
     persistFailureTurn,
     setGuestLimitExceeded,
     setAnnovarMessageModal,
@@ -582,8 +604,9 @@ export function useChatMessaging({
         );
       }
       if (activeConversationIdRef.current === originConversationId) {
+        const persisted = persistTurn(false, userMessageText, data.response, data.sources || [], 'assistant-only', originConversationId, thinkingMs);
         typeMessage(data.response, async (finalText, finalSources) => {
-          await appendAssistantAndPersist(false, userMessageText, finalText, finalSources || [], 'assistant-only', originConversationId, thinkingMs);
+          await appendAssistantAndPersist(false, userMessageText, finalText, finalSources || [], 'assistant-only', originConversationId, thinkingMs, persisted);
         }, data.sources || [], originConversationId);
       } else {
         inFlightOriginRef.current = null;
@@ -614,6 +637,7 @@ export function useChatMessaging({
     runChatCompletion,
     typeMessage,
     appendAssistantAndPersist,
+    persistTurn,
     promptChatBlocked,
   ]);
 

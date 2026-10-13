@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useSeo } from '@/hooks/useSeo';
 import {
@@ -313,15 +313,20 @@ const AdminPage = () => {
           <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
             Users &amp; tiers
           </h1>
-          <button
-            type="button"
-            onClick={loadUsers}
-            disabled={busy}
-            className="text-xs px-3 py-1.5 rounded-lg border disabled:opacity-50"
-            style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-          >
-            {busy ? 'Working…' : 'Reload'}
-          </button>
+          <div className="flex items-center gap-3">
+            <Link to="/admin-haha/infra" className="text-xs underline" style={{ color: 'var(--text-secondary)' }}>
+              Infra &rarr;
+            </Link>
+            <button
+              type="button"
+              onClick={loadUsers}
+              disabled={busy}
+              className="text-xs px-3 py-1.5 rounded-lg border disabled:opacity-50"
+              style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
+            >
+              {busy ? 'Working…' : 'Reload'}
+            </button>
+          </div>
         </div>
         <p className="text-xs mb-5" style={{ color: 'var(--text-tertiary)' }}>
           Signup always creates <code>planStatus: "free"</code> — seats are never handed out

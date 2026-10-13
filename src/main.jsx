@@ -19,6 +19,7 @@ const AuthPage = React.lazy(() => import('./pages/AuthPage'));
 const AuthActionPage = React.lazy(() => import('./pages/AuthActionPage'));
 const ChatPage = React.lazy(() => import('./pages/ChatPage'));
 const AdminPage = React.lazy(() => import('./pages/AdminPage'));
+const AdminInfraPage = React.lazy(() => import('./pages/AdminInfraPage'));
 const LegalDocPage = React.lazy(() => import('./pages/LegalDocPage'));
 const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage'));
 const LegalConsentGate = React.lazy(() => import('./components/LegalConsentGate'));
@@ -92,6 +93,7 @@ root.render(
           <Route path="/legal/terms" element={<LegalDocPage doc="terms" />} />
           <Route path="/legal/privacy" element={<LegalDocPage doc="privacy" />} />
           <Route path="/admin-haha" element={<AdminPage />} />
+          <Route path="/admin-haha/infra" element={<AdminInfraPage />} />
           <Route path="/subscription-success" element={<Navigate to="/app" replace />} />
           <Route path="/subscription-canceled" element={<Navigate to="/app" replace />} />
 

@@ -474,6 +474,9 @@ export function module1UrlErrorMessage(error, fallback = 'URL import failed.') {
   if (!error) return fallback;
   if (error.status === 401) return 'Your session expired. Sign in again to import from a URL.';
   if (error.status === 404) return 'This chat is no longer available. Start a new chat and try again.';
+  // An admin intake pause carries its own user-facing copy (with the resume time); the generic
+  // 503 text below would hide it.
+  if (error.code === 'INTAKE_PAUSED' && error.message) return error.message;
   if (error.status === 503) return 'Raw data analysis is unavailable right now. Try again later.';
   if (error.status === 413) {
     const gb = error.limitBytes ? error.limitBytes / 1024 ** 3 : null;

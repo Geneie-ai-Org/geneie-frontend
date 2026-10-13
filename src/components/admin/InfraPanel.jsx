@@ -19,6 +19,7 @@ import {
 import WorkerCard from './WorkerCard';
 import Module1Card from './Module1Card';
 import IntakePanel from './IntakePanel';
+import DataPlaneCard from './DataPlaneCard';
 import { AlarmStrip, AuditTable, DlqSection, EcsTable } from './InfraReadOnly';
 import { INTRO, SECTION_HELP } from './infraHelp';
 
@@ -58,6 +59,11 @@ function applyMerge(prev, m) {
     else if (r?.value?.until) entry = { paused_until: r.value.until, by: r.value.by, reason: r.value.reason };
     else return prev;
     return { ...prev, intake: { ...(prev.intake || {}), [m.intakeKind]: entry } };
+  }
+  if (m.kind === 'dataplaneConfig') {
+    if (!prev.dataplane) return prev;
+    const value = r && typeof r === 'object' && 'value' in r ? r.value : m.fallbackValue;
+    return { ...prev, dataplane: { ...prev.dataplane, config: { ...(prev.dataplane.config || {}), [m.configKey]: value } } };
   }
   if (m.kind === 'config' || m.kind === 'module1Cap') {
     if (!prev.module1) return prev;
@@ -266,6 +272,15 @@ export default function InfraPanel() {
           intake={status?.intake || null}
           errors={errors}
           bounds={bounds}
+          blockedReason={globalBlock}
+          onRequest={setConfirm}
+        />
+      </Section>
+
+      <Section title="Data plane (annotation v2)" help={SECTION_HELP.dataplane}>
+        <DataPlaneCard
+          dataplane={status?.dataplane || null}
+          errors={errors}
           blockedReason={globalBlock}
           onRequest={setConfirm}
         />

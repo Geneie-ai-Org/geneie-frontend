@@ -52,6 +52,19 @@ export const SECTION_HELP = {
     ],
     summary: 'More',
   },
+  dataplane: {
+    what: 'The new, faster annotation path (a lookup table + a serverless worker) and which path serves new ANNOVAR jobs. The old path is the default.',
+    items: [
+      ['Shadow', 'Safe first step: users still get the old result; the new path runs silently and every pair of results is compared.'],
+      ['v2', 'The new path serves users. If a job fails there it is re-run once on the old path (while the fall-back is on).'],
+      ['Canary accounts', 'Try a path on named accounts (yours) before anyone else gets it.'],
+      ['Kill switch', 'Instantly (~45 s) sends every new job back to the old path.'],
+      ['Data release', 'Which frozen copy of the annotation databases the new path reads. Switch back to the previous release to undo a bad one.'],
+      ['Cost', 'The new path costs cents per job; the old workers still cost what they do today.'],
+      ['Reverts', 'No timer: a setting stays until you change it. Reset restores the recorded default (old path).'],
+    ],
+    summary: 'More',
+  },
   ecs: {
     what: 'The always-on services (API, background workers, PGx worker, chat agent). Read-only.',
     items: [

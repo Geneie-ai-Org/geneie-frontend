@@ -241,3 +241,33 @@ export function validateInstanceTypes(list, allowlist) {
   if (bad.length) return `Not in the allowlist: ${bad.join(', ')}.`;
   return null;
 }
+
+/** Data Plane v2 (annotation) flags the page may write. All live in the existing config store; the new path is OFF
+ *  until `dataplane.annotation.backend.<build>` (or the canary list) says otherwise. */
+export const DATAPLANE_KEYS = {
+  kill: 'dataplane.annotation.kill_switch',
+  backendHg38: 'dataplane.annotation.backend.hg38',
+  backendHg19: 'dataplane.annotation.backend.hg19',
+  releaseHg38: 'dataplane.annotation.release.hg38',
+  releaseHg19: 'dataplane.annotation.release.hg19',
+  canaryUsers: 'dataplane.annotation.canary_users',
+  canaryBackend: 'dataplane.annotation.canary_backend',
+  maxLines: 'dataplane.annotation.v2_max_variant_lines',
+  fallback: 'dataplane.annotation.v2_fallback_to_annovar',
+  shadowParity: 'dataplane.annotation.shadow_parity',
+};
+export const DATAPLANE_BACKENDS = ['annovar', 'shadow', 'v2'];
+const DATAPLANE_RELEASE_RE = /^(hg19|hg38)-[0-9A-Za-z.-]+-r[0-9]+$/;
+
+export function validateDataplaneRelease(value, build) {
+  const v = String(value ?? '').trim();
+  if (!v) return null; // empty = no release (the router keeps using annovar)
+  if (!DATAPLANE_RELEASE_RE.test(v)) return 'Release ids look like hg38-20261012-r1.';
+  if (!v.startsWith(`${build}-`)) return `This release is not for ${build}.`;
+  return null;
+}
+
+/** Comma / newline separated emails or user ids -> trimmed unique list. */
+export function parseCanaryUsers(text) {
+  return [...new Set(String(text ?? '').split(/[\s,]+/).map((s) => s.trim()).filter(Boolean))];
+}

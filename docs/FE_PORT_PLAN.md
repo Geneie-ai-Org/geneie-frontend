@@ -50,7 +50,7 @@ Decisions:
 
 | Path | What it is | Decision | Why |
 |---|---|---|---|
-| `src/lib/postLoginPath.js` | Sends a user back to the `/app…` page they were turned away from after sign-in. | PORT | Required for the sign-in gate (owner decision). |
+| `src/lib/postLoginPath.js` | Sends a user back to the `/app…` page they were turned away from after sign-in. | PORT | Required for the sign-in gate (confirmed by the owner on 2026-10-15). |
 | `src/components/Module1QcSection.jsx` | "QC & alignment" row, closed by default, that wraps the QC, IGV and saved-report panels. | PORT | Used by the stepper (item 2) and by the ported drawer (item 3a). It calls the same three panels and endpoints newprod already uses. |
 
 ### Only on newprod (23), all KEEP-NEWPROD
@@ -133,7 +133,7 @@ from the newprod backend contract.
 
 | # | Item | Evidence | Decision | Risk |
 |---|------|----------|----------|------|
-| 1 | `/app` requires sign-in, with a post-login deep link (main `9a19802`) | Two-dot diff: `src/lib/postLoginPath.js` is new. `ProtectedRoute.jsx` waits on `!isAuthReady \|\| userLoading` (the old guard bounced signed-in users on a hard refresh). `PublicRoute.jsx` and `AuthForm.jsx` (4 x `navigate('/app')`) now use `postLoginPath(location)`. `main.jsx` wraps `/app` and `/app/:id` in `ProtectedRoute`. | **ADAPT** (owner decision: require sign-in). `main.jsx` is hand-edited, because main's copy deletes newprod's `/admin-haha/infra` route. No backend allowlist is needed: the deep link travels in React Router `location.state.from`, and only `/app*` paths are honoured. | Medium. Signed-out visitors and guests can no longer chat. See "Guest code that becomes unreachable" below. |
+| 1 | `/app` requires sign-in, with a post-login deep link (main `9a19802`) | Two-dot diff: `src/lib/postLoginPath.js` is new. `ProtectedRoute.jsx` waits on `!isAuthReady \|\| userLoading` (the old guard bounced signed-in users on a hard refresh). `PublicRoute.jsx` and `AuthForm.jsx` (4 x `navigate('/app')`) now use `postLoginPath(location)`. `main.jsx` wraps `/app` and `/app/:id` in `ProtectedRoute`. | **ADAPT**. Requiring sign-in was **confirmed by the owner on 2026-10-15**. `main.jsx` is hand-edited, because main's copy deletes newprod's `/admin-haha/infra` route. No backend allowlist is needed: the deep link travels in React Router `location.state.from`, and only `/app*` paths are honoured. | Medium. Signed-out visitors and guests can no longer chat. See "Guest code that becomes unreachable" below. |
 | 2 | Module 1 QC section collapsed by default (main `Module1QcSection.jsx`) | Main moved the QC panel, IGV panel and QC report panel into `Module1QcSection` and rendered it inside the new `PipelineDrawer`. Newprod already has the same collapsed "QC & alignment" row, but inside the stepper's `expanded` body, which is open by default. So once a run finished, the stage row stayed open and the QC row sat underneath it. | **ADAPT**. Add `Module1QcSection.jsx` (main's file), render it in `Module1PipelineStepper` **outside** the collapsible body, and collapse the stage body by default once the run has finished or is terminal. The open state is reset per `jobId`, so a new run opens again. Main's drawer also renders this section; see 3a. | Low (presentation only). |
 | 3a | Phase pills: `PipelineDrawer` shows every route as two pills, "VCF uploaded" or "Reads → VCF", then "Annotated & ready". On main it also absorbs the Module 1 job and deletes `Module1PipelineStepper` (main `419ac48`/`1c6b7ec`, `1d3c845`). | Two-dot diff: `PipelineDrawer.jsx` +536/-271. `git diff 077c1ec origin/newprod -- src/components/PipelineDrawer.jsx` is **empty**: newprod never edited the drawer after the merge base, so main's drawer is a strict superset of newprod's. | **ADAPT**. Take main's `PipelineDrawer.jsx` verbatim. Its pill header, phase pills, the action button on the pill, the always-visible Annotated badge row, the copy, and the `module1Job` / `onModule1StartOver` props all come across. In `ChatPage` the FASTQ job still belongs to newprod's `Module1PipelineStepper` while it is queued, running, cancelling, cancelled or failed, or complete with ingest still pending. The stepper is the only place with the GPU/CPU chip, queue position, ETA and **Leave queue / Stop run / Switch to CPU**. Once the run has finished successfully and the VCF is in the conversation, the drawer takes over as on main: pill 1 shows "Reads → VCF" ✓ with its duration and the QC & alignment section, and the stepper is no longer rendered. Main's ChatPage `hasUploadedFile` change comes across too. | Medium (visual). The drawer layout changes for every VCF conversation. The handoff from stepper to drawer happens when the VCF lands. **Owner sign-off needed:** the first brief said "do not re-import main's drawer wholesale". The later instruction asked for main's pills and new components to be ported faithfully. Because newprod never touched the file, taking it whole is the faithful port. It is isolated in its own commit and can be reverted alone. |
 | 3b | Hide infrastructure errors and the finished-run helper (main `b079364`: `getModule1FailureMessage`, `module1FinishedSuccessfully` in `module1PipelinePhases.js`) | Main's `getModule1FailureMessage` reads `job.error \|\| job.message` and blanks infrastructure text with a regex. | **ADAPT** to the new backend contract (item 4). `module1FinishedSuccessfully` moves from the stepper into the lib file. Newprod's `waiting_gpu`, `launching`, `cancelling` and `cancelled` phases stay. | Low. |
@@ -144,8 +144,8 @@ from the newprod backend contract.
 | 3g | VariantFilterSidebar changes (main `b313239` crossfade status, `e0bb2a1` lock) | The only two-dot hunk is newprod's `X-Device-Id` header, which main lacks. | **PRESENT** (newprod is ahead). | None. |
 | 3h | `useModule1Pipeline.js` (main `b079364`) | Main's only addition is that the failure modal uses `getModule1FailureMessage`. Everything else in the diff is newprod-only (cancel, switch, queue cadence). | **ADAPT** (item 4). | Medium. Polling logic changes. |
 | 3i | Other main-touched files: CaseReportDownloadButton, ColumnInterpretationResults, ExportVariantsButton, PhenotypeInputPanel, PanelAppSuggestSection, ChatMessage, TypewriterText (deleted), config/api.js, SSE streaming in useChatMessaging | Two-dot diff is **empty** for each, so they are identical on both branches. In `useChatMessaging` the two-dot hunks are all newprod-only (exploratory branch, `persistTurn` #208, token fix). | **PRESENT**. | None. |
-| 4 | Module 1 status contract: `failure`, `terminal`, admin-only `error` | Newprod reads `data.error` at `useModule1Pipeline.js:43/238` and `Module1PipelineStepper.jsx:153/325`. Polling stops only on `failed`/`cancelled`, and `cancelling` is treated as non-terminal. | **NEW**. Map `failure` and `terminal`. User-facing text is `failure.message`, else `message` (infrastructure text masked), else a plain fallback. `error` is **never rendered**: it is not mapped onto the job at all. Polling stops when `terminal` is true, except for `status=complete` while `ingest_status` is still pending, because the backend advances ingest as a side effect of `GET /status`. `terminal` with status or phase `cancelling` is shown as the distinct **Cancelled** state: polling stops, the toast shows once, and the job is dropped after one cycle. `module1JobActive` is false whenever the job is terminal (except the complete-but-ingesting case). If an older backend omits `terminal`, the old status-set logic still applies. | Medium. A user who reloads while a run is `cancelling` now sees no job (it is terminal) instead of "Stopping…". Starting a new run during the 20-80 s machine shutdown may get a backend 409, which is shown by the existing form error path. |
-| 5 | Chat-eligibility re-poll after a filter or Exomiser job (known bug: chat stayed greyed after Exomiser until reload) | `pollExomiserUntilDone` calls `refreshConversationAfterAnnovar` once. The background poll effect (`useVariantPipeline.js:1326`) only runs for `enrichmentActive \|\| indexingActive \|\| filterLoadPending \|\| pgxOnlyPending`. `indexingActive` is false when `ADVANCED_CHAT_INDEXING` arrives with `advanced_chat_status: 'ready'` (the brief re-index after GA/Exomiser), and nothing polls `allowed:null, reason:null` (the optimistic state set by `beginPipelineWork`). The filter path refreshes only on an observed `running -> completed`, so a fast job seen as `pending -> completed` never refreshes at all. | **NEW**. Add a pure helper `src/lib/chatEligibilityPoll.js` that decides whether to poll again (transient reasons: `ENRICHMENT_RUNNING/PENDING`, `ADVANCED_CHAT_INDEXING` unless `failed`, `FILTER_JOB_RUNNING`, `CHAT_REQUIRES_FILTER` with a filter active or "not loaded yet", or no answer at all). Backoff: 3 s for the first minute, then 5 s, with a cap of about 9 minutes. `settleChatEligibility()` in `useVariantPipeline` runs that loop after Exomiser completes or fails, after a filter job completes (any non-completed state -> completed), and after GA triage completes (ChatPage). It aborts on conversation switch. While the loop runs, the background effect skips its own fetch, so there are no duplicate requests. `ADVANCED_CHAT_INDEXING` with `advanced_chat_status` ready (or null) is treated as a transient "Preparing chat…" that keeps polling, not as an error. | Medium. More eligibility GETs for up to about 9 minutes after a job, which is bounded. |
+| 4 | Module 1 status contract: `failure`, `terminal`, admin-only `error` | Newprod reads `data.error` at `useModule1Pipeline.js:43/238` and `Module1PipelineStepper.jsx:153/325`. Polling stops only on `failed`/`cancelled`, and `cancelling` is treated as non-terminal. | **NEW**. Map `failure` and `terminal`. User-facing text is `failure.message`, else `message` (infrastructure text masked), else a plain fallback. `error` is **never rendered**: it is not mapped onto the job at all. Polling stops when `terminal` is true, except for `status=complete` while `ingest_status` is still pending, because the backend advances ingest as a side effect of `GET /status`. `terminal` with status or phase `cancelling` is shown as the distinct **Cancelled** state: polling stops, the toast shows once, and the job is dropped after one cycle. `module1JobActive` is false whenever the job is terminal (except the complete-but-ingesting case). If an older backend omits `terminal`, the old status-set logic still applies. | Medium. A user who reloads while a run is `cancelling` sees "Stopping…" until the next poll reports it terminal, then Cancelled (review fix R3). Starting a new run during the 20-80 s machine shutdown may get a backend 409, which is shown by the existing form error path. |
+| 5 | Chat-eligibility re-poll after a filter or Exomiser job (known bug: chat stayed greyed after Exomiser until reload) | `pollExomiserUntilDone` calls `refreshConversationAfterAnnovar` once. The background poll effect (`useVariantPipeline.js:1326`) only runs for `enrichmentActive \|\| indexingActive \|\| filterLoadPending \|\| pgxOnlyPending`. Nothing polls `allowed:null, reason:null` (the optimistic state set by `beginPipelineWork`). The filter path refreshes only on an observed `running -> completed`, so a fast job seen as `pending -> completed` never refreshes at all. | **NEW**. Add a pure helper `src/lib/chatEligibilityPoll.js` that decides whether to poll again (transient reasons: `ENRICHMENT_RUNNING/PENDING`, `ADVANCED_CHAT_INDEXING` unless `failed`, `FILTER_JOB_RUNNING`, `CHAT_REQUIRES_FILTER` with a filter active or "not loaded yet", or no answer at all). Backoff: 3 s for the first minute, then 5 s, with a cap of about 9 minutes. `settleChatEligibility()` in `useVariantPipeline` runs that loop after Exomiser completes or fails, after a filter job completes (any non-completed state -> completed), and after GA triage completes (ChatPage). It aborts on conversation switch. While the loop runs, the background effect skips its own fetch, so there are no duplicate requests. `ADVANCED_CHAT_INDEXING` with `advanced_chat_status` exporting, queued or indexing (the only values the backend sends with that reason, including the short re-index after GA) shows as "Preparing chat…" and keeps polling, not as an error. Any other non-failed status is polled with a cap (review fix R6). | Medium. More eligibility GETs for up to about 9 minutes after a job, which is bounded. |
 | 6 | pgx_only placeholder mentions QC when a Module 1 QC exists | `ChatPage.jsx:1359` | **NEW**. When the conversation has Module 1 QC artifacts (`module1ArtifactsVisible`: live QC, BAM, or the saved report after purge), the placeholder is "Ask about pharmacogenes or this sample's sequencing QC…". | Low. |
 | 7 | Stale "Disease tab" wording | `VariantFilterSidebar.jsx:2265`: "On the Disease tab, select at least one HPO finding…". No such tab exists; findings are picked under "Clinical findings" in sample info (PhenotypeInputPanel). | **NEW**. New text: "In sample info, select at least one clinical finding (HPO term) present in this patient." | None. |
 | 8 | Explore refusals | `useChatMessaging.js:532` rewrites a `refused` event to "⚠️ … (not grounded)". | **NEW**. Show `evt.label` exactly as sent. If the label is missing, use a neutral line. There is no emoji prefix and no "not grounded" text. | Low. |
@@ -168,6 +168,48 @@ stay in the code but can no longer be reached by a real guest:
 **Not dead code:** `useAuth` starts every session with `userTier = 'guest'` until the profile and
 subscription load. Some guest branches still run briefly for signed-in users during page load. Do
 not remove them as dead code.
+
+## Review fixes (independent review of PR #222)
+
+Each fix is its own commit on `port/fe-from-main`.
+
+| # | Finding | Fix |
+|---|---|---|
+| R1 | The eligibility settle loop was never aborted on unmount. After logout or navigation, a failed (401) fetch returned null, which counted as "still settling", so polling could continue for about 9 minutes. | Aborted on unmount. An auth failure (401/403, or no signed-in user) ends the loop. `fetchChatEligibility` errors now carry the HTTP status. |
+| R2 | The GA poll's previous status was local to the effect, which restarts when enrichment or indexing flips. An in-flight -> completed change could be missed, so the settle loop never ran. | The previous status lives in a ref keyed by conversation id. A failed fetch no longer overwrites it. |
+| R3 | A resumed `cancelled` job with QC/BAM was shown as-is: no Cancelled mapping, no dismiss timer, not polled. A resumed `cancelling` job wasn't shown at all. | Resumed `cancelled` with artifacts shows Cancelled for one cycle and is then dropped (no toast). Resumed `cancelling` shows "Stopping…" and is polled only until the backend reports it terminal. |
+| R4 | The stepper header repeated the failure text that also appears in the red box. | The header says "Pipeline failed". The detail appears only in the box. |
+| R5 | A failed VCF import showed generic hard-coded text. | Shows the backend's curated `ingest_failure.message`. The old text is the fallback only. |
+| R6 | "Preparing chat…" keyed off `advanced_chat_status: 'ready'`, which the backend never sends with `ADVANCED_CHAT_INDEXING`. | Keys off exporting, queued and indexing. Those are polled for as long as they last and keep the GA poll alive. Any other non-failed status is polled with a cap. Comments describe the real backend behaviour. |
+
+Related backend change, opened separately by the coordinator: Module 1 notifications no longer
+carry `job.error`.
+
+### KEEP-NEWPROD list (agreed in review)
+
+These keep newprod's version because main is older or lacks newprod work:
+
+- **The 23 newprod-only files:**
+  - Admin infra: `AdminInfraPage`, `components/admin/*`, `infraApi`.
+  - Tuning mode: `TuningMode`, `TuningConfigModal`, `TuningCompareColumns`, `useTuningCompare`, `streamCompare`, `tuningConfig`.
+  - Compute choice: `Module1ComputeChoice`, `useModule1Capacity`.
+  - Explore: `ExploratoryModeToggle`, `streamExploratory`.
+  - `Module1PipelineStepper`, adapted.
+- **13 files that differ from main:**
+  - `DocumentUpload`
+  - `VariantFilterSidebar`, plus the HPO wording fix
+  - `useChatMessaging`, plus refusals shown as sent
+  - `useVariantPipeline`, plus the eligibility settle
+  - `ErrorBoundary`
+  - `NotificationBell`
+  - `SubscriptionPage`
+  - `config/env.js`
+  - `index.css`
+  - `lib/safeAuth.js`
+  - `AdminPage`
+  - `services/backendApi.js`, plus the error status on chat-eligibility
+  - `services/limitErrors.js`
+- **Outside `src/`:** `vite.config.js`.
 
 ## Order of work (one commit per group, so each can be reverted alone)
 
@@ -200,7 +242,7 @@ Results on this branch:
 - Smoke assertions all passed:
   - `postLoginPath`: 5/5.
   - `module1PipelinePhases` (failure text, terminal, keep-polling, cancelled, finished): 23/23.
-  - `chatEligibilityPoll` (transient reasons, indexing 'ready' versus 'failed', the filter case,
+  - `chatEligibilityPoll` (transient reasons, the indexing statuses versus 'failed', the filter case,
     backoff, cap): 18/18.
 
 ### Manual click-through (on the newprod preview or a local `npm run dev` pointed at newprod)
@@ -213,7 +255,7 @@ Results on this branch:
    - Signed in, open `/auth`. You should be redirected to `/app`.
    - `/admin-haha/infra` should still load (for an admin).
 2. **Module 1 failure display**
-   - Open a conversation whose FASTQ job failed. The stepper and the "Module 1 failed" modal should
+   - Open a conversation whose FASTQ job failed. The stepper header should say "Pipeline failed". The red box and the "Pipeline failed" modal should
      show `failure.message`, or a plain fallback. They should never show raw job or exception text
      (instance names, regions, tracebacks).
    - In DevTools > Network, `/api/module1/status` should stop being polled once the response has

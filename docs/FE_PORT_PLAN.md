@@ -176,6 +176,15 @@ Instead:
   body.
 - The owner's manual click-through is below.
 
+Results on this branch:
+
+- `npm run build` passed after every commit.
+- Smoke assertions all passed:
+  - `postLoginPath`: 5/5.
+  - `module1PipelinePhases` (failure text, terminal, keep-polling, cancelled, finished): 23/23.
+  - `chatEligibilityPoll` (transient reasons, indexing 'ready' versus 'failed', the filter case,
+    backoff, cap): 18/18.
+
 ### Manual click-through (on the newprod preview or a local `npm run dev` pointed at newprod)
 
 1. **Sign-in gate**

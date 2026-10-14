@@ -297,6 +297,8 @@ const Module1UploadForm = ({
 }) => {
   const [sampleName, setSampleName] = useState('');
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  // Live text in the phenotype box, for the "Skip & start" label.
+  const [phenotypeDraft, setPhenotypeDraft] = useState('');
   const [genome, setGenome] = useState('hg38');
   const [sequencingType, setSequencingType] = useState('WES');
   const [r1File, setR1File] = useState(null);
@@ -336,6 +338,7 @@ const Module1UploadForm = ({
     setValidationAttempted(false);
     setMetadataStep('sample');
     setComputeChoice(null);
+    setPhenotypeDraft('');
     loadBedCatalog?.('hg38');
   }, [open, loadBedCatalog]);
 
@@ -490,6 +493,17 @@ const Module1UploadForm = ({
     metadataStep === 'phenotype' ? 3 : metadataStep === 'analysis' ? 2 : 1;
   const onFinalStep = !germlineWizard || metadataStep === 'phenotype';
   const showComputeChoice = onFinalStep && !isStaging;
+  // Germline final step with no phenotype typed or chosen: say that it is being skipped (main's
+  // "Skip & start pipeline"), keeping the compute-aware wording, e.g. "Skip & join GPU queue (#3)".
+  const skippingPhenotype =
+    !isStaging &&
+    germlineWizard &&
+    metadataStep === 'phenotype' &&
+    !phenotypeDraft.trim() &&
+    !(sampleMetadata.phenotype || '').trim();
+  const finalSubmitLabel = skippingPhenotype
+    ? `Skip & ${submitLabel.charAt(0).toLowerCase()}${submitLabel.slice(1)}`
+    : submitLabel;
 
   const setAnalysisType = (val) => {
     setSampleMetadata((prev) => ({ ...prev, analysisType: val }));
@@ -925,6 +939,7 @@ const Module1UploadForm = ({
                 <div className="disclosure-enter">
                   <PhenotypeInputPanel
                     hideLabel
+                    onDraftChange={setPhenotypeDraft}
                     value={{
                       phenotype_mode: sampleMetadata.phenotype_mode || PHENOTYPE_MODE_NOTE,
                       phenotype_findings: sampleMetadata.phenotype_findings || '',
@@ -1044,7 +1059,7 @@ const Module1UploadForm = ({
                       className="px-4 py-2 text-sm font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
                     >
-                      {module1Submitting ? (isUrlMode ? 'Importing…' : 'Starting…') : submitLabel}
+                      {module1Submitting ? (isUrlMode ? 'Importing…' : 'Starting…') : finalSubmitLabel}
                     </button>
                   )}
                 </div>

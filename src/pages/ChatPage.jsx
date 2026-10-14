@@ -467,6 +467,10 @@ const ChatPage = () => {
   // GA completion triggers a brief second advanced-chat index on the backend; re-check
   // eligibility until it settles so chat unlocks without a reload.
   const settleChatEligibilityRef = useRef(settleChatEligibility);
+  // Last GA status seen, per conversation. Kept outside the poll effect because that effect
+  // restarts whenever enrichment/indexing flip, which would otherwise forget an in-flight run
+  // and miss its in-flight -> completed change.
+  const gaPrevStatusRef = useRef({ conversationId: null, status: null });
   settleChatEligibilityRef.current = settleChatEligibility;
   useEffect(() => {
     if (!activeConversationId || userTier === 'guest') {
@@ -478,17 +482,18 @@ const ChatPage = () => {
     let timer = null;
     const armedAt = Date.now();
     let fetching = false;
-    let prevStatus = null;
     const tick = async () => {
       if (fetching) return;
       fetching = true;
       clearTimeout(timer);
       let status = 'absent';
       let updatedAt = null;
+      let fetched = false;
       try {
         const payload = await fetchGaTriage(activeConversationId);
         status = String(payload?.status || '').toLowerCase();
         updatedAt = payload?.updated_at || null;
+        fetched = true;
       } catch {
         // Treated as absent; the window / enrichment rules below decide whether to retry.
       }
@@ -497,8 +502,11 @@ const ChatPage = () => {
       setGaTriageStatus(status);
       setGaTriageUpdatedAt(updatedAt);
       const inFlight = status === 'pending' || status === 'running' || status === 'queued';
+      const prev = gaPrevStatusRef.current;
+      const prevStatus = prev.conversationId === activeConversationId ? prev.status : null;
+      // A failed fetch must not overwrite an in-flight status, or its completion would be missed.
+      if (fetched) gaPrevStatusRef.current = { conversationId: activeConversationId, status };
       const wasInFlight = prevStatus === 'pending' || prevStatus === 'running' || prevStatus === 'queued';
-      prevStatus = status;
       if (wasInFlight && (status === 'completed' || status === 'ready')) {
         void settleChatEligibilityRef.current?.(activeConversationId, { fresh: true });
       }

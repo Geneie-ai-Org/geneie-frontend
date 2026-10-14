@@ -4,7 +4,7 @@ import * as mongodbApi from '../services/mongodbApi';
 import { apiUrl } from '@/config/api';
 import { apiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
 import { useAuth } from '@/hooks/useAuth';
-import { nextEligibilitySettleStep, isIndexingTransient } from '@/lib/chatEligibilityPoll';
+import { nextEligibilitySettleStep, isIndexingPreparing, isIndexingTransient } from '@/lib/chatEligibilityPoll';
 import { actionGate } from '@/services/tierLimits';
 import { describeLimitError } from '@/services/limitErrors';
 import {
@@ -1309,11 +1309,12 @@ export function useVariantPipeline({
     const reason = chatEligibility.reason;
     const isIndexing = reason === 'ADVANCED_CHAT_INDEXING';
     const acs = chatEligibility.advanced_chat_status;
-    // Transient unless the index build failed: after GA completes the backend briefly re-indexes
-    // (~10 s) while advanced_chat_status may still read 'ready' — show "Preparing chat…", keep
-    // polling, never an error.
+    // Transient unless the index build failed. While the backend builds the chat index it
+    // reports advanced_chat_status exporting / queued / indexing (GA completion triggers a short
+    // ~10 s re-index too) — that shows as "Preparing chat…" and keeps polling, never an error.
+    // Any other non-failed status is still treated as transient, with a capped poll.
     const active = isIndexingTransient(chatEligibility);
-    const preparing = active && acs === 'ready';
+    const preparing = isIndexingPreparing(chatEligibility);
     const failed = isIndexing && acs === 'failed';
     return {
       active,
@@ -1383,9 +1384,10 @@ export function useVariantPipeline({
 
   const enrichmentActive = enrichmentState.active;
   const indexingActive = indexingState.active;
-  // The post-GA re-index reports advanced_chat_status 'ready'; it should last seconds, so it is
-  // polled with a cap rather than indefinitely like a real index build.
-  const indexingPreparingOnly = Boolean(indexingState.preparing) && !enrichmentActive;
+  // A known build status (exporting / queued / indexing) is polled for as long as it lasts; an
+  // ADVANCED_CHAT_INDEXING answer with any other non-failed status is polled with a cap so an
+  // unexpected backend state can't poll forever.
+  const indexingUnknownStatusOnly = indexingActive && !indexingState.preparing && !enrichmentActive;
   // The BE reports reason PGX_ONLY (allowed, scope pgx_only) while disease chat is still being
   // prepared (enrichment / advanced-chat index) once PGx is done, which hides the ENRICHMENT_*/
   // ADVANCED_CHAT_INDEXING reasons the loop above keys on. Keep polling in that state, capped,
@@ -1405,7 +1407,7 @@ export function useVariantPipeline({
     // may legitimately run longer; those reasons keep the poll via enrichmentActive.
     const maxTicks = pgxOnlyPending
       ? 450 // ~30 min at 4s
-      : (filterLoadPending && !enrichmentActive && !indexingActive) || indexingPreparingOnly
+      : (filterLoadPending && !enrichmentActive && !indexingActive) || indexingUnknownStatusOnly
         ? 150
         : Infinity;
     const tick = async () => {
@@ -1435,7 +1437,7 @@ export function useVariantPipeline({
     indexingActive,
     filterLoadPending,
     pgxOnlyPending,
-    indexingPreparingOnly,
+    indexingUnknownStatusOnly,
     activeConversationId,
     userTier,
   ]);

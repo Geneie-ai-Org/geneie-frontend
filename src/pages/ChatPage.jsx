@@ -461,9 +461,9 @@ const ChatPage = () => {
   const gaEnrichmentActive = Boolean(enrichmentState.active);
   // Indexing can overlap GA, and re-applying the same filter re-runs GA without changing
   // the filter key — keep watching while it runs, and re-check when the tab regains focus.
-  // The short post-GA "preparing" re-index is left to the eligibility settle loop (capped), so it
-  // can't keep this GA poll alive indefinitely.
-  const gaIndexingActive = Boolean(indexingState.active && !indexingState.preparing);
+  // Only a real index build (exporting / queued / indexing) keeps this GA poll alive; any other
+  // non-failed indexing status is left to the capped eligibility polls.
+  const gaIndexingActive = Boolean(indexingState.active && indexingState.preparing);
   // GA completion triggers a brief second advanced-chat index on the backend; re-check
   // eligibility until it settles so chat unlocks without a reload.
   const settleChatEligibilityRef = useRef(settleChatEligibility);

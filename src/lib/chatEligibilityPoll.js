@@ -1,8 +1,8 @@
 /**
  * When to keep re-checking /api/chat-eligibility after a pipeline job (filter, Exomiser, GA)
- * finishes. The backend settles in steps — filter load, enrichment, advanced-chat indexing (a
- * brief second index runs after GA) — so a single refresh can land mid-way and leave chat
- * greyed out until a reload.
+ * finishes. The backend settles in steps — filter load, enrichment, advanced-chat indexing (GA
+ * completion triggers a brief, ~10 s re-index) — so a single refresh can land mid-way and leave
+ * chat greyed out until a reload.
  *
  * Pure and dependency-free so it can be exercised on its own.
  */
@@ -23,9 +23,23 @@ export function eligibilitySettleDelayMs(tick) {
 }
 
 /**
- * ADVANCED_CHAT_INDEXING is transient unless the index build failed. After GA completes the
- * backend briefly re-indexes (~10 s) while advanced_chat_status may still read 'ready' — that
- * is "preparing", not an error.
+ * advanced_chat_status values the backend sends with ADVANCED_CHAT_INDEXING while the chat index
+ * is being built (including the short re-index after GA). It never sends 'ready' with that
+ * reason; on a failed build it sends 'failed'.
+ */
+export const ADVANCED_CHAT_BUILDING_STATUSES = new Set(['exporting', 'queued', 'indexing']);
+
+/** The chat index is being (re)built: show "Preparing chat…" and keep polling — not an error. */
+export function isIndexingPreparing(eligibility) {
+  return (
+    eligibility?.reason === 'ADVANCED_CHAT_INDEXING' &&
+    ADVANCED_CHAT_BUILDING_STATUSES.has(eligibility?.advanced_chat_status)
+  );
+}
+
+/**
+ * ADVANCED_CHAT_INDEXING is transient unless the build failed. A missing or unexpected status is
+ * also treated as transient (polled, but with a cap by callers) rather than as an error.
  */
 export function isIndexingTransient(eligibility) {
   return eligibility?.reason === 'ADVANCED_CHAT_INDEXING' && eligibility?.advanced_chat_status !== 'failed';

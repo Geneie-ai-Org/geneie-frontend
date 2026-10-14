@@ -65,6 +65,21 @@ export const SECTION_HELP = {
     ],
     summary: 'More',
   },
+  exomiserFast: {
+    what: 'The faster Exomiser path (phenotype ranking on a long-running engine instead of a fresh start for every job). The normal path is the default and the answer to every error.',
+    items: [
+      ['Licence', 'Exomiser is AGPL-3.0 and the faster path adds our own code to it. Until the licence question is answered, the fast path is for canary / admin accounts only: the main selector offers only "classic" and "shadow".'],
+      ['Shadow', 'Safe first step: users still get the normal result; the fast engine runs the same job silently and every pair of result tables is compared. Small differences in P-VALUE and in which of two tied diseases is named are normal for Exomiser itself and are counted as "noise", not as a problem.'],
+      ['Fast (canary only)', 'The listed accounts get their result from the fast engine. If it fails, the job is re-run once on the normal path (while the fall-back is on).'],
+      ['Kill switch', 'Instantly (~45 s) sends every new job back to the normal path and stops shadow runs.'],
+      ['Worker gate', 'Read only. It lives on the worker machines (an admin command) and says whether they use the new queue handling, the heartbeat and how many fast engines each machine runs. "legacy" = exactly today\'s behaviour.'],
+      ['Slots', 'How many jobs the workers can run at once right now / how many are running. All slots busy while jobs wait raises an alarm.'],
+      ['Shadow rate', 'Share of eligible jobs that also get a shadow run (0 = none, 1 = all). Lower it if shadow runs compete for capacity.'],
+      ['Output files', '"all" keeps every Exomiser output file; "tsv_variant" writes only the table the app reads (about 2 s faster).'],
+      ['Reverts', 'No timer: a setting stays until you change it. Reset restores the recorded default (normal path).'],
+    ],
+    summary: 'More',
+  },
   ecs: {
     what: 'The always-on services (API, background workers, PGx worker, chat agent). Read-only.',
     items: [

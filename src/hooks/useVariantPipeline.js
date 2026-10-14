@@ -1365,6 +1365,9 @@ export function useVariantPipeline({
 
   const enrichmentActive = enrichmentState.active;
   const indexingActive = indexingState.active;
+  // The post-GA re-index reports advanced_chat_status 'ready'; it should last seconds, so it is
+  // polled with a cap rather than indefinitely like a real index build.
+  const indexingPreparingOnly = Boolean(indexingState.preparing) && !enrichmentActive;
   // The BE reports reason PGX_ONLY (allowed, scope pgx_only) while disease chat is still being
   // prepared (enrichment / advanced-chat index) once PGx is done, which hides the ENRICHMENT_*/
   // ADVANCED_CHAT_INDEXING reasons the loop above keys on. Keep polling in that state, capped,
@@ -1384,7 +1387,7 @@ export function useVariantPipeline({
     // may legitimately run longer; those reasons keep the poll via enrichmentActive.
     const maxTicks = pgxOnlyPending
       ? 450 // ~30 min at 4s
-      : filterLoadPending && !enrichmentActive && !indexingActive
+      : (filterLoadPending && !enrichmentActive && !indexingActive) || indexingPreparingOnly
         ? 150
         : Infinity;
     const tick = async () => {
@@ -1414,6 +1417,7 @@ export function useVariantPipeline({
     indexingActive,
     filterLoadPending,
     pgxOnlyPending,
+    indexingPreparingOnly,
     activeConversationId,
     userTier,
   ]);

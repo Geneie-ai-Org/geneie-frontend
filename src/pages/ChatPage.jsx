@@ -47,6 +47,7 @@ import { conversationPath, isValidConversationId } from '@/lib/conversationRoute
 import { getDeviceId } from '@/lib/deviceId';
 import { useVariantPipeline } from '@/hooks/useVariantPipeline';
 import { useModule1Pipeline } from '@/hooks/useModule1Pipeline';
+import { module1FinishedSuccessfully } from '@/lib/module1PipelinePhases';
 import { useModule1Capacity } from '@/hooks/useModule1Capacity';
 import { useAutomaticPipelineConductor } from '@/hooks/useAutomaticPipelineConductor';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -268,6 +269,7 @@ const ChatPage = () => {
     convertTabularToVcfForConversation,
     refreshChatEligibilityFromApi,
     refreshGuestConversationFromStatus,
+    settleChatEligibility,
   } = pipeline;
 
   const handleGuestRefreshMetadata = useCallback(() => {
@@ -459,7 +461,17 @@ const ChatPage = () => {
   const gaEnrichmentActive = Boolean(enrichmentState.active);
   // Indexing can overlap GA, and re-applying the same filter re-runs GA without changing
   // the filter key — keep watching while it runs, and re-check when the tab regains focus.
-  const gaIndexingActive = Boolean(indexingState.active);
+  // Only a real index build (exporting / queued / indexing) keeps this GA poll alive; any other
+  // non-failed indexing status is left to the capped eligibility polls.
+  const gaIndexingActive = Boolean(indexingState.active && indexingState.preparing);
+  // GA completion triggers a brief second advanced-chat index on the backend; re-check
+  // eligibility until it settles so chat unlocks without a reload.
+  const settleChatEligibilityRef = useRef(settleChatEligibility);
+  // Last GA status seen, per conversation. Kept outside the poll effect because that effect
+  // restarts whenever enrichment/indexing flip, which would otherwise forget an in-flight run
+  // and miss its in-flight -> completed change.
+  const gaPrevStatusRef = useRef({ conversationId: null, status: null });
+  settleChatEligibilityRef.current = settleChatEligibility;
   useEffect(() => {
     if (!activeConversationId || userTier === 'guest') {
       setGaTriageStatus('');
@@ -476,10 +488,12 @@ const ChatPage = () => {
       clearTimeout(timer);
       let status = 'absent';
       let updatedAt = null;
+      let fetched = false;
       try {
         const payload = await fetchGaTriage(activeConversationId);
         status = String(payload?.status || '').toLowerCase();
         updatedAt = payload?.updated_at || null;
+        fetched = true;
       } catch {
         // Treated as absent; the window / enrichment rules below decide whether to retry.
       }
@@ -488,6 +502,14 @@ const ChatPage = () => {
       setGaTriageStatus(status);
       setGaTriageUpdatedAt(updatedAt);
       const inFlight = status === 'pending' || status === 'running' || status === 'queued';
+      const prev = gaPrevStatusRef.current;
+      const prevStatus = prev.conversationId === activeConversationId ? prev.status : null;
+      // A failed fetch must not overwrite an in-flight status, or its completion would be missed.
+      if (fetched) gaPrevStatusRef.current = { conversationId: activeConversationId, status };
+      const wasInFlight = prevStatus === 'pending' || prevStatus === 'running' || prevStatus === 'queued';
+      if (wasInFlight && (status === 'completed' || status === 'ready')) {
+        void settleChatEligibilityRef.current?.(activeConversationId, { fresh: true });
+      }
       const expectingRun = (gaFilterKey || gaEnrichmentActive) && Date.now() - armedAt < 20000;
       if (inFlight || gaEnrichmentActive || gaIndexingActive || expectingRun) {
         timer = setTimeout(tick, 4000);
@@ -1216,8 +1238,24 @@ const ChatPage = () => {
     [runAnnovarForCurrentConversation]
   );
 
+  // A FASTQ run reads as the first phase ("Reads → VCF") of the same pipeline card as its VCF —
+  // main's phase-pill drawer — once the run has finished and the VCF is in this conversation.
+  // Until then (queued, running, stopping, cancelled, failed, importing) newprod's stepper owns
+  // the job: only it carries the GPU/CPU chip, queue position and Leave queue / Stop run /
+  // Switch to CPU.
+  const showModule1Phase = Boolean(
+    showAnalysisPipeline &&
+      module1.module1Job &&
+      !module1.module1JobActive &&
+      module1.module1ArtifactsVisible &&
+      module1FinishedSuccessfully(module1.module1Job)
+  );
   const module1PipelineBlock =
-    module1.module1JobActive || module1.module1ArtifactsVisible || module1.module1CancelledVisible ? (
+    !showModule1Phase &&
+    (module1.module1JobActive ||
+      module1.module1ArtifactsVisible ||
+      module1.module1CancelledVisible ||
+      module1.module1StoppingVisible) ? (
       <Module1PipelineStepper
         job={module1.module1Job}
         onStartOver={module1.openModule1Form}
@@ -1342,7 +1380,7 @@ const ChatPage = () => {
       const pct = enrichmentState.progress != null ? ` (${Math.round(enrichmentState.progress)}%)` : '';
       inputPlaceholder = `Enriching variants for chat${pct}…`;
     } else if (indexingState.active) {
-      inputPlaceholder = 'Indexing variants for chat…';
+      inputPlaceholder = indexingState.preparing ? 'Preparing chat…' : 'Indexing variants for chat…';
     } else if (chatEligibility.reason === 'FILTER_JOB_RUNNING') {
       inputPlaceholder = isRunningExomiser ? 'Running phenotype prioritization…' : 'Applying filter…';
     } else if (chatEligibility.reason === 'CHAT_REQUIRES_FILTER') {
@@ -1356,7 +1394,11 @@ const ChatPage = () => {
     chatEligibility.allowed === true &&
     (chatEligibility.scope || '').toLowerCase() === 'pgx_only'
   ) {
-    inputPlaceholder = 'Ask about pharmacogenes (metabolizer status, CPIC, PharmGKB)…';
+    // The backend also answers Module 1 QC questions in pgx_only scope, so say so when this
+    // conversation has a FASTQ run with QC.
+    inputPlaceholder = module1.module1ArtifactsVisible
+      ? "Ask about pharmacogenes or this sample's sequencing QC (coverage, mapping, metabolizer status)…"
+      : 'Ask about pharmacogenes (metabolizer status, CPIC, PharmGKB)…';
   } else if (isChatLimitReached) {
     inputPlaceholder = userTier === 'guest'
       ? `Limit reached (${DEFAULT_GUEST_CHAT_LIMIT} exchanges). Please Sign Up or Log In.`
@@ -1416,6 +1458,8 @@ const ChatPage = () => {
 
   const pipelineDrawer = showAnalysisPipeline ? (
     <PipelineDrawer
+      module1Job={showModule1Phase ? module1.module1Job : null}
+      onModule1StartOver={module1.openModule1Form}
       fileName={currentDocument?.name ?? currentDocument?.file_name}
       conversationId={activeConversationId}
       expanded={pipelineExpanded}
@@ -1424,7 +1468,7 @@ const ChatPage = () => {
       onStepAction={handlePipelineStepAction}
       uploadInProgress={variantUploadInProgress}
       uploadProgress={uploadProgress}
-      hasUploadedFile={!!currentDocument || variantUploadInProgress}
+      hasUploadedFile={Boolean(showAnalysisPipeline && (currentDocument || variantUploadInProgress))}
       columnInterpretationResult={columnInterpretationResult}
       hasAnnotatedFile={pipelineSnapshot.hasAnnotatedFile}
       vcfAnnotated={pipelineSnapshot.vcfAnnotated}

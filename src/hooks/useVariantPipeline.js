@@ -4,6 +4,7 @@ import * as mongodbApi from '../services/mongodbApi';
 import { apiUrl } from '@/config/api';
 import { apiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
 import { useAuth } from '@/hooks/useAuth';
+import { nextEligibilitySettleStep, isIndexingTransient } from '@/lib/chatEligibilityPoll';
 import { actionGate } from '@/services/tierLimits';
 import { describeLimitError } from '@/services/limitErrors';
 import {
@@ -118,6 +119,13 @@ export function useVariantPipeline({
   conversationFilterStateRef.current = conversationFilterState;
   const refreshConversationAfterAnnovarRef = useRef(null);
   const refreshChatEligibilityFromApiRef = useRef(null);
+  // Last /api/chat-eligibility answer (null when the last fetch failed) — seeds the settle loop.
+  const lastEligibilityRef = useRef(null);
+  // The running post-job settle loop ({ aborted }), if any. While set, the background poll skips
+  // its own fetch so the two never double up.
+  const eligibilitySettleRef = useRef(null);
+  const activeConversationIdRef = useRef(activeConversationId);
+  activeConversationIdRef.current = activeConversationId;
   const presentFileAnalysisModalRef = useRef(null);
   const getDeviceIdRef = useRef(getDeviceId);
   getDeviceIdRef.current = getDeviceId;
@@ -469,7 +477,7 @@ export function useVariantPipeline({
         const prevFilt = prevFilterJobStatusRef.current;
         prevFilterJobStatusRef.current = filtJob.status || null;
 
-        if (prevFilt === 'running' && filtJob.status === 'completed') {
+        if ((prevFilt === 'running' || prevFilt === 'pending') && filtJob.status === 'completed') {
           if (isGuestUser) {
             refreshGuestStatus?.();
             setChatEligibility(
@@ -483,6 +491,7 @@ export function useVariantPipeline({
           } else {
             await refreshConversationAfterAnnovarRef.current?.(conversationId);
             refreshSubscriptionStatus?.();
+            void settleChatEligibilityRef.current?.(conversationId);
           }
         }
 
@@ -584,6 +593,7 @@ export function useVariantPipeline({
         ) {
         }
         prevChatAllowedRef.current = allowed;
+        lastEligibilityRef.current = data;
         setChatEligibility({
           allowed,
           message: normalizeChatEligibilityMessage(data.message) || null,
@@ -606,6 +616,7 @@ export function useVariantPipeline({
         return data;
       } catch (error) {
         console.warn('[useVariantPipeline] chat-eligibility fetch failed:', error);
+        lastEligibilityRef.current = null;
         if (convFallback) {
           applyChatEligibilityFromConversation(convFallback, { announceReady });
         } else {
@@ -806,6 +817,38 @@ export function useVariantPipeline({
   refreshConversationAfterAnnovarRef.current = refreshConversationAfterAnnovar;
   refreshChatEligibilityFromApiRef.current = refreshChatEligibilityFromApi;
   presentFileAnalysisModalRef.current = presentFileAnalysisModal;
+
+  /**
+   * After a filter / Exomiser / GA job finishes, keep re-checking chat-eligibility until chat is
+   * allowed or the answer is no longer transient (enrichment, indexing — including the brief
+   * re-index after GA — filter load, or no answer at all). 3 s, then 5 s, capped at ~9 min; stops
+   * on conversation switch. Without this, a single refresh could land mid-way and leave chat
+   * greyed out until a reload.
+   */
+  const settleChatEligibility = useCallback(async (conversationId) => {
+    if (!conversationId || userTierRef.current === 'guest') return;
+    if (eligibilitySettleRef.current) eligibilitySettleRef.current.aborted = true;
+    const run = { aborted: false };
+    eligibilitySettleRef.current = run;
+    try {
+      let latest = lastEligibilityRef.current;
+      for (let tick = 0; ; tick += 1) {
+        const step = nextEligibilitySettleStep(latest, {
+          tick,
+          activeProprietaryFilter: conversationFilterStateRef.current?.activeProprietaryFilter ?? null,
+        });
+        if (!step.keepPolling) break;
+        await new Promise((resolve) => setTimeout(resolve, step.delayMs));
+        if (run.aborted || activeConversationIdRef.current !== conversationId) break;
+        latest = await refreshChatEligibilityFromApiRef.current?.(conversationId, { announceReady: true });
+        if (run.aborted || activeConversationIdRef.current !== conversationId) break;
+      }
+    } finally {
+      if (eligibilitySettleRef.current === run) eligibilitySettleRef.current = null;
+    }
+  }, []);
+  const settleChatEligibilityRef = useRef(settleChatEligibility);
+  settleChatEligibilityRef.current = settleChatEligibility;
 
   const convertTabularToVcfForConversation = useCallback(
     async (referenceGenome = 'hg38') => {
@@ -1065,9 +1108,10 @@ export function useVariantPipeline({
           }
         } else if (prevAnn === 'running' && annJob.status === 'failed') {
         }
-        if (prevFilt === 'running' && filtJob.status === 'completed') {
+        if ((prevFilt === 'running' || prevFilt === 'pending') && filtJob.status === 'completed') {
           if (!isGuestUser) {
             await refreshConversationAfterAnnovarRef.current(activeConversationId);
+            void settleChatEligibilityRef.current?.(activeConversationId);
           } else {
             refreshGuestStatus?.();
             const fp = latestFilterStatusPayload;
@@ -1247,13 +1291,20 @@ export function useVariantPipeline({
     const reason = chatEligibility.reason;
     const isIndexing = reason === 'ADVANCED_CHAT_INDEXING';
     const acs = chatEligibility.advanced_chat_status;
-    const active = isIndexing && acs !== 'ready' && acs !== 'failed';
+    // Transient unless the index build failed: after GA completes the backend briefly re-indexes
+    // (~10 s) while advanced_chat_status may still read 'ready' — show "Preparing chat…", keep
+    // polling, never an error.
+    const active = isIndexingTransient(chatEligibility);
+    const preparing = active && acs === 'ready';
     const failed = isIndexing && acs === 'failed';
     return {
       active,
+      preparing,
       failed,
       status: acs || null,
-      message: isIndexing ? (chatEligibility.message || 'Indexing variants for chat…') : null,
+      message: isIndexing
+        ? (preparing ? 'Preparing chat…' : chatEligibility.message || 'Indexing variants for chat…')
+        : null,
     };
   })();
 
@@ -1344,7 +1395,10 @@ export function useVariantPipeline({
         return;
       }
       try {
-        await refreshChatEligibilityFromApiRef.current?.(activeConversationId, { announceReady: true });
+        // A post-job settle loop is already polling this conversation — don't double up.
+        if (!eligibilitySettleRef.current) {
+          await refreshChatEligibilityFromApiRef.current?.(activeConversationId, { announceReady: true });
+        }
       } catch (e) {
         console.warn('[useVariantPipeline] eligibility poll failed:', e);
       }
@@ -1963,6 +2017,9 @@ export function useVariantPipeline({
         } else {
           await refreshConversationAfterAnnovar(conversationId);
         }
+        // Then keep checking until chat unlocks (enrichment / indexing / filter load can still be
+        // settling) — previously chat stayed greyed after Exomiser until a reload.
+        if (!abort.aborted) void settleChatEligibilityRef.current?.(conversationId);
         break;
       }
     }
@@ -2033,6 +2090,8 @@ export function useVariantPipeline({
     setDownloadValidationGeneration(0);
     setDownloadValidatedGeneration(0);
     if (exomiserPollAbortRef.current) exomiserPollAbortRef.current.aborted = true;
+    if (eligibilitySettleRef.current) eligibilitySettleRef.current.aborted = true;
+    lastEligibilityRef.current = null;
     prevAnnovarJobStatusRef.current = null;
     prevFilterJobStatusRef.current = null;
     prevChatAllowedRef.current = null;
@@ -2108,6 +2167,7 @@ export function useVariantPipeline({
   return {
     chatEligibility,
     setChatEligibility,
+    settleChatEligibility,
     pipelineSnapshot,
     isRunningAnnovar,
     isApplyingProprietaryFilter,

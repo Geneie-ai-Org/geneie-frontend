@@ -269,6 +269,7 @@ const ChatPage = () => {
     convertTabularToVcfForConversation,
     refreshChatEligibilityFromApi,
     refreshGuestConversationFromStatus,
+    settleChatEligibility,
   } = pipeline;
 
   const handleGuestRefreshMetadata = useCallback(() => {
@@ -461,6 +462,10 @@ const ChatPage = () => {
   // Indexing can overlap GA, and re-applying the same filter re-runs GA without changing
   // the filter key — keep watching while it runs, and re-check when the tab regains focus.
   const gaIndexingActive = Boolean(indexingState.active);
+  // GA completion triggers a brief second advanced-chat index on the backend; re-check
+  // eligibility until it settles so chat unlocks without a reload.
+  const settleChatEligibilityRef = useRef(settleChatEligibility);
+  settleChatEligibilityRef.current = settleChatEligibility;
   useEffect(() => {
     if (!activeConversationId || userTier === 'guest') {
       setGaTriageStatus('');
@@ -471,6 +476,7 @@ const ChatPage = () => {
     let timer = null;
     const armedAt = Date.now();
     let fetching = false;
+    let prevStatus = null;
     const tick = async () => {
       if (fetching) return;
       fetching = true;
@@ -489,6 +495,11 @@ const ChatPage = () => {
       setGaTriageStatus(status);
       setGaTriageUpdatedAt(updatedAt);
       const inFlight = status === 'pending' || status === 'running' || status === 'queued';
+      const wasInFlight = prevStatus === 'pending' || prevStatus === 'running' || prevStatus === 'queued';
+      prevStatus = status;
+      if (wasInFlight && (status === 'completed' || status === 'ready')) {
+        void settleChatEligibilityRef.current?.(activeConversationId);
+      }
       const expectingRun = (gaFilterKey || gaEnrichmentActive) && Date.now() - armedAt < 20000;
       if (inFlight || gaEnrichmentActive || gaIndexingActive || expectingRun) {
         timer = setTimeout(tick, 4000);
@@ -1356,7 +1367,7 @@ const ChatPage = () => {
       const pct = enrichmentState.progress != null ? ` (${Math.round(enrichmentState.progress)}%)` : '';
       inputPlaceholder = `Enriching variants for chat${pct}…`;
     } else if (indexingState.active) {
-      inputPlaceholder = 'Indexing variants for chat…';
+      inputPlaceholder = indexingState.preparing ? 'Preparing chat…' : 'Indexing variants for chat…';
     } else if (chatEligibility.reason === 'FILTER_JOB_RUNNING') {
       inputPlaceholder = isRunningExomiser ? 'Running phenotype prioritization…' : 'Applying filter…';
     } else if (chatEligibility.reason === 'CHAT_REQUIRES_FILTER') {

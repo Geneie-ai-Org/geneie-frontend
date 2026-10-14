@@ -155,8 +155,9 @@ const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, c
   let statusLine;
   if (cancelled) statusLine = 'Cancelled · you can start again from the upload button.';
   else if (cancelling) statusLine = 'Stopping your run…';
-  // Never the admin-only `error`: curated `failure.message`, else masked job text, else a fallback.
-  else if (failed) statusLine = getModule1FailureMessage(job);
+  // The header only names the state; the failure detail (getModule1FailureMessage — never the
+  // admin-only `error`) is shown once, in the red box below.
+  else if (failed) statusLine = 'Pipeline failed';
   else if (queueLine) statusLine = queueLine;
   else if (running && lane) statusLine = `Running on ${lane === 'gpu' ? 'GPU' : 'CPU'} · ${phaseMessage}`;
   else statusLine = phaseMessage;

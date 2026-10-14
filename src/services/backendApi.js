@@ -262,7 +262,9 @@ export async function fetchChatEligibility(conversationId) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load chat eligibility');
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to load chat eligibility');
+    err.status = response.status;
+    throw err;
   }
   return data;
 }

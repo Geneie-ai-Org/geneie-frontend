@@ -121,6 +121,9 @@ export function useVariantPipeline({
   const refreshChatEligibilityFromApiRef = useRef(null);
   // Last /api/chat-eligibility answer (null when the last fetch failed) — seeds the settle loop.
   const lastEligibilityRef = useRef(null);
+  // True when the last eligibility fetch failed for auth reasons (signed out / 401 / 403): a
+  // settle loop must stop rather than keep retrying.
+  const lastEligibilityAuthFailedRef = useRef(false);
   // The running post-job settle loop ({ aborted }), if any. While set, the background poll skips
   // its own fetch so the two never double up.
   const eligibilitySettleRef = useRef(null);
@@ -594,6 +597,7 @@ export function useVariantPipeline({
         }
         prevChatAllowedRef.current = allowed;
         lastEligibilityRef.current = data;
+        lastEligibilityAuthFailedRef.current = false;
         setChatEligibility({
           allowed,
           message: normalizeChatEligibilityMessage(data.message) || null,
@@ -617,6 +621,10 @@ export function useVariantPipeline({
       } catch (error) {
         console.warn('[useVariantPipeline] chat-eligibility fetch failed:', error);
         lastEligibilityRef.current = null;
+        lastEligibilityAuthFailedRef.current =
+          error?.status === 401 ||
+          error?.status === 403 ||
+          /authentication required/i.test(String(error?.message || ''));
         if (convFallback) {
           applyChatEligibilityFromConversation(convFallback, { announceReady });
         } else {
@@ -843,6 +851,8 @@ export function useVariantPipeline({
         if (run.aborted || activeConversationIdRef.current !== conversationId) break;
         latest = await refreshChatEligibilityFromApiRef.current?.(conversationId, { announceReady: true });
         if (run.aborted || activeConversationIdRef.current !== conversationId) break;
+        // Signed out / token rejected: a null answer here is not "still settling" — stop.
+        if (lastEligibilityAuthFailedRef.current) break;
       }
     } finally {
       if (eligibilitySettleRef.current === run) eligibilitySettleRef.current = null;
@@ -850,6 +860,13 @@ export function useVariantPipeline({
   }, []);
   const settleChatEligibilityRef = useRef(settleChatEligibility);
   settleChatEligibilityRef.current = settleChatEligibility;
+  // Stop any settle loop when the page unmounts (logout, navigation away from /app).
+  useEffect(
+    () => () => {
+      if (eligibilitySettleRef.current) eligibilitySettleRef.current.aborted = true;
+    },
+    []
+  );
 
   const convertTabularToVcfForConversation = useCallback(
     async (referenceGenome = 'hg38') => {

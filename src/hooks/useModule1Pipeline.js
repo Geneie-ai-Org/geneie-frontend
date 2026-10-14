@@ -175,12 +175,15 @@ export function useModule1Pipeline({
     }
   }, []);
 
-  /** Show "Cancelled · …" for one poll cycle, toast once per job, then drop the job. */
+  /**
+   * Show "Cancelled · …" for one poll cycle, toast once per job, then drop the job.
+   * `announce: false` (a cancelled job found on page load) skips the toast.
+   */
   const handleCancelled = useCallback(
-    (jobId, delayMs = RUNNING_POLL_MS) => {
+    (jobId, delayMs = RUNNING_POLL_MS, { announce = true } = {}) => {
       stopPolling();
       const toastKey = jobId || 'unknown';
-      if (!cancelToastedRef.current.has(toastKey)) {
+      if (announce && !cancelToastedRef.current.has(toastKey)) {
         cancelToastedRef.current.add(toastKey);
         toast.success(RUN_STOPPED_TOAST);
       }
@@ -339,10 +342,31 @@ export function useModule1Pipeline({
         const data = await fetchModule1Status(activeConversationId);
         if (cancelled || !data?.status) return;
         const resumed = jobFromStatusPayload(data, activeConversationId);
-        // Includes "complete but VCF import still pending"; a terminal job (failed, cancelled,
-        // cancelling) is not resumed.
+        const hasArtifacts = Boolean(data.has_qc || data.has_bam || data.bam_qc_purged);
+
+        // Reloaded while the run was being stopped: show "Stopping…" and poll only until the
+        // backend reports it terminal — the poll tick then shows Cancelled and drops it.
+        if (resumed.status === 'cancelling' || (resumed.phase === 'cancelling' && resumed.status !== 'cancelled')) {
+          lastComputeRef.current = { jobId: resumed.jobId, compute: resumed.compute };
+          setModule1Job({ ...resumed, phase: 'cancelling', cancellable: false, switchable: false });
+          pollModule1StatusRef.current(activeConversationId, QUEUED_POLL_MS);
+          return;
+        }
+
+        // Already cancelled: with retained QC/BAM it shows as Cancelled for one cycle and is
+        // dropped, like a live cancel (no toast — the user didn't just do it).
+        if (resumed.status === 'cancelled') {
+          if (hasArtifacts) {
+            setModule1Job({ ...resumed, phase: 'cancelled' });
+            handleCancelled(resumed.jobId, RUNNING_POLL_MS, { announce: false });
+          }
+          return;
+        }
+
+        // Includes "complete but VCF import still pending"; other terminal jobs (failed) are
+        // not polled.
         const stillRunning = module1ShouldKeepPolling(resumed);
-        if (stillRunning || data.has_qc || data.has_bam || data.bam_qc_purged) {
+        if (stillRunning || hasArtifacts) {
           lastComputeRef.current = { jobId: resumed.jobId, compute: resumed.compute };
           setModule1Job(resumed);
           if (stillRunning) {
@@ -712,6 +736,8 @@ export function useModule1Pipeline({
     (!module1JobIsTerminal(module1Job) || module1IngestPending(module1Job));
   // A cancelled job stays on screen ("Cancelled · …") for one poll cycle, then drops.
   const module1CancelledVisible = module1Job?.status === 'cancelled';
+  // Found mid-stop on page load: shows "Stopping…" until the next poll reports it terminal.
+  const module1StoppingVisible = Boolean(module1Job) && module1Job.status !== 'cancelled' && module1Job.phase === 'cancelling';
   const module1JobQueued = module1JobActive && (module1Job.status === 'queued' || module1Job.phase === 'waiting_gpu');
 
   // QC / IGV stay visible after the stepper would otherwise dismiss, until purge.
@@ -739,6 +765,7 @@ export function useModule1Pipeline({
     module1JobActive,
     module1JobQueued,
     module1CancelledVisible,
+    module1StoppingVisible,
     cancelModule1Run,
     switchModule1Compute,
     module1QcVisible,

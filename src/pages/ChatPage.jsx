@@ -1252,7 +1252,10 @@ const ChatPage = () => {
   );
   const module1PipelineBlock =
     !showModule1Phase &&
-    (module1.module1JobActive || module1.module1ArtifactsVisible || module1.module1CancelledVisible) ? (
+    (module1.module1JobActive ||
+      module1.module1ArtifactsVisible ||
+      module1.module1CancelledVisible ||
+      module1.module1StoppingVisible) ? (
       <Module1PipelineStepper
         job={module1.module1Job}
         onStartOver={module1.openModule1Form}

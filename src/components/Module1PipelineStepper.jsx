@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { AlertCircle, Check, ChevronDown, CircleSlash, Dna, FileText, Loader2 } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, CircleSlash, Dna, Loader2 } from 'lucide-react';
 import {
   MODULE1_STAGE_GROUPS,
   getModule1FailureMessage,
@@ -11,9 +11,7 @@ import {
 import { MODULE1_CPU_TYPICAL_MIN, formatMinutesRange } from '@/components/Module1ComputeChoice';
 import RunTimer from '@/components/ui/RunTimer';
 import { useRunTimer } from '@/hooks/useRunTimer';
-import Module1QcPanel from '@/components/Module1QcPanel';
-import Module1IgvPanel from '@/components/Module1IgvPanel';
-import Module1QcReportPanel from '@/components/Module1QcReportPanel';
+import Module1QcSection, { module1HasQcArtifacts } from '@/components/Module1QcSection';
 
 const EASE = [0.23, 1, 0.32, 1];
 
@@ -74,7 +72,12 @@ const SECONDARY_BUTTON_CLASS =
  * job model rather than the ANNOVAR/filter step model.
  */
 const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, cpuEstimateMin = null }) => {
-  const [expanded, setExpanded] = useState(true);
+  // null = follow the default (open while the run is in flight, closed once it has finished or
+  // ended); 'open' / 'closed' once the user clicks the header. Reset per job so a new run opens.
+  const [expandedIntent, setExpandedIntent] = useState(null);
+  useEffect(() => {
+    setExpandedIntent(null);
+  }, [job?.jobId]);
   // Inline confirm for Leave queue / Stop run ('leave' | 'stop' | null), and which request is in flight.
   const [confirm, setConfirm] = useState(null);
   const [busy, setBusy] = useState(null); // 'cancel' | 'switch' | null
@@ -84,9 +87,6 @@ const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, c
   // Where focus goes when the confirm closes: the Leave/Stop trigger, or the header once the
   // run is gone and the trigger no longer renders.
   const restoreFocusRef = useRef(null); // 'trigger' | 'header' | null
-  // QC / browser / saved report stay behind a single control — default closed so the
-  // drawer does not dominate the composer area after Module 1 finishes.
-  const [qcOpen, setQcOpen] = useState(false);
   const reduceMotion = useReducedMotion();
   // This is the long one — hours, not minutes — so it carries its own clock: ticking
   // while the pipeline runs, total once it lands.
@@ -124,6 +124,16 @@ const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, c
   const lane = jobLane(job);
   const chip = computeChip(job);
   const finishedOk = module1FinishedSuccessfully(job);
+  // Once the run has finished, the stage row is history: start collapsed (the header still carries
+  // the status, and QC sits outside the body so it stays one click away). A failed run stays open
+  // so its failure box and Start over are visible, as on main's drawer.
+  const runOver = finishedOk || job.status === 'complete';
+  const expanded = expandedIntent ? expandedIntent === 'open' : !runOver;
+  const setExpanded = (updater) =>
+    setExpandedIntent((prev) => {
+      const current = prev ? prev === 'open' : !runOver;
+      return (typeof updater === 'function' ? updater(current) : updater) ? 'open' : 'closed';
+    });
   const activeGroupId = failed ? getModule1StageGroup(job.phase) : getModule1StageGroup(job.phase);
   const phaseMessage = finishedOk
     ? (job.message || 'Module 1 complete — VCF is in this conversation.').replace(
@@ -132,9 +142,7 @@ const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, c
       )
     : getModule1PhaseMessage(job.phase, job.message);
   const pct = typeof job.progressPercent === 'number' ? Math.max(0, Math.min(100, Math.round(job.progressPercent))) : null;
-  const hasQcArtifacts =
-    Boolean(job.conversationId) &&
-    Boolean(job.hasQc || job.hasBam || job.bamQcPurged);
+  const hasQcArtifacts = module1HasQcArtifacts(job);
   const startText = formatMinutesRange(job.estStartMin);
   const hasQueueInfo = job.queuePosition != null;
   const queueLine = queued && hasQueueInfo
@@ -196,12 +204,6 @@ const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, c
       setBusy(null);
     }
   };
-
-  const qcButtonBits = [
-    job.hasQc ? 'live reports' : null,
-    job.hasBam ? 'alignment browser' : null,
-    job.hasQc || job.hasBam || job.bamQcPurged ? 'saved report' : null,
-  ].filter(Boolean);
 
   return (
     <section
@@ -422,81 +424,18 @@ const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, c
                 </div>
               )}
 
-              {hasQcArtifacts && (
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    onClick={() => setQcOpen((v) => !v)}
-                    aria-expanded={qcOpen}
-                    className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-left"
-                    style={{
-                      backgroundColor: 'var(--bg-elevated)',
-                      borderColor: 'var(--border-subtle)',
-                    }}
-                  >
-                    <div className="min-w-0 flex items-center gap-2">
-                      <FileText className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--accent-teal)' }} />
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                          QC & alignment
-                        </p>
-                        <p className="text-2xs truncate" style={{ color: 'var(--text-tertiary)' }}>
-                          {qcOpen
-                            ? 'Hide reports and browser'
-                            : `Open ${qcButtonBits.join(' · ')}`}
-                        </p>
-                      </div>
-                    </div>
-                    <motion.span
-                      className="shrink-0 flex items-center"
-                      animate={{ rotate: qcOpen ? 180 : 0 }}
-                      transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: EASE }}
-                    >
-                      <ChevronDown className="w-4 h-4" style={{ color: 'var(--text-tertiary)' }} />
-                    </motion.span>
-                  </button>
-
-                  <AnimatePresence initial={false}>
-                    {qcOpen && (
-                      <motion.div
-                        key="qc-body"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{
-                          opacity: 0,
-                          transition: reduceMotion ? { duration: 0 } : { duration: 0.12, ease: EASE },
-                        }}
-                        transition={reduceMotion ? { duration: 0 } : { duration: 0.16, ease: EASE }}
-                        className="max-h-[min(50vh,480px)] overflow-y-auto overscroll-contain"
-                      >
-                        {job.hasQc && job.conversationId && (
-                          <Module1QcPanel conversationId={job.conversationId} hasQc={job.hasQc} />
-                        )}
-
-                        {job.hasBam && job.conversationId && (
-                          <Module1IgvPanel
-                            conversationId={job.conversationId}
-                            hasBam={job.hasBam}
-                            genome={job.genome}
-                          />
-                        )}
-
-                        {(job.bamQcPurged || job.hasQc || job.hasBam) && job.conversationId && (
-                          <Module1QcReportPanel
-                            conversationId={job.conversationId}
-                            visible
-                            hideBrowserSnapshots={Boolean(job.hasBam)}
-                          />
-                        )}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* QC / alignment browser / saved report: one collapsed control (Module1QcSection, from
+        * main), kept outside the stage body so it stays reachable when that body is collapsed. */}
+      {hasQcArtifacts && !cancelled && (
+        <div className="px-3 pb-3">
+          <Module1QcSection job={job} />
+        </div>
+      )}
     </section>
   );
 };

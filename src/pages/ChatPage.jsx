@@ -47,6 +47,7 @@ import { conversationPath, isValidConversationId } from '@/lib/conversationRoute
 import { getDeviceId } from '@/lib/deviceId';
 import { useVariantPipeline } from '@/hooks/useVariantPipeline';
 import { useModule1Pipeline } from '@/hooks/useModule1Pipeline';
+import { module1FinishedSuccessfully } from '@/lib/module1PipelinePhases';
 import { useModule1Capacity } from '@/hooks/useModule1Capacity';
 import { useAutomaticPipelineConductor } from '@/hooks/useAutomaticPipelineConductor';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -1216,8 +1217,21 @@ const ChatPage = () => {
     [runAnnovarForCurrentConversation]
   );
 
+  // A FASTQ run reads as the first phase ("Reads → VCF") of the same pipeline card as its VCF —
+  // main's phase-pill drawer — once the run has finished and the VCF is in this conversation.
+  // Until then (queued, running, stopping, cancelled, failed, importing) newprod's stepper owns
+  // the job: only it carries the GPU/CPU chip, queue position and Leave queue / Stop run /
+  // Switch to CPU.
+  const showModule1Phase = Boolean(
+    showAnalysisPipeline &&
+      module1.module1Job &&
+      !module1.module1JobActive &&
+      module1.module1ArtifactsVisible &&
+      module1FinishedSuccessfully(module1.module1Job)
+  );
   const module1PipelineBlock =
-    module1.module1JobActive || module1.module1ArtifactsVisible || module1.module1CancelledVisible ? (
+    !showModule1Phase &&
+    (module1.module1JobActive || module1.module1ArtifactsVisible || module1.module1CancelledVisible) ? (
       <Module1PipelineStepper
         job={module1.module1Job}
         onStartOver={module1.openModule1Form}
@@ -1416,6 +1430,8 @@ const ChatPage = () => {
 
   const pipelineDrawer = showAnalysisPipeline ? (
     <PipelineDrawer
+      module1Job={showModule1Phase ? module1.module1Job : null}
+      onModule1StartOver={module1.openModule1Form}
       fileName={currentDocument?.name ?? currentDocument?.file_name}
       conversationId={activeConversationId}
       expanded={pipelineExpanded}
@@ -1424,7 +1440,7 @@ const ChatPage = () => {
       onStepAction={handlePipelineStepAction}
       uploadInProgress={variantUploadInProgress}
       uploadProgress={uploadProgress}
-      hasUploadedFile={!!currentDocument || variantUploadInProgress}
+      hasUploadedFile={Boolean(showAnalysisPipeline && (currentDocument || variantUploadInProgress))}
       columnInterpretationResult={columnInterpretationResult}
       hasAnnotatedFile={pipelineSnapshot.hasAnnotatedFile}
       vcfAnnotated={pipelineSnapshot.vcfAnnotated}

@@ -247,7 +247,7 @@ export function useModule1Pipeline({
 
         if (nextJob.status === 'failed') {
           setAnnovarMessageModal({
-            title: 'Module 1 failed',
+            title: 'Pipeline failed',
             message: getModule1FailureMessage(nextJob),
             variant: 'error',
           });

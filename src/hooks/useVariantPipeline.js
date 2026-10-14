@@ -825,13 +825,14 @@ export function useVariantPipeline({
    * on conversation switch. Without this, a single refresh could land mid-way and leave chat
    * greyed out until a reload.
    */
-  const settleChatEligibility = useCallback(async (conversationId) => {
+  const settleChatEligibility = useCallback(async (conversationId, { fresh = false } = {}) => {
     if (!conversationId || userTierRef.current === 'guest') return;
     if (eligibilitySettleRef.current) eligibilitySettleRef.current.aborted = true;
     const run = { aborted: false };
     eligibilitySettleRef.current = run;
     try {
-      let latest = lastEligibilityRef.current;
+      // `fresh`: the stored answer may be old (e.g. GA just finished), so fetch before deciding.
+      let latest = fresh ? null : lastEligibilityRef.current;
       for (let tick = 0; ; tick += 1) {
         const step = nextEligibilitySettleStep(latest, {
           tick,

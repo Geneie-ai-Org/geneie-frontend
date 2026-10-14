@@ -461,7 +461,9 @@ const ChatPage = () => {
   const gaEnrichmentActive = Boolean(enrichmentState.active);
   // Indexing can overlap GA, and re-applying the same filter re-runs GA without changing
   // the filter key — keep watching while it runs, and re-check when the tab regains focus.
-  const gaIndexingActive = Boolean(indexingState.active);
+  // The short post-GA "preparing" re-index is left to the eligibility settle loop (capped), so it
+  // can't keep this GA poll alive indefinitely.
+  const gaIndexingActive = Boolean(indexingState.active && !indexingState.preparing);
   // GA completion triggers a brief second advanced-chat index on the backend; re-check
   // eligibility until it settles so chat unlocks without a reload.
   const settleChatEligibilityRef = useRef(settleChatEligibility);
@@ -498,7 +500,7 @@ const ChatPage = () => {
       const wasInFlight = prevStatus === 'pending' || prevStatus === 'running' || prevStatus === 'queued';
       prevStatus = status;
       if (wasInFlight && (status === 'completed' || status === 'ready')) {
-        void settleChatEligibilityRef.current?.(activeConversationId);
+        void settleChatEligibilityRef.current?.(activeConversationId, { fresh: true });
       }
       const expectingRun = (gaFilterKey || gaEnrichmentActive) && Date.now() - armedAt < 20000;
       if (inFlight || gaEnrichmentActive || gaIndexingActive || expectingRun) {
@@ -1383,7 +1385,7 @@ const ChatPage = () => {
   ) {
     // The backend also answers Module 1 QC questions in pgx_only scope, so say so when this
     // conversation has a FASTQ run with QC.
-    inputPlaceholder = module1.module1QcVisible
+    inputPlaceholder = module1.module1ArtifactsVisible
       ? "Ask about pharmacogenes or this sample's sequencing QC (coverage, mapping, metabolizer status)…"
       : 'Ask about pharmacogenes (metabolizer status, CPIC, PharmGKB)…';
   } else if (isChatLimitReached) {

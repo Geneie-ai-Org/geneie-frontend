@@ -2,6 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import * as mongodbApi from '../services/mongodbApi';
 import { buildVariantDataFromConversation } from '@/lib/variantPipelineUtils';
+import {
+  getModule1FailureMessage,
+  module1IngestPending,
+  module1JobIsTerminal,
+  module1JobWasCancelled,
+  module1ShouldKeepPolling,
+} from '@/lib/module1PipelinePhases';
 import { useAuth } from '@/hooks/useAuth';
 import { actionGate } from '@/services/tierLimits';
 import { describeLimitError, isEmailVerificationCode } from '@/services/limitErrors';
@@ -20,9 +27,8 @@ import {
   validateModule1Bed,
 } from '@/services/backendApi';
 
-// 'cancelling' (GPU box shutting down, 20-80 s) is still in flight: a reload in that window must
-// resume polling instead of showing no job.
-const NON_TERMINAL_STATUSES = new Set(['queued', 'running', 'cancelling']);
+// Whether to keep polling is decided by the backend's `terminal` flag (see
+// module1ShouldKeepPolling); older backends without it fall back to the status set there.
 // Queue position moves faster than pipeline phases, so a queued job is polled more often.
 const QUEUED_POLL_MS = 10000;
 const RUNNING_POLL_MS = 20000;
@@ -40,7 +46,10 @@ function jobFromStatusPayload(data, conversationId = null) {
     phase: data.phase ?? null,
     progressPercent: data.progress_percent ?? null,
     message: data.message ?? null,
-    error: data.error ?? null,
+    // `error` is admin-only (null for normal users) and is deliberately NOT mapped: the UI must
+    // never render raw job/exception text. User-facing failure text comes from `failure`.
+    failure: data.failure ?? null, // { code, retryable, message, at, attempts } — only when failed
+    terminal: typeof data.terminal === 'boolean' ? data.terminal : null,
     vcfS3Key: data.vcf_s3_key ?? null,
     genome: data.genome ?? null,
     sampleName: data.sample_name ?? null,
@@ -224,10 +233,14 @@ export function useModule1Pipeline({
         if (abort.aborted) return;
 
         const nextJob = jobFromStatusPayload(data, conversationId);
-        setModule1Job((prev) => ({ ...prev, ...nextJob }));
+        // The backend marks 'cancelling' terminal: the stop is accepted and the machine is going
+        // away, so the user sees the distinct Cancelled state and polling ends here.
+        const wasCancelled = module1JobWasCancelled(nextJob);
+        const shownJob = wasCancelled ? { ...nextJob, status: 'cancelled', phase: 'cancelled' } : nextJob;
+        setModule1Job((prev) => ({ ...prev, ...shownJob }));
         noteComputeTransition(nextJob);
 
-        if (nextJob.status === 'cancelled') {
+        if (wasCancelled) {
           handleCancelled(nextJob.jobId);
           return;
         }
@@ -235,7 +248,7 @@ export function useModule1Pipeline({
         if (nextJob.status === 'failed') {
           setAnnovarMessageModal({
             title: 'Module 1 failed',
-            message: nextJob.error || nextJob.message || 'The pipeline did not complete.',
+            message: getModule1FailureMessage(nextJob),
             variant: 'error',
           });
           return;
@@ -262,7 +275,8 @@ export function useModule1Pipeline({
 
         // Critical: keep polling past status==="complete" while ingest_status is still
         // null/"running" — the backend only advances it as a side effect of this GET.
-        // Phase "cancelling" arrives with a non-terminal status, so it keeps polling too.
+        // Otherwise stop as soon as the backend says the job is terminal.
+        if (!module1ShouldKeepPolling(nextJob)) return;
         tick(pollDelayFor(nextJob));
       };
 
@@ -285,7 +299,8 @@ export function useModule1Pipeline({
       phase: initial.phase ?? 'queued',
       progressPercent: initial.progressPercent ?? null,
       message: initial.message ?? null,
-      error: null,
+      failure: null,
+      terminal: false,
       vcfS3Key: null,
       genome: initial.genome ?? null,
       sampleName: initial.sampleName ?? null,
@@ -323,11 +338,11 @@ export function useModule1Pipeline({
       try {
         const data = await fetchModule1Status(activeConversationId);
         if (cancelled || !data?.status) return;
-        const completeNotIngested =
-          data.status === 'complete' && data.ingest_status !== 'done' && data.ingest_status !== 'failed';
-        const stillRunning = NON_TERMINAL_STATUSES.has(data.status) || completeNotIngested;
+        const resumed = jobFromStatusPayload(data, activeConversationId);
+        // Includes "complete but VCF import still pending"; a terminal job (failed, cancelled,
+        // cancelling) is not resumed.
+        const stillRunning = module1ShouldKeepPolling(resumed);
         if (stillRunning || data.has_qc || data.has_bam || data.bam_qc_purged) {
-          const resumed = jobFromStatusPayload(data, activeConversationId);
           lastComputeRef.current = { jobId: resumed.jobId, compute: resumed.compute };
           setModule1Job(resumed);
           if (stillRunning) {
@@ -687,11 +702,14 @@ export function useModule1Pipeline({
     }
   }, [module1Job, refreshModule1Status]);
 
+  // Active = still in flight. A terminal job is never active, except a completed run whose VCF
+  // import is still pending.
   const module1JobActive =
     !!module1Job &&
     module1Job.status !== 'failed' &&
     module1Job.status !== 'cancelled' &&
-    !(module1Job.status === 'complete' && (module1Job.ingestStatus === 'done' || module1Job.ingestStatus === 'failed'));
+    !(module1Job.status === 'complete' && (module1Job.ingestStatus === 'done' || module1Job.ingestStatus === 'failed')) &&
+    (!module1JobIsTerminal(module1Job) || module1IngestPending(module1Job));
   // A cancelled job stays on screen ("Cancelled · …") for one poll cycle, then drops.
   const module1CancelledVisible = module1Job?.status === 'cancelled';
   const module1JobQueued = module1JobActive && (module1Job.status === 'queued' || module1Job.phase === 'waiting_gpu');

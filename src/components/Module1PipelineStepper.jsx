@@ -1,7 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AlertCircle, Check, ChevronDown, CircleSlash, Dna, FileText, Loader2 } from 'lucide-react';
-import { MODULE1_STAGE_GROUPS, getModule1PhaseMessage, getModule1StageGroup } from '@/lib/module1PipelinePhases';
+import {
+  MODULE1_STAGE_GROUPS,
+  getModule1FailureMessage,
+  getModule1PhaseMessage,
+  getModule1StageGroup,
+  module1FinishedSuccessfully,
+} from '@/lib/module1PipelinePhases';
 import { MODULE1_CPU_TYPICAL_MIN, formatMinutesRange } from '@/components/Module1ComputeChoice';
 import RunTimer from '@/components/ui/RunTimer';
 import { useRunTimer } from '@/hooks/useRunTimer';
@@ -19,15 +25,6 @@ function nodeStatus(groupId, activeGroupId, failed, groupOrder, finishedOk) {
   if (idx < activeIdx) return 'done';
   if (idx === activeIdx) return 'running';
   return 'pending';
-}
-
-/** Pipeline + VCF ingest landed — don't leave the Complete node spinning forever. */
-function module1FinishedSuccessfully(job) {
-  if (!job || job.status !== 'complete') return false;
-  if (job.ingestStatus === 'done') return true;
-  const msg = String(job.message || '');
-  const pctOk = typeof job.progressPercent === 'number' && job.progressPercent >= 100;
-  return pctOk && /(pass\s+)?vcf\s+ready/i.test(msg);
 }
 
 const LANES = new Set(['gpu', 'cpu']);
@@ -150,7 +147,8 @@ const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, c
   let statusLine;
   if (cancelled) statusLine = 'Cancelled · you can start again from the upload button.';
   else if (cancelling) statusLine = 'Stopping your run…';
-  else if (failed) statusLine = job.error || job.message || 'The pipeline did not complete.';
+  // Never the admin-only `error`: curated `failure.message`, else masked job text, else a fallback.
+  else if (failed) statusLine = getModule1FailureMessage(job);
   else if (queueLine) statusLine = queueLine;
   else if (running && lane) statusLine = `Running on ${lane === 'gpu' ? 'GPU' : 'CPU'} · ${phaseMessage}`;
   else statusLine = phaseMessage;
@@ -322,7 +320,7 @@ const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, c
               {failed && (
                 <div className="mt-3 p-3 rounded-lg border flex items-start justify-between gap-3" style={{ backgroundColor: 'var(--error-soft)', borderColor: 'var(--error)' }}>
                   <span className="text-xs" style={{ color: 'var(--error)' }}>
-                    {job.error || job.message || 'The pipeline did not complete successfully.'}
+                    {getModule1FailureMessage(job)}
                   </span>
                   {onStartOver && (
                     <button

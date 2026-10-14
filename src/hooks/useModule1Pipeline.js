@@ -4,6 +4,7 @@ import * as mongodbApi from '../services/mongodbApi';
 import { buildVariantDataFromConversation } from '@/lib/variantPipelineUtils';
 import {
   getModule1FailureMessage,
+  getModule1IngestFailureMessage,
   module1IngestPending,
   module1JobIsTerminal,
   module1JobWasCancelled,
@@ -54,6 +55,7 @@ function jobFromStatusPayload(data, conversationId = null) {
     genome: data.genome ?? null,
     sampleName: data.sample_name ?? null,
     ingestStatus: data.ingest_status ?? null,
+    ingestFailure: data.ingest_failure ?? null, // curated by the backend; set when ingest failed
     hasBam: Boolean(data.has_bam),
     hasQc: Boolean(data.has_qc),
     bamQcPurged: Boolean(data.bam_qc_purged),
@@ -269,7 +271,7 @@ export function useModule1Pipeline({
           } else if (nextJob.ingestStatus === 'failed') {
             setAnnovarMessageModal({
               title: 'Module 1 import failed',
-              message: 'The pipeline finished but importing the result failed. Contact support if this persists.',
+              message: getModule1IngestFailureMessage(nextJob),
               variant: 'error',
             });
           }

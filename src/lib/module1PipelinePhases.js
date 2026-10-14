@@ -75,6 +75,16 @@ export function getModule1FailureMessage(job) {
   return raw;
 }
 
+export const MODULE1_INGEST_FAILED_FALLBACK =
+  'The pipeline finished but importing the result failed. Contact support if this persists.';
+
+/** User-facing text for a failed VCF import: the backend's curated `ingest_failure.message`. */
+export function getModule1IngestFailureMessage(job) {
+  const f = job?.ingestFailure;
+  const curated = String((f && typeof f === 'object' ? f.message : f) || '').trim();
+  return curated || MODULE1_INGEST_FAILED_FALLBACK;
+}
+
 export function getModule1PhaseMessage(phase, backendMessage) {
   return backendMessage || MODULE1_PHASE_MESSAGES[phase] || 'Processing…';
 }

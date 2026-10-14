@@ -2262,7 +2262,7 @@ const VariantFilterSidebar = ({
                 germline_only: 'Analysis type must be Germline.',
                 phenotype_required: 'Add a phenotype description to the sample metadata (edit the file pill).',
                 hpo_selection_required:
-                  'On the Disease tab, select at least one HPO finding present in this patient.',
+                  'In sample info, select at least one clinical finding (HPO term) present in this patient.',
                 annovar_required: 'Run Annotation first — phenotype prioritization requires an annotated file.',
                 proprietary_filter_active: 'Another proprietary filter is active. Remove it first.',
                 manual_filter_active: 'Manual filters are active. Reset them first.',

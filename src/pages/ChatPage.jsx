@@ -1381,7 +1381,11 @@ const ChatPage = () => {
     chatEligibility.allowed === true &&
     (chatEligibility.scope || '').toLowerCase() === 'pgx_only'
   ) {
-    inputPlaceholder = 'Ask about pharmacogenes (metabolizer status, CPIC, PharmGKB)…';
+    // The backend also answers Module 1 QC questions in pgx_only scope, so say so when this
+    // conversation has a FASTQ run with QC.
+    inputPlaceholder = module1.module1QcVisible
+      ? "Ask about pharmacogenes or this sample's sequencing QC (coverage, mapping, metabolizer status)…"
+      : 'Ask about pharmacogenes (metabolizer status, CPIC, PharmGKB)…';
   } else if (isChatLimitReached) {
     inputPlaceholder = userTier === 'guest'
       ? `Limit reached (${DEFAULT_GUEST_CHAT_LIMIT} exchanges). Please Sign Up or Log In.`

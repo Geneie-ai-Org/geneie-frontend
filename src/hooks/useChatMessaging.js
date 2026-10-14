@@ -529,7 +529,8 @@ export function useChatMessaging({
           } else if (evt.type === 'narration') {
             pushTrace('fact', evt.data?.fact || evt.label);      // grounded fact, in-order
           } else if (evt.type === 'refused') {
-            finalAnswer = '⚠️ ' + (evt.label || 'Answer withheld (not grounded).');
+            // The backend sends cause-specific refusal text; show it exactly as sent (no relabel).
+            finalAnswer = evt.label || evt.data?.message || "I couldn't answer that one.";
             patch((m) => ({ ...m, text: finalAnswer }));
           } else if (evt.type === 'error') {
             patch((m) => ({ ...m, text: 'Error: ' + (evt.data?.error || 'stream failed') }));

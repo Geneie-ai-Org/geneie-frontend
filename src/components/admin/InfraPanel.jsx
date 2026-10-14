@@ -20,6 +20,7 @@ import WorkerCard from './WorkerCard';
 import Module1Card from './Module1Card';
 import IntakePanel from './IntakePanel';
 import DataPlaneCard from './DataPlaneCard';
+import ExomiserFastCard from './ExomiserFastCard';
 import { AlarmStrip, AuditTable, DlqSection, EcsTable } from './InfraReadOnly';
 import { INTRO, SECTION_HELP } from './infraHelp';
 
@@ -64,6 +65,11 @@ function applyMerge(prev, m) {
     if (!prev.dataplane) return prev;
     const value = r && typeof r === 'object' && 'value' in r ? r.value : m.fallbackValue;
     return { ...prev, dataplane: { ...prev.dataplane, config: { ...(prev.dataplane.config || {}), [m.configKey]: value } } };
+  }
+  if (m.kind === 'exomiserConfig') {
+    if (!prev.exomiser_fast) return prev;
+    const value = r && typeof r === 'object' && 'value' in r ? r.value : m.fallbackValue;
+    return { ...prev, exomiser_fast: { ...prev.exomiser_fast, config: { ...(prev.exomiser_fast.config || {}), [m.configKey]: value } } };
   }
   if (m.kind === 'config' || m.kind === 'module1Cap') {
     if (!prev.module1) return prev;
@@ -280,6 +286,15 @@ export default function InfraPanel() {
       <Section title="Data plane (annotation v2)" help={SECTION_HELP.dataplane}>
         <DataPlaneCard
           dataplane={status?.dataplane || null}
+          errors={errors}
+          blockedReason={globalBlock}
+          onRequest={setConfirm}
+        />
+      </Section>
+
+      <Section title="Exomiser fast path" help={SECTION_HELP.exomiserFast}>
+        <ExomiserFastCard
+          exomiser={status?.exomiser_fast || null}
           errors={errors}
           blockedReason={globalBlock}
           onRequest={setConfirm}

@@ -271,3 +271,39 @@ export function validateDataplaneRelease(value, build) {
 export function parseCanaryUsers(text) {
   return [...new Set(String(text ?? '').split(/[\s,]+/).map((s) => s.trim()).filter(Boolean))];
 }
+
+/** Exomiser fast path flags the page may write (config store, namespace `dataplane.exomiser.*`). The fast path is OFF until
+ *  `backend` (or the canary list) says otherwise. `fast` serves users from the resident engine, which needs a licence
+ *  decision first: the page only offers it for canary accounts. */
+export const EXOMISER_KEYS = {
+  backend: 'dataplane.exomiser.backend',
+  canaryUsers: 'dataplane.exomiser.canary_users',
+  canaryBackend: 'dataplane.exomiser.canary_backend',
+  kill: 'dataplane.exomiser.kill_switch',
+  fallback: 'dataplane.exomiser.fallback_to_classic',
+  shadowRate: 'dataplane.exomiser.shadow_rate',
+  shadowParity: 'dataplane.exomiser.shadow_parity',
+  outputFormats: 'dataplane.exomiser.output_formats',
+  nominalSlots: 'dataplane.exomiser.nominal_slots',
+};
+export const EXOMISER_BACKENDS = ['classic', 'shadow']; // the global path: `fast` is canary-only for now
+export const EXOMISER_CANARY_BACKENDS = ['shadow', 'fast'];
+export const EXOMISER_OUTPUT_FORMATS = ['all', 'tsv_variant'];
+export const EXOMISER_SLOTS_RANGE = [1, 4];
+
+/** Parses the shadow-rate field (0 to 1). Returns { value } or { error }. */
+export function parseShadowRate(text) {
+  const t = String(text ?? '').trim();
+  if (!t) return { error: 'Enter a number between 0 and 1.' };
+  const n = Number(t);
+  if (!Number.isFinite(n) || n < 0 || n > 1) return { error: 'Shadow rate must be between 0 (none) and 1 (every job).' };
+  return { value: n };
+}
+
+/** Parses the nominal-slots field (whole number in the allowed range). Returns { value } or { error }. */
+export function parseNominalSlots(text, range = EXOMISER_SLOTS_RANGE) {
+  const t = String(text ?? '').trim();
+  const n = Number(t);
+  if (!t || !Number.isInteger(n) || n < range[0] || n > range[1]) return { error: `Whole number from ${range[0]} to ${range[1]}.` };
+  return { value: n };
+}

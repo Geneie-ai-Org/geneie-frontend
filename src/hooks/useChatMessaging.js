@@ -7,6 +7,10 @@ import { DEFAULT_GUEST_CHAT_LIMIT } from '@/services/backendApi';
 import { useAuth } from '@/hooks/useAuth';
 import { describeLimitError, isLimitCode } from '@/services/limitErrors';
 import { streamExploratory } from '@/services/streamExploratory';
+import { env } from '@/config/env';
+import {
+  splitSseFrames, parseSseFrame, classifyStreamEnd, withStreamCutNote, stripStreamCutNote,
+} from '@/lib/sseFrames';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const MAX_RETRIES = 3;
@@ -15,6 +19,18 @@ const MAX_RETRIES = 3;
 // the JSON /api/chat path stays the default until the backend endpoint is deployed everywhere.
 const CHAT_STREAMING_ENABLED =
   String(import.meta.env?.VITE_CHAT_STREAMING ?? '').toLowerCase() === 'true';
+
+// A stream that closes without a `done` event is not a complete answer (release-safety design item 3). Off by
+// default (VITE_CHAT_STREAM_CUT_HANDLING); a browser can opt in for testing with localStorage.chatStreamCutHandling='1'.
+// Read per turn so the override applies without a reload.
+function streamCutHandlingOn() {
+  if (env.chatStreamCutHandling) return true;
+  try {
+    return typeof window !== 'undefined' && window.localStorage?.getItem('chatStreamCutHandling') === '1';
+  } catch {
+    return false;
+  }
+}
 
 // Map an SSE {type:"error"} detail onto the same shape runChatCompletion returns, so the
 // existing limit/eligibility handling in sendMessage works unchanged.
@@ -367,6 +383,8 @@ export function useChatMessaging({
   // sendMessage's persistence / limits / leak-fix logic is identical for both paths.
   const runChatCompletionStream = useCallback(
     async (userMessageText, historyPayload, signal, onDelta) => {
+      const cutHandling = streamCutHandlingOn();
+      let full = '';
       try {
         const requestBody = {
           message: userMessageText,
@@ -398,10 +416,10 @@ export function useChatMessaging({
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
-        let full = '';
         let sources = [];
         let meta = {};
         let streamError = null;
+        let sawDone = false;
 
         // eslint-disable-next-line no-constant-condition
         while (true) {
@@ -410,13 +428,12 @@ export function useChatMessaging({
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
           // SSE frames are separated by a blank line; each line we care about starts with "data: ".
-          const frames = buffer.split('\n\n');
-          buffer = frames.pop() ?? '';
-          for (const frame of frames) {
-            const line = frame.split('\n').find((l) => l.startsWith('data: '));
-            if (!line) continue;
-            let evt;
-            try { evt = JSON.parse(line.slice(6)); } catch { continue; }
+          // Comment frames (": keepalive") have no data line and are skipped (src/lib/sseFrames.js).
+          const split = splitSseFrames(buffer);
+          buffer = split.rest;
+          for (const frame of split.frames) {
+            const evt = parseSseFrame(frame);
+            if (evt === undefined) continue;
             if (evt.type === 'delta') {
               full += evt.text || '';
               if (onDelta) onDelta(full);
@@ -426,6 +443,7 @@ export function useChatMessaging({
               const { type, ...rest } = evt; // eslint-disable-line no-unused-vars
               meta = rest;
             } else if (evt.type === 'done') {
+              sawDone = true;
               full = evt.response ?? full;
             } else if (evt.type === 'error') {
               // If some text streamed before the error, keep it as the partial answer.
@@ -442,9 +460,21 @@ export function useChatMessaging({
           return res;
         }
 
+        if (cutHandling) {
+          // Body closed without `done` (e.g. the API task was replaced mid-stream): keep the partial as a cut
+          // answer; with nothing streamed, fall back to the JSON endpoint once, as for a network failure.
+          const end = classifyStreamEnd({ sawDone, sawError: false, text: full });
+          if (end === 'cut') return { data: null, lastError: null, aborted: false, partial: full, streamCut: true };
+          if (end === 'failed') {
+            return { data: null, lastError: new Error('Stream closed before completion'), aborted: false, streamFailed: true };
+          }
+        }
+
         return { data: { response: full, sources, ...meta }, lastError: null, aborted: false };
       } catch (error) {
         if (error.name === 'AbortError') return { data: null, lastError: null, aborted: true };
+        // Body errored after text arrived: a cut, not a reason to run the model again.
+        if (cutHandling && full) return { data: null, lastError: null, aborted: false, partial: full, streamCut: true };
         // Network/parse failure: let the caller fall back to the non-streaming path.
         return { data: null, lastError: error, aborted: false, streamFailed: true };
       }
@@ -474,8 +504,9 @@ export function useChatMessaging({
     const ac = new AbortController();
     chatAbortControllerRef.current = ac;
 
+    const cutHandling = streamCutHandlingOn();
     const historyPayload = [
-      ...messages.map((msg) => ({ role: msg.role, text: msg.text })),
+      ...messages.map((msg) => ({ role: msg.role, text: cutHandling ? stripStreamCutNote(msg.text) : msg.text })),
       { role: 'user', text: userMessageText },
     ];
 
@@ -508,6 +539,24 @@ export function useChatMessaging({
         return { ...m, trace: tr };
       });
       let finalAnswer = '';   // accumulate so we can PERSIST the turn after the stream
+      let exploreSawDone = false;
+      // PERSIST the exploratory turn so it survives reload (Standard persists; this branch didn't).
+      // Best-effort — a save failure must never break the live UI.
+      const persistExploreTurn = async () => {
+        if (userId && activeConversationId && finalAnswer.trim()) {
+          try {
+            await mongodbApi.createMessage(activeConversationId, 'user', userMessageText, []);
+            await mongodbApi.createMessage(activeConversationId, 'ai', finalAnswer, []);
+          } catch (persistErr) {
+            console.error('Exploratory persist error:', persistErr);
+          }
+        }
+      };
+      // Stream cut (stream-cut handling on): keep the partial answer with the fixed note, stored the same way.
+      const markExploreCut = () => {
+        finalAnswer = withStreamCutNote(finalAnswer);
+        patch((m) => ({ ...m, streaming: false, text: finalAnswer }));
+      };
       try {
         await streamExploratory(userMessageText, (evt) => {
           if (evt.type === 'answer_delta') {
@@ -535,6 +584,7 @@ export function useChatMessaging({
           } else if (evt.type === 'error') {
             patch((m) => ({ ...m, text: 'Error: ' + (evt.data?.error || 'stream failed') }));
           } else if (evt.type === 'done') {
+            exploreSawDone = true;
             patch((m) => ({ ...m, streaming: false }));
           } else if (evt.type === 'tool_call') {
             pushTrace('toolcall', evt.data?.query || evt.label);  // starts a new timeline turn
@@ -547,18 +597,15 @@ export function useChatMessaging({
         }, ac.signal, activeConversationId || 'guest-session',
            { ...(token && { Authorization: `Bearer ${token}` }), 'X-Device-Id': getDeviceId() });
 
-        // PERSIST the exploratory turn so it survives reload (Standard persists; this branch didn't).
-        // Best-effort — a save failure must never break the live UI.
-        if (userId && activeConversationId && finalAnswer.trim()) {
-          try {
-            await mongodbApi.createMessage(activeConversationId, 'user', userMessageText, []);
-            await mongodbApi.createMessage(activeConversationId, 'ai', finalAnswer, []);
-          } catch (persistErr) {
-            console.error('Exploratory persist error:', persistErr);
-          }
-        }
+        if (cutHandling && !exploreSawDone && finalAnswer.trim()) markExploreCut();
+        await persistExploreTurn();
       } catch (e) {
-        patch((m) => ({ ...m, streaming: false, text: m.text || `Error: ${e.message}` }));
+        if (cutHandling && e?.name !== 'AbortError' && finalAnswer.trim()) {
+          markExploreCut();
+          await persistExploreTurn();
+        } else {
+          patch((m) => ({ ...m, streaming: false, text: m.text || `Error: ${e.message}` }));
+        }
       }
       chatAbortControllerRef.current = null;
       setIsLoading(false);
@@ -608,6 +655,20 @@ export function useChatMessaging({
     setTurnStartedAt(null);
 
     if (aborted) return;
+
+    if (!data && result.streamCut) {
+      // Stream closed before `done` (stream-cut handling on only): render and persist the partial with the fixed
+      // note, never as a complete answer. The Regenerate button on the last answer re-asks. No meta arrived, so
+      // limits are not patched; the server did not finalize (quota/summary) this turn either.
+      typingGenerationIdRef.current += 1;
+      if (typingTimeoutRef.current) { clearTimeout(typingTimeoutRef.current); typingTimeoutRef.current = null; }
+      setTypingText('');
+      setIsLoading(false);
+      inFlightOriginRef.current = null;
+      pendingTurnRef.current = null;
+      await appendAssistantAndPersist(wasFirstInConversation, userMessageText, withStreamCutNote(result.partial), [], 'full', originConversationId, thinkingMs);
+      return;
+    }
 
     if (data) {
       patchLimitsFromChat(data);

@@ -385,6 +385,10 @@ export function useChatMessaging({
     async (userMessageText, historyPayload, signal, onDelta) => {
       const cutHandling = streamCutHandlingOn();
       let full = '';
+      let sources = [];
+      let meta = {};
+      let streamError = null;
+      let sawDone = false;
       try {
         const requestBody = {
           message: userMessageText,
@@ -416,10 +420,6 @@ export function useChatMessaging({
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
-        let sources = [];
-        let meta = {};
-        let streamError = null;
-        let sawDone = false;
 
         // eslint-disable-next-line no-constant-condition
         while (true) {
@@ -473,8 +473,13 @@ export function useChatMessaging({
         return { data: { response: full, sources, ...meta }, lastError: null, aborted: false };
       } catch (error) {
         if (error.name === 'AbortError') return { data: null, lastError: null, aborted: true };
-        // Body errored after text arrived: a cut, not a reason to run the model again.
-        if (cutHandling && full) return { data: null, lastError: null, aborted: false, partial: full, streamCut: true };
+        if (cutHandling) {
+          // Body errored: after `done` the answer is complete; after text only it is a cut (not a reason to run the
+          // model again); otherwise (error event / nothing streamed) the JSON fallback below, as today.
+          const end = classifyStreamEnd({ sawDone, sawError: Boolean(streamError), text: full });
+          if (end === 'complete') return { data: { response: full, sources, ...meta }, lastError: null, aborted: false };
+          if (end === 'cut') return { data: null, lastError: null, aborted: false, partial: full, streamCut: true };
+        }
         // Network/parse failure: let the caller fall back to the non-streaming path.
         return { data: null, lastError: error, aborted: false, streamFailed: true };
       }
@@ -601,7 +606,9 @@ export function useChatMessaging({
         await persistExploreTurn();
       } catch (e) {
         if (cutHandling && e?.name !== 'AbortError' && finalAnswer.trim()) {
-          markExploreCut();
+          // Body errored: after `done` the answer is complete (just persist it); before `done` it is a cut.
+          if (exploreSawDone) patch((m) => ({ ...m, streaming: false }));
+          else markExploreCut();
           await persistExploreTurn();
         } else {
           patch((m) => ({ ...m, streaming: false, text: m.text || `Error: ${e.message}` }));

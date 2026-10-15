@@ -373,7 +373,7 @@ const ConversationSidebar = ({
                         <button
                             type="button"
                             onClick={onCreateConversation}
-                            className="flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 focus-visible:ring-offset-2 focus-visible:ring-offset-background max-md:h-11"
+                            className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 focus-visible:ring-offset-2 focus-visible:ring-offset-background max-md:h-11"
                         >
                             <Plus className="size-4" />
                             New chat
@@ -386,7 +386,7 @@ const ConversationSidebar = ({
                                     type="button"
                                     onClick={onCreateConversation}
                                     aria-label="New chat"
-                                    className="inline-flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55"
+                                    className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55"
                                 />
                             }
                         >

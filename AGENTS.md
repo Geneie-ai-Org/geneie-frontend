@@ -134,8 +134,9 @@ Reference implementation: the PGx worker (`BE:deploy/terraform/newprod/pgx_worke
       needs. Allow it into a datastore by adding it to that datastore SG's **inline `ingress` list** in
       `BE:deploy/terraform/newprod/newprod_security.tf`. Do not add `aws_security_group_rule` resources: they fight
       the inline lists.
-- [ ] **Service shell** in `ecs_services.tf`: `deployment_circuit_breaker { enable = true, rollback = true }`,
-      `enable_execute_command = false`, `lifecycle { ignore_changes = [task_definition, desired_count] }`.
+- [ ] **Service shell** in `ecs_services.tf` (copy the `pgx_worker` block): a `deployment_circuit_breaker` block with
+      `enable = true` and `rollback = true`, `enable_execute_command = false`, and
+      `lifecycle { ignore_changes = [task_definition, desired_count] }`.
 - [ ] **Container hardening**: non-root (`USER app` in the Dockerfile), `linuxParameters` with
       `capabilities.drop ["ALL"]` and `initProcessEnabled: true`, `readonlyRootFilesystem: true` where the code
       can write only to a mounted temp volume, `stopTimeout: 120`.
@@ -285,8 +286,10 @@ Never combine the role change and the resources it unlocks in one PR.
 
 No laptop connections to newprod databases. Pattern (no script in the repo yet):
 - Run a one-off ECS task of family `geneie-newprod-corpus-jobs` (container `corpus-job`) on cluster
-  `geneie-newprod`, private subnets, SG `geneie-newprod-corpus-jobs` (allowed into the app RDS and the sidecar RDS),
-  with a command override. The DSN comes from the task's secret env; never print it.
+  `geneie-newprod`, private subnets, SG `geneie-newprod-corpus-jobs`, with a command override. The DSN comes from the
+  task's secret env; never print it. Its corpus DSN targets the **sidecar Postgres** (where `literature_chunks`
+  lives); its access to the app RDS is the literature-map read path only.
+- DDL on any other database: the owner first confirms which task and DSN user has the privilege. Do not improvise.
 - DDL is idempotent (`IF NOT EXISTS`), reviewed in a PR first, and run in a transaction.
 - Prove it: probe insert inside a transaction, check it, then `ROLLBACK`. Log only "ok" and counts.
 - Read the result in CloudWatch `/ecs/geneie-newprod-corpus-jobs`. Commit the DDL with the PR that needed it.
@@ -294,8 +297,9 @@ No laptop connections to newprod databases. Pattern (no script in the repo yet):
 ### 5.9 Worker code, AMIs, Module 1 head box
 
 - **Worker boot code**: `newprod-ci.yml` publishes worker files to `s3://geneie-newprod-variant-files/exomiser-worker/`.
-  Workers fetch them at boot, fail-soft (keep the AMI copy on a bad download) and sha256-verified where a `.sha256`
-  file is published. A new boot-time file follows the same rule: verify, then fall back.
+  Workers fetch them at boot. App code: verify (sha256 where a `.sha256` file is published, or an import check),
+  then fall back to the AMI copy on a bad download. Required data files (for example `exomiser_data.py`): a bad
+  fetch fails the boot so the instance is replaced. A new boot-time file picks one of these two rules explicitly.
 - **AMIs** carry the slow-changing software. Built by hand-started Image Builder pipelines
   (`BE:deploy/worker-ami/README.md`), promoted only by a PR changing `image_id`. Rollback = PR to the previous id.
   Boot-time overrides (code, data paths, env) sit on top; do not bake fast-changing code into the AMI.

@@ -3,16 +3,15 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 /**
  * Theme state for the app shell.
  *
- * Dark is the shipped look and stays the default — light mode is opt-in and is being
- * migrated component by component. The active theme is the `dark` class on <html>
+ * Light is the default (design v1); dark is a first-class peer. The active theme is the `dark` class on <html>
  * (tailwind.config.js runs `darkMode: ['class']`), so every `dark:` utility and the
  * `.dark` token block in index.css switch off the same flag.
  *
  * The initial class is set by the inline script in index.html to avoid a flash of the
  * wrong theme before React mounts; this hook keeps it in sync afterwards.
  */
-export const THEME_STORAGE_KEY = 'geneie-theme';
-const DEFAULT_THEME = 'dark';
+export const THEME_STORAGE_KEY = 'geneie-theme-v2';
+const DEFAULT_THEME = 'light';
 
 const ThemeContext = createContext(null);
 

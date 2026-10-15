@@ -76,9 +76,10 @@ export default {
         '2xl': 'var(--elevation-2xl)',
       },
       fontFamily: {
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        sans: ['"Geist Variable"', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
         heading: ['Outfit', 'Inter', 'sans-serif'],
         brand: ['"DM Sans"', 'Inter', 'sans-serif'],
+        mono: ['ui-monospace', '"SF Mono"', 'Menlo', 'Consolas', 'monospace'],
       },
       fontSize: {
         '2xs': ['11px', { lineHeight: '16px' }],

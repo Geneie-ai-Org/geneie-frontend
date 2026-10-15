@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 
 <head>
   <meta charset="utf-8" />
@@ -38,7 +38,7 @@
   <link rel="manifest" href="/manifest.json" />
   <meta name="apple-mobile-web-app-title" content="Geneie" />
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#0F0F0F" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#14161a" media="(prefers-color-scheme: dark)" />
 
   <!-- The hero poster is the landing page's LCP element, but it lives inside a lazily
        loaded route chunk, so the browser doesn't discover it until React has rendered.
@@ -118,9 +118,10 @@
   <script>
     (function () {
       try {
-        var stored = localStorage.getItem('geneie-theme');
-        document.documentElement.classList.toggle('dark', stored !== 'light');
-      } catch (e) { /* storage blocked — keep the dark class from the markup */ }
+        // v2 key: the redesign defaults to light, so earlier stored 'dark' values must not carry over.
+        var stored = localStorage.getItem('geneie-theme-v2');
+        document.documentElement.classList.toggle('dark', stored === 'dark');
+      } catch (e) { /* storage blocked — light default from the markup */ }
     })();
   </script>
 </head>

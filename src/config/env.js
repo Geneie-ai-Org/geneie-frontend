@@ -42,6 +42,9 @@ export const env = {
     key: viteVar('POSTHOG_KEY'),
     host: viteVar('POSTHOG_HOST') || 'https://us.i.posthog.com',
   },
+  // Chat stream closed before `done` -> show/persist the partial with a fixed note instead of presenting it as
+  // complete (useChatMessaging). Default off; per-browser override: localStorage.chatStreamCutHandling = '1'.
+  chatStreamCutHandling: viteVar('CHAT_STREAM_CUT_HANDLING').toLowerCase() === 'true',
 };
 
 export function isFirebaseConfigured() {

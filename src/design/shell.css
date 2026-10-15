@@ -43,20 +43,19 @@
   }
 }
 
-/* Composer: a soft card, not a boxed input. Hairline border, generous radius, diffuse warm shadow. */
+/* Composer: a large rounded card, hairline border, soft diffuse shadow (reference frames). */
 .pipeline-composer {
-  border-radius: 16px !important;
+  border-radius: var(--composer-radius) !important;
   border: 1px solid hsl(var(--border)) !important;
   background-color: hsl(var(--card)) !important;
-  box-shadow: 0 1px 2px hsl(40 8% 10% / 0.04), 0 14px 36px -12px hsl(40 8% 10% / 0.10) !important;
+  box-shadow: var(--shadow-composer) !important;
 }
 .dark .pipeline-composer {
-  box-shadow: 0 1px 2px hsl(0 0% 0% / 0.3), 0 14px 36px -12px hsl(0 0% 0% / 0.5) !important;
+  box-shadow: 0 1px 2px hsl(0 0% 0% / 0.3), 0 8px 28px -6px hsl(0 0% 0% / 0.5) !important;
 }
 .pipeline-composer:focus-within {
   border-color: hsl(var(--border-strong, var(--border))) !important;
-  box-shadow: 0 1px 2px hsl(40 8% 10% / 0.05), 0 16px 40px -12px hsl(40 8% 10% / 0.14) !important;
 }
 
-/* Rail: warm, quiet. Active row is a soft fill, not an outline. */
+/* Rail: light neutral panel. */
 .chat-shell-left { background-color: hsl(var(--sidebar)); }

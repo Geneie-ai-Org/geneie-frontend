@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown, Dna, Workflow, ListChecks, PanelRight } from 'lucide-react';
+import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown, Dna, Workflow, ListChecks, PanelRight, LayoutList, FileCheck2 } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
 import { toast } from 'sonner';
@@ -56,6 +56,7 @@ import { getClinicalReportGate } from '@/components/CaseReportDownloadButton';
 import ClinicalReportAssignModal from '@/components/ClinicalReportAssignModal';
 import WorkspacePanel, { useWorkspaceWidth } from '@/components/workspace/WorkspacePanel';
 import PipelineStatusStrip, { derivePipelineStrip } from '@/components/workspace/PipelineStatusStrip';
+import SummaryTab, { deriveSummary } from '@/components/workspace/SummaryTab';
 import AutomaticPipelinePanel from '@/components/AutomaticPipelinePanel';
 import {
   normalizePipelineRunMode,
@@ -86,8 +87,10 @@ const ChatPage = () => {
   const [variantData, setVariantData] = useState(null);
   const [isVariantSidebarOpen, setIsVariantSidebarOpen] = useState(false);
   // Right-hand workspace: which tab is showing, and its drag-resizable width.
-  const [workspaceTab, setWorkspaceTab] = useState('variants');
-  const [workspaceWidth, setWorkspaceWidth] = useWorkspaceWidth();
+  const [workspaceTab, setWorkspaceTab] = useState('summary');
+  const [openTabs, setOpenTabs] = useState(['summary', 'variants']);
+  const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
+  const [workspaceWidth, setWorkspaceWidth] = useWorkspaceWidth(workspaceExpanded);
   const [sidebarRequestedTab, setSidebarRequestedTab] = useState(null);
   const [isEditSampleModalOpen, setIsEditSampleModalOpen] = useState(false);
 
@@ -1188,6 +1191,7 @@ const ChatPage = () => {
   // When the file-check results appear, open the workspace on that tab instead of a modal.
   useEffect(() => {
     if (showFileAnalysisModal) {
+      setOpenTabs((prev) => (prev.includes('file') ? prev : [...prev, 'file']));
       setWorkspaceTab('file');
       setIsVariantSidebarOpen(true);
     }
@@ -1541,9 +1545,58 @@ const ChatPage = () => {
     ) : null;
 
   const openWorkspaceTab = (tab) => {
+    setOpenTabs((prev) => (prev.includes(tab) ? prev : [...prev, tab]));
     setWorkspaceTab(tab);
     setIsVariantSidebarOpen(true);
   };
+  const closeWorkspaceTab = (tab) => {
+    setOpenTabs((prev) => {
+      const next = prev.filter((id) => id !== tab);
+      if (workspaceTab === tab) setWorkspaceTab(next[Math.max(0, prev.indexOf(tab) - 1)] || 'summary');
+      return next.length ? next : ['summary'];
+    });
+  };
+
+  // One next action, consistent with the stage wording: annotate first when the file needs it.
+  const primaryAction =
+    chatEligibility?.requires_annovar && !pipelineSnapshot.hasAnnotatedFile && !isRunningAnnovar
+      ? { label: 'Run annotation', onClick: () => runAnnovarForCurrentConversation() }
+      : gatedAction;
+
+  // ---- Summary tab: derived from state this page already holds ----
+  const docMeta = currentDocument?.sample_metadata || {};
+  const activeManualFilters = conversationFilterState.activeVariantFilters;
+  const manualFilterCount = activeManualFilters ? Object.keys(activeManualFilters).length : 0;
+  const summary = currentDocument
+    ? deriveSummary({
+        fileName: currentDocument?.name ?? currentDocument?.file_name,
+        genome: docMeta.genome,
+        sequencingType: docMeta.sequencingType,
+        analysisType: docMeta.analysisType,
+        totalVariants: variantData?.total_variants,
+        filteredVariantCount: conversationFilterState.filteredVariantCount ?? pipelineVariantsUnderConsideration,
+        hasAnnotatedFile: pipelineSnapshot.hasAnnotatedFile,
+        requiresAnnovar: chatEligibility?.requires_annovar,
+        isRunningAnnovar,
+        isFiltering: isApplyingProprietaryFilter || isRunningExomiser,
+        filterActive: Boolean(conversationFilterState.activeProprietaryFilter) || manualFilterCount > 0,
+        filterLabel:
+          conversationFilterState.activeProprietaryFilter === 'filter_1'
+            ? 'ACMG filter applied'
+            : conversationFilterState.activeProprietaryFilter === 'filter_3'
+              ? 'Phenotype ranking applied'
+              : manualFilterCount > 0
+                ? `${manualFilterCount} manual ${manualFilterCount === 1 ? 'filter' : 'filters'} applied`
+                : null,
+        chatAllowed: chatEligibility?.allowed,
+        chatReason: chatEligibility?.requires_annovar ? 'Run annotation to continue' : 'Apply a filter to enable chat',
+        nextAction: primaryAction,
+      })
+    : null;
+  const summaryJumps = [
+    { id: 'variants', title: 'Variants and filters', meta: summary?.inScope != null ? `${summary.inScope.toLocaleString()} in scope` : 'Narrow the set', onClick: () => openWorkspaceTab('variants') },
+    { id: 'pipeline', title: 'Pipeline', meta: 'Run status and steps', onClick: () => openWorkspaceTab('pipeline'), disabled: !pipelineStack },
+  ].filter((j) => !j.disabled);
 
   const pipelineStripStatus = derivePipelineStrip({
     module1Job: module1.module1Job,
@@ -1561,7 +1614,7 @@ const ChatPage = () => {
 
   const pipelineStrip = pipelineStripStatus ? (
     <PipelineStatusStrip
-      status={{ ...pipelineStripStatus, action: pipelineStripStatus.state === 'running' ? null : gatedAction }}
+      status={{ ...pipelineStripStatus, action: pipelineStripStatus.state === 'running' ? null : primaryAction }}
       onOpen={pipelineStack ? () => openWorkspaceTab('pipeline') : () => openWorkspaceTab('variants')}
     />
   ) : null;
@@ -2090,14 +2143,29 @@ const ChatPage = () => {
         <WorkspacePanel
           width={workspaceWidth}
           onWidthChange={setWorkspaceWidth}
+          expanded={workspaceExpanded}
+          onToggleExpand={() => setWorkspaceExpanded((v) => !v)}
+          openIds={openTabs}
           activeId={workspaceTab}
           onActiveChange={setWorkspaceTab}
+          onOpenTab={openWorkspaceTab}
+          onCloseTab={closeWorkspaceTab}
           onClose={() => setIsVariantSidebarOpen(false)}
           tabs={[
+            {
+              id: 'summary',
+              label: 'Summary',
+              icon: LayoutList,
+              closable: false,
+              subtitle: currentDocument?.name ?? currentDocument?.file_name ?? 'No file yet',
+              content: <SummaryTab summary={summary} jumps={summaryJumps} />,
+            },
             {
               id: 'variants',
               label: 'Variants',
               icon: Dna,
+              closable: true,
+              hint: 'Filters',
               subtitle: currentDocument?.name ?? currentDocument?.file_name ?? null,
               content: (
           <VariantFilterSidebar
@@ -2194,22 +2262,27 @@ const ChatPage = () => {
               id: 'pipeline',
               label: 'Pipeline',
               icon: Workflow,
-              subtitle: 'Run status and steps',
+              closable: true,
               hidden: !pipelineStack,
+              subtitle: 'Run status and steps',
               content: pipelineStack,
             },
             {
               id: 'file',
               label: 'File check',
-              icon: FileText,
+              icon: FileCheck2,
+              closable: true,
               hidden: !fileCheckPanel,
+              subtitle: 'Column and annotation check',
               content: fileCheckPanel,
             },
             {
               id: 'triage',
               label: 'Triage',
               icon: ListChecks,
+              closable: true,
               hidden: userTier === 'guest' || !activeConversationId || !gaTriageStatus,
+              subtitle: 'Review candidates',
               content: (
                 <GaTriagePanel
                   conversationId={activeConversationId}

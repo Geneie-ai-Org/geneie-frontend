@@ -19,6 +19,12 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // Status variants carry meaning only; use text + colour, never colour alone.
+        success: "bg-[var(--success-soft)] text-[var(--success)]",
+        warning: "bg-[var(--warning-soft)] text-[var(--warning)]",
+        error: "bg-[var(--error-soft)] text-[var(--error)]",
+        info: "bg-[var(--info-soft)] text-[var(--info)]",
+        muted: "bg-muted text-muted-foreground",
       },
     },
     defaultVariants: {

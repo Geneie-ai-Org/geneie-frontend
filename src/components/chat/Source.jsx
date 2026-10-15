@@ -45,21 +45,22 @@ function SourceTrigger({
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        "inline-flex h-6 max-w-40 items-center gap-1 overflow-hidden rounded-full py-0 text-xs no-underline transition-colors duration-150 border",
+        "inline-flex h-6 max-w-56 items-center gap-1 overflow-hidden rounded-full py-0 text-xs no-underline transition-colors duration-150 border hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] [@media(pointer:coarse)]:h-8",
         showFavicon ? "pr-2 pl-1" : "px-2",
         className
       )}
       style={{
         borderColor: "var(--border-default)",
         color: "var(--text-secondary)",
-        backgroundColor: "var(--bg-surface)",
+        backgroundColor: "var(--bg-surface-raised)",
       }}
       {...props}
     >
       {showFavicon && (
         <img
           src={`https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(href)}`}
-          alt="favicon"
+          alt=""
+          aria-hidden="true"
           width={14}
           height={14}
           className="size-3.5 rounded-full"
@@ -78,7 +79,7 @@ function SourceContent({ title, description, className }) {
   return (
     <HoverCardContent
       className={cn(
-        "w-80 p-0 ring-0 border shadow-lg",
+        "w-80 p-0 ring-0 border",
         className
       )}
       style={{
@@ -96,20 +97,21 @@ function SourceContent({ title, description, className }) {
         <div className="flex items-center gap-1.5">
           <img
             src={`https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(href)}`}
-            alt="favicon"
+            alt=""
+            aria-hidden="true"
             className="size-4 rounded-full"
             width={16}
             height={16}
           />
-          <div className="truncate text-sm" style={{ color: "var(--text-secondary)" }}>
+          <div className="truncate text-xs" style={{ color: "var(--text-secondary)" }}>
             {domain.replace("www.", "")}
           </div>
         </div>
-        <div className="line-clamp-2 text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+        <div className="line-clamp-2 text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>
           {title}
         </div>
         {description && (
-          <div className="line-clamp-2 text-sm" style={{ color: "var(--text-tertiary)" }}>
+          <div className="line-clamp-2 text-xs break-all" style={{ color: "var(--text-tertiary)" }}>
             {description}
           </div>
         )}

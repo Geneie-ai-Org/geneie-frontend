@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useSeo } from '@/hooks/useSeo';
 import { adminWhoAmI } from '@/services/backendApi';
 import InfraPanel from '@/components/admin/InfraPanel';
+import { AdminFrame } from '@/components/admin/adminUi';
 
 /**
  * Unlisted infra page next to the admin tool (/admin-haha/infra).
@@ -39,11 +40,9 @@ const AdminInfraPage = () => {
   if (!isAllowed) return <Navigate to="/app" replace />;
 
   return (
-    <div className="min-h-screen px-6 py-10" style={{ backgroundColor: 'var(--bg-app)' }}>
-      <div className="mx-auto w-full max-w-5xl">
-        <InfraPanel />
-      </div>
-    </div>
+    <AdminFrame>
+      <InfraPanel />
+    </AdminFrame>
   );
 };
 

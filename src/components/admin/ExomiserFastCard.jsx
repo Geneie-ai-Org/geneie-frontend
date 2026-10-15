@@ -6,28 +6,25 @@ import {
   EXOMISER_KEYS,
   EXOMISER_OUTPUT_FORMATS,
   EXOMISER_SLOTS_RANGE,
-  parseCanaryUsers,
   parseNominalSlots,
   parseShadowRate,
 } from '@/services/infraApi';
-import {
-  cardStyle,
-  cellStyle,
-  dangerButtonStyle,
-  fmtRelative,
-  fmtTime,
-  inputStyle,
-  mutedText,
-  secondaryButtonClass,
-  secondaryButtonStyle,
-  Stat,
-  Unavailable,
-} from './infraShared';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { Banner, HelpBody, HelpPopover, Panel, StatusChip, inputCls, selectCls, toneText } from './adminUi';
+import { ChangeLine, fmtRelative, fmtTime, Stat, Unavailable } from './infraShared';
+import { CanaryEditor, depth, ToggleRow } from './routingShared';
+import { SECTION_HELP } from './infraHelp';
 
 const BACKEND_TEXT = {
   classic: 'Normal path (a fresh Exomiser process per job)',
   shadow: 'Normal path serves; the fast engine runs silently and is compared',
   fast: 'Fast engine serves',
+};
+
+const DEFAULT_UNDO = {
+  undoable: true,
+  text: 'Change it back from this card at any time. There is no timer: the setting stays until you change it.',
 };
 
 function cfg(exomiser, key, fallback) {
@@ -36,22 +33,19 @@ function cfg(exomiser, key, fallback) {
 }
 
 /** `after` is what the confirm dialog shows; `value` (default: `after`) is what is written. */
-function writeRequest(key, label, before, after, onRequest, { danger = false, note, value = after } = {}) {
-  const show = (v) => (Array.isArray(v) ? v.join(', ') || '—' : v);
+function writeRequest(key, label, before, after, onRequest, { danger = false, note, value = after, confirmLabel = 'Save', undo = DEFAULT_UNDO } = {}) {
+  const show = (v) => (Array.isArray(v) ? v.join(', ') || '–' : v);
   onRequest({
     title: `Exomiser fast path: ${label}`,
+    confirmLabel,
     danger,
     rows: [{ label, before: show(before), after: show(after) }],
     note,
+    undo,
     run: () => adminSetConfig(key, value),
     merge: (response) => ({ kind: 'exomiserConfig', configKey: key, response, fallbackValue: value }),
     successText: `${label} updated.`,
   });
-}
-
-function depth(q) {
-  if (!q) return '—';
-  return `${q.visible ?? 0} waiting / ${q.in_flight ?? 0} running`;
 }
 
 function PathRow({ exomiser, blocked, onRequest }) {
@@ -62,6 +56,11 @@ function PathRow({ exomiser, blocked, onRequest }) {
   const save = () => {
     if (chosen === backend) return;
     writeRequest(EXOMISER_KEYS.backend, 'Exomiser path', backend, chosen, onRequest, {
+      confirmLabel: `Switch to ${chosen}`,
+      undo: {
+        undoable: true,
+        text: `Switch back to ${backend} from this card, or use the kill switch to send every new job to the normal path within ~45 s. Jobs already running finish where they started.`,
+      },
       note: chosen === 'shadow'
         ? 'Users still get the normal result. The fast engine also runs each eligible job and the two result tables are compared; a real difference raises an alarm.'
         : 'New jobs use the normal path only. Jobs already running finish where they started.',
@@ -69,80 +68,21 @@ function PathRow({ exomiser, blocked, onRequest }) {
   };
   return (
     <div>
-      <div className="text-xs font-medium mb-1" style={{ color: 'var(--text-primary)' }}>Who serves new Exomiser jobs</div>
+      <h3 className="mb-1 text-xs font-medium text-foreground">Who serves new Exomiser jobs</h3>
       <div className="flex flex-wrap items-center gap-2">
-        <select value={chosen} disabled={Boolean(blocked)} onChange={(e) => setPick(e.target.value)}
-          className="px-2 py-1 text-2xs rounded-md border disabled:opacity-50" style={inputStyle}>
+        <StatusChip tone={backend === 'classic' ? 'muted' : 'info'}>{backend}</StatusChip>
+        <select
+          value={chosen}
+          disabled={Boolean(blocked)}
+          aria-label="Exomiser path"
+          onChange={(e) => setPick(e.target.value)}
+          className={cn(selectCls, 'max-md:h-10')}
+        >
           {options.map((b) => <option key={b} value={b}>{b}</option>)}
         </select>
-        <button type="button" disabled={Boolean(blocked) || chosen === backend} onClick={save}
-          className={secondaryButtonClass} style={secondaryButtonStyle}>Apply</button>
+        <Button variant="outline" size="sm" disabled={Boolean(blocked) || chosen === backend} onClick={save} className="max-md:h-10">Apply…</Button>
       </div>
-      <div className="text-2xs mt-1" style={mutedText}>{BACKEND_TEXT[backend] || backend}</div>
-    </div>
-  );
-}
-
-function ToggleRow({ label, help, configKey, exomiser, fallback = false, blocked, onRequest, danger, onWhenText, offWhenText }) {
-  const on = Boolean(cfg(exomiser, configKey, fallback));
-  return (
-    <div className="flex items-start justify-between gap-3 py-2 border-b" style={cellStyle}>
-      <div>
-        <div className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{label}: {on ? 'ON' : 'off'}</div>
-        <div className="text-2xs" style={mutedText}>{help}</div>
-      </div>
-      <button type="button" disabled={Boolean(blocked)}
-        onClick={() => writeRequest(configKey, label, on ? 'on' : 'off', on ? 'off' : 'on', onRequest, {
-          value: !on,
-          danger: danger && !on,
-          note: on ? offWhenText : onWhenText,
-        })}
-        className={secondaryButtonClass} style={danger && !on ? dangerButtonStyle : secondaryButtonStyle}>
-        Turn {on ? 'off' : 'on'}
-      </button>
-    </div>
-  );
-}
-
-function CanaryEditor({ exomiser, blocked, onRequest }) {
-  const users = cfg(exomiser, EXOMISER_KEYS.canaryUsers, []);
-  const backend = cfg(exomiser, EXOMISER_KEYS.canaryBackend, 'shadow');
-  const [text, setText] = useState(null);
-  const [pick, setPick] = useState(null);
-  const draft = text ?? users.join('\n');
-  const list = parseCanaryUsers(draft);
-  const chosen = pick ?? backend;
-  const disabled = Boolean(blocked);
-  const same = JSON.stringify(list) === JSON.stringify(users);
-  return (
-    <div className="mt-3">
-      <div className="text-xs font-medium mb-1" style={{ color: 'var(--text-primary)' }}>Canary accounts</div>
-      <p className="text-2xs mb-1" style={mutedText}>
-        These accounts (email or user id, one per line) get the path below regardless of the setting above. <strong>fast</strong> serves them from the
-        fast engine: use it only for your own and test accounts until the licence question is answered.
-      </p>
-      <div className="flex flex-wrap items-start gap-2">
-        <textarea value={draft} rows={3} disabled={disabled} onChange={(e) => setText(e.target.value)}
-          className="px-2 py-1 text-2xs rounded-md border min-w-[240px] disabled:opacity-50" style={inputStyle} />
-        <select value={chosen} disabled={disabled} onChange={(e) => setPick(e.target.value)}
-          className="px-2 py-1 text-2xs rounded-md border disabled:opacity-50" style={inputStyle}>
-          {EXOMISER_CANARY_BACKENDS.map((b) => <option key={b} value={b}>{b}</option>)}
-        </select>
-        <div className="flex flex-col gap-1">
-          <button type="button" disabled={disabled || same} className={secondaryButtonClass} style={secondaryButtonStyle}
-            onClick={() => writeRequest(EXOMISER_KEYS.canaryUsers, 'Canary accounts', users, list, onRequest)}>Save accounts</button>
-          <button type="button" disabled={disabled || chosen === backend} className={secondaryButtonClass}
-            style={chosen === 'fast' ? dangerButtonStyle : secondaryButtonStyle}
-            onClick={() => writeRequest(EXOMISER_KEYS.canaryBackend, 'Canary path', backend, chosen, onRequest, {
-              danger: chosen === 'fast',
-              note: chosen === 'fast'
-                ? 'The canary accounts get their Exomiser result from the fast engine (re-run once on the normal path if it fails, while the fall-back is on). The licence decision is still open: keep this to your own accounts.'
-                : 'The canary accounts get the normal result; the fast engine runs silently and is compared.',
-            })}>
-            Save path
-          </button>
-        </div>
-      </div>
+      <p className="mt-1 text-2xs text-muted-foreground">{BACKEND_TEXT[backend] || backend}</p>
     </div>
   );
 }
@@ -161,15 +101,17 @@ function ValueRow({ label, help, configKey, exomiser, fallback, blocked, onReque
     writeRequest(configKey, label, format(current), format(parsed.value), onRequest, { value: parsed.value });
   };
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 py-2 border-b" style={cellStyle}>
-      <div className="max-w-md">
-        <div className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{label}: {format(current)}</div>
-        <div className="text-2xs" style={mutedText}>{help}</div>
-        {error && <p className="text-2xs mt-1" style={{ color: 'var(--error)' }}>{error}</p>}
+    <div className="flex flex-wrap items-start justify-between gap-3 border-t border-border py-2.5">
+      <div className="min-w-0 max-w-md">
+        <div className="text-xs font-medium text-foreground">
+          {label}: <span className="tabular-nums">{format(current)}</span>
+        </div>
+        <p className="mt-0.5 text-2xs text-muted-foreground">{help}</p>
+        {error && <p role="alert" className="mt-1 text-2xs text-[var(--error)]">{error}</p>}
       </div>
       <div className="flex items-center gap-2">
-        {input({ text, setText: setDraft, disabled: Boolean(blocked) })}
-        <button type="button" disabled={Boolean(blocked)} onClick={save} className={secondaryButtonClass} style={secondaryButtonStyle}>Save</button>
+        {input({ text, setText: setDraft, disabled: Boolean(blocked), label })}
+        <Button variant="outline" size="sm" disabled={Boolean(blocked)} onClick={save} className="max-md:h-10">Save…</Button>
       </div>
     </div>
   );
@@ -178,60 +120,108 @@ function ValueRow({ label, help, configKey, exomiser, fallback, blocked, onReque
 function GateChips({ gate }) {
   if (!gate) return null;
   const chip = (label, on, extra) => (
-    <span key={label} className="text-2xs px-2 py-0.5 rounded-full border"
-      style={{ borderColor: 'var(--border-default)', color: on ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
+    <StatusChip key={label} tone={on ? 'success' : 'muted'}>
       {label}: {extra ?? (on ? 'on' : 'off')}
-    </span>
+    </StatusChip>
   );
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-2">
+      <h3 className="mb-1.5 flex items-center gap-2 text-xs font-medium text-foreground">
+        Worker gate <StatusChip tone="muted" className="font-normal">Read-only</StatusChip>
+      </h3>
+      <div className="flex flex-wrap items-center gap-1.5">
         {chip('New queue handling', gate.sqs_v2)}
         {chip('Heartbeat', gate.heartbeat)}
         {chip('Fast engines per machine', gate.slots > 0, String(gate.slots))}
         {chip('Shadow polling', gate.shadow)}
         {gate.jar_sha ? chip('Engine build', true, gate.jar_sha) : null}
       </div>
-      <p className="text-2xs mt-1" style={mutedText}>
+      <p className="mt-1 text-2xs text-muted-foreground">
         {gate.legacy
-          ? 'Worker gate: legacy (today\'s behaviour). It is changed on the machines with an admin command, not from this page.'
-          : `Worker gate (read only)${gate.changed_at ? `, changed ${fmtRelative(gate.changed_at)}` : ''}. It is changed with an admin command, not from this page.`}
+          ? 'Legacy (today\'s behaviour). It is changed on the machines with an admin command, not from this page.'
+          : `${gate.changed_at ? `Changed ${fmtRelative(gate.changed_at)}. ` : ''}It is changed with an admin command, not from this page.`}
       </p>
     </div>
   );
 }
 
+const smallInput = (extra) => cn(inputCls, 'max-md:h-10', extra);
+
 /**
  * Exomiser fast path: which path serves Exomiser jobs, plus the fast engine's health. The normal path is the default and the
  * answer to every error; the kill switch forces it everywhere within ~45 s. `fast` is for canary accounts only until the
- * licence question is answered.
+ * licence question is answered. `lastChange` (optional) is the newest matching audit row.
  */
-export default function ExomiserFastCard({ exomiser, errors, blockedReason, onRequest }) {
+export default function ExomiserFastCard({ exomiser, errors, blockedReason, onRequest, lastChange }) {
   const panelErrors = Object.entries(errors || {}).filter(([k]) => k === 'exomiser_fast' || k.startsWith('exomiser_fast.'));
   const blocked = blockedReason || (errors?.exomiser_fast ? errors.exomiser_fast : null) || (exomiser ? null : 'no Exomiser data');
-  if (!exomiser) return <Unavailable reason={blocked} />;
+  const help = (
+    <HelpPopover title="Exomiser fast path" align="start">
+      <HelpBody what={SECTION_HELP.exomiserFast.what} items={SECTION_HELP.exomiserFast.items} />
+    </HelpPopover>
+  );
+  if (!exomiser) {
+    return <Panel title="Exomiser fast path" help={help}><Unavailable reason={blocked} /></Panel>;
+  }
   const parity = exomiser.parity;
   const slots = exomiser.slots;
   const dlqCount = exomiser.shadow_dlq ? (exomiser.shadow_dlq.visible || 0) + (exomiser.shadow_dlq.in_flight || 0) : null;
+  const killOn = Boolean(cfg(exomiser, EXOMISER_KEYS.kill, false));
+  const backend = cfg(exomiser, EXOMISER_KEYS.backend, 'classic');
+
+  let chip;
+  if (killOn) chip = { tone: 'warning', text: 'Kill switch on: normal path everywhere' };
+  else if (dlqCount) chip = { tone: 'error', text: `${dlqCount} failed shadow job${dlqCount === 1 ? '' : 's'}` };
+  else if (backend === 'classic') chip = { tone: 'success', text: 'Normal path serving' };
+  else chip = { tone: 'info', text: `Path: ${backend}` };
+
+  const toggle = (label, configKey, fallback, { danger, onWhenText, offWhenText }) => {
+    const on = Boolean(cfg(exomiser, configKey, fallback));
+    writeRequest(configKey, label, on ? 'on' : 'off', on ? 'off' : 'on', onRequest, {
+      value: !on,
+      danger: danger && !on,
+      confirmLabel: `Turn ${on ? 'off' : 'on'}`,
+      note: on ? offWhenText : onWhenText,
+    });
+  };
+  const row = (label, configKey, fallback, opts) => (
+    <ToggleRow
+      label={label}
+      on={Boolean(cfg(exomiser, configKey, fallback))}
+      blocked={blocked}
+      danger={opts.danger}
+      help={opts.help}
+      onToggle={() => toggle(label, configKey, fallback, opts)}
+    />
+  );
+
   return (
-    <div className="rounded-xl border p-4 space-y-4" style={cardStyle}>
-      <p className="text-2xs" style={{ color: 'var(--warning)' }}>
+    <Panel
+      title="Exomiser fast path"
+      badge={<StatusChip tone={chip.tone}>{chip.text}</StatusChip>}
+      help={help}
+      bodyClassName="flex flex-col gap-4"
+    >
+      <Banner tone="warning">
         Licence decision pending: Exomiser is AGPL-3.0. The fast engine is for canary / admin accounts only; the main selector does not offer it.
-      </p>
+      </Banner>
       {!exomiser.shadow_queue_configured && (
-        <p className="text-2xs" style={{ color: 'var(--warning)' }}>
+        <Banner tone="warning">
           Shadow runs are not wired to this API (no shadow queue configured), so only the normal path runs whatever is set below.
-        </p>
+        </Banner>
       )}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-4">
         <Stat label="Shadow queue" value={depth(exomiser.shadow_queue)} />
-        <Stat label="Shadow failed (dead-letter)" value={dlqCount === null ? '—' : String(dlqCount)}
-          tone={dlqCount ? 'var(--error)' : undefined} />
-        <Stat label="Slots busy / total" value={slots && slots.total !== null ? `${slots.busy ?? 0} / ${slots.total}` : '—'} />
-        <Stat label="Last compare" value={parity?.last_at ? fmtRelative(parity.last_at) : '—'} />
+        <Stat
+          label="Shadow failed (dead-letter)"
+          value={dlqCount === null ? '–' : String(dlqCount)}
+          tone={dlqCount ? toneText('error') : undefined}
+        />
+        <Stat label="Slots busy / total" value={slots && slots.total !== null ? `${slots.busy ?? 0} / ${slots.total}` : '–'} />
+        <Stat label="Last compare" value={parity?.last_at ? fmtRelative(parity.last_at) : '–'} />
       </div>
       {parity && (
-        <p className="text-2xs" style={mutedText}>
+        <p className="text-2xs text-muted-foreground">
           Last {parity.shown} shadow comparisons: {parity.match} identical, {parity.noise} within normal Exomiser noise, {parity.mismatch} different
           {parity.mismatch ? ' (do not serve from the fast engine until this is 0: see the alarm)' : ''}.
           {parity.p_value_crossings || parity.acmg_tie_flips || parity.tier_changes
@@ -242,51 +232,97 @@ export default function ExomiserFastCard({ exomiser, errors, blockedReason, onRe
       )}
       <GateChips gate={exomiser.gate} />
 
-      <PathRow exomiser={exomiser} blocked={blocked} onRequest={onRequest} />
-      <CanaryEditor exomiser={exomiser} blocked={blocked} onRequest={onRequest} />
+      <ChangeLine by={lastChange?.actor} at={lastChange?.at} reason={lastChange?.reason} />
 
-      <div>
-        <ToggleRow label="Kill switch" configKey={EXOMISER_KEYS.kill} exomiser={exomiser} blocked={blocked} onRequest={onRequest} danger
-          help="Force every new Exomiser job back to the normal path, everywhere, within ~45 s, and stop shadow runs. Jobs already running finish where they started."
-          onWhenText="All new Exomiser jobs use the normal path, including canary accounts."
-          offWhenText="The paths set above apply again." />
-        <ToggleRow label="Fall back to the normal path on failure" configKey={EXOMISER_KEYS.fallback} fallback exomiser={exomiser} blocked={blocked}
+      <PathRow exomiser={exomiser} blocked={blocked} onRequest={onRequest} />
+
+      <CanaryEditor
+        users={cfg(exomiser, EXOMISER_KEYS.canaryUsers, [])}
+        backend={cfg(exomiser, EXOMISER_KEYS.canaryBackend, 'shadow')}
+        options={EXOMISER_CANARY_BACKENDS}
+        blocked={blocked}
+        dangerValue="fast"
+        intro={(
+          <>
+            These accounts get the path below regardless of the setting above. <strong className="font-medium text-foreground">fast</strong> serves them from the
+            fast engine: use it only for your own and test accounts until the licence question is answered.
+          </>
+        )}
+        onSaveUsers={(users, list) => writeRequest(EXOMISER_KEYS.canaryUsers, 'Canary accounts', users, list, onRequest, { confirmLabel: 'Save accounts' })}
+        onSavePath={(current, chosen) => writeRequest(EXOMISER_KEYS.canaryBackend, 'Canary path', current, chosen, onRequest, {
+          danger: chosen === 'fast',
+          confirmLabel: `Serve canaries from ${chosen}`,
+          note: chosen === 'fast'
+            ? 'The canary accounts get their Exomiser result from the fast engine (re-run once on the normal path if it fails, while the fall-back is on). The licence decision is still open: keep this to your own accounts.'
+            : 'The canary accounts get the normal result; the fast engine runs silently and is compared.',
+        })}
+      />
+
+      <div className="border-t border-border pt-1">
+        {row('Kill switch', EXOMISER_KEYS.kill, false, {
+          danger: true,
+          help: 'Force every new Exomiser job back to the normal path, everywhere, within ~45 s, and stop shadow runs. Jobs already running finish where they started.',
+          onWhenText: 'All new Exomiser jobs use the normal path, including canary accounts.',
+          offWhenText: 'The paths set above apply again.',
+        })}
+        {row('Fall back to the normal path on failure', EXOMISER_KEYS.fallback, true, {
+          help: 'If a job fails on the fast engine, run it once more on the normal path instead of showing a failure.',
+          onWhenText: 'A failed fast-engine job is re-run once on the normal path.',
+          offWhenText: 'A failed fast-engine job fails for the user.',
+        })}
+        {row('Compare shadow results', EXOMISER_KEYS.shadowParity, true, {
+          help: 'After a shadowed job, compare the two result tables and record the outcome (counts only).',
+          onWhenText: 'Each shadowed job is compared; real differences raise an alarm.',
+          offWhenText: 'Shadow jobs still run but are not compared.',
+        })}
+        <ValueRow
+          label="Shadow rate"
+          configKey={EXOMISER_KEYS.shadowRate}
+          fallback={1}
+          exomiser={exomiser}
+          blocked={blocked}
           onRequest={onRequest}
-          help="If a job fails on the fast engine, run it once more on the normal path instead of showing a failure."
-          onWhenText="A failed fast-engine job is re-run once on the normal path." offWhenText="A failed fast-engine job fails for the user." />
-        <ToggleRow label="Compare shadow results" configKey={EXOMISER_KEYS.shadowParity} fallback exomiser={exomiser} blocked={blocked}
-          onRequest={onRequest}
-          help="After a shadowed job, compare the two result tables and record the outcome (counts only)."
-          onWhenText="Each shadowed job is compared; real differences raise an alarm." offWhenText="Shadow jobs still run but are not compared." />
-        <ValueRow label="Shadow rate" configKey={EXOMISER_KEYS.shadowRate} fallback={1} exomiser={exomiser} blocked={blocked}
-          onRequest={onRequest} parse={parseShadowRate}
+          parse={parseShadowRate}
           help="Share of eligible jobs that also get a shadow run: 0 = none, 1 = every job."
-          input={({ text, setText, disabled }) => (
-            <input value={text} disabled={disabled} onChange={(e) => setText(e.target.value)} inputMode="decimal"
-              className="px-2 py-1 text-2xs rounded-md border w-20 disabled:opacity-50" style={inputStyle} />
-          )} />
-        <ValueRow label="Jobs one machine runs at once (for scaling)" configKey={EXOMISER_KEYS.nominalSlots} fallback={1} exomiser={exomiser}
-          blocked={blocked} onRequest={onRequest} parse={parseNominalSlots}
+          input={({ text, setText, disabled, label }) => (
+            <input value={text} disabled={disabled} aria-label={label} onChange={(e) => setText(e.target.value)} inputMode="decimal" className={smallInput('w-20')} />
+          )}
+        />
+        <ValueRow
+          label="Jobs one machine runs at once (for scaling)"
+          configKey={EXOMISER_KEYS.nominalSlots}
+          fallback={1}
+          exomiser={exomiser}
+          blocked={blocked}
+          onRequest={onRequest}
+          parse={parseNominalSlots}
           help={`Used to decide how many machines to start for a backlog (${EXOMISER_SLOTS_RANGE[0]} = today's behaviour). Set it to the number of fast engines per machine only once those are running.`}
-          input={({ text, setText, disabled }) => (
-            <input value={text} disabled={disabled} onChange={(e) => setText(e.target.value)} inputMode="numeric"
-              className="px-2 py-1 text-2xs rounded-md border w-16 disabled:opacity-50" style={inputStyle} />
-          )} />
-        <ValueRow label="Output files" configKey={EXOMISER_KEYS.outputFormats} fallback="all" exomiser={exomiser} blocked={blocked}
-          onRequest={onRequest} parse={(t) => (EXOMISER_OUTPUT_FORMATS.includes(t) ? { value: t } : { error: 'Choose all or tsv_variant.' })}
+          input={({ text, setText, disabled, label }) => (
+            <input value={text} disabled={disabled} aria-label={label} onChange={(e) => setText(e.target.value)} inputMode="numeric" className={smallInput('w-16')} />
+          )}
+        />
+        <ValueRow
+          label="Output files"
+          configKey={EXOMISER_KEYS.outputFormats}
+          fallback="all"
+          exomiser={exomiser}
+          blocked={blocked}
+          onRequest={onRequest}
+          parse={(t) => (EXOMISER_OUTPUT_FORMATS.includes(t) ? { value: t } : { error: 'Choose all or tsv_variant.' })}
           help={'"all" keeps every Exomiser output file; "tsv_variant" writes only the table the app reads.'}
-          input={({ text, setText, disabled }) => (
-            <select value={text} disabled={disabled} onChange={(e) => setText(e.target.value)}
-              className="px-2 py-1 text-2xs rounded-md border disabled:opacity-50" style={inputStyle}>
+          input={({ text, setText, disabled, label }) => (
+            <select value={text} disabled={disabled} aria-label={label} onChange={(e) => setText(e.target.value)} className={cn(selectCls, 'max-md:h-10')}>
               {EXOMISER_OUTPUT_FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
-          )} />
+          )}
+        />
       </div>
+
       {panelErrors.length > 0 && (
-        <p className="text-2xs" style={{ color: 'var(--warning)' }}>
+        <Banner tone="warning">
           Some readings are unavailable: {panelErrors.map(([k, v]) => `${k.replace('exomiser_fast.', '')} (${v})`).join('; ')}.
-        </p>
+        </Banner>
       )}
-    </div>
+    </Panel>
   );
 }

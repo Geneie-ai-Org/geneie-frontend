@@ -1,7 +1,10 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Navigate } from 'react-router-dom';
+import { RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useSeo } from '@/hooks/useSeo';
+import { Button } from '@/components/ui/button';
 import {
   adminDeleteWaitlistEntry,
   adminGetBetaSeats,
@@ -14,6 +17,16 @@ import {
   adminSetWaitlistStatus,
   adminWhoAmI,
 } from '@/services/backendApi';
+import { AdminFrame, AdminHeader, Banner, HelpBody, HelpPopover } from '@/components/admin/adminUi';
+import UsersTable from '@/components/admin/UsersTable';
+import { SeatCards, WaitlistTable } from '@/components/admin/BetaWaitlist';
+import {
+  ChangePlanDialog,
+  DeleteWaitlistDialog,
+  QuotasDialog,
+  ResetDevicesDialog,
+  SeatsDialog,
+} from '@/components/admin/UserDialogs';
 
 /**
  * Unlisted internal tool for managing tiers and seeding closed-beta testers.
@@ -28,6 +41,10 @@ import {
  * the waitlist below; setting someone to `beta` here writes the full quota block and
  * claims one of the configured seats. Demoting them releases it.
  *
+ * Every state-changing action (reset devices, change plan, quota edits, seat total,
+ * waitlist delete) goes through a confirm dialog that names the account, says what will be
+ * written and whether it can be undone. The handlers and API calls underneath are unchanged.
+ *
  * There is no nav entry to this page by design — it is reached by typing the URL, and the
  * real access control is the server-side admin check, not this component's gate.
  */
@@ -36,8 +53,6 @@ import {
 const PLANS = ['free', 'beta', 'pro', 'super_pro'];
 
 const MAX_USERS = 500;
-
-const WAITLIST_STATUSES = ['new', 'contacted', 'invited', 'declined'];
 
 const MAX_WAITLIST = 200;
 
@@ -69,21 +84,9 @@ const QUOTA_FIELDS = [
   { key: 'filterAppliesRemaining', label: 'ACMG/Phenotype left' },
 ];
 
-const PLAN_COLORS = {
-  beta: 'var(--accent-teal)',
-  pro: 'var(--success)',
-  super_pro: 'var(--success)',
-  admin: 'var(--warning)',
-  free: 'var(--text-tertiary)',
-};
+const UNDO_TOAST_MS = 10000;
 
-const inputStyle = {
-  backgroundColor: 'var(--bg-surface)',
-  borderColor: 'var(--border-default)',
-  color: 'var(--text-primary)',
-};
-
-const cellStyle = { borderColor: 'var(--border-subtle)' };
+const undoToast = (onClick) => ({ label: 'Undo', onClick });
 
 const AdminPage = () => {
   useSeo({ title: 'Admin · Geneie', description: 'Internal tool', path: '/admin-haha', noindex: true });
@@ -110,15 +113,17 @@ const AdminPage = () => {
   }, [isAuthReady, userId]);
 
   const [users, setUsers] = useState(null);
+  const [listMeta, setListMeta] = useState({ total: 0, truncated: false });
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState(null); // { type: 'ok' | 'error', text }
+  const [status, setStatus] = useState(null); // { type: 'ok' | 'error', text }; only errors are shown
   const [filter, setFilter] = useState('');
   const [planFilter, setPlanFilter] = useState('all');
-  const [expandedUid, setExpandedUid] = useState(null);
-  const [draft, setDraft] = useState({});
   const [seats, setSeats] = useState(null); // { seats, betaUserCount, waitlistCount }
   const [seatDraft, setSeatDraft] = useState('');
   const [waitlist, setWaitlist] = useState(null);
+  /* The one open confirm dialog: { type: 'devices' | 'plan' | 'quotas' | 'seats' | 'waitlist-delete', ... }.
+   * Held here, not in the row menu, because a dialog inside the menu would unmount with it. */
+  const [pending, setPending] = useState(null);
 
   const loadUsers = useCallback(async () => {
     setBusy(true);
@@ -130,6 +135,7 @@ const AdminPage = () => {
       // no email, which are exactly the ones most likely to need attention.
       rows.sort((a, b) => (a.email || '').localeCompare(b.email || ''));
       setUsers(rows);
+      setListMeta({ total: data.total ?? rows.length, truncated: Boolean(data.nextCursor) });
       setStatus({
         type: 'ok',
         text: data.nextCursor
@@ -171,6 +177,8 @@ const AdminPage = () => {
     loadWaitlist();
   }, [isAuthReady, isAllowed, loadUsers, loadSeats, loadWaitlist]);
 
+  /* Resolves { ok: true, text } or { ok: false, error } so a confirm dialog can stay open
+   * and show the server's message instead of closing on a failed write. */
   const applyChange = useCallback(async (uid, mutate, successText) => {
     setBusy(true);
     setStatus(null);
@@ -179,63 +187,43 @@ const AdminPage = () => {
       // Patch in place so the table reflects the write without a full reload.
       setUsers((prev) => (prev || []).map((u) => (u.uid === uid ? { ...u, ...updated } : u)));
       setStatus({ type: 'ok', text: successText });
+      return { ok: true, text: successText };
     } catch (error) {
-      setStatus({ type: 'error', text: error.message || 'Update failed.' });
+      const message = error.message || 'Update failed.';
+      setStatus({ type: 'error', text: message });
+      return { ok: false, error: message };
     } finally {
       setBusy(false);
     }
   }, []);
 
-  const openEditor = useCallback((user) => {
-    if (expandedUid === user.uid) {
-      setExpandedUid(null);
-      return;
-    }
-    setExpandedUid(user.uid);
-    setDraft(
-      QUOTA_FIELDS.reduce((acc, f) => {
-        acc[f.key] = user[f.key] ?? '';
-        return acc;
-      }, {}),
-    );
-  }, [expandedUid]);
+  const saveQuotas = useCallback((uid, fields) => applyChange(
+    uid,
+    () => adminSetCounters(uid, fields),
+    "Quotas updated. Takes effect on the tester's next API request.",
+  ), [applyChange]);
 
-  const saveQuotas = useCallback((uid) => {
-    const fields = {};
-    for (const f of QUOTA_FIELDS) {
-      const raw = draft[f.key];
-      if (raw === '' || raw === null || raw === undefined) continue;
-      const n = Number(raw);
-      if (Number.isFinite(n)) fields[f.key] = n;
-    }
-    if (Object.keys(fields).length === 0) {
-      setStatus({ type: 'error', text: 'Nothing to write.' });
-      return;
-    }
-    applyChange(
-      uid,
-      () => adminSetCounters(uid, fields),
-      "Quotas updated. Takes effect on the tester's next API request.",
-    );
-  }, [draft, applyChange]);
-
-  const saveSeatTotal = useCallback(async () => {
-    const total = Number(seatDraft);
+  /** `totalOverride` lets an Undo restore the previous total without touching the draft. */
+  const saveSeatTotal = useCallback(async (totalOverride) => {
+    const total = Number(totalOverride ?? seatDraft);
     if (!Number.isFinite(total) || total < 0) {
-      setStatus({ type: 'error', text: 'Seats must be a number, 0 or more.' });
-      return;
+      const error = 'Seats must be a number, 0 or more.';
+      setStatus({ type: 'error', text: error });
+      return { ok: false, error };
     }
     setBusy(true);
     setStatus(null);
     try {
       const updated = await adminSetBetaSeats(Math.floor(total));
       setSeats((prev) => ({ ...(prev || {}), seats: updated }));
-      setStatus({
-        type: 'ok',
-        text: `Beta seats set to ${updated.total} — ${updated.remaining} left.`,
-      });
+      setSeatDraft(String(updated.total ?? ''));
+      const text = `Beta seats set to ${updated.total} — ${updated.remaining} left.`;
+      setStatus({ type: 'ok', text });
+      return { ok: true, text };
     } catch (error) {
-      setStatus({ type: 'error', text: error.message || 'Could not update seats.' });
+      const message = error.message || 'Could not update seats.';
+      setStatus({ type: 'error', text: message });
+      return { ok: false, error: message };
     } finally {
       setBusy(false);
     }
@@ -243,17 +231,19 @@ const AdminPage = () => {
 
   /* Seat accounting is server-side: the plan endpoint claims or releases a seat, so the
    * counter has to be re-read after a plan change rather than adjusted here. */
-  const changePlan = useCallback((user, next) => {
+  const changePlan = useCallback(async (user, next) => {
     const plan = user.planStatus || 'free';
-    applyChange(
+    // The API seeds the full beta quota block; a bare plan flip would leave a beta user
+    // with no quotas at all.
+    const result = await applyChange(
       user.uid,
       () => adminSetPlan(user.uid, next),
       next === 'beta'
         ? `${user.email || user.uid} promoted to beta with full quotas.`
         : `${user.email || user.uid} set to ${next}.`,
-    ).then(() => {
-      if (next === 'beta' || plan === 'beta') loadSeats();
-    });
+    );
+    if (next === 'beta' || plan === 'beta') loadSeats();
+    return result;
   }, [applyChange, loadSeats]);
 
   const updateWaitlistEntry = useCallback(async (entryId, nextStatus) => {
@@ -262,9 +252,13 @@ const AdminPage = () => {
     try {
       const entry = await adminSetWaitlistStatus(entryId, nextStatus);
       setWaitlist((prev) => (prev || []).map((e) => (e.id === entryId ? { ...e, ...entry } : e)));
-      setStatus({ type: 'ok', text: `${entry.email} marked ${entry.status}.` });
+      const text = `${entry.email} marked ${entry.status}.`;
+      setStatus({ type: 'ok', text });
+      return { ok: true, text };
     } catch (error) {
-      setStatus({ type: 'error', text: error.message || 'Could not update the entry.' });
+      const message = error.message || 'Could not update the entry.';
+      setStatus({ type: 'error', text: message });
+      return { ok: false, error: message };
     } finally {
       setBusy(false);
     }
@@ -277,13 +271,119 @@ const AdminPage = () => {
       await adminDeleteWaitlistEntry(entry.id);
       setWaitlist((prev) => (prev || []).filter((e) => e.id !== entry.id));
       setSeats((prev) => (prev ? { ...prev, waitlistCount: Math.max(0, (prev.waitlistCount || 1) - 1) } : prev));
-      setStatus({ type: 'ok', text: `${entry.email} removed from the waitlist.` });
+      const text = `${entry.email} removed from the waitlist.`;
+      setStatus({ type: 'ok', text });
+      return { ok: true, text };
     } catch (error) {
-      setStatus({ type: 'error', text: error.message || 'Could not delete the entry.' });
+      const message = error.message || 'Could not delete the entry.';
+      setStatus({ type: 'error', text: message });
+      return { ok: false, error: message };
     } finally {
       setBusy(false);
     }
   }, []);
+
+  /* ---- confirmed actions: run the handler, then tell the admin what happened ---- */
+
+  const confirmResetDevices = useCallback(async (user) => {
+    const label = user.email || user.uid;
+    const result = await applyChange(
+      user.uid,
+      () => adminResetDevices(user.uid),
+      `Devices cleared for ${label}. They can sign in anywhere again.`,
+    );
+    if (!result.ok) { setStatus(null); return result; }
+    // No Undo: the previous device list is not kept anywhere.
+    toast.success(`Devices reset for ${label}`, {
+      description: 'They can sign in anywhere again. Recorded in the audit log.',
+    });
+    return result;
+  }, [applyChange]);
+
+  const confirmChangePlan = useCallback(async (user, next, { undoable }) => {
+    const label = user.email || user.uid;
+    const prev = user.planStatus || 'free';
+    const result = await changePlan(user, next);
+    if (!result.ok) { setStatus(null); return result; }
+    toast.success(`${label} set to ${next}`, {
+      description: next === 'beta' ? 'Full beta quotas seeded. Recorded in the audit log.' : 'Recorded in the audit log.',
+      duration: undoable ? UNDO_TOAST_MS : undefined,
+      action: undoable
+        ? undoToast(async () => {
+          const back = await changePlan({ ...user, planStatus: next }, prev);
+          if (back.ok) toast.success(`${label} restored to ${prev}`);
+          else toast.error(`Could not undo: ${back.error}`);
+        })
+        : undefined,
+    });
+    return result;
+  }, [changePlan]);
+
+  const confirmQuotas = useCallback(async (user, changes, { undoable }) => {
+    const label = user.email || user.uid;
+    const fields = Object.fromEntries(changes.map((c) => [c.key, c.after]));
+    const result = await saveQuotas(user.uid, fields);
+    if (!result.ok) { setStatus(null); return result; }
+    const previous = Object.fromEntries(changes.map((c) => [c.key, c.before]));
+    toast.success(`Quotas updated for ${label}`, {
+      description: 'Takes effect on their next API request. Recorded in the audit log.',
+      duration: undoable ? UNDO_TOAST_MS : undefined,
+      action: undoable
+        ? undoToast(async () => {
+          const back = await saveQuotas(user.uid, previous);
+          if (back.ok) toast.success(`Quotas restored for ${label}`);
+          else toast.error(`Could not undo: ${back.error}`);
+        })
+        : undefined,
+    });
+    return result;
+  }, [saveQuotas]);
+
+  const confirmSeats = useCallback(async (total, previousTotal) => {
+    const result = await saveSeatTotal(total);
+    if (!result.ok) { setStatus(null); return result; }
+    toast.success(result.text, {
+      duration: UNDO_TOAST_MS,
+      action: typeof previousTotal === 'number'
+        ? undoToast(async () => {
+          const back = await saveSeatTotal(previousTotal);
+          if (back.ok) toast.success(`Beta seats restored to ${previousTotal}`);
+          else toast.error(`Could not undo: ${back.error}`);
+        })
+        : undefined,
+    });
+    return result;
+  }, [saveSeatTotal]);
+
+  const changeWaitlistStatus = useCallback(async (entry, next) => {
+    const previous = entry.status || 'new';
+    if (next === previous) return;
+    const result = await updateWaitlistEntry(entry.id, next);
+    if (!result.ok) { toast.error(result.error); return; }
+    toast.success(result.text, {
+      duration: UNDO_TOAST_MS,
+      action: undoToast(async () => {
+        const back = await updateWaitlistEntry(entry.id, previous);
+        if (!back.ok) toast.error(`Could not undo: ${back.error}`);
+      }),
+    });
+  }, [updateWaitlistEntry]);
+
+  const confirmDeleteWaitlist = useCallback(async (entry) => {
+    const result = await removeWaitlistEntry(entry);
+    if (!result.ok) { setStatus(null); return result; }
+    toast.success(result.text);
+    return result;
+  }, [removeWaitlistEntry]);
+
+  const openAction = useCallback((type, user) => setPending({ type, user }), []);
+
+  const openSeats = useCallback(() => {
+    setSeatDraft(String(seats?.seats?.total ?? ''));
+    setPending({ type: 'seats' });
+  }, [seats]);
+
+  const closePending = useCallback(() => setPending(null), []);
 
   const visible = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -306,363 +406,136 @@ const AdminPage = () => {
   if (!isAuthReady || userLoading || isAllowed === null) return null;
   if (!isAllowed) return <Navigate to="/app" replace />;
 
+  const loadedCount = (users || []).length;
+
   return (
-    <div className="min-h-screen px-6 py-10" style={{ backgroundColor: 'var(--bg-app)' }}>
-      <div className="mx-auto w-full max-w-5xl">
-        <div className="flex items-baseline justify-between gap-4 mb-1">
-          <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
-            Users &amp; tiers
-          </h1>
-          <div className="flex items-center gap-3">
-            <Link to="/admin-haha/infra" className="text-xs underline" style={{ color: 'var(--text-secondary)' }}>
-              Infra &rarr;
-            </Link>
-            <button
-              type="button"
-              onClick={loadUsers}
-              disabled={busy}
-              className="text-xs px-3 py-1.5 rounded-lg border disabled:opacity-50"
-              style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-            >
-              {busy ? 'Working…' : 'Reload'}
-            </button>
-          </div>
-        </div>
-        <p className="text-xs mb-5" style={{ color: 'var(--text-tertiary)' }}>
-          Signup always creates <code>planStatus: "free"</code> — seats are never handed out
-          automatically. People apply from the landing page; you grant a seat by setting them
-          to <code>beta</code> here, which claims one. Takes effect on their next API request.
-        </p>
+    <AdminFrame>
+      <AdminHeader
+        current="users"
+        title="Users"
+        subtitle={users === null
+          ? 'Loading…'
+          : listMeta.truncated
+            ? `${loadedCount} of ${listMeta.total} users loaded`
+            : `${loadedCount} user${loadedCount === 1 ? '' : 's'}`}
+        help={(
+          <HelpPopover title="Users and tiers" align="start">
+            <HelpBody
+              what="Signup always creates a free account. Seats are never handed out automatically."
+              items={[
+                ['Getting a seat', 'People apply from the landing page. You grant a seat by changing their plan to beta, which claims one and seeds the full quota block.'],
+                ['When it applies', 'Plan, quota and device changes take effect on the tester’s next API request.'],
+                ['Confirmations', 'Every change asks you to confirm first and says whether it can be undone. Plan, quota, seat and status changes that can be reversed show an Undo in the toast.'],
+                ['Admin plan', 'The admin plan cannot be assigned from this page.'],
+              ]}
+            />
+          </HelpPopover>
+        )}
+        actions={(
+          <Button variant="outline" size="sm" onClick={loadUsers} disabled={busy}>
+            <RefreshCw className={busy ? 'size-3.5 animate-spin motion-reduce:animate-none' : 'size-3.5'} aria-hidden="true" />
+            {busy ? 'Working…' : 'Reload'}
+          </Button>
+        )}
+      />
 
-        <div
-          className="rounded-xl border p-4 mb-5"
-          style={{ backgroundColor: 'var(--bg-surface-raised)', borderColor: 'var(--border-default)' }}
-        >
-          <div className="flex flex-wrap items-end gap-5">
-            <div>
-              <div className="text-2xs mb-1" style={{ color: 'var(--text-tertiary)' }}>Beta seats</div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  value={seatDraft}
-                  onChange={(e) => setSeatDraft(e.target.value)}
-                  className="w-24 px-2 py-1.5 text-sm rounded-md border tabular-nums"
-                  style={inputStyle}
-                />
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={saveSeatTotal}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg disabled:opacity-50"
-                  style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-
-            <div className="tabular-nums">
-              <div className="text-2xs mb-1" style={{ color: 'var(--text-tertiary)' }}>Claimed</div>
-              <div className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-                {seats?.seats?.claimed ?? '—'}
-              </div>
-            </div>
-
-            <div className="tabular-nums">
-              <div className="text-2xs mb-1" style={{ color: 'var(--text-tertiary)' }}>Left</div>
-              <div
-                className="text-lg font-semibold"
-                style={{ color: seats?.seats?.remaining ? 'var(--accent-teal)' : 'var(--text-secondary)' }}
-              >
-                {seats?.seats?.remaining ?? '—'}
-              </div>
-            </div>
-
-            <div className="tabular-nums">
-              <div className="text-2xs mb-1" style={{ color: 'var(--text-tertiary)' }}>Beta accounts</div>
-              <div className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-                {seats?.betaUserCount ?? '—'}
-              </div>
-            </div>
-
-            <div className="tabular-nums">
-              <div className="text-2xs mb-1" style={{ color: 'var(--text-tertiary)' }}>Waitlist</div>
-              <div className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-                {seats?.waitlistCount ?? '—'}
-              </div>
-            </div>
-          </div>
-
-          {seats && seats.betaUserCount !== seats.seats?.claimed && (
-            /* The counter and the real number of beta accounts are maintained separately,
-             * so a mismatch means a seat was leaked or a plan was changed outside this
-             * tool. Raising or lowering the total is how you bring them back in step. */
-            <p className="text-2xs mt-3" style={{ color: 'var(--warning)' }}>
-              Counter says {seats.seats?.claimed} claimed but there are {seats.betaUserCount} beta
-              accounts. Adjust the total if the beta should stay open for the difference.
-            </p>
-          )}
-          <p className="text-2xs mt-2" style={{ color: 'var(--text-tertiary)' }}>
-            The first {seats?.seats?.total ?? 'N'} signups are provisioned straight into beta. After
-            that, signups land on free and the landing page shows the waitlist form.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 mb-3">
-          <input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter by email, UID or cohort"
-            className="flex-1 min-w-[220px] px-3 py-2 text-sm rounded-lg border"
-            style={inputStyle}
-          />
-          <select
-            value={planFilter}
-            onChange={(e) => setPlanFilter(e.target.value)}
-            className="px-3 py-2 text-sm rounded-lg border"
-            style={inputStyle}
-          >
-            <option value="all">All plans ({(users || []).length})</option>
-            {['free', 'beta', 'pro', 'super_pro', 'admin', 'guest'].map((p) => (
-              <option key={p} value={p}>{p} ({counts[p] || 0})</option>
-            ))}
-          </select>
-        </div>
-
-        {status && (
-          <p
-            className="text-xs mb-4"
-            style={{ color: status.type === 'error' ? 'var(--error)' : 'var(--text-tertiary)' }}
+      {status?.type === 'error' && (
+        <div className="mb-4">
+          <Banner
+            tone="error"
+            action={<Button variant="ghost" size="xs" onClick={() => setStatus(null)}>Dismiss</Button>}
           >
             {status.text}
-          </p>
-        )}
-
-        <div
-          className="rounded-xl border overflow-x-auto"
-          style={{ backgroundColor: 'var(--bg-surface-raised)', borderColor: 'var(--border-default)' }}
-        >
-          <table className="w-full text-left" style={{ minWidth: '760px' }}>
-            <thead>
-              <tr className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                <th className="px-3 py-2 font-medium border-b" style={cellStyle}>User</th>
-                <th className="px-3 py-2 font-medium border-b" style={cellStyle}>Plan</th>
-                <th className="px-3 py-2 font-medium border-b tabular-nums" style={cellStyle}>
-                  M1 / M2 / Chat / Filters
-                </th>
-                <th className="px-3 py-2 font-medium border-b" style={cellStyle}>Set plan</th>
-                <th className="px-3 py-2 font-medium border-b" style={cellStyle} />
-              </tr>
-            </thead>
-            <tbody>
-              {users === null && (
-                <tr><td colSpan={5} className="px-3 py-6 text-xs" style={{ color: 'var(--text-tertiary)' }}>Loading…</td></tr>
-              )}
-              {users !== null && visible.length === 0 && (
-                <tr><td colSpan={5} className="px-3 py-6 text-xs" style={{ color: 'var(--text-tertiary)' }}>No matching users.</td></tr>
-              )}
-              {visible.map((u) => {
-                const plan = u.planStatus || 'free';
-                const isOpen = expandedUid === u.uid;
-                return (
-                  <Fragment key={u.uid}>
-                    <tr className="text-xs align-middle">
-                      <td className="px-3 py-2 border-b" style={cellStyle}>
-                        <div style={{ color: 'var(--text-primary)' }}>{u.email || '(no email)'}</div>
-                        <div className="text-2xs font-mono" style={{ color: 'var(--text-tertiary)' }}>{u.uid}</div>
-                      </td>
-                      <td className="px-3 py-2 border-b" style={cellStyle}>
-                        <span className="font-medium" style={{ color: PLAN_COLORS[plan] || 'var(--text-secondary)' }}>
-                          {plan}
-                        </span>
-                        {u.betaCohort && (
-                          <div className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>{u.betaCohort}</div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 border-b tabular-nums" style={{ ...cellStyle, color: 'var(--text-secondary)' }}>
-                        {u.module1RunsRemaining ?? '—'} / {u.module2RunsRemaining ?? '—'} /{' '}
-                        {u.chatExchangesUsed ?? '—'}
-                        {u.chatExchangesLimit != null ? ` of ${u.chatExchangesLimit}` : ''} /{' '}
-                        {u.filterAppliesRemaining ?? u.acmgExomiserAppliesRemaining ?? '—'}
-                      </td>
-                      <td className="px-3 py-2 border-b" style={cellStyle}>
-                        <select
-                          value={PLANS.includes(plan) ? plan : ''}
-                          disabled={busy}
-                          onChange={(e) => {
-                            const next = e.target.value;
-                            if (!next || next === plan) return;
-                            // The API seeds the full beta quota block; a bare plan flip
-                            // would leave a beta user with no quotas at all.
-                            changePlan(u, next);
-                          }}
-                          className="px-2 py-1 text-2xs rounded-md border"
-                          style={inputStyle}
-                        >
-                          {!PLANS.includes(plan) && <option value="">{plan}</option>}
-                          {PLANS.map((p) => (
-                            <option key={p} value={p}>{p === 'beta' ? 'beta (full seed)' : p}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-3 py-2 border-b text-right" style={cellStyle}>
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => applyChange(
-                              u.uid,
-                              () => adminResetDevices(u.uid),
-                              `Devices cleared for ${u.email || u.uid}. They can sign in anywhere again.`,
-                            )}
-                            className="text-2xs px-2 py-1 rounded-md border disabled:opacity-50"
-                            style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-                          >
-                            Devices
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openEditor(u)}
-                            className="text-2xs px-2 py-1 rounded-md border"
-                            style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-                          >
-                            {isOpen ? 'Close' : 'Quotas'}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-
-                    {isOpen && (
-                      <tr>
-                        <td colSpan={5} className="px-3 py-3 border-b" style={{ ...cellStyle, backgroundColor: 'var(--bg-surface)' }}>
-                          <div className="flex flex-wrap items-end gap-3">
-                            {QUOTA_FIELDS.map((f) => (
-                              <label key={f.key} className="flex flex-col gap-1">
-                                <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>{f.label}</span>
-                                <input
-                                  type="number"
-                                  value={draft[f.key] ?? ''}
-                                  onChange={(e) => setDraft((prev) => ({ ...prev, [f.key]: e.target.value }))}
-                                  className="w-24 px-2 py-1 text-xs rounded-md border tabular-nums"
-                                  style={inputStyle}
-                                />
-                              </label>
-                            ))}
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => saveQuotas(u.uid)}
-                              className="px-3 py-1.5 text-xs font-semibold rounded-lg disabled:opacity-50"
-                              style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
-                            >
-                              Save quotas
-                            </button>
-                          </div>
-                          <p className="text-2xs mt-2" style={{ color: 'var(--text-tertiary)' }}>
-                            Blank = leave unchanged. Raise the &ldquo;remaining&rdquo; fields to top a tester up; lower
-                            &ldquo;Chat used&rdquo; to give chat back.
-                          </p>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+          </Banner>
         </div>
+      )}
 
-        <div className="flex items-baseline justify-between gap-4 mt-10 mb-3">
-          <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-            Waitlist
-          </h2>
-          <button
-            type="button"
-            onClick={loadWaitlist}
-            disabled={busy}
-            className="text-xs px-3 py-1.5 rounded-lg border disabled:opacity-50"
-            style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-          >
-            Reload
-          </button>
-        </div>
+      <div className="space-y-5">
+        <SeatCards
+          seats={seats}
+          busy={busy}
+          onEditTotal={openSeats}
+          onShowBeta={() => { setPlanFilter('beta'); setFilter(''); }}
+        />
 
-        <div
-          className="rounded-xl border overflow-x-auto"
-          style={{ backgroundColor: 'var(--bg-surface-raised)', borderColor: 'var(--border-default)' }}
-        >
-          <table className="w-full text-left" style={{ minWidth: '620px' }}>
-            <thead>
-              <tr className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                <th className="px-3 py-2 font-medium border-b" style={cellStyle}>Email</th>
-                <th className="px-3 py-2 font-medium border-b" style={cellStyle}>Joined</th>
-                <th className="px-3 py-2 font-medium border-b" style={cellStyle}>Source</th>
-                <th className="px-3 py-2 font-medium border-b" style={cellStyle}>Status</th>
-                <th className="px-3 py-2 font-medium border-b" style={cellStyle} />
-              </tr>
-            </thead>
-            <tbody>
-              {waitlist === null && (
-                <tr><td colSpan={5} className="px-3 py-6 text-xs" style={{ color: 'var(--text-tertiary)' }}>Loading…</td></tr>
-              )}
-              {waitlist !== null && waitlist.length === 0 && (
-                <tr><td colSpan={5} className="px-3 py-6 text-xs" style={{ color: 'var(--text-tertiary)' }}>Nobody is waiting.</td></tr>
-              )}
-              {(waitlist || []).map((entry) => (
-                <tr key={entry.id} className="text-xs align-middle">
-                  <td className="px-3 py-2 border-b" style={{ ...cellStyle, color: 'var(--text-primary)' }}>
-                    {entry.email}
-                  </td>
-                  <td className="px-3 py-2 border-b" style={{ ...cellStyle, color: 'var(--text-tertiary)' }}>
-                    {entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : '—'}
-                  </td>
-                  <td className="px-3 py-2 border-b" style={{ ...cellStyle, color: 'var(--text-tertiary)' }}>
-                    {entry.source || '—'}
-                  </td>
-                  <td className="px-3 py-2 border-b" style={cellStyle}>
-                    <select
-                      value={entry.status || 'new'}
-                      disabled={busy}
-                      onChange={(e) => updateWaitlistEntry(entry.id, e.target.value)}
-                      className="px-2 py-1 text-2xs rounded-md border"
-                      style={inputStyle}
-                    >
-                      {WAITLIST_STATUSES.map((st) => (
-                        <option key={st} value={st}>{st}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-3 py-2 border-b text-right" style={cellStyle}>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => removeWaitlistEntry(entry)}
-                      className="text-2xs px-2 py-1 rounded-md border disabled:opacity-50"
-                      style={{ borderColor: 'var(--border-default)', color: 'var(--error)' }}
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <UsersTable
+          users={users}
+          visible={visible}
+          counts={counts}
+          total={listMeta.total}
+          truncated={listMeta.truncated}
+          filter={filter}
+          onFilter={setFilter}
+          planFilter={planFilter}
+          onPlanFilter={setPlanFilter}
+          busy={busy}
+          onAction={openAction}
+        />
 
-        <details className="mt-5">
-          <summary className="text-2xs cursor-pointer" style={{ color: 'var(--text-tertiary)' }}>
+        <WaitlistTable
+          waitlist={waitlist}
+          busy={busy}
+          onReload={loadWaitlist}
+          onStatus={changeWaitlistStatus}
+          onDelete={(entry) => setPending({ type: 'waitlist-delete', entry })}
+        />
+
+        <details className="group rounded-lg border border-border bg-card px-4 py-2.5">
+          <summary className="cursor-pointer text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55">
             Beta seed fields (written server-side when you set a user to beta)
           </summary>
-          <pre
-            className="mt-2 text-2xs overflow-x-auto p-2 rounded-md"
-            style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-secondary)' }}
-          >
+          <pre className="mt-2 overflow-x-auto rounded-md bg-muted p-3 font-mono text-2xs text-muted-foreground">
             {JSON.stringify(BETA_SEED_REFERENCE, null, 2)}
           </pre>
         </details>
       </div>
-    </div>
+
+      {pending?.type === 'devices' && (
+        <ResetDevicesDialog
+          key={pending.user.uid}
+          user={pending.user}
+          onClose={closePending}
+          onConfirm={() => confirmResetDevices(pending.user)}
+        />
+      )}
+      {pending?.type === 'plan' && (
+        <ChangePlanDialog
+          key={pending.user.uid}
+          user={pending.user}
+          plans={PLANS}
+          seats={seats}
+          betaSeedReference={BETA_SEED_REFERENCE}
+          onClose={closePending}
+          onConfirm={(next, opts) => confirmChangePlan(pending.user, next, opts)}
+        />
+      )}
+      {pending?.type === 'quotas' && (
+        <QuotasDialog
+          key={pending.user.uid}
+          user={pending.user}
+          fields={QUOTA_FIELDS}
+          onClose={closePending}
+          onConfirm={(changes, opts) => confirmQuotas(pending.user, changes, opts)}
+        />
+      )}
+      {pending?.type === 'seats' && (
+        <SeatsDialog
+          seats={seats}
+          draft={seatDraft}
+          onDraft={setSeatDraft}
+          onClose={closePending}
+          onConfirm={confirmSeats}
+        />
+      )}
+      {pending?.type === 'waitlist-delete' && (
+        <DeleteWaitlistDialog
+          key={pending.entry.id}
+          entry={pending.entry}
+          onClose={closePending}
+          onConfirm={() => confirmDeleteWaitlist(pending.entry)}
+        />
+      )}
+    </AdminFrame>
   );
 };
 

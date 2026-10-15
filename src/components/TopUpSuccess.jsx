@@ -1,67 +1,69 @@
-import React, { useEffect, useState } from 'react';
-import { CheckCircle, Loader2, Zap } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
+const cleanUrl = () => window.history.replaceState({}, document.title, window.location.pathname);
+
+/**
+ * Calm confirmation after a top-up checkout. Renders as a plain panel (the parent supplies
+ * any overlay): working, then done with one next action.
+ */
 const TopUpSuccess = ({ onClose }) => {
   const [loading, setLoading] = useState(true);
+  // ChatPage passes a fresh inline onClose on every render; keep the countdown independent of it.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     // Wait a moment for webhook to process, then show success
+    let closeTimer;
     const timer = setTimeout(() => {
       setLoading(false);
       // Auto-close after 5 seconds
-      if (onClose) {
-        setTimeout(() => {
-          onClose();
+      if (onCloseRef.current) {
+        closeTimer = setTimeout(() => {
+          onCloseRef.current?.();
           // Clean up URL
-          window.history.replaceState({}, document.title, window.location.pathname);
+          cleanUrl();
         }, 5000);
       }
     }, 2000);
 
-    return () => clearTimeout(timer);
-  }, [onClose]);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(closeTimer);
+    };
+  }, []);
+
+  const handleContinue = () => {
+    if (onClose) onClose();
+    cleanUrl();
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#F9FBFF' }}>
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-8 text-center">
+    <div className="flex min-h-[60dvh] items-center justify-center p-4">
+      <div
+        role="status"
+        aria-live="polite"
+        className="w-full max-w-md rounded-xl border border-border bg-card p-8 text-center shadow-lg"
+      >
         {loading ? (
           <>
-            <Loader2 className="w-16 h-16 animate-spin mx-auto mb-4" style={{ color: '#3E8E7E' }} />
-            <h2 className="text-2xl font-bold mb-2" style={{ color: '#1F2A44' }}>Processing Your Purchase</h2>
-            <p style={{ color: '#5F6F82' }}>Please wait while we confirm your payment...</p>
+            <Loader2 aria-hidden="true" className="mx-auto mb-4 size-8 animate-spin text-muted-foreground motion-reduce:animate-none" />
+            <h2 className="text-base font-medium text-foreground">Confirming your purchase</h2>
+            <p className="mt-1.5 text-sm text-muted-foreground">This usually takes a few seconds.</p>
           </>
         ) : (
           <>
-            <CheckCircle className="w-16 h-16 mx-auto mb-4" style={{ color: '#3E8E7E' }} />
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <Zap className="w-6 h-6" style={{ color: '#2F7F7A' }} />
-              <h2 className="text-2xl font-bold" style={{ color: '#1F2A44' }}>Top-Up Successful! 🎉</h2>
-            </div>
-            <p className="mb-6" style={{ color: '#5F6F82' }}>
-              Your additional database queries have been added to your account. You can now continue using database queries!
+            <CheckCircle2 aria-hidden="true" className="mx-auto mb-4 size-8 text-[var(--success)]" />
+            <h2 className="text-base font-medium text-foreground">Top-up added</h2>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              Your queries are on your account now and don&rsquo;t expire. Your updated balance is in Settings, under Plan and usage.
             </p>
-            <div className="rounded-lg p-4 mb-6" style={{ backgroundColor: '#F1F6F3', border: '1px solid #3E8E7E' }}>
-              <p className="text-sm font-semibold mb-2" style={{ color: '#1F3D2B' }}>What's Next?</p>
-              <ul className="text-sm text-left space-y-1" style={{ color: '#1F3D2B' }}>
-                <li>✓ Queries added to your account</li>
-                <li>✓ No expiration date</li>
-                <li>✓ Ready to use immediately</li>
-                <li>✓ Check your profile to see updated balance</li>
-              </ul>
-            </div>
-            <button
-              onClick={() => {
-                if (onClose) onClose();
-                window.history.replaceState({}, document.title, window.location.pathname);
-              }}
-              className="w-full px-4 py-2 text-white rounded-lg font-semibold transition-colors"
-              style={{ backgroundColor: '#2F7F7A' }}
-              onMouseEnter={(e) => { e.target.style.backgroundColor = '#256B67'; }}
-              onMouseLeave={(e) => { e.target.style.backgroundColor = '#2F7F7A'; }}
-            >
-              Continue to Dashboard
-            </button>
-            <p className="text-sm mt-4" style={{ color: '#5F6F82' }}>Redirecting you automatically...</p>
+            <Button size="lg" className="mt-6 h-10 w-full" onClick={handleContinue} autoFocus>
+              Continue to Geneie
+            </Button>
+            <p className="mt-3 text-xs text-muted-foreground">This closes on its own in a few seconds.</p>
           </>
         )}
       </div>

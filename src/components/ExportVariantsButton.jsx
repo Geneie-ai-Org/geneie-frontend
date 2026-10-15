@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Download, Loader2, RefreshCw } from 'lucide-react';
+import { Download, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { getExportEligibility, exportVariants } from '@/services/backendApi';
 
 /**
@@ -124,11 +125,11 @@ export default function ExportVariantsButton({
   };
 
   const label = isExporting
-    ? 'Exporting…'
+    ? 'Preparing download…'
     : gateBlocked
       ? gateLabel()
       : countMismatch
-        ? 'Counts out of sync — refresh'
+        ? 'Counts out of sync. Refresh'
         : canExport
           ? annotatedOnly
             ? `Download ${rowCount.toLocaleString()} annotated variants`
@@ -142,56 +143,68 @@ export default function ExportVariantsButton({
   const subLine = countMismatch
     ? `Export has ${Number(rowCount).toLocaleString()} rows but this view shows ${Number(uiCount).toLocaleString()}.`
     : gateBlocked && downloadGate?.kind === 'syncing'
-      ? downloadGate.message || 'State syncing after filter change — download unlocks automatically.'
+      ? downloadGate.message || 'State syncing after filter change. Download unlocks automatically.'
     : gateBlocked && downloadGate?.kind === 'enriching'
       ? downloadGate.message || 'Download unlocks when enrichment finishes.'
       : annotatedOnly
-        ? 'Full annotated file — apply a filter to enable chat.'
-        : null;
+        ? 'Full annotated file. Apply a filter to enable chat.'
+        : !canExport && !isLoading && message
+          ? message
+          : null;
 
   const title = countMismatch
-    ? 'Variant counts disagree — refresh before downloading'
+    ? 'Variant counts disagree. Refresh before downloading'
     : gateBlocked
       ? downloadGate?.message || 'A job is still running'
       : canExport
         ? `Download ${rowCount.toLocaleString()} variants as TSV`
         : message;
 
+  // Working states carry a small dot (status), never a spinner beside a label that says otherwise.
+  const working = isExporting || gateBlocked || (isLoading && !eligibility);
+  const interactive = (canExport || countMismatch) && !isExporting && !gateBlocked;
+
   return (
-    <div className="space-y-1.5">
-      <button
+    <div className="space-y-1">
+      <Button
         type="button"
+        variant="link"
+        size="sm"
         onClick={countMismatch ? checkEligibility : handleExport}
-        disabled={(!canExport && !countMismatch) || isExporting}
+        disabled={!interactive}
         title={title}
-        className={`w-full h-10 rounded-lg flex items-center justify-center gap-2 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${
-          canExport && !isExporting
-            ? 'bg-[var(--accent-teal)] text-[var(--bg-app)] hover:brightness-110'
-            : countMismatch
-              ? 'bg-[var(--bg-surface)] text-[var(--error)] hover:brightness-110'
-              : 'bg-[var(--bg-surface)] text-[var(--text-tertiary)] cursor-not-allowed'
-        }`}
+        aria-busy={isExporting || undefined}
+        className={`h-8 max-md:h-11 w-full justify-start gap-1.5 px-1 text-[13px] tabular-nums ${
+          countMismatch ? 'text-[var(--error)]' : interactive ? 'text-primary' : 'text-muted-foreground'
+        } disabled:opacity-100`}
       >
-        {isExporting ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
+        {working ? (
+          <span aria-hidden className="inline-block size-1.5 shrink-0 animate-pulse rounded-full bg-[var(--info)] motion-reduce:animate-none" />
         ) : countMismatch ? (
-          <RefreshCw className="w-4 h-4" />
+          <RefreshCw aria-hidden />
         ) : (
-          <Download className="w-4 h-4" />
+          <Download aria-hidden />
         )}
-        {label}
-      </button>
+        <span className="truncate">{label}</span>
+      </Button>
       {subLine && (
         <p
-          className="text-2xs leading-snug"
-          style={{ color: countMismatch ? 'var(--error)' : 'var(--text-tertiary)' }}
+          className={`px-1 text-2xs leading-snug ${countMismatch ? 'text-[var(--error)]' : 'text-muted-foreground'}`}
         >
           {subLine}
         </p>
       )}
       {error && (
-        <p className="text-2xs text-[var(--error)] truncate" title={error}>
-          {error}
+        <p role="alert" className="flex flex-wrap items-center gap-x-2 px-1 text-2xs leading-snug text-[var(--error)]">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={eligibility ? handleExport : checkEligibility}
+            disabled={isExporting || isLoading}
+            className="rounded font-medium underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50"
+          >
+            Try again
+          </button>
         </p>
       )}
     </div>

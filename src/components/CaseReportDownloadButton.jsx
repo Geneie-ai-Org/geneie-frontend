@@ -1,5 +1,6 @@
 import React from 'react';
-import { AlertCircle, CheckCircle2, FileText, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileText } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import RunTimer from '@/components/ui/RunTimer';
 import { useRunTimer } from '@/hooks/useRunTimer';
 
@@ -134,48 +135,49 @@ export default function CaseReportDownloadButton({
 
   return (
     <div className="space-y-1">
-      <button
+      <Button
         type="button"
+        variant="outline"
         onClick={() => {
           if (!blocked && typeof onRequestOpen === 'function') onRequestOpen();
         }}
         disabled={blocked}
         title={title}
-        className={`w-full min-h-9 px-2.5 py-2 rounded-lg inline-flex items-center justify-center gap-2 text-xs font-medium text-center leading-snug border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${
-          !blocked
-            ? 'border-[var(--border-subtle)] bg-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]'
-            : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] cursor-not-allowed'
-        }`}
+        className="h-8 w-full text-[13px] max-md:h-11"
       >
-        <FileText className="w-3.5 h-3.5 shrink-0" />
-        <span className="min-w-0">{label}</span>
-      </button>
+        <FileText aria-hidden />
+        <span className="min-w-0 truncate">{label}</span>
+      </Button>
+      {/* Why the button is locked is shown as text, not only in a tooltip. */}
+      {blocked && !gaInFlight && title && (
+        <p className="line-clamp-2 px-1 text-2xs leading-snug text-muted-foreground" title={title}>{title}</p>
+      )}
       {/* Ranking status sits beside the button, not as a spinner inside it: the line says
         * what's running, for how long, and what waiting buys. */}
       {gaInFlight && (
-        <div className="px-0.5 text-2xs leading-snug" style={{ color: 'var(--text-tertiary)' }} aria-live="polite">
-          <div className="flex items-center gap-1" style={{ color: 'var(--text-secondary)' }}>
-            <Loader2 className="w-3 h-3 shrink-0 animate-spin text-[var(--accent-teal)]" aria-hidden />
+        <div className="px-1 text-2xs leading-snug text-muted-foreground" aria-live="polite">
+          <div className="flex items-center gap-1.5 text-foreground">
+            <span aria-hidden className="inline-block size-1.5 shrink-0 animate-pulse rounded-full bg-[var(--info)] motion-reduce:animate-none" />
             <span>Ranking variants</span>
             <RunTimer running elapsedMs={gaTimer.elapsedMs} startMs={gaTimer.startMs} prefix="· " />
           </div>
           <p className="mt-0.5">
             {gaStalled
-              ? 'Taking longer than usual — you can open the report and pick variants manually.'
+              ? 'Taking longer than usual. You can open the report and pick variants manually.'
               : 'You can open the report when it finishes, with top picks pre-checked.'}
           </p>
         </div>
       )}
       {!gaInFlight && ga === 'completed' && (
-        <p className="px-0.5 text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
-          <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: 'var(--success)' }} aria-hidden />
-          Ranked · top picks pre-checked
+        <p className="inline-flex items-center gap-1.5 px-1 text-2xs text-muted-foreground">
+          <CheckCircle2 className="size-3 shrink-0 text-[var(--success)]" aria-hidden />
+          Ranked. Top picks are pre-checked.
         </p>
       )}
       {!gaInFlight && ga === 'failed' && (
-        <p className="px-0.5 text-2xs inline-flex items-center gap-1" style={{ color: 'var(--error)' }}>
-          <AlertCircle className="w-3 h-3 shrink-0" aria-hidden />
-          Ranking failed — you can still pick variants manually.
+        <p role="status" className="inline-flex items-center gap-1.5 px-1 text-2xs text-[var(--error)]">
+          <AlertCircle className="size-3 shrink-0" aria-hidden />
+          Ranking failed. You can still pick variants manually.
         </p>
       )}
     </div>

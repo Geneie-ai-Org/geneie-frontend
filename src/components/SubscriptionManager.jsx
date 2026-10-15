@@ -3,45 +3,39 @@ import { useNavigate } from 'react-router-dom';
 import { performLogout } from '@/lib/logout';
 import { meterFor } from '@/services/tierLimits';
 import { useAuth } from '../hooks/useAuth';
-import { Zap, Unlock, TrendingUp } from 'lucide-react';
-import SubscriptionPage from './SubscriptionPage';
+import { Button } from '@/components/ui/button';
+import SubscriptionPage, { PlanCard } from './SubscriptionPage';
 
-const FeatureItem = ({ text, isIncluded }) => (
-    <li className="flex items-start space-x-2 py-1.5">
-        {isIncluded ? (
-            <Zap className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--success)' }} />
-        ) : (
-            <Unlock className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--text-tertiary)' }} />
-        )}
-        <span style={{ color: isIncluded ? 'var(--text-primary)' : 'var(--text-tertiary)' }} className={isIncluded ? '' : 'line-through'}>{text}</span>
-    </li>
-);
-
+/**
+ * Full-page gate shown when the chat allowance is used up (and the plan overview for guests).
+ * One message, two plans side by side, one action.
+ */
 const SubscriptionManager = ({ isInputGated, userId }) => {
     const { userTier, limits } = useAuth();
     const navigate = useNavigate();
     const chatMeter = meterFor(limits, 'chat');
     // The real number from the API rather than a hardcoded one — free is 60 and beta is 100 now.
-    const chatLimitCopy = chatMeter.tracked && chatMeter.limit != null
-        ? `your plan's limit of ${chatMeter.limit} chat exchanges`
+    const chatLimit = chatMeter.tracked && chatMeter.limit != null ? chatMeter.limit : null;
+    const chatLimitCopy = chatLimit != null
+        ? `your plan's limit of ${chatLimit} chat exchanges`
         : "your plan's chat limit";
     const [showSubscriptionPage, setShowSubscriptionPage] = useState(false);
 
     const getManagerContent = () => {
         if (userTier === 'guest') {
             return {
-                title: "Guest Access: Chat Limits",
-                description: "You are not logged in. Your chat is limited to 5 total exchanges and your history will NOT be saved. Sign up to save your progress and get your first free experiment!",
+                title: "Sign up to keep going",
+                description: "Guest chats are limited to 5 exchanges and your history is not saved. Create an account to save your work and get your first free experiment.",
                 showUpgrade: true,
-                upgradeText: "Sign Up Now",
+                upgradeText: "Sign up",
                 action: () => {
                     navigate('/auth');
                 }
             };
         } else if (userTier === 'free' || userTier === 'beta') {
             return {
-                title: "Unlock Unlimited Research",
-                description: `Thank you for using Geneie! You've reached ${chatLimitCopy}. Upgrade to Pro to continue your research with a larger monthly allowance, advanced features, and priority support.`,
+                title: "You've used your free allowance",
+                description: `You've reached ${chatLimitCopy}. Upgrade to Pro to continue your research with a larger monthly allowance, advanced features and priority support.`,
                 showUpgrade: true,
                 upgradeText: "Upgrade to Pro",
                 action: () => {
@@ -50,19 +44,24 @@ const SubscriptionManager = ({ isInputGated, userId }) => {
             };
         } else if (userTier === 'pro') {
             return {
-                title: "🎉 Pro Subscriber: Welcome!",
-                description: "You have unlimited chat, access to 1 free experiment (plus purchasing options), and unlimited file uploads. You're ready to go!",
-                showUpgrade: false,
-                upgradeText: "Manage Subscription",
+                title: "You're on Pro",
+                description: "You have unlimited chat, one free experiment (plus purchasing options) and unlimited file uploads.",
+                showUpgrade: true,
+                upgradeText: "Manage subscription",
                 action: () => {
                     setShowSubscriptionPage(true);
                 }
             };
         }
-        return { title: "Loading...", description: "" };
+        return { title: "Loading", description: "" };
     };
 
     const content = getManagerContent();
+    const isGuest = userTier === 'guest';
+    const isPro = userTier === 'pro';
+    const freeChat = isGuest
+        ? '5 chat exchanges'
+        : chatLimit != null ? `${chatLimit} chat exchanges` : 'Limited chat exchanges';
 
     return (
         <>
@@ -71,75 +70,55 @@ const SubscriptionManager = ({ isInputGated, userId }) => {
                     isOpen={showSubscriptionPage}
                     onClose={() => setShowSubscriptionPage(false)}
                     userId={userId}
-                          />
+                />
             )}
-            <div className="w-full max-w-4xl mx-auto p-6 space-y-8">
-            <div className="p-8 rounded-xl border-t-4"
-            style={{ backgroundColor: 'var(--bg-surface)', borderTopColor: 'var(--accent-teal)', border: '1px solid var(--border-default)', borderTopWidth: '3px' }}
-            >
-                <div className="flex justify-between items-start mb-6">
-                    <div className="flex items-center space-x-3">
-                        <TrendingUp className="w-5 h-5" style={{ color: 'var(--accent-teal)' }} />
-                        <h3 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>{content.title}</h3>
+            <main className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 py-10 sm:px-6 sm:py-14">
+                <div className="mb-8 flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                        <h1 className="text-xl font-semibold tracking-tight text-foreground">{content.title}</h1>
+                        <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">{content.description}</p>
                     </div>
-                    {userTier !== 'guest' && (
-                        <button
-                            onClick={() => performLogout(navigate)}
-                            className="text-sm px-3 py-1 rounded-lg hover:bg-white/5 transition-colors"
-                            style={{ color: 'var(--text-tertiary)' }}
-                        >
-                            Sign Out
-                        </button>
+                    {!isGuest && (
+                        <Button variant="ghost" size="lg" className="shrink-0 text-muted-foreground" onClick={() => performLogout(navigate)}>
+                            Sign out
+                        </Button>
                     )}
                 </div>
 
-                <p className="mb-8 leading-relaxed text-sm" style={{ color: 'var(--text-secondary)' }}>{content.description}</p>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6">
-                    {/* Free/Guest Plan Card */}
-                    <div className="p-5 border rounded-lg"
-                    style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-default)' }}
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <PlanCard
+                        name={isGuest ? 'Guest' : 'Free'}
+                        current={!isPro}
+                        features={[
+                            freeChat,
+                            ...(isGuest ? [] : ['Conversation history saved', '1 free experiment']),
+                        ]}
+                    />
+                    <PlanCard
+                        name="Pro"
+                        highlighted
+                        current={isPro}
+                        features={[
+                            'Unlimited chat exchanges',
+                            'Unlimited file uploads',
+                            'Bioinformatics pipelines',
+                            'Conversation history saved',
+                            '1 free experiment + purchase options',
+                        ]}
                     >
-                        <h4 className="text-base font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
-                            {userTier === 'guest' ? 'Guest Access' : 'Current Plan (Free)'}
-                        </h4>
-                        <ul className="text-sm space-y-1.5">
-                            <FeatureItem text={`Chat Exchanges: ${userTier === 'guest' ? '5 Max' : '10 Max'}`} isIncluded={true} />
-                            <FeatureItem text="Conversation History Saved" isIncluded={userTier !== 'guest'} />
-                            <FeatureItem text="1 Free Experiment" isIncluded={userTier !== 'guest'} />
-                            <FeatureItem text="Unlimited Chat Exchanges" isIncluded={false} />
-                            <FeatureItem text="Unlimited File Uploads" isIncluded={false} />
-                        </ul>
-                    </div>
-
-                    {/* Pro Plan Card */}
-                    <div className="p-5 border rounded-lg" style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--accent-teal)' }}>
-                        <h4 className="text-base font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Pro Plan</h4>
-                        <ul className="text-sm space-y-1.5">
-                            <FeatureItem text="Chat Exchanges: Unlimited" isIncluded={true} />
-                            <FeatureItem text="Conversation History Saved" isIncluded={true} />
-                            <FeatureItem text="1 Free Experiment + Purchase Options" isIncluded={true} />
-                            <FeatureItem text="Unlimited Chat Exchanges" isIncluded={true} />
-                            <FeatureItem text="Unlimited File Uploads" isIncluded={true} />
-                            <FeatureItem text="Bioinformatics Pipelines" isIncluded={true} />
-                        </ul>
-                    </div>
+                        {content.showUpgrade && (
+                            <Button
+                                size="lg"
+                                variant={isPro ? 'outline' : 'default'}
+                                className="h-10 w-full"
+                                onClick={content.action}
+                            >
+                                {content.upgradeText}
+                            </Button>
+                        )}
+                    </PlanCard>
                 </div>
-
-                {content.showUpgrade && (
-                    <button
-                        onClick={content.action}
-                        className="mt-6 w-full py-3 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 active:scale-98"
-                        style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
-                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                    >
-                        {content.upgradeText}
-                    </button>
-                )}
-            </div>
-
-        </div>
+            </main>
         </>
     );
 };

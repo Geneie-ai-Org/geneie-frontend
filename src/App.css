@@ -321,14 +321,15 @@
 /* Chat message typography (markdown + streaming) */
 .chat-prose {
   font-size: 0.875rem;
-  line-height: 1.6;
+  line-height: 1.7;
   color: var(--text-primary);
   word-break: break-word;
   overflow-wrap: anywhere;
+  max-width: 46rem;
 }
 
 .chat-prose p {
-  margin: 0 0 0.75em;
+  margin: 0 0 0.85em;
 }
 
 .chat-prose p:last-child {
@@ -337,27 +338,57 @@
 
 .chat-prose ul,
 .chat-prose ol {
-  margin: 0.5em 0 0.75em;
-  padding-left: 1.35em;
+  margin: 0.4em 0 0.85em;
+  padding-left: 1.4em;
+}
+
+.chat-prose ul {
+  list-style: disc;
+}
+
+.chat-prose ol {
+  list-style: decimal;
 }
 
 .chat-prose li + li {
-  margin-top: 0.35em;
+  margin-top: 0.3em;
 }
 
 .chat-prose li > p {
-  margin-bottom: 0.35em;
+  margin-bottom: 0.3em;
+}
+
+.chat-prose li::marker {
+  color: var(--text-tertiary);
+}
+
+.chat-prose strong {
+  font-weight: 600;
+}
+
+.chat-prose a {
+  color: var(--accent-teal);
+  text-underline-offset: 2px;
+}
+
+.chat-prose a:hover {
+  text-decoration: underline;
 }
 
 .chat-prose h1,
 .chat-prose h2,
 .chat-prose h3,
 .chat-prose h4 {
-  margin: 1.1em 0 0.5em;
+  margin: 1.4em 0 0.5em;
   line-height: 1.35;
   font-weight: 600;
   color: var(--text-primary);
 }
+
+.chat-prose h1 { font-size: 1.125rem; }
+.chat-prose h2 { font-size: 1rem; }
+.chat-prose h3,
+.chat-prose h4 { font-size: 0.9375rem; }
 
 .chat-prose h1:first-child,
 .chat-prose h2:first-child,
@@ -371,19 +402,264 @@
 }
 
 .chat-prose blockquote {
-  margin: 0.75em 0;
+  margin: 0.85em 0;
   padding-left: 1em;
-  border-left: 3px solid var(--border-default);
+  border-left: 2px solid var(--border-strong);
   color: var(--text-secondary);
 }
 
 .chat-prose hr {
-  margin: 1.25em 0;
-  border-color: var(--border-subtle);
+  margin: 1.5em 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Inline code: mono, a quiet chip. */
+.chat-inline-code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background-color: var(--code-inline-bg);
+  color: var(--code-inline);
+  word-break: break-all;
+}
+
+/* Tables: scroll inside their own box, sticky header, tabular numbers, copy button on top. */
+.chat-table-wrap {
+  position: relative;
+  margin: 0.85em 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-surface);
+  overflow: hidden;
+}
+
+.chat-table-scroll {
+  max-height: 420px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.chat-table-scroll:focus-visible {
+  outline-offset: -2px;
 }
 
 .chat-prose table {
-  margin: 0.75em 0;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-prose th,
+.chat-prose td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.chat-prose th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-weight: 600;
+  color: var(--text-primary);
+  background-color: var(--bg-surface-raised);
+  border-bottom-color: var(--border-default);
+}
+
+.chat-prose td {
+  color: var(--text-secondary);
+}
+
+.chat-prose tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.chat-prose tbody tr:hover td {
+  background-color: var(--bg-surface-hover);
+}
+
+/* Copy buttons that sit on a table sit in the corner, clear of the header row's text. */
+.chat-table-copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 1.5rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background-color: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  transition: background-color var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast);
+}
+
+.chat-table-copy:hover {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  /* Quiet until the table is touched, but always reachable by keyboard. */
+  .chat-table-copy {
+    opacity: 0;
+  }
+
+  .chat-table-wrap:hover .chat-table-copy,
+  .chat-table-wrap:focus-within .chat-table-copy {
+    opacity: 1;
+  }
+}
+
+@media (pointer: coarse) {
+  .chat-table-copy {
+    height: 2.25rem;
+    padding: 0 0.75rem;
+  }
+}
+
+/* Code blocks (see CodeBlock.jsx): dual-theme shiki output, theme picked here. */
+.chat-code-body {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.chat-code-body pre {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: transparent !important;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  width: max-content;
+  min-width: 100%;
+  tab-size: 2;
+}
+
+.chat-code-body code {
+  font-family: var(--font-mono);
+  background: transparent;
+  white-space: pre;
+}
+
+.chat-code-body .shiki span {
+  color: var(--shiki-light);
+}
+
+.dark .chat-code-body .shiki span {
+  color: var(--shiki-dark);
+}
+
+/* Streaming caret: a 2px bar painted after the last rendered element. It is inline with a fixed
+ * size, so it takes the width of one character at most and never changes a line's height. */
+.chat-prose[data-streaming='true'] > :last-child:not(ul):not(ol):not(.chat-table-wrap):not(.chat-code)::after,
+.chat-prose[data-streaming='true'] > :is(ul, ol):last-child > li:last-child::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.12em;
+  background-color: var(--accent-teal);
+  animation: chat-caret 1s steps(1) infinite;
+}
+
+@keyframes chat-caret {
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-prose[data-streaming='true'] > :last-child::after,
+  .chat-prose[data-streaming='true'] > :is(ul, ol):last-child > li:last-child::after {
+    animation: none;
+  }
+}
+
+/* Citation chips: small numbered buttons inline with the text; open the source below. */
+.chat-cite {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.125rem;
+  margin: 0 0.15rem;
+  padding: 0 0.3rem;
+  border: 1px solid var(--border-default);
+  border-radius: 9999px;
+  background-color: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  vertical-align: 0.12em;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.chat-cite:hover {
+  background-color: var(--accent-teal-soft);
+  border-color: var(--accent-teal);
+  color: var(--accent-teal);
+}
+
+/* Message row actions (copy, regenerate): quiet at rest, shown on hover, on keyboard focus
+ * anywhere inside the message, and always on devices that cannot hover. */
+.chat-msg-actions {
+  opacity: 0;
+  transition: opacity 150ms var(--ease-out);
+}
+
+.chat-msg:hover .chat-msg-actions,
+.chat-msg:focus-within .chat-msg-actions,
+.chat-msg-actions:focus-within,
+.chat-msg-actions[data-pinned='true'] {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .chat-msg-actions {
+    opacity: 1;
+  }
+}
+
+/* The source that a citation chip scrolls to flashes briefly. */
+.chat-source-flash {
+  background-color: var(--accent-teal-soft) !important;
+  border-color: var(--accent-teal) !important;
+}
+
+/* Thinking line (ThinkingIndicator): a single quiet row with a small pulsing dot. */
+.chat-thinking-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background-color: var(--accent-teal);
+  animation: chat-thinking-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes chat-thinking-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-thinking-dot {
+    animation: none;
+    opacity: 0.8;
+  }
 }
 
 /* Conversation header */

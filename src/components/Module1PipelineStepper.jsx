@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { AlertCircle, Check, ChevronDown, CircleSlash, Dna, Loader2 } from 'lucide-react';
+import { Dna, Loader2 } from 'lucide-react';
 import {
   MODULE1_STAGE_GROUPS,
   getModule1FailureMessage,
@@ -11,13 +10,18 @@ import {
 import { MODULE1_CPU_TYPICAL_MIN, formatMinutesRange } from '@/components/Module1ComputeChoice';
 import RunTimer from '@/components/ui/RunTimer';
 import { useRunTimer } from '@/hooks/useRunTimer';
+import { Button } from '@/components/ui/button';
 import Module1QcSection, { module1HasQcArtifacts } from '@/components/Module1QcSection';
-
-const EASE = [0.23, 1, 0.32, 1];
+import PipelineJobCard, { splitJobMessage } from '@/components/PipelineJobCard';
 
 function nodeStatus(groupId, activeGroupId, failed, groupOrder, finishedOk) {
   if (finishedOk) return 'done';
-  if (failed) return groupOrder.indexOf(groupId) <= groupOrder.indexOf(activeGroupId) ? 'failed' : 'pending';
+  if (failed) {
+    // Only the stage that broke is Failed; the ones before it did finish.
+    const at = groupOrder.indexOf(activeGroupId);
+    const idx = groupOrder.indexOf(groupId);
+    return idx < at ? 'done' : idx === at ? 'failed' : 'pending';
+  }
   const activeIdx = groupOrder.indexOf(activeGroupId);
   const idx = groupOrder.indexOf(groupId);
   if (idx < activeIdx) return 'done';
@@ -38,11 +42,11 @@ function jobLane(job) {
 /** GPU / CPU / "CPU (no GPU available)" — null when the backend sent no compute info. */
 function computeChip(job) {
   if (job.compute === 'cpu' && job.computeReason === 'gpu_capacity_unavailable') {
-    return { label: 'CPU (no GPU available)', amber: true };
+    return { label: 'CPU (no GPU available)', warn: true };
   }
   const lane = jobLane(job);
   if (!lane) return null;
-  return { label: lane === 'gpu' ? 'GPU' : 'CPU', amber: false };
+  return { label: lane === 'gpu' ? 'GPU' : 'CPU', warn: false };
 }
 
 const CONFIRM_COPY = {
@@ -63,31 +67,41 @@ const CONFIRM_COPY = {
   },
 };
 
-const SECONDARY_BUTTON_CLASS =
-  'shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]';
+/** Secondary destructive: outline with error-coloured text. Filled red appears only inside the confirm. */
+const DESTRUCTIVE_OUTLINE =
+  'text-[var(--error)] hover:bg-[var(--error-soft)] hover:text-[var(--error)] border-[var(--border-strong)]';
 
 /**
- * Sticky chip for the Module 1 (FASTQ) long-running job — modeled visually on
- * VariantAnalysisPipeline's chip-that-expands, but driven by the 9-phase Module 1
- * job model rather than the ANNOVAR/filter step model.
+ * The Module 1 (FASTQ) long-running job as one compact job card, driven by the 9-phase Module 1
+ * job model rather than the ANNOVAR/filter step model. The status line is a single sentence, the
+ * stage list is collapsed until asked for, and Stop run / Leave queue / Switch compute and the
+ * failure message stay outside the collapse so they are never hidden.
+ *
+ * `variant="card"` (default) is the inline card above the composer; `variant="panel"` renders
+ * plain, scrolling content for a workspace tab.
  */
-const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, cpuEstimateMin = null }) => {
-  // null = follow the default (open while the run is in flight, closed once it has finished or
-  // ended); 'open' / 'closed' once the user clicks the header. Reset per job so a new run opens.
-  const [expandedIntent, setExpandedIntent] = useState(null);
+const Module1PipelineStepper = ({
+  job,
+  onStartOver,
+  onCancel,
+  onSwitchCompute,
+  cpuEstimateMin = null,
+  variant = 'card',
+}) => {
+  // Stage list: collapsed until the user opens it. Reset per job.
+  const [stepsOpen, setStepsOpen] = useState(false);
   useEffect(() => {
-    setExpandedIntent(null);
+    setStepsOpen(false);
   }, [job?.jobId]);
   // Inline confirm for Leave queue / Stop run ('leave' | 'stop' | null), and which request is in flight.
   const [confirm, setConfirm] = useState(null);
   const [busy, setBusy] = useState(null); // 'cancel' | 'switch' | null
-  const headerButtonRef = useRef(null);
+  const stepsToggleRef = useRef(null);
   const confirmTriggerRef = useRef(null);
   const confirmSafeRef = useRef(null);
-  // Where focus goes when the confirm closes: the Leave/Stop trigger, or the header once the
+  // Where focus goes when the confirm closes: the Leave/Stop trigger, or the steps toggle once the
   // run is gone and the trigger no longer renders.
   const restoreFocusRef = useRef(null); // 'trigger' | 'header' | null
-  const reduceMotion = useReducedMotion();
   // This is the long one — hours, not minutes — so it carries its own clock: ticking
   // while the pipeline runs, total once it lands.
   const timer = useRunTimer(
@@ -106,7 +120,7 @@ const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, c
     } else if (restoreFocusRef.current) {
       const target = restoreFocusRef.current === 'trigger' ? confirmTriggerRef.current : null;
       restoreFocusRef.current = null;
-      (target || headerButtonRef.current)?.focus();
+      (target || stepsToggleRef.current)?.focus();
     }
   }, [confirm]);
 
@@ -124,23 +138,7 @@ const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, c
   const lane = jobLane(job);
   const chip = computeChip(job);
   const finishedOk = module1FinishedSuccessfully(job);
-  // Once the run has finished, the stage row is history: start collapsed (the header still carries
-  // the status, and QC sits outside the body so it stays one click away). A failed run stays open
-  // so its failure box and Start over are visible, as on main's drawer.
-  const runOver = finishedOk || job.status === 'complete';
-  const expanded = expandedIntent ? expandedIntent === 'open' : !runOver;
-  const setExpanded = (updater) =>
-    setExpandedIntent((prev) => {
-      const current = prev ? prev === 'open' : !runOver;
-      return (typeof updater === 'function' ? updater(current) : updater) ? 'open' : 'closed';
-    });
-  const activeGroupId = failed ? getModule1StageGroup(job.phase) : getModule1StageGroup(job.phase);
-  const phaseMessage = finishedOk
-    ? (job.message || 'Module 1 complete — VCF is in this conversation.').replace(
-        /PASS\s+VCF\s+ready\.?/i,
-        'VCF Ready'
-      )
-    : getModule1PhaseMessage(job.phase, job.message);
+  const activeGroupId = getModule1StageGroup(job.phase);
   const pct = typeof job.progressPercent === 'number' ? Math.max(0, Math.min(100, Math.round(job.progressPercent))) : null;
   const hasQcArtifacts = module1HasQcArtifacts(job);
   const startText = formatMinutesRange(job.estStartMin);
@@ -152,17 +150,37 @@ const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, c
         startText ? `est. start in ${startText}` : null,
       ].filter(Boolean).join(' · ')
     : null;
-  let statusLine;
-  if (cancelled) statusLine = 'Cancelled · you can start again from the upload button.';
-  else if (cancelling) statusLine = 'Stopping your run…';
-  // The header only names the state; the failure detail (getModule1FailureMessage — never the
-  // admin-only `error`) is shown once, in the red box below.
-  else if (failed) statusLine = 'Pipeline failed';
-  else if (queueLine) statusLine = queueLine;
-  else if (running && lane) statusLine = `Running on ${lane === 'gpu' ? 'GPU' : 'CPU'} · ${phaseMessage}`;
-  else statusLine = phaseMessage;
-  const showPct = pct != null && !failed && !cancelled && !cancelling && !queueLine;
-  const showTimer = !cancelled && !cancelling;
+
+  // One status word from one vocabulary. Stopping and importing the result are still "Running".
+  const status = failed ? 'failed' : cancelled ? 'cancelled' : finishedOk ? 'done' : queued ? 'queued' : 'running';
+
+  // The backend line carries the phase, the compute and the data residency in one run-on string;
+  // the phase is the sentence, the residency becomes a quiet second line.
+  const split = splitJobMessage(job.message);
+  let statusText;
+  if (cancelled) statusText = 'You can start again from the upload button.';
+  else if (cancelling) statusText = 'Stopping your run…';
+  else if (failed) statusText = getModule1FailureMessage(job);
+  else if (finishedOk) {
+    statusText = (job.message || 'Module 1 complete — VCF is in this conversation.').replace(
+      /PASS\s+VCF\s+ready\.?/i,
+      'VCF ready.'
+    );
+  } else if (queueLine) statusText = queueLine;
+  else statusText = getModule1PhaseMessage(job.phase, split.sentence || undefined);
+  const note = !cancelled && !cancelling && !failed && !finishedOk ? split.note : '';
+
+  const showPct = pct != null && status === 'running' && !cancelling;
+  const timerMs = timer.running ? timer.elapsedMs : timer.durationMs;
+  const timerNode = !cancelled && !cancelling && timerMs != null && timerMs >= 1000 ? (
+    <RunTimer
+      running={timer.running}
+      elapsedMs={timer.elapsedMs}
+      durationMs={timer.durationMs}
+      startMs={timer.startMs}
+      prefix={timer.running ? 'Elapsed ' : 'Took '}
+    />
+  ) : null;
 
   // Controls appear only when the backend says they apply, so older backends show none.
   const confirmMode = queued ? 'leave' : running ? 'stop' : null;
@@ -206,238 +224,133 @@ const Module1PipelineStepper = ({ job, onStartOver, onCancel, onSwitchCompute, c
     }
   };
 
-  return (
-    <section
-      className="relative mb-2 rounded-xl border overflow-hidden"
-      style={{
-        backgroundColor: 'var(--bg-surface)',
-        borderColor: failed ? 'var(--error)' : 'var(--border-strong)',
-        boxShadow: 'var(--shadow-sm)',
-      }}
-      aria-label="Module 1 raw sequencing pipeline"
-    >
-      <button
-        ref={headerButtonRef}
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 min-h-[40px] text-left"
-      >
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--accent-teal-soft)' }}>
-          {failed ? (
-            <AlertCircle className="w-4 h-4" style={{ color: 'var(--error)' }} />
-          ) : cancelled ? (
-            <CircleSlash className="w-4 h-4" style={{ color: 'var(--text-tertiary)' }} />
-          ) : (
-            <Dna className="w-4 h-4" style={{ color: 'var(--accent-teal)' }} />
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
-              {job.sampleName || 'Raw sequencing pipeline'}
-            </p>
-            {chip && !cancelled && !failed && (
-              <span
-                className="shrink-0 text-2xs font-semibold px-1.5 h-[18px] inline-flex items-center rounded-full"
-                style={chip.amber
-                  ? { backgroundColor: 'var(--warning-soft)', color: 'var(--warning)' }
-                  : { backgroundColor: 'var(--accent-teal-soft)', color: 'var(--accent-teal)' }}
-              >
-                {chip.label}
-              </span>
-            )}
-          </div>
-          <p className="text-2xs truncate" style={{ color: failed ? 'var(--error)' : 'var(--text-tertiary)' }}>
-            {statusLine}
-            {showPct ? ` · ${pct}%` : ''}
-            {showTimer && (
-              <RunTimer
-                running={timer.running}
-                elapsedMs={timer.elapsedMs}
-                durationMs={timer.durationMs}
-                startMs={timer.startMs}
-                prefix=" · "
-              />
-            )}
-          </p>
-        </div>
-        {/* One rotating chevron rather than two swapped glyphs — the rotation is the
-          * same gesture as the panel opening, so the two read as one movement. */}
-        <motion.span
-          className="shrink-0 flex items-center"
-          animate={{ rotate: expanded ? 180 : 0 }}
-          transition={reduceMotion ? { duration: 0 } : { duration: 0.22, ease: EASE }}
+  const steps = cancelled
+    ? null
+    : MODULE1_STAGE_GROUPS.map((group) => {
+        const st = nodeStatus(group.id, activeGroupId, failed, groupOrder, finishedOk);
+        // The "Queued" stage while the job is queued is where it is waiting, not a run in progress.
+        return { id: group.id, label: group.label, status: st === 'running' && queued ? 'waiting' : st };
+      });
+
+  const showFailureAction = failed && typeof onStartOver === 'function';
+  const showControls = showFailureAction || showQueuePanel || showRunPanel;
+
+  const controls = showControls ? (
+    <div className="space-y-2.5 border-t border-border pt-3">
+      {confirmCopy ? (
+        <div
+          role="group"
+          aria-labelledby="module1-confirm-question"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && !busy) {
+              e.stopPropagation();
+              closeConfirm();
+            }
+          }}
         >
-          <ChevronDown className="w-4 h-4" />
-        </motion.span>
-      </button>
-      <span className="sr-only" aria-live="polite">{liveAnnouncement}</span>
-
-      <AnimatePresence initial={false}>
-        {expanded && !cancelled && (
-          <motion.div
-            key="body"
-            // Opacity-only: height:auto + overflow:hidden locks a measured height before
-            // async QC/JBrowse content mounts, which clips the panel and kills pan/zoom.
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{
-              opacity: 0,
-              transition: reduceMotion ? { duration: 0 } : { duration: 0.12, ease: EASE },
-            }}
-            transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: EASE }}
-          >
-            <div className="px-3 pb-3">
-              <div className="flex items-center justify-between">
-                {MODULE1_STAGE_GROUPS.map((group, i) => {
-                  const status = nodeStatus(group.id, activeGroupId, failed, groupOrder, finishedOk);
-                  return (
-                    <React.Fragment key={group.id}>
-                      {i > 0 && (
-                        <div
-                          className="flex-1 h-px mx-1"
-                          style={{ backgroundColor: status === 'pending' ? 'var(--border-subtle)' : 'var(--accent-teal)' }}
-                        />
-                      )}
-                      <div className="flex flex-col items-center gap-1">
-                        <div
-                          className="w-5 h-5 rounded-full flex items-center justify-center border"
-                          style={{
-                            borderColor: status === 'failed' ? 'var(--error)' : status === 'pending' ? 'var(--border-subtle)' : 'var(--accent-teal)',
-                            backgroundColor: status === 'done' ? 'var(--accent-teal)' : 'transparent',
-                          }}
-                        >
-                          {status === 'done' && <Check className="w-3 h-3" style={{ color: 'var(--accent-teal-contrast)' }} />}
-                          {status === 'running' && <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--accent-teal)' }} />}
-                          {status === 'failed' && <AlertCircle className="w-3 h-3" style={{ color: 'var(--error)' }} />}
-                        </div>
-                        <span className="text-2xs" style={{ color: status === 'pending' ? 'var(--text-tertiary)' : 'var(--text-secondary)' }}>
-                          {group.label}
-                        </span>
-                      </div>
-                    </React.Fragment>
-                  );
-                })}
-              </div>
-
-              {failed && (
-                <div className="mt-3 p-3 rounded-lg border flex items-start justify-between gap-3" style={{ backgroundColor: 'var(--error-soft)', borderColor: 'var(--error)' }}>
-                  <span className="text-xs" style={{ color: 'var(--error)' }}>
-                    {getModule1FailureMessage(job)}
-                  </span>
-                  {onStartOver && (
-                    <button
-                      type="button"
-                      onClick={onStartOver}
-                      className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border"
-                      style={{ borderColor: 'var(--error)', color: 'var(--error)' }}
-                    >
-                      Start over
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {(showQueuePanel || showRunPanel) && (
-                <div
-                  className="mt-3 p-3 rounded-lg border"
-                  style={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-subtle)' }}
-                >
-                  {confirmCopy ? (
-                    <div
-                      role="group"
-                      aria-labelledby="module1-confirm-question"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape' && !busy) {
-                          e.stopPropagation();
-                          closeConfirm();
-                        }
-                      }}
-                    >
-                      <p id="module1-confirm-question" className="text-xs" style={{ color: 'var(--text-primary)' }}>
-                        {confirmCopy.question}
-                      </p>
-                      <div className="mt-2.5 flex flex-wrap items-center justify-end gap-2">
-                        <button
-                          ref={confirmSafeRef}
-                          type="button"
-                          onClick={closeConfirm}
-                          disabled={busy === 'cancel'}
-                          className={SECONDARY_BUTTON_CLASS}
-                          style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-                        >
-                          {confirmCopy.keep}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={runCancel}
-                          disabled={busy === 'cancel'}
-                          className={SECONDARY_BUTTON_CLASS}
-                          style={{ borderColor: 'var(--error)', color: 'var(--error)' }}
-                        >
-                          {busy === 'cancel' && <Loader2 className="w-3 h-3 animate-spin" />}
-                          {confirmCopy.confirm}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {showQueuePanel && (
-                        <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                          Your place is kept if you close this tab. We&apos;ll notify you when it starts and when it finishes.
-                        </p>
-                      )}
-                      {(canSwitch || canCancel) && (
-                        <div className={`${showQueuePanel ? 'mt-2.5 ' : ''}flex flex-wrap items-center justify-end gap-2`}>
-                          {canSwitch && lane !== 'cpu' && (
-                            <span className="mr-auto text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                              CPU starts now and takes about {cpuText}.
-                            </span>
-                          )}
-                          {canSwitch && (
-                            <button
-                              type="button"
-                              onClick={() => runSwitch(lane === 'cpu' ? 'gpu' : 'cpu')}
-                              disabled={Boolean(busy)}
-                              className={SECONDARY_BUTTON_CLASS}
-                              style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
-                            >
-                              {busy === 'switch' && <Loader2 className="w-3 h-3 animate-spin" />}
-                              {lane === 'cpu' ? 'Wait for GPU instead' : 'Switch to CPU now'}
-                            </button>
-                          )}
-                          {canCancel && (
-                            <button
-                              ref={confirmTriggerRef}
-                              type="button"
-                              onClick={() => setConfirm(confirmMode)}
-                              disabled={Boolean(busy)}
-                              className={SECONDARY_BUTTON_CLASS}
-                              style={{ borderColor: 'var(--border-default)', color: 'var(--error)' }}
-                            >
-                              {queued ? 'Leave queue' : 'Stop run'}
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* QC / alignment browser / saved report: one collapsed control (Module1QcSection, from
-        * main), kept outside the stage body so it stays reachable when that body is collapsed. */}
-      {hasQcArtifacts && !cancelled && (
-        <div className="px-3 pb-3">
-          <Module1QcSection job={job} />
+          <p id="module1-confirm-question" className="text-xs text-foreground">
+            {confirmCopy.question}
+          </p>
+          <div className="mt-2.5 flex flex-wrap items-center justify-end gap-2">
+            <Button
+              ref={confirmSafeRef}
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={closeConfirm}
+              disabled={busy === 'cancel'}
+              className="max-sm:h-11"
+            >
+              {confirmCopy.keep}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={runCancel}
+              disabled={busy === 'cancel'}
+              className="bg-[var(--error)] text-white hover:bg-[var(--error)] hover:brightness-110 max-sm:h-11"
+            >
+              {busy === 'cancel' && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
+              {confirmCopy.confirm}
+            </Button>
+          </div>
         </div>
+      ) : (
+        <>
+          {showQueuePanel && (
+            <p className="text-2xs text-muted-foreground">
+              Your place is kept if you close this tab. We&apos;ll notify you when it starts and when it finishes.
+            </p>
+          )}
+          {(canSwitch || canCancel || showFailureAction) && (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {canSwitch && lane !== 'cpu' && (
+                <span className="mr-auto text-2xs text-muted-foreground">
+                  CPU starts now and takes about {cpuText}.
+                </span>
+              )}
+              {showFailureAction && (
+                <Button type="button" variant="outline" size="sm" onClick={onStartOver} className="max-sm:h-11">
+                  Start over
+                </Button>
+              )}
+              {canSwitch && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => runSwitch(lane === 'cpu' ? 'gpu' : 'cpu')}
+                  disabled={Boolean(busy)}
+                  className="max-sm:h-11"
+                >
+                  {busy === 'switch' && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
+                  {lane === 'cpu' ? 'Wait for GPU instead' : 'Switch to CPU now'}
+                </Button>
+              )}
+              {canCancel && (
+                <Button
+                  ref={confirmTriggerRef}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfirm(confirmMode)}
+                  disabled={Boolean(busy)}
+                  className={`${DESTRUCTIVE_OUTLINE} max-sm:h-11`}
+                >
+                  {queued ? 'Leave queue' : 'Stop run'}
+                </Button>
+              )}
+            </div>
+          )}
+        </>
       )}
-    </section>
+    </div>
+  ) : null;
+
+  return (
+    <PipelineJobCard
+      variant={variant}
+      ariaLabel="Module 1 raw sequencing pipeline"
+      title={job.sampleName || 'Raw sequencing pipeline'}
+      icon={<Dna className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />}
+      engine={chip}
+      status={status}
+      statusText={statusText}
+      pct={showPct ? pct : null}
+      timer={timerNode}
+      note={note}
+      steps={steps}
+      stepsOpen={stepsOpen}
+      onStepsToggle={() => setStepsOpen((v) => !v)}
+      stepsToggleRef={stepsToggleRef}
+      stepsLabel="Steps"
+    >
+      <span className="sr-only" aria-live="polite">{liveAnnouncement}</span>
+      {controls}
+      {/* QC / alignment browser / saved report (Module1QcSection), outside the step list so it
+        * stays reachable while that list is collapsed. */}
+      {hasQcArtifacts && !cancelled && <Module1QcSection job={job} variant={variant === 'panel' ? 'panel' : 'card'} />}
+    </PipelineJobCard>
   );
 };
 

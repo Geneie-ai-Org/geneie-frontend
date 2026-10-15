@@ -1,9 +1,8 @@
 import React from 'react';
-import { motion } from 'motion/react';
 
 /**
  * Illustration for the 404 page: a DNA double helix with a segment missing, the lost
- * base pairs drifting in the gap. Drawn from the same sine curves as the strands so the
+ * base pairs resting in the gap (static; no longer animated). Drawn from the same sine curves as the strands so the
  * pieces line up, and coloured from theme tokens so it follows light/dark.
  */
 
@@ -107,18 +106,13 @@ export default function BrokenHelix({ className }) {
       />
 
       {LOOSE.map((p) => (
-        <motion.g
-          key={p.x}
-          initial={{ y: 0 }}
-          animate={{ y: [0, -5, 0] }}
-          transition={{ duration: 3.2, delay: p.delay, repeat: Infinity, ease: 'easeInOut' }}
-        >
+        <g key={p.x}>
           <g transform={`translate(${p.x} ${p.y}) rotate(${p.rot})`}>
             <line x1={0} x2={0} y1={-p.len / 2} y2={p.len / 2} stroke="var(--accent-teal)" strokeWidth={2} />
             <circle cy={-p.len / 2} r={2.5} fill="var(--text-primary)" fillOpacity={0.85} />
             <circle cy={p.len / 2} r={2.5} fill="var(--text-secondary)" fillOpacity={0.7} />
           </g>
-        </motion.g>
+        </g>
       ))}
     </svg>
   );

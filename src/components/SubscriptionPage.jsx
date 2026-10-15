@@ -1,19 +1,81 @@
 import React, { useState, useEffect } from 'react';
-import { X, CreditCard, Check, Zap, Calendar, Receipt, AlertCircle } from 'lucide-react';
+import { Check, Loader2, AlertCircle, Receipt } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getAuth } from 'firebase/auth';
 import { apiUrl } from '@/config/api';
 import { fetchSubscriptionStatus } from '@/services/backendApi';
+import { meterFor } from '@/services/tierLimits';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
+/**
+ * One plan in a comparison. Flat card, hairline border; the highlighted plan swaps its
+ * border to the accent. `current` adds a text marker (never colour alone).
+ */
+export const PlanCard = ({ name, price, priceNote, blurb, features, current, highlighted, children }) => (
+  <section
+    aria-label={`${name} plan`}
+    className={cn(
+      'flex flex-col rounded-lg border bg-card p-5',
+      highlighted ? 'border-primary ring-1 ring-primary' : 'border-border'
+    )}
+  >
+    <div className="flex items-center justify-between gap-2">
+      <h3 className="text-base font-medium text-foreground">{name}</h3>
+      {current && (
+        <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-xs font-medium text-muted-foreground">
+          Current plan
+        </span>
+      )}
+    </div>
+    {price && (
+      <p className="mt-3 flex items-baseline gap-1">
+        <span className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{price}</span>
+        {priceNote && <span className="text-sm text-muted-foreground">{priceNote}</span>}
+      </p>
+    )}
+    {blurb && <p className="mt-2 text-[13px] text-muted-foreground">{blurb}</p>}
+    <ul className="mt-4 flex-1 space-y-2">
+      {features.map((f) => (
+        <li key={f} className="flex items-start gap-2 text-sm text-foreground">
+          <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
+          <span>{f}</span>
+        </li>
+      ))}
+    </ul>
+    {children && <div className="mt-5">{children}</div>}
+  </section>
+);
 
 const SubscriptionPage = ({ isOpen, onClose, userId }) => {
-  const { userTier } = useAuth();
+  const { userTier, limits } = useAuth();
   const [loading, setLoading] = useState(true);
   const [subscriptionDetails, setSubscriptionDetails] = useState(null);
-  const [billingHistory, setBillingHistory] = useState([]);
+  const [billingHistory] = useState([]);
+  const [busy, setBusy] = useState(null); // 'upgrade' | 'billing' | null
+  const [actionError, setActionError] = useState('');
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   useEffect(() => {
     if (isOpen && userId) {
+      setActionError('');
       loadSubscriptionData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -63,7 +125,7 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
     } catch (error) {
       console.error('[SubscriptionPage] Error reading user country:', error);
     }
-    
+
     // Fallback: Try IP geolocation (optional - can be removed if not needed)
     try {
       const response = await fetch('https://ipapi.co/json/');
@@ -76,18 +138,21 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
   };
 
   const handleUpgrade = async () => {
+    setActionError('');
+    setBusy('upgrade');
     try {
       const auth = getAuth();
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      
+
       if (!token) {
-        alert("Please log in to upgrade");
+        setActionError('Sign in again to upgrade.');
+        setBusy(null);
         return;
       }
-      
+
       // Detect user country for payment method selection
       const userCountry = await detectUserCountry();
-      
+
       const response = await fetch(apiUrl('/api/create-checkout-session'), {
         method: 'POST',
         headers: {
@@ -98,12 +163,12 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
           user_country: userCountry,
         }),
       });
-      
+
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.detail || 'Failed to create checkout session');
       }
-      
+
       const data = await response.json();
       // Redirect to Dodo Payments checkout
       if (data.url) {
@@ -113,20 +178,24 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
       }
     } catch (error) {
       console.error('[SubscriptionPage] Error creating checkout:', error);
-      alert(`Failed to start checkout: ${error.message}`);
+      setActionError(`Could not start checkout. ${error.message || 'Try again in a moment.'}`);
+      setBusy(null);
     }
   };
 
   const handleManageBilling = async () => {
+    setActionError('');
+    setBusy('billing');
     try {
       const auth = getAuth();
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      
+
       if (!token) {
-        alert("Please log in");
+        setActionError('Sign in again to manage billing.');
+        setBusy(null);
         return;
       }
-      
+
       const response = await fetch(apiUrl('/api/create-portal-session'), {
         method: 'POST',
         headers: {
@@ -134,268 +203,183 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
           'Content-Type': 'application/json',
         },
       });
-      
+
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.detail || 'Failed to create portal session');
       }
-      
+
       const data = await response.json();
       // Redirect to Dodo Payments customer portal or profile page
       if (data.url) {
         window.location.href = data.url;
       } else if (data.message) {
-        alert(data.message);
+        setActionError(data.message);
+        setBusy(null);
       } else {
         throw new Error('No portal URL received from server');
       }
     } catch (error) {
       console.error('[SubscriptionPage] Error creating portal session:', error);
-      alert(`Failed to open billing portal: ${error.message}`);
+      setActionError(`Could not open the billing portal. ${error.message || 'Try again in a moment.'}`);
+      setBusy(null);
     }
   };
 
   const handleCancelSubscription = async () => {
-    if (window.confirm("Are you sure you want to cancel your Pro subscription? You'll lose access to Pro features at the end of your billing period.")) {
-      // Redirect to billing portal where user can cancel
-      await handleManageBilling();
-    }
+    setConfirmCancel(false);
+    // Redirect to billing portal where user can cancel
+    await handleManageBilling();
   };
 
   if (!isOpen) return null;
 
   const isPro = userTier === 'pro' || userTier === 'admin';
-  const isFree = userTier === 'free';
 
   // Pro monthly price comes from the backend (subscription-status pricing, hot-tunable via config).
   // Fall back to the historical hardcoded 27.99 only if the API didn't supply it (degrade-open) so the
   // page never renders blank pricing. This ends the drift where the fetched pricing was ignored.
   const proMonthlyDisplay = subscriptionDetails?.pricing?.proMonthlyUsd ?? 27.99;
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-      <div 
-        className="bg-white rounded-xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" 
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="sticky top-0 text-white p-6 rounded-t-xl" style={{ backgroundColor: '#2F7F7A' }}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <CreditCard className="w-6 h-6" />
-              <h2 className="text-2xl font-bold">Subscription Management</h2>
-            </div>
-            <button
-              onClick={onClose}
-              className="text-white hover:text-gray-200 transition-colors p-1"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-        </div>
+  const chatMeter = meterFor(limits, 'chat');
+  const freeChatFeature = chatMeter.tracked && !chatMeter.unlimited && chatMeter.limit != null
+    ? `${chatMeter.limit} chat exchanges`
+    : 'Limited chat exchanges';
 
-        {/* Content */}
-        <div className="p-6 space-y-6">
+  const startDate = subscriptionDetails?.subscriptionStartDate
+    ? new Date(subscriptionDetails.subscriptionStartDate).toLocaleDateString()
+    : null;
+  const endDate = subscriptionDetails?.subscriptionEndDate
+    ? new Date(subscriptionDetails.subscriptionEndDate).toLocaleDateString()
+    : null;
+
+  return (
+    <>
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-1.5rem)] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-base">Plan and billing</DialogTitle>
+            <DialogDescription>
+              {isPro
+                ? [startDate && `Pro since ${startDate}`, endDate && `renews ${endDate}`].filter(Boolean).join(', ') || 'You are on Pro.'
+                : 'Compare plans and upgrade when you need more room.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {actionError && (
+            <div role="alert" className="flex items-start gap-2 rounded-md border border-border bg-[var(--error-soft)] px-3 py-2 text-[13px] text-destructive">
+              <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+              <span>{actionError}</span>
+            </div>
+          )}
+
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="w-8 h-8 border-4 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#2F7F7A' }}></div>
+            <div className="flex items-center justify-center py-16" role="status">
+              <Loader2 aria-hidden="true" className="size-5 animate-spin text-muted-foreground motion-reduce:animate-none" />
+              <span className="sr-only">Loading plan details</span>
             </div>
           ) : (
             <>
-              {/* Current Plan Section */}
-              <div className="rounded-lg p-5 border border-gray-200" style={{ backgroundColor: '#F9FBFF' }}>
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: '#1F2A44' }}>
-                  <Zap className="w-5 h-5" style={{ color: '#2F7F7A' }} />
-                  Current Plan
-                </h3>
-                
-                <div className="p-4 rounded-lg border-2" style={{ backgroundColor: '#FFFFFF', borderColor: '#2F7F7A' }}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <h4 className="text-xl font-bold" style={{ color: '#1F2A44' }}>
-                        {isPro ? '✨ Pro Plan' : '🆓 Free Plan'}
-                      </h4>
-                      {subscriptionDetails?.subscriptionStartDate && (
-                        <p className="text-sm mt-1" style={{ color: '#5F6F82' }}>
-                          Active since {new Date(subscriptionDetails.subscriptionStartDate).toLocaleDateString()}
-                        </p>
-                      )}
-                    </div>
-                    {isPro && subscriptionDetails?.subscriptionEndDate && (
-                      <div className="text-right">
-                        <p className="text-xs" style={{ color: '#5F6F82' }}>Renews on</p>
-                        <p className="text-sm font-semibold" style={{ color: '#2E2E2E' }}>
-                          {new Date(subscriptionDetails.subscriptionEndDate).toLocaleDateString()}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Plan Features */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-                    <div className="flex items-center gap-2">
-                      <Check className="w-4 h-4" style={{ color: '#3E8E7E' }} />
-                      <span className="text-sm" style={{ color: '#2E2E2E' }}>
-                        {isPro ? 'Unlimited' : '10'} Chat Exchanges
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Check className="w-4 h-4" style={{ color: '#3E8E7E' }} />
-                      <span className="text-sm" style={{ color: '#2E2E2E' }}>Conversation History</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Check className="w-4 h-4" style={{ color: '#3E8E7E' }} />
-                      <span className="text-sm" style={{ color: '#2E2E2E' }}>File Uploads</span>
-                    </div>
-                    {isPro && (
-                      <div className="flex items-center gap-2">
-                        <Check className="w-4 h-4" style={{ color: '#3E8E7E' }} />
-                        <span className="text-sm" style={{ color: '#2E2E2E' }}>Bioinformatics Pipelines</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <PlanCard
+                  name="Free"
+                  price="$0"
+                  blurb="For trying Geneie on a sample."
+                  current={!isPro}
+                  features={[freeChatFeature, 'Conversation history', 'File uploads']}
+                />
+                <PlanCard
+                  name="Pro"
+                  price={`$${proMonthlyDisplay}`}
+                  priceNote="per month"
+                  blurb="Auto-debit. Cancel anytime."
+                  current={isPro}
+                  highlighted
+                  features={['Unlimited chat exchanges', 'Bioinformatics pipelines', 'Conversation history', 'File uploads']}
+                >
+                  {!isPro ? (
+                    <>
+                      <Button size="lg" className="h-10 w-full max-md:h-11" onClick={handleUpgrade} disabled={busy !== null}>
+                        {busy === 'upgrade' ? (<><Loader2 className="animate-spin motion-reduce:animate-none" /> Opening checkout</>) : 'Upgrade to Pro'}
+                      </Button>
+                      <p className="mt-2 text-center text-xs text-muted-foreground">
+                        Cards, UPI, QR code, net banking and wallets.
+                      </p>
+                    </>
+                  ) : (
+                    <Button variant="outline" size="lg" className="h-10 w-full max-md:h-11" onClick={handleManageBilling} disabled={busy !== null}>
+                      {busy === 'billing' ? (<><Loader2 className="animate-spin motion-reduce:animate-none" /> Opening portal</>) : 'Manage billing and payment methods'}
+                    </Button>
+                  )}
+                </PlanCard>
               </div>
 
-              {/* Upgrade Section (for Free users) */}
-              {isFree && (
-                <div className="rounded-lg p-5 border-2" style={{ backgroundColor: '#FFFFFF', borderColor: '#2F7F7A' }}>
-                  <h3 className="text-lg font-semibold mb-3 flex items-center gap-2" style={{ color: '#1F2A44' }}>
-                    <Zap className="w-5 h-5" style={{ color: '#2F7F7A' }} />
-                    Upgrade to Pro
-                  </h3>
-                  <p className="text-sm mb-4" style={{ color: '#2E2E2E' }}>
-                    Get unlimited chat exchanges, access to bioinformatics pipelines, and more.
-                  </p>
-                  <div className="bg-white rounded-lg p-4 mb-4 border border-gray-200">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-lg font-semibold" style={{ color: '#1F2A44' }}>Pro Plan</span>
-                      <span className="text-2xl font-bold" style={{ color: '#2F7F7A' }}>${proMonthlyDisplay}<span className="text-sm font-normal" style={{ color: '#5F6F82' }}>/month</span></span>
-                    </div>
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <p className="text-xs mb-2" style={{ color: '#5F6F82' }}>Payment Methods:</p>
-                      <div className="flex flex-wrap gap-2">
-                        <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: '#FFFFFF', color: '#2E2E2E', border: '1px solid #2F7F7A' }}>Credit/Debit Cards</span>
-                        <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: '#FFFFFF', color: '#2E2E2E', border: '1px solid #2F7F7A' }}>UPI</span>
-                        <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: '#FFFFFF', color: '#2E2E2E', border: '1px solid #2F7F7A' }}>QR Code</span>
-                        <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: '#FFFFFF', color: '#2E2E2E', border: '1px solid #2F7F7A' }}>Net Banking</span>
-                        <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: '#FFFFFF', color: '#2E2E2E', border: '1px solid #2F7F7A' }}>Wallets</span>
-                      </div>
-                      <p className="text-xs mt-2" style={{ color: '#5F6F82' }}>Auto-debit subscriptions. Cancel anytime.</p>
-                    </div>
-                    <ul className="text-sm space-y-1 mt-3" style={{ color: '#2E2E2E' }}>
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4" style={{ color: '#3E8E7E' }} />
-                        Unlimited chat exchanges
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4" style={{ color: '#3E8E7E' }} />
-                        Bioinformatics pipelines access
-                      </li>
-                    </ul>
-                  </div>
-
-                  {/* Total Price */}
-                  <div className="rounded-lg p-3 mb-4 border border-gray-200" style={{ backgroundColor: '#F9FBFF' }}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold" style={{ color: '#2E2E2E' }}>Total:</span>
-                      <span className="text-xl font-bold" style={{ color: '#2F7F7A' }}>
-                        ${proMonthlyDisplay}
-                      </span>
-                    </div>
-                    <div className="text-xs mt-1" style={{ color: '#5F6F82' }}>
-                      ${proMonthlyDisplay}/month
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={handleUpgrade}
-                    className="w-full px-4 py-3 text-white rounded-lg font-semibold transition-all shadow-lg"
-                    style={{ backgroundColor: '#2F7F7A' }}
-                    onMouseEnter={(e) => { e.target.style.backgroundColor = '#256B67'; }}
-                    onMouseLeave={(e) => { e.target.style.backgroundColor = '#2F7F7A'; }}
-                  >
-                    Upgrade to Pro
-                  </button>
-                </div>
-              )}
-
-              {/* Pro User Actions */}
-              {isPro && (
-                <div className="rounded-lg p-5 border border-gray-200" style={{ backgroundColor: '#F9FBFF' }}>
-                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: '#1F2A44' }}>
-                    <CreditCard className="w-5 h-5" style={{ color: '#2F7F7A' }} />
-                    Manage Subscription
-                  </h3>
-                  <div className="space-y-3">
-                    <button
-                      onClick={handleManageBilling}
-                      className="w-full px-4 py-2 text-left bg-white border border-gray-300 rounded-lg transition-colors flex items-center justify-between"
-                      style={{ backgroundColor: '#FFFFFF' }}
-                      onMouseEnter={(e) => { e.target.style.backgroundColor = '#F9FBFF'; }}
-                      onMouseLeave={(e) => { e.target.style.backgroundColor = '#FFFFFF'; }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Receipt className="w-4 h-4 text-gray-600" />
-                        <span className="text-sm font-medium" style={{ color: '#2E2E2E' }}>Manage Billing & Payment Methods</span>
-                      </div>
-                      <span className="text-xs" style={{ color: '#5F6F82' }}>→</span>
-                    </button>
-                    <button
-                      onClick={handleCancelSubscription}
-                      className="w-full px-4 py-2 text-left border rounded-lg transition-colors flex items-center justify-between"
-                      style={{ backgroundColor: '#FFFFFF', borderColor: '#8B2F3C', color: '#8B2F3C' }}
-                      onMouseEnter={(e) => { e.target.style.backgroundColor = '#F1F6F3'; }}
-                      onMouseLeave={(e) => { e.target.style.backgroundColor = '#FFFFFF'; }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4" />
-                        <span className="text-sm font-medium">Cancel Subscription</span>
-                      </div>
-                      <span className="text-xs">→</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Billing History Section */}
-              <div className="rounded-lg p-5 border border-gray-200" style={{ backgroundColor: '#F9FBFF' }}>
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: '#1F2A44' }}>
-                  <Calendar className="w-5 h-5" style={{ color: '#2F7F7A' }} />
-                  Billing History
-                </h3>
+              <section aria-label="Billing history">
+                <h3 className="mb-2 text-sm font-medium text-foreground">Billing history</h3>
                 {billingHistory.length > 0 ? (
-                  <div className="space-y-2">
+                  <ul className="divide-y divide-border border-y border-border">
                     {billingHistory.map((invoice, idx) => (
-                      <div key={idx} className="bg-white rounded-lg p-3 border border-gray-200 flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium" style={{ color: '#1F2A44' }}>{invoice.description || 'Pro Plan Subscription'}</p>
-                          <p className="text-xs" style={{ color: '#5F6F82' }}>{new Date(invoice.date).toLocaleDateString()}</p>
+                      <li key={idx} className="flex items-center justify-between gap-3 py-2.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-foreground">{invoice.description || 'Pro plan subscription'}</p>
+                          <p className="text-xs text-muted-foreground">{new Date(invoice.date).toLocaleDateString()}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-semibold" style={{ color: '#2E2E2E' }}>${invoice.amount}</p>
-                          <p className="text-xs" style={{ color: invoice.status === 'paid' ? '#3E8E7E' : '#8B2F3C' }}>
+                          <p className="text-sm tabular-nums text-foreground">${invoice.amount}</p>
+                          <p className={cn('text-xs', invoice.status === 'paid' || !invoice.status ? 'text-muted-foreground' : 'text-destructive')}>
                             {invoice.status || 'paid'}
                           </p>
                         </div>
-                      </div>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 ) : (
-                  <div className="text-center py-8" style={{ color: '#5F6F82' }}>
-                    <Receipt className="w-12 h-12 mx-auto mb-2" style={{ color: '#5F6F82' }} />
-                    <p className="text-sm">No billing history yet</p>
-                    <p className="text-xs mt-1">Your invoices will appear here after your first payment</p>
+                  <div className="flex items-center gap-3 rounded-lg border border-dashed border-border px-4 py-3 text-[13px] text-muted-foreground">
+                    <Receipt aria-hidden="true" className="size-4 shrink-0" />
+                    <span>No invoices yet. They appear here after your first payment.</span>
                   </div>
                 )}
-              </div>
+              </section>
+
+              {isPro && (
+                <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+                  <p className="text-[13px] text-muted-foreground">
+                    Cancelling keeps Pro until the end of your billing period.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="shrink-0 max-md:h-11 border-destructive/40 text-destructive hover:bg-[var(--error-soft)] hover:text-destructive"
+                    onClick={() => setConfirmCancel(true)}
+                    disabled={busy !== null}
+                  >
+                    Cancel subscription
+                  </Button>
+                </div>
+              )}
             </>
           )}
-        </div>
-      </div>
-    </div>
+
+        <AlertDialog open={confirmCancel} onOpenChange={setConfirmCancel}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Cancel your Pro subscription?</AlertDialogTitle>
+              <AlertDialogDescription>
+                You will lose Pro features at the end of your billing period. We will open the billing portal to finish cancelling.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep Pro</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" onClick={handleCancelSubscription}>
+                Continue to billing portal
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
 export default SubscriptionPage;
-

@@ -1,19 +1,25 @@
+import { AlertTriangle, Info, X } from 'lucide-react';
+
 /**
- * Inline, non-blocking usage banner.
+ * Slim, dismissible inline notice for usage and plan limits.
  *
- * Two variants matching the two shapes already used for the guest nudge in ChatPage: a rounded
- * card for the empty/new-chat layout, and a full-width strip for an active conversation.
+ * Status colour carries the meaning (warning / info) on the icon, the hairline and a soft
+ * fill; the sentence itself stays in primary text so it reads in both themes. One CTA at most,
+ * plus a quiet dismiss. The two `layout` values only differ in spacing: `card` for the new-chat
+ * layout (sits above the composer, capped to its width), `strip` for an active conversation.
  */
 const TONES = {
   warning: {
-    card: { backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)' },
-    strip: { backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)' },
-    text: 'var(--warning)',
+    Icon: AlertTriangle,
+    fill: 'var(--warning-soft)',
+    line: 'color-mix(in srgb, var(--warning) 35%, transparent)',
+    accent: 'var(--warning)',
   },
   info: {
-    card: { backgroundColor: 'var(--info-soft)', borderColor: 'var(--info)' },
-    strip: { backgroundColor: 'var(--info-soft)', borderColor: 'var(--info)' },
-    text: 'var(--info)',
+    Icon: Info,
+    fill: 'var(--info-soft)',
+    line: 'color-mix(in srgb, var(--info) 35%, transparent)',
+    accent: 'var(--info)',
   },
 };
 
@@ -27,38 +33,43 @@ const UsageNudge = ({
 }) => {
   if (!message) return null;
   const palette = TONES[tone] || TONES.warning;
+  const { Icon } = palette;
 
-  const className = layout === 'card'
-    ? 'mb-4 w-full max-w-2xl px-4 py-3 rounded-xl border flex items-center justify-between gap-3'
-    : 'flex items-center justify-between gap-3 px-4 py-2 border-b mx-4';
+  const className =
+    layout === 'card'
+      ? 'mb-3 w-full max-w-2xl'
+      : 'mx-4 mt-2 shrink-0';
 
   return (
-    <div className={className} style={layout === 'card' ? palette.card : palette.strip}>
-      <span className="text-xs font-medium" style={{ color: palette.text }}>
-        {message}
-      </span>
-      <div className="flex items-center gap-2 shrink-0">
-        {ctaLabel && onCta && (
-          <button
-            type="button"
-            onClick={onCta}
-            className="text-xs px-3 py-1.5 rounded-lg font-medium border shrink-0 transition-colors hover:opacity-90"
-            style={{ borderColor: 'var(--accent-teal)', color: 'var(--accent-teal)' }}
-          >
-            {ctaLabel}
-          </button>
-        )}
-        {onDismiss && (
-          <button
-            type="button"
-            onClick={onDismiss}
-            aria-label="Dismiss"
-            className="text-xs px-2 py-1.5 rounded-lg transition-colors hover:opacity-70"
-            style={{ color: palette.text }}
-          >
-            Dismiss
-          </button>
-        )}
+    <div className={className}>
+      <div
+        role="status"
+        className="flex items-center gap-2.5 rounded-lg border py-1.5 pl-3 pr-1.5 text-[13px] leading-snug"
+        style={{ backgroundColor: palette.fill, borderColor: palette.line }}
+      >
+        <Icon className="size-4 shrink-0" style={{ color: palette.accent }} aria-hidden />
+        <span className="min-w-0 flex-1 text-[var(--text-primary)]">{message}</span>
+        <div className="flex shrink-0 items-center gap-1">
+          {ctaLabel && onCta && (
+            <button
+              type="button"
+              onClick={onCta}
+              className="inline-flex h-7 items-center rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-surface-hover)] [@media(pointer:coarse)]:h-9"
+            >
+              {ctaLabel}
+            </button>
+          )}
+          {onDismiss && (
+            <button
+              type="button"
+              onClick={onDismiss}
+              aria-label="Dismiss"
+              className="inline-flex size-7 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] [@media(pointer:coarse)]:size-9"
+            >
+              <X className="size-3.5" aria-hidden />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,0 +1,44 @@
+/*
+ * Geneie design v1 — shell layout overrides (rail | thread | workspace).
+ * Loaded after tokens.css. Kept out of App.css so shell work and component work never collide.
+ */
+
+/* Hairline seams instead of heavy borders; the workspace supplies its own header rule. */
+.chat-shell-left::after,
+.chat-shell-right::before {
+  background-color: hsl(var(--border));
+}
+
+.chat-shell-right {
+  background-color: hsl(var(--background));
+}
+
+/* Below 768px the rail is a drawer (App.css) and the workspace becomes a full-height sheet. */
+@media (max-width: 767px) {
+  .chat-app-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .chat-shell-right {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    width: 100%;
+    transform: translateX(100%);
+    visibility: hidden;
+    transition: transform var(--transition-move), visibility 0s linear 240ms;
+  }
+  .chat-shell-right::before {
+    display: none;
+  }
+  [data-right='open'] > .chat-shell-right {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform var(--transition-move);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-shell-right {
+    transition: none;
+  }
+}

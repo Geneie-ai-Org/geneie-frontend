@@ -4,7 +4,9 @@
  * Disease matches are a shortcut to load annotated findings for review.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronUp, Circle, Info, Loader2, Lock, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, ChevronUp, Circle, Info, Loader2, Lock, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { interpretPhenotypeNarrative, resolveHpoTerms } from '@/services/mongodbApi';
 import PanelAppSuggestSection from '@/components/PanelAppSuggestSection';
 
@@ -479,7 +481,7 @@ function InfoHint({ label, children }) {
     <span className="relative inline-flex align-middle" ref={wrapRef}>
       <button
         type="button"
-        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
+        className="relative inline-flex size-5 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/55 after:absolute after:-inset-2.5"
         style={{ color: open ? 'var(--text-primary)' : 'var(--text-tertiary)' }}
         aria-label={label}
         aria-expanded={open}
@@ -489,17 +491,12 @@ function InfoHint({ label, children }) {
           setOpen((v) => !v);
         }}
       >
-        <Info className="h-3 w-3" aria-hidden />
+        <Info className="size-3.5" aria-hidden />
       </button>
       {open ? (
         <div
           role="tooltip"
-          className="absolute left-0 top-full z-50 mt-1.5 w-60 rounded-md border px-2.5 py-2 text-2xs font-normal leading-snug shadow-md space-y-1"
-          style={{
-            color: 'var(--text-secondary)',
-            background: 'var(--bg-surface-raised)',
-            borderColor: 'var(--border-default)',
-          }}
+          className="absolute left-0 top-full z-50 mt-1.5 w-60 max-w-[min(15rem,75vw)] space-y-1 rounded-md border border-border bg-popover px-2.5 py-2 text-xs font-normal leading-snug text-popover-foreground shadow-md"
         >
           {children}
         </div>
@@ -1255,344 +1252,527 @@ export default function PhenotypeInputPanel({
     };
   }, [draft, disabled, runInterpretNote, emit]);
 
-  const inputStyle = {
-    borderColor: 'var(--border-default)',
-    background: 'var(--bg-input)',
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)',
-    color: 'var(--text-primary)',
-  };
+  // ---- presentation (logic above is unchanged) ----
 
-  // One toggle per finding, styled like the condition chips. There's no separate remove:
-  // an unselected finding is already left out of ranking, and removing one could only be
-  // undone by re-applying the disease.
+  const FINDINGS_PREVIEW = 10;
+  const CONDITIONS_PREVIEW = 3;
+  const EXAMPLE_NOTE = 'Painful blisters in skin folds, armpits and groin since childhood';
+
+  const [showAllFindings, setShowAllFindings] = useState(false);
+
+  // Stable order: findings read from the note first, then those added by a condition; within
+  // each, best match first. Never ordered by selection, so chips do not jump on a click.
+  const orderedClinical = useMemo(() => {
+    const score = (c) => {
+      const n = Number(c.match_score);
+      return Number.isFinite(n) ? n : -1;
+    };
+    return clinicalCandidates
+      .map((c, i) => ({ c, i }))
+      .sort((a, b) => {
+        const ao = a.c.origin === 'disease_annotation' ? 1 : 0;
+        const bo = b.c.origin === 'disease_annotation' ? 1 : 0;
+        if (ao !== bo) return ao - bo;
+        const diff = score(b.c) - score(a.c);
+        if (diff !== 0) return diff;
+        return a.i - b.i;
+      })
+      .map((x) => x.c);
+  }, [clinicalCandidates]);
+
+  const noteFoundCount = orderedClinical.filter((c) => c.origin !== 'disease_annotation').length;
+  const clinicalSelectedCount = clinicalCandidates.filter((c) => c.selected).length;
+  const visibleFindings = showAllFindings
+    ? orderedClinical
+    : orderedClinical.slice(0, FINDINGS_PREVIEW);
+  const hiddenFindingsCount = orderedClinical.length - visibleFindings.length;
+  const hiddenSelectedCount = showAllFindings
+    ? 0
+    : orderedClinical.slice(FINDINGS_PREVIEW).filter((c) => c.selected).length;
+  const noteGroup = visibleFindings.filter((c) => c.origin !== 'disease_annotation');
+  const conditionGroup = visibleFindings.filter((c) => c.origin === 'disease_annotation');
+  const groupsLabelled = noteGroup.length > 0 && conditionGroup.length > 0;
+
+  const unmappedCount = noteUnmapped.length;
+  const draftLen = draft.trim().length;
+  const working = searchingDiseases || interpreting;
+
+  const allConditions = primaryDisease ? [primaryDisease, ...altDiseases] : [];
+  const showConditionStep = allConditions.length > 0;
+  const showFindingsStep = clinicalCandidates.length > 0 || inheritanceCandidates.length > 0;
+  const showPanelsStep = selectedCount > 0 || (value?.selected_panels || []).length > 0;
+  let stepNo = 1;
+  const conditionStepNo = showConditionStep ? ++stepNo : 0;
+  const findingsStepNo = showFindingsStep ? ++stepNo : 0;
+  const panelsStepNo = showPanelsStep ? ++stepNo : 0;
+
+  // One toggle per finding. There's no separate remove: an unselected finding is already left
+  // out of ranking, and removing one could only be undone by re-applying the disease.
   const renderChip = (c) => {
     const label = c.hpo_name || c.matched_phrase || c.hpo_id;
-    return (
-      <button
-        key={c.hpo_id}
-        type="button"
-        disabled={disabled}
-        onClick={() => toggleCandidate(c.hpo_id)}
-        aria-pressed={!!c.selected}
-        title={c.hpo_id ? `${label} · ${c.hpo_id}` : label}
-        className="inline-flex items-center gap-1 max-w-full px-2 py-1 rounded-full border text-2xs font-medium transition-colors disabled:opacity-60"
-        style={{
-          borderColor: c.selected ? 'var(--accent-teal)' : 'var(--border-strong)',
-          background: c.selected
-            ? 'color-mix(in srgb, var(--accent-teal) 12%, transparent)'
-            : 'var(--bg-surface-raised)',
-          color: c.selected ? 'var(--accent-teal)' : 'var(--text-primary)',
-        }}
-      >
-        {c.selected ? (
-          <Check className="w-3 h-3 shrink-0" aria-hidden />
-        ) : (
-          <Circle className="w-3 h-3 shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
-        )}
-        <span className="truncate">{label}</span>
-      </button>
-    );
+    return <FindingChip key={c.hpo_id} candidate={c} label={label} disabled={disabled} onToggle={toggleCandidate} />;
   };
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-1">
-        {hideLabel ? (
-          // The upload forms already title the step "Phenotype (optional)"; one line says why.
-          <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-            Describe symptoms to rank variants by disease fit.
-          </p>
-        ) : (
-          <label className="flex items-baseline gap-1.5 text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-            Phenotype
-            <span className="text-2xs font-normal" style={{ color: 'var(--text-tertiary)' }}>
-              (optional)
-            </span>
-          </label>
-        )}
-        <InfoHint label="About phenotype">
-          <p>Clinical findings are used to rank variants by how well they fit the patient.</p>
-          {isAutomatic ? (
-            <p>
-              Automatic mode pre-selects strong disease matches and high-confidence findings.
-              Click any of them to change it.
-            </p>
-          ) : null}
-        </InfoHint>
-      </div>
+    <div className="space-y-5 text-foreground">
+      {/* 1. Describe */}
+      <section className="space-y-2" aria-labelledby="pheno-step-describe">
+        <div className="flex items-center gap-1.5">
+          {hideLabel ? (
+            <StepHeader id="pheno-step-describe" n={1} title="Describe the patient" />
+          ) : (
+            <StepHeader id="pheno-step-describe" n={1} title="Phenotype" aside="Optional" />
+          )}
+          <InfoHint label="About phenotype">
+            <p>Clinical findings are used to rank variants by how well they fit the patient.</p>
+            {isAutomatic ? (
+              <p>
+                Automatic mode pre-selects strong disease matches and high-confidence findings.
+                Click any of them to change it.
+              </p>
+            ) : null}
+          </InfoHint>
+        </div>
 
-      <div className="relative">
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onFocus={() => {
-            focusedRef.current = true;
-          }}
-          onBlur={() => {
-            setTimeout(() => {
-              focusedRef.current = false;
-            }, 150);
-          }}
-          disabled={disabled}
-          placeholder="e.g. painful blisters in skin folds, armpits and groin since childhood"
-          rows={5}
-          className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-1 resize-none text-sm transition-all pr-9"
-          style={inputStyle}
-        />
-        {draft.trim() && !disabled && (
-          <button
-            type="button"
-            onClick={clearNoteOnly}
-            className="absolute top-2 right-2 p-1 rounded-md"
-            title="Clear note and detected findings"
-            style={{ color: 'var(--text-tertiary)' }}
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-
-      <div className="flex items-center gap-2 flex-wrap min-h-[1.25rem]">
-        {searchingDiseases || interpreting ? (
-          <span className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
-            <Loader2 className="w-3 h-3 animate-spin" />
-            {searchingDiseases ? 'Finding matches…' : 'Reading note…'}
-          </span>
-        ) : draft.trim().length >= 3 ? (
-          <span className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
-            <Lock className="w-3 h-3" aria-hidden />
-            Patient names are removed automatically.
-          </span>
-        ) : draft.trim().length > 0 ? (
-          <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-            Keep typing to search…
-          </span>
-        ) : (
-          <span className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
-            <Lock className="w-3 h-3" aria-hidden />
-            Patient names are removed automatically.
-          </span>
-        )}
-      </div>
-
-      {(noteUnmapped.length > 0 || noteAmbiguous.length > 0) && (
-        <div className="text-2xs space-y-1" style={{ color: 'var(--text-tertiary)' }}>
-          {noteAmbiguous.length > 0 && <p>Ambiguous: {noteAmbiguous.join('; ')}</p>}
-          {noteUnmapped.length > 0 && (
-            <p>Could not map to HPO: {noteUnmapped.join('; ')}</p>
+        <div className="relative">
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onFocus={() => {
+              focusedRef.current = true;
+            }}
+            onBlur={() => {
+              setTimeout(() => {
+                focusedRef.current = false;
+              }, 150);
+            }}
+            disabled={disabled}
+            aria-label="Clinical note"
+            aria-describedby="pheno-note-status"
+            placeholder="Describe symptoms, age of onset and anything notable in your own words"
+            rows={5}
+            className="min-h-28 resize-none bg-background pr-10 text-base md:text-[13px] md:leading-5"
+          />
+          {draft.trim() && !disabled && (
+            <button
+              type="button"
+              onClick={clearNoteOnly}
+              aria-label="Clear note and detected findings"
+              title="Clear note and detected findings"
+              className="absolute right-1.5 top-1.5 flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55 max-md:size-11"
+            >
+              <X className="size-3.5" aria-hidden />
+            </button>
           )}
         </div>
-      )}
 
-      {primaryDisease && (() => {
-        // Chips that wrap: the first few matches stay visible, the rest sit behind "+N more".
-        // Long names truncate; the full name and ID are in the tooltip.
-        const VISIBLE = 4;
-        const all = [primaryDisease, ...altDiseases];
-        // Collapsed still keeps every selected match on screen, wherever it ranks.
-        const collapsed = all.filter((c, i) => i < VISIBLE || isActiveDisease(c));
-        const shown = showMoreDiseases ? all : collapsed;
-        const hiddenCount = all.length - collapsed.length;
-        const activeCount = all.filter(isActiveDisease).length;
-        return (
+        {draftLen === 0 && !disabled ? (
+          <p className="text-xs text-muted-foreground">
+            Example: <span className="italic">{EXAMPLE_NOTE}</span>{' '}
+            <button
+              type="button"
+              onClick={() => setDraft(EXAMPLE_NOTE)}
+              className="rounded font-medium underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55 max-md:inline-flex max-md:min-h-11 max-md:items-center"
+              style={{ color: 'hsl(var(--primary))' }}
+            >
+              Use example
+            </button>
+          </p>
+        ) : null}
+
+        <p
+          id="pheno-note-status"
+          role="status"
+          aria-live="polite"
+          className="flex min-h-5 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground"
+        >
+          {working ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
+              {searchingDiseases ? 'Finding matches…' : 'Reading note…'}
+            </span>
+          ) : draftLen > 0 && draftLen < 3 ? (
+            <span>Keep typing to search…</span>
+          ) : notePreview || candidates.length > 0 ? (
+            <span className="inline-flex items-center gap-1.5 text-foreground">
+              <Check className="size-3.5" style={{ color: 'var(--success)' }} aria-hidden />
+              {noteFoundCount > 0
+                ? `Found ${noteFoundCount} finding${noteFoundCount === 1 ? '' : 's'}`
+                : 'No findings recognised yet'}
+            </span>
+          ) : null}
+          {!working ? (
+            <span className="inline-flex items-center gap-1">
+              <Lock className="size-3" aria-hidden />
+              Patient names are removed automatically.
+            </span>
+          ) : null}
+        </p>
+
+        {(unmappedCount > 0 || noteAmbiguous.length > 0) && !working && (
           <div
-            className="px-2.5 py-2 rounded-lg border text-xs space-y-2"
-            style={{ borderColor: 'var(--border-default)', background: 'var(--bg-muted)' }}
+            role="note"
+            className="flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs"
+            style={{
+              background: 'var(--warning-soft)',
+              borderColor: 'color-mix(in srgb, var(--warning) 35%, transparent)',
+            }}
           >
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="inline-flex items-center gap-1 font-medium" style={{ color: 'var(--text-primary)' }}>
-                Likely condition
-                <InfoHint label="About disease matches">
-                  <p>Pick one or more. Their clinical findings are combined below.</p>
-                </InfoHint>
-              </span>
-              <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                {activeCount > 0 ? `${activeCount} selected` : 'Pick one or more'}
-              </span>
+            <AlertCircle className="mt-0.5 size-3.5 shrink-0" style={{ color: 'var(--warning)' }} aria-hidden />
+            <div className="min-w-0 space-y-1 text-foreground">
+              {unmappedCount > 0 && (
+                <p>
+                  <span className="font-medium">Could not map: </span>
+                  <span className="break-words">{noteUnmapped.join('; ')}</span>
+                  <span className="block text-muted-foreground">
+                    These terms are not used for ranking. Try rewording them.
+                  </span>
+                </p>
+              )}
+              {noteAmbiguous.length > 0 && (
+                <p>
+                  <span className="font-medium">Ambiguous: </span>
+                  <span className="break-words">{noteAmbiguous.join('; ')}</span>
+                </p>
+              )}
             </div>
+          </div>
+        )}
+      </section>
 
-            <div className="flex flex-wrap gap-1.5">
-              {shown.map((c) => {
-                const active = isActiveDisease(c);
-                return (
-                  <button
-                    key={diseaseKey(c)}
-                    type="button"
-                    disabled={disabled || resolving}
-                    onClick={() => applyDisease(c)}
-                    aria-pressed={active}
-                    title={c.disease_id ? `${c.disease_name} · ${c.disease_id}` : c.disease_name}
-                    className="inline-flex items-center gap-1 max-w-full px-2 py-1 rounded-full border text-2xs font-medium transition-colors disabled:opacity-60"
-                    style={{
-                      borderColor: active ? 'var(--accent-teal)' : 'var(--border-strong)',
-                      background: active
-                        ? 'color-mix(in srgb, var(--accent-teal) 12%, transparent)'
-                        : 'var(--bg-surface-raised)',
-                      color: active ? 'var(--accent-teal)' : 'var(--text-primary)',
-                    }}
-                  >
-                    {active ? (
-                      <Check className="w-3 h-3 shrink-0" aria-hidden />
-                    ) : (
-                      <Circle className="w-3 h-3 shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
-                    )}
-                    <span className="truncate">{c.disease_name}</span>
-                  </button>
-                );
-              })}
-              {hiddenCount > 0 && (
-                <button
+      {/* 2. Confirm condition */}
+      {showConditionStep &&
+        (() => {
+          // The first few matches stay visible; a selected match stays visible wherever it ranks.
+          const collapsed = allConditions.filter(
+            (c, i) => i < CONDITIONS_PREVIEW || isActiveDisease(c)
+          );
+          const shown = showMoreDiseases ? allConditions : collapsed;
+          const hiddenCount = allConditions.length - collapsed.length;
+          const activeCount = allConditions.filter(isActiveDisease).length;
+          return (
+            <section
+              className="space-y-2 border-t border-border pt-4"
+              aria-labelledby="pheno-step-condition"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <StepHeader id="pheno-step-condition" n={conditionStepNo} title="Confirm the condition" />
+                  <InfoHint label="About disease matches">
+                    <p>Pick one or more. Their clinical findings are added to the list below.</p>
+                  </InfoHint>
+                </div>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {activeCount > 0 ? `${activeCount} selected` : 'Optional'}
+                </span>
+              </div>
+
+              <ul className="divide-y divide-border overflow-hidden rounded-md border border-border">
+                {shown.map((c) => (
+                  <li key={diseaseKey(c)}>
+                    <ConditionRow
+                      condition={c}
+                      active={isActiveDisease(c)}
+                      disabled={disabled || resolving}
+                      onToggle={applyDisease}
+                    />
+                  </li>
+                ))}
+              </ul>
+
+              {hiddenCount > 0 || showMoreDiseases ? (
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   disabled={disabled}
                   onClick={() => setShowMoreDiseases((v) => !v)}
-                  className="inline-flex items-center gap-0.5 px-2 py-1 rounded-full text-2xs"
-                  style={{ color: 'var(--text-secondary)' }}
+                  aria-expanded={showMoreDiseases}
+                  className="-ml-2 text-muted-foreground max-md:h-11"
                 >
                   {showMoreDiseases ? (
                     <>
-                      Show fewer <ChevronUp className="w-3 h-3" />
+                      Show fewer <ChevronUp aria-hidden />
                     </>
                   ) : (
                     <>
-                      +{hiddenCount} more <ChevronDown className="w-3 h-3" />
+                      Show {hiddenCount} more <ChevronDown aria-hidden />
                     </>
                   )}
-                </button>
+                </Button>
+              ) : null}
+
+              {/* Says what picking does, until something is picked. */}
+              {activeCount === 0 && !resolving && (
+                <p className="text-xs text-muted-foreground">
+                  Pick a condition to add its known findings. You can also skip this.
+                </p>
               )}
-            </div>
-
-            {/* Says what picking does, until something is picked. */}
-            {activeCount === 0 && !resolving && (
-              <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                Pick a condition to see its findings.
-              </p>
-            )}
-            {propagatedFromRelated?.length > 0 && isActiveDisease(primaryDisease) && (
-              <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                Includes annotations from {propagatedFromRelated.length} related subtype
-                {propagatedFromRelated.length === 1 ? '' : 's'}.
-              </p>
-            )}
-            {resolving && (
-              <p className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
-                <Loader2 className="w-3 h-3 animate-spin" /> Loading findings for disease…
-              </p>
-            )}
-          </div>
-        );
-      })()}
-
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-          {/* The note's progress shows once, under the text box — not again here. */}
-          {!interpreting && candidates.length > 0 ? (
-            <span>
-              Clinical findings ({clinicalCandidates.filter((c) => c.selected).length}/
-              {clinicalCandidates.length} selected)
-            </span>
-          ) : null}
-        </div>
-        {(clinicalCandidates.length > 0 || inheritanceCandidates.length > 0) && (
-          <div className="flex flex-wrap justify-end gap-2 text-2xs">
-            {inheritanceCandidates.length > 0 && (
-              <button
-                type="button"
-                className="underline"
-                style={{ color: 'var(--text-secondary)' }}
-                onClick={() => setShowInheritance((v) => !v)}
-                disabled={disabled}
-              >
-                {showInheritance
-                  ? `Hide inheritance (${inheritanceCandidates.length})`
-                  : `Show inheritance (${inheritanceCandidates.length})`}
-              </button>
-            )}
-            {clinicalCandidates.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  className="underline"
-                  style={{ color: 'var(--text-secondary)' }}
-                  onClick={() => setGroupSelected(clinicalCandidates, true)}
-                  disabled={disabled}
+              {propagatedFromRelated?.length > 0 && isActiveDisease(primaryDisease) && (
+                <p className="text-xs text-muted-foreground">
+                  Includes annotations from {propagatedFromRelated.length} related subtype
+                  {propagatedFromRelated.length === 1 ? '' : 's'}.
+                </p>
+              )}
+              {resolving && (
+                <p
+                  role="status"
+                  className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
                 >
-                  Select all
-                </button>
-                <button
-                  type="button"
-                  className="underline"
-                  style={{ color: 'var(--text-secondary)' }}
-                  onClick={() => setGroupSelected(clinicalCandidates, false)}
-                  disabled={disabled}
-                >
-                  Clear selection
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* A prompt, not a warning: nothing is wrong yet, and the step is optional. The line
-        * stays while findings are listed and only its wording changes, so the chips below
-        * don't jump up on the first pick. */}
-      {clinicalCandidates.length > 0 && (
-        <p className="text-2xs" style={{ color: 'var(--text-secondary)' }}>
-          {selectedCount === 0
-            ? 'Pick the findings that match this patient. Phenotype ranking uses only the ones you select.'
-            : `Phenotype ranking will use the ${selectedCount} finding${selectedCount === 1 ? '' : 's'} you picked.`}
-        </p>
-      )}
+                  <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
+                  Loading findings for this condition…
+                </p>
+              )}
+            </section>
+          );
+        })()}
 
       {resolveError && (
-        <p className="text-2xs" style={{ color: 'var(--error)' }}>
-          {resolveError}
-        </p>
-      )}
-
-      {clinicalCandidates.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 max-h-52 overflow-y-auto">
-          {clinicalCandidates.map(renderChip)}
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs"
+          style={{
+            background: 'var(--error-soft)',
+            borderColor: 'color-mix(in srgb, var(--error) 30%, transparent)',
+          }}
+        >
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0" style={{ color: 'var(--error)' }} aria-hidden />
+          <span className="min-w-0 text-foreground">{resolveError}</span>
         </div>
       )}
 
-      {showInheritance && inheritanceCandidates.length > 0 && (
-        <div className="space-y-1">
-          <div className="flex items-center gap-1 text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-            Inheritance terms
-            <InfoHint label="About inheritance terms">
-              <p>Optional. These aren't used as clinical findings unless you select them.</p>
-            </InfoHint>
+      {/* 3. Review findings */}
+      {showFindingsStep && (
+        <section
+          className="space-y-2.5 border-t border-border pt-4"
+          aria-labelledby="pheno-step-findings"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <StepHeader id="pheno-step-findings" n={findingsStepNo} title="Review findings" />
+            {clinicalCandidates.length > 0 && (
+              <div className="flex items-center gap-0.5 text-xs">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  disabled={disabled || clinicalSelectedCount === clinicalCandidates.length}
+                  onClick={() => setGroupSelected(clinicalCandidates, true)}
+                  className="max-md:h-11 max-md:px-3"
+                >
+                  Select all {clinicalCandidates.length}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  disabled={disabled || clinicalSelectedCount === 0}
+                  onClick={() => setGroupSelected(clinicalCandidates, false)}
+                  className="max-md:h-11 max-md:px-3"
+                >
+                  Clear
+                </Button>
+              </div>
+            )}
           </div>
-          <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto opacity-80">
-            {inheritanceCandidates.map(renderChip)}
-          </div>
-        </div>
+
+          {clinicalCandidates.length > 0 && (
+            <p role="status" className="text-xs text-muted-foreground">
+              <span className="font-medium tabular-nums text-foreground">
+                {clinicalSelectedCount} of {clinicalCandidates.length} selected
+              </span>
+              {' · '}
+              {selectedCount === 0
+                ? 'Pick the findings that match this patient. Ranking uses only the ones you select.'
+                : `${selectedCount} finding${selectedCount === 1 ? '' : 's'} drive${selectedCount === 1 ? 's' : ''} phenotype ranking.`}
+            </p>
+          )}
+
+          {clinicalCandidates.length > 0 && (
+            <div className="space-y-2.5">
+              {noteGroup.length > 0 && (
+                <FindingGroup label={groupsLabelled ? 'From your note' : null}>
+                  {noteGroup.map(renderChip)}
+                </FindingGroup>
+              )}
+              {conditionGroup.length > 0 && (
+                <FindingGroup label={groupsLabelled ? 'From selected conditions' : 'From the selected condition'}>
+                  {conditionGroup.map(renderChip)}
+                </FindingGroup>
+              )}
+            </div>
+          )}
+
+          {(hiddenFindingsCount > 0 || showAllFindings) && orderedClinical.length > FINDINGS_PREVIEW && (
+            <div className="flex flex-wrap items-center gap-x-3">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAllFindings((v) => !v)}
+                aria-expanded={showAllFindings}
+                className="-ml-2 text-muted-foreground max-md:h-11"
+              >
+                {showAllFindings ? (
+                  <>
+                    Show top {FINDINGS_PREVIEW} <ChevronUp aria-hidden />
+                  </>
+                ) : (
+                  <>
+                    Show all {orderedClinical.length} <ChevronDown aria-hidden />
+                  </>
+                )}
+              </Button>
+              {hiddenSelectedCount > 0 && (
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {hiddenSelectedCount} selected but hidden
+                </span>
+              )}
+            </div>
+          )}
+
+          {inheritanceCandidates.length > 0 && (
+            <div className="space-y-1.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowInheritance((v) => !v)}
+                disabled={disabled}
+                aria-expanded={showInheritance}
+                className="-ml-2 text-muted-foreground max-md:h-11"
+              >
+                {showInheritance ? 'Hide' : 'Show'} inheritance terms ({inheritanceCandidates.length})
+                {showInheritance ? <ChevronUp aria-hidden /> : <ChevronDown aria-hidden />}
+              </Button>
+              {showInheritance && (
+                <FindingGroup label="Inheritance (not used unless you select them)">
+                  {inheritanceCandidates.map(renderChip)}
+                </FindingGroup>
+              )}
+            </div>
+          )}
+        </section>
       )}
 
       {/* Also shown while a panel is still chosen: its genes are sent with the upload,
         * so it must stay visible (and removable) even with no findings selected. */}
-      {(selectedCount > 0 || (value?.selected_panels || []).length > 0) && (
-        <PanelAppSuggestSection
-          confirmedHpoIds={candidates.filter((c) => c.selected).map((c) => c.hpo_id)}
-          // Stable text only — live `draft` was re-fetching panels on every keystroke.
-          phenotypeText={
-            value?.phenotype ||
-            value?.phenotype_note_clean ||
-            value?.phenotype_disease ||
-            ''
-          }
-          value={value}
-          conversationId={conversationId}
-          disabled={disabled}
-          isAutomatic={isAutomatic}
-          onChange={(panelPatch) => {
-            // Parent merges into sample_metadata; send panel keys only.
-            onChangeRef.current?.(panelPatch);
-          }}
-        />
+      {showPanelsStep && (
+        <section className="border-t border-border pt-4" aria-label={`Step ${panelsStepNo}: gene panels`}>
+          <PanelAppSuggestSection
+            confirmedHpoIds={candidates.filter((c) => c.selected).map((c) => c.hpo_id)}
+            // Stable text only — live `draft` was re-fetching panels on every keystroke.
+            phenotypeText={
+              value?.phenotype ||
+              value?.phenotype_note_clean ||
+              value?.phenotype_disease ||
+              ''
+            }
+            value={value}
+            conversationId={conversationId}
+            disabled={disabled}
+            isAutomatic={isAutomatic}
+            onChange={(panelPatch) => {
+              // Parent merges into sample_metadata; send panel keys only.
+              onChangeRef.current?.(panelPatch);
+            }}
+          />
+        </section>
       )}
     </div>
+  );
+}
+
+function StepHeader({ id, n, title, aside }) {
+  return (
+    <h3 id={id} className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
+      <span
+        aria-hidden
+        className="flex size-5 shrink-0 items-center justify-center rounded-full text-2xs font-semibold tabular-nums"
+        style={{ background: 'var(--accent-teal-soft)', color: 'hsl(var(--primary))' }}
+      >
+        {n}
+      </span>
+      <span>{title}</span>
+      {aside ? <span className="text-xs font-normal text-muted-foreground">{aside}</span> : null}
+    </h3>
+  );
+}
+
+function FindingGroup({ label, children }) {
+  return (
+    <div className="space-y-1.5">
+      {label ? <p className="text-2xs font-medium text-muted-foreground">{label}</p> : null}
+      <div className="flex flex-wrap gap-1.5 max-md:gap-2">{children}</div>
+    </div>
+  );
+}
+
+function FindingChip({ candidate: c, label, disabled, onToggle }) {
+  const selected = !!c.selected;
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onToggle(c.hpo_id)}
+      aria-pressed={selected}
+      title={c.hpo_id ? `${label} · ${c.hpo_id}` : label}
+      className="inline-flex h-7 max-w-full items-center gap-1 rounded-full border px-2.5 text-xs font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring/55 disabled:opacity-60 max-md:min-h-11 max-md:px-3"
+      style={{
+        borderColor: selected ? 'hsl(var(--primary))' : 'var(--border-strong)',
+        background: selected ? 'var(--accent-teal-soft)' : 'var(--bg-input)',
+        color: selected ? 'hsl(var(--primary))' : 'var(--text-primary)',
+      }}
+    >
+      {selected ? (
+        <Check className="size-3 shrink-0" aria-hidden />
+      ) : (
+        <Circle className="size-3 shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
+      )}
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
+/** Radio-style row. Picking several is allowed, so it keeps toggle (aria-pressed) semantics. */
+function ConditionRow({ condition: c, active, disabled, onToggle }) {
+  const score = c.score;
+  const strong = score != null && score >= AUTO_DISEASE_MIN_SCORE;
+  const hints = [];
+  if (score != null) hints.push(`${strong ? 'Strong match' : 'Match'} ${Number(score).toFixed(2)}`);
+  if (c.annotation_hpo_count > 0) {
+    hints.push(`${c.annotation_hpo_count} known finding${c.annotation_hpo_count === 1 ? '' : 's'}`);
+  }
+  const src = (c.sources || []).slice(0, 2).join(', ');
+  if (src) hints.push(src);
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onToggle(c)}
+      aria-pressed={active}
+      title={c.disease_id ? `${c.disease_name} · ${c.disease_id}` : c.disease_name}
+      className="flex w-full items-start gap-2.5 px-2.5 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/55 disabled:opacity-60 max-md:min-h-11"
+      style={{ background: active ? 'var(--accent-teal-soft)' : undefined }}
+    >
+      <span
+        aria-hidden
+        className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border"
+        style={{
+          borderColor: active ? 'hsl(var(--primary))' : 'var(--border-strong)',
+          background: active ? 'hsl(var(--primary))' : 'var(--bg-input)',
+          color: 'hsl(var(--primary-foreground))',
+        }}
+      >
+        {active ? <Check className="size-2.5" strokeWidth={3.5} /> : null}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] font-medium text-foreground">{c.disease_name}</span>
+        {hints.length > 0 ? (
+          <span className="mt-0.5 block truncate text-2xs tabular-nums text-muted-foreground">
+            {hints.join(' · ')}
+          </span>
+        ) : null}
+      </span>
+    </button>
   );
 }

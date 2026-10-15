@@ -13,6 +13,7 @@ import { Toaster } from '@/components/ui/sonner';
 import './index.css';
 import './App.css';
 import './design/tokens.css';
+import './design/shell.css';
 
 initAnalytics();
 

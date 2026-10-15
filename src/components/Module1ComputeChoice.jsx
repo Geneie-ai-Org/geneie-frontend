@@ -146,18 +146,15 @@ export function module1ComputeSubmitLabel(choice, state) {
   return 'Start on GPU';
 }
 
-function ComputeCard({ name, value, checked, onSelect, disabled, title, badge, description, children }) {
+function ComputeCard({ name, value, checked, onSelect, disabled, title, badge, eta, description, children }) {
   return (
     <label
       className={cn(
         'relative flex items-start gap-3 rounded-lg border px-3.5 py-3 transition-colors',
-        'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--accent-teal)]',
+        'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/55',
+        checked ? 'border-primary bg-[var(--accent-teal-soft)]' : 'border-border bg-[var(--bg-input)] hover:border-[var(--border-strong)]',
         disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
       )}
-      style={{
-        borderColor: checked ? 'var(--accent-teal)' : 'var(--border-default)',
-        backgroundColor: checked ? 'var(--accent-teal-soft)' : 'var(--bg-input)',
-      }}
     >
       <input
         type="radio"
@@ -173,24 +170,24 @@ function ComputeCard({ name, value, checked, onSelect, disabled, title, badge, d
       />
       <span
         aria-hidden="true"
-        className="mt-0.5 w-4 h-4 shrink-0 rounded-full border flex items-center justify-center"
-        style={{ borderColor: checked ? 'var(--accent-teal)' : 'var(--border-strong)' }}
+        className={cn(
+          'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
+          checked ? 'border-primary' : 'border-[var(--border-strong)]'
+        )}
       >
-        {checked && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--accent-teal)' }} />}
+        {checked && <span className="h-2 w-2 rounded-full bg-primary" />}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{title}</span>
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="text-sm font-medium text-foreground">{title}</span>
           {badge && (
-            <span
-              className="text-2xs font-semibold px-1.5 h-[18px] inline-flex items-center rounded-full"
-              style={{ backgroundColor: 'var(--accent-teal-soft)', color: 'var(--accent-teal)' }}
-            >
+            <span className="inline-flex h-[18px] items-center rounded-full bg-[var(--accent-teal-soft)] px-1.5 text-2xs font-semibold text-primary">
               {badge}
             </span>
           )}
+          {eta && <span className="ml-auto text-xs tabular-nums text-muted-foreground">{eta}</span>}
         </span>
-        <span className="block text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>{description}</span>
+        <span className="mt-0.5 block text-xs text-[var(--text-secondary)]">{description}</span>
         {children}
       </span>
     </label>
@@ -198,18 +195,20 @@ function ComputeCard({ name, value, checked, onSelect, disabled, title, badge, d
 }
 
 /**
- * GPU vs CPU choice on the last Module 1 wizard step. Native radios inside a radiogroup, so
- * arrow keys move between the cards. `value` null means nothing chosen yet (sent as "auto").
+ * GPU vs CPU choice on the last Module 1 wizard step: two radio cards. GPU is the
+ * recommendation, with its ETA and the live queue note; CPU starts at once but is slower.
+ * Native radios inside a radiogroup, so arrow keys move between the cards. `value` null means
+ * nothing chosen yet (sent as "auto").
  */
 const Module1ComputeChoice = ({ value, onChange, state, disabled = false }) => {
   const groupName = useId();
   const labelId = `${groupName}-label`;
   const kind = state?.kind;
-  const lineColor = kind === 'no_gpu' ? 'var(--warning)' : 'var(--text-tertiary)';
+  const lineClass = kind === 'no_gpu' ? 'text-[var(--warning)]' : 'text-muted-foreground';
 
   return (
     <div>
-      <span id={labelId} className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+      <span id={labelId} className="mb-1.5 block text-xs font-medium text-foreground">
         Where should this run?
       </span>
       <div role="radiogroup" aria-labelledby={labelId} className="flex flex-col gap-2">
@@ -219,17 +218,14 @@ const Module1ComputeChoice = ({ value, onChange, state, disabled = false }) => {
           checked={value === 'gpu'}
           onSelect={onChange}
           disabled={disabled}
-          title="Run on GPU"
+          title="GPU"
           badge="Recommended"
+          eta="20–30 min"
           description="Fastest. Finishes in about 20–30 min once it starts."
         >
           {state?.gpuLine && (
-            <span
-              className="flex items-start gap-1.5 mt-1.5 text-2xs"
-              style={{ color: lineColor }}
-              aria-live="polite"
-            >
-              {kind === 'loading' && <Loader2 className="w-3 h-3 mt-px animate-spin shrink-0" style={{ color: 'var(--accent-teal)' }} />}
+            <span className={cn('mt-1.5 flex items-start gap-1.5 text-2xs', lineClass)} aria-live="polite">
+              {kind === 'loading' && <Loader2 className="mt-px h-3 w-3 shrink-0 animate-spin" aria-hidden />}
               <span>{state.gpuLine}</span>
             </span>
           )}
@@ -240,8 +236,9 @@ const Module1ComputeChoice = ({ value, onChange, state, disabled = false }) => {
           checked={value === 'cpu'}
           onSelect={onChange}
           disabled={disabled}
-          title="Run on CPU now"
-          description="Starts immediately on our CPU cluster. Slower: about 1½–2½ h. Same results, same run credit."
+          title="CPU"
+          eta="1½–2½ h"
+          description="Starts immediately on our CPU cluster, but is slower. Same results, same run credit."
         />
       </div>
     </div>

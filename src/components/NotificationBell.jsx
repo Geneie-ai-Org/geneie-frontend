@@ -1,33 +1,34 @@
-import { Bell } from 'lucide-react';
+import { useMemo } from 'react';
+import { Bell, CheckCheck } from 'lucide-react';
 import { useNotifications } from '@/hooks/useNotifications';
+import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { PHENOTYPE_FILTER_DISPLAY_NAME } from '@/lib/filterDisplayNames';
 
-const JOB_TYPE_CONFIG = {
-  annovar: { label: 'Annotation', color: 'var(--accent-teal)' },
-  acmg: { label: 'ACMG', color: 'var(--accent-purple, #7c3aed)' },
-  exomiser: { label: PHENOTYPE_FILTER_DISPLAY_NAME, color: 'var(--warning)' },
-  module1: { label: 'Raw data', color: 'var(--accent-teal)' },
+const JOB_TYPE_LABELS = {
+  annovar: 'Annotation',
+  acmg: 'ACMG',
+  exomiser: PHENOTYPE_FILTER_DISPLAY_NAME,
+  module1: 'Raw data',
 };
 
-function getJobColor(jobType) {
-  return (JOB_TYPE_CONFIG[jobType] || {}).color || 'var(--text-tertiary)';
-}
 function getJobLabel(jobType) {
-  return (JOB_TYPE_CONFIG[jobType] || {}).label || jobType;
+  return JOB_TYPE_LABELS[jobType] || jobType;
 }
 
 function timeAgo(dateStr) {
   if (!dateStr) return '';
   const now = Date.now();
   const then = new Date(dateStr).getTime();
+  if (Number.isNaN(then)) return '';
   const diffMs = now - then;
   const mins = Math.floor(diffMs / 60000);
   if (mins < 1) return 'just now';
@@ -39,10 +40,43 @@ function timeAgo(dateStr) {
   return new Date(dateStr).toLocaleDateString();
 }
 
-const DEFAULT_TRIGGER_CLASS =
-  'relative p-1.5 rounded-lg text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-0';
+/** Today / This week / Earlier, newest first inside each group (the API already returns newest first). */
+function groupByRecency(items) {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const weekAgo = startOfToday.getTime() - 6 * 86400000;
+  const groups = { today: [], week: [], older: [] };
+  items.forEach((n) => {
+    const t = new Date(n.created_at).getTime();
+    if (Number.isNaN(t)) groups.older.push(n);
+    else if (t >= startOfToday.getTime()) groups.today.push(n);
+    else if (t >= weekAgo) groups.week.push(n);
+    else groups.older.push(n);
+  });
+  return [
+    { label: 'Today', items: groups.today },
+    { label: 'This week', items: groups.week },
+    { label: 'Earlier', items: groups.older },
+  ].filter((g) => g.items.length > 0);
+}
 
-export default function NotificationBell({ onNavigateToConversation, triggerClassName }) {
+const DEFAULT_TRIGGER_CLASS =
+  'inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 aria-expanded:bg-accent';
+
+/**
+ * Notification bell with a recency-grouped popover.
+ *
+ * `side` / `align` place the popover, `tooltip` (optional) adds a hover/focus tooltip to the
+ * trigger for icon-only rails, and `triggerClassName` restyles the button. All three are
+ * additive; the original two props behave exactly as before.
+ */
+export default function NotificationBell({
+  onNavigateToConversation,
+  triggerClassName,
+  side = 'right',
+  align = 'end',
+  tooltip,
+}) {
   const {
     unreadCount,
     notifications,
@@ -53,6 +87,8 @@ export default function NotificationBell({ onNavigateToConversation, triggerClas
     markAllRead,
     handleNotificationClick,
   } = useNotifications();
+
+  const groups = useMemo(() => groupByRecency(notifications), [notifications]);
 
   const handleOpenChange = (open) => {
     if (open) {
@@ -69,127 +105,132 @@ export default function NotificationBell({ onNavigateToConversation, triggerClas
     }
   };
 
+  const badgeText = unreadCount > 99 ? '99+' : String(unreadCount);
+
+  const trigger = (
+    <DropdownMenuTrigger
+      className={cn('relative', triggerClassName || DEFAULT_TRIGGER_CLASS)}
+      aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount > 99 ? 'more than 99' : unreadCount} unread` : ''}`}
+    >
+      <Bell className="size-4" aria-hidden="true" />
+      {unreadCount > 0 && (
+        <span
+          aria-hidden="true"
+          className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none tabular-nums text-primary-foreground ring-2 ring-[var(--bg-sidebar)]"
+        >
+          {badgeText}
+        </span>
+      )}
+    </DropdownMenuTrigger>
+  );
+
   return (
     <DropdownMenu open={dropdownOpen} onOpenChange={handleOpenChange}>
-      <DropdownMenuTrigger
-        className={triggerClassName || DEFAULT_TRIGGER_CLASS}
-        aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
-      >
-        <span className="relative inline-flex">
-          <Bell className="w-5 h-5" />
-          {unreadCount > 0 && (
-            <span
-              className="absolute -top-2 -right-2 h-4 min-w-4 px-1 rounded-full inline-flex items-center justify-center text-2xs font-semibold leading-none tabular-nums bg-[var(--accent-teal)] text-[var(--bg-app)]"
-            >
-              {unreadCount > 99 ? '99+' : unreadCount}
-            </span>
-          )}
-        </span>
-      </DropdownMenuTrigger>
+      {tooltip ? (
+        <Tooltip>
+          <TooltipTrigger render={trigger} />
+          <TooltipContent side={side}>{tooltip}</TooltipContent>
+        </Tooltip>
+      ) : (
+        trigger
+      )}
 
       <DropdownMenuContent
-        side="right"
-        align="end"
-        sideOffset={6}
-        className="w-[336px] p-0 rounded-xl overflow-hidden shadow-2xl bg-[var(--bg-surface-raised)] border border-[var(--border-default)]"
+        side={side}
+        align={align}
+        sideOffset={8}
+        className="w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg p-0"
       >
-        <div className="px-3.5 h-10 flex items-center justify-between border-b border-[var(--border-subtle)]">
-          <span className="text-xs font-semibold tracking-tight text-[var(--text-primary)]">
-            Notifications
-          </span>
-          {unreadCount > 0 && (
-            <div className="flex items-center gap-2">
-              <span
-                className="text-2xs px-1.5 h-[18px] inline-flex items-center rounded-full font-semibold tabular-nums bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]"
-              >
-                {unreadCount} new
-              </span>
-              {/* Clicking one notification only clears that conversation's, so reading
-                * everything needed a way out that isn't "open every conversation". */}
-              <button
-                type="button"
-                onClick={(e) => { e.preventDefault(); markAllRead(); }}
-                className="text-2xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] rounded"
-              >
-                Mark all read
-              </button>
-            </div>
-          )}
+        <div className="flex min-h-11 items-center justify-between border-b border-border px-3.5">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-medium text-foreground">Notifications</span>
+            {unreadCount > 0 && (
+              <span className="text-xs tabular-nums text-muted-foreground">{badgeText} unread</span>
+            )}
+          </div>
+          {/* Opening one notification only clears that conversation's, so reading everything
+            * needed a way out that isn't "open every conversation". */}
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); markAllRead(); }}
+            disabled={unreadCount === 0}
+            className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs max-md:h-11 max-md:px-3 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 disabled:pointer-events-none disabled:opacity-40"
+          >
+            <CheckCheck className="size-3.5" aria-hidden="true" />
+            Mark all read
+          </button>
         </div>
 
-        <ScrollArea className={notifications.length > 4 ? 'h-[360px]' : ''}>
+        <ScrollArea className={notifications.length > 4 ? 'h-[min(24rem,60vh)]' : ''}>
           {loading && notifications.length === 0 ? (
-            <div aria-busy="true" aria-live="polite">
+            <div aria-busy="true" aria-live="polite" className="py-1">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="px-3.5 py-2.5 border-b border-[var(--border-subtle)] last:border-b-0">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="h-3 w-14 rounded bg-[var(--bg-surface-hover)] animate-pulse" />
-                    <div className="h-3 w-8 rounded bg-[var(--bg-surface-hover)] animate-pulse" />
-                  </div>
-                  <div className="h-3.5 w-[70%] rounded bg-[var(--bg-surface-hover)] animate-pulse mb-1.5" />
-                  <div className="h-3 w-[90%] rounded bg-[var(--bg-surface-hover)] animate-pulse" />
+                <div key={i} className="px-3.5 py-3">
+                  <div className="mb-2 h-3 w-24 animate-pulse rounded bg-muted" />
+                  <div className="mb-1.5 h-3.5 w-[70%] animate-pulse rounded bg-muted" />
+                  <div className="h-3 w-[90%] animate-pulse rounded bg-muted" />
                 </div>
               ))}
               <span className="sr-only">Loading notifications…</span>
             </div>
           ) : notifications.length === 0 ? (
-            <div className="py-10 px-6 text-center">
-              <p className="text-xs text-[var(--text-secondary)]">
-                You're all caught up.
-              </p>
-              <p className="mt-1 text-2xs text-[var(--text-tertiary)]">
-                We'll ping you here when a pipeline finishes.
+            <div className="px-6 py-10 text-center">
+              <Bell className="mx-auto mb-2 size-5 text-[var(--text-disabled)]" aria-hidden="true" />
+              <p className="text-[13px] font-medium text-foreground">You&rsquo;re all caught up</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                When an annotation, ACMG or raw-data run finishes, it shows up here.
               </p>
             </div>
           ) : (
-            <div>
-              {notifications.map((n) => {
-                const color = getJobColor(n.job_type);
-                const label = getJobLabel(n.job_type);
-                return (
-                  <DropdownMenuItem
-                    key={n.id}
-                    onSelect={() => onClickNotification(n)}
-                    aria-label={`${label} — ${n.title}. ${n.read ? 'Read' : 'Unread'}. ${timeAgo(n.created_at)}.`}
-                    data-unread={!n.read || undefined}
-                    className="group relative flex flex-col items-stretch gap-1 px-3.5 py-2.5 rounded-none cursor-pointer border-b border-[var(--border-subtle)] last:border-b-0 data-[highlighted]:bg-[var(--bg-surface-hover)] focus:bg-[var(--bg-surface-hover)]"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="text-2xs font-semibold uppercase shrink-0"
-                        style={{ color, letterSpacing: '0.08em' }}
+            <div className="pb-1">
+              {groups.map((group) => (
+                <div key={group.label} role="group" aria-label={group.label}>
+                  <p className="px-3.5 pb-1 pt-3 text-2xs font-medium tracking-wide text-muted-foreground">
+                    {group.label}
+                  </p>
+                  {group.items.map((n) => {
+                    const label = getJobLabel(n.job_type);
+                    const unread = !n.read;
+                    return (
+                      <DropdownMenuItem
+                        key={n.id}
+                        onClick={() => onClickNotification(n)}
+                        aria-label={`${label}: ${n.title}. ${unread ? 'Unread' : 'Read'}. ${timeAgo(n.created_at)}.`}
+                        data-unread={unread || undefined}
+                        className={cn(
+                          'relative flex-col items-stretch gap-0.5 rounded-none py-2.5 pl-7 pr-3.5 focus:bg-accent',
+                          unread && 'bg-primary/5'
+                        )}
                       >
-                        {label}
-                      </span>
-                      <span
-                        className="w-0.5 h-0.5 rounded-full shrink-0 bg-[var(--text-tertiary)]"
-                        aria-hidden
-                      />
-                      <span className="text-2xs shrink-0 tabular-nums text-[var(--text-tertiary)]">
-                        {timeAgo(n.created_at)}
-                      </span>
-                      {!n.read && (
-                        <span
-                          className="ml-auto w-[7px] h-[7px] rounded-full shrink-0"
-                          style={{ backgroundColor: color }}
-                          aria-label="unread"
-                        />
-                      )}
-                    </div>
-                    <p className="text-xs font-medium leading-snug truncate text-[var(--text-primary)]">
-                      {n.title}
-                    </p>
-                    <p className="text-xs leading-snug truncate text-[var(--text-secondary)]">
-                      {n.message}
-                    </p>
-                    {n.conversation_title && (
-                      <p className="text-2xs truncate text-[var(--text-tertiary)]">
-                        in {n.conversation_title}
-                      </p>
-                    )}
-                  </DropdownMenuItem>
-                );
-              })}
+                        {unread && (
+                          <span
+                            aria-hidden="true"
+                            className="absolute left-3 top-[1.05rem] size-1.5 rounded-full bg-primary"
+                          />
+                        )}
+                        <div className="flex items-center gap-2 text-2xs text-muted-foreground">
+                          <span className="font-medium">{label}</span>
+                          <span aria-hidden="true">&middot;</span>
+                          <span className="tabular-nums">{timeAgo(n.created_at)}</span>
+                        </div>
+                        <p className={cn('truncate text-[13px] leading-snug', unread ? 'font-medium text-foreground' : 'text-muted-foreground')}>
+                          {n.title}
+                        </p>
+                        {n.message && (
+                          <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">
+                            {n.message}
+                          </p>
+                        )}
+                        {n.conversation_title && (
+                          <p className="truncate text-2xs text-[var(--text-tertiary)]">
+                            in {n.conversation_title}
+                          </p>
+                        )}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           )}
         </ScrollArea>

@@ -2,21 +2,16 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { codeToHtml } from 'shiki';
 import { Check, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 
 /**
- * Code block product component (moved out of prompt-kit): shiki highlighting
- * inside a shadcn Card with a header row (language Badge + copy Button/Tooltip).
+ * Code block: shiki highlighting in a flat hairline surface. A slim header carries the language
+ * and an always-visible copy button; the body scrolls horizontally and never wraps.
+ *
+ * Highlighting is emitted for BOTH themes (`--shiki-light` / `--shiki-dark` custom properties)
+ * and the active one is picked in CSS (`.chat-code`, App.css), so the block follows the app theme
+ * without re-highlighting. Passing an explicit `theme` still pins a single shiki theme.
  */
-export function CodeBlock({ code, language = 'plaintext', theme = 'github-dark', className }) {
+export function CodeBlock({ code, language = 'plaintext', theme, className }) {
   const codeText = Array.isArray(code) ? code.join('') : String(code ?? '');
   const [highlightedHtml, setHighlightedHtml] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -25,11 +20,16 @@ export function CodeBlock({ code, language = 'plaintext', theme = 'github-dark',
     let active = true;
     async function highlight() {
       if (!codeText) {
-        if (active) setHighlightedHtml('<pre><code></code></pre>');
+        if (active) setHighlightedHtml(null);
         return;
       }
       try {
-        const html = await codeToHtml(codeText, { lang: language, theme });
+        const html = await codeToHtml(
+          codeText,
+          theme
+            ? { lang: language, theme }
+            : { lang: language, themes: { light: 'github-light', dark: 'github-dark' }, defaultColor: false }
+        );
         if (active) setHighlightedHtml(html);
       } catch {
         if (active) setHighlightedHtml(null);
@@ -50,50 +50,38 @@ export function CodeBlock({ code, language = 'plaintext', theme = 'github-dark',
   }, [codeText]);
 
   return (
-    <Card
+    <div
       className={cn(
-        'not-prose w-full gap-0 py-0 overflow-hidden rounded-xl ring-0 border border-[var(--border-default)]',
+        'chat-code not-prose my-3 w-full overflow-hidden rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface-sunken)]',
         className
       )}
-      style={{ backgroundColor: 'var(--bg-surface)' }}
     >
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--border-default)]">
-        <Badge variant="secondary" className="font-mono text-2xs normal-case">
-          {language}
-        </Badge>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-6 rounded-md"
-                  onClick={handleCopy}
-                  aria-label={copied ? 'Copied!' : 'Copy code'}
-                >
-                  {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                </Button>
-              }
-            />
-            <TooltipContent>{copied ? 'Copied!' : 'Copy code'}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+      <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pl-3 pr-1 h-8">
+        <span className="font-mono text-[11px] leading-none text-[var(--text-tertiary)]">{language}</span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label={copied ? 'Copied' : `Copy ${language} code`}
+          className="inline-flex h-6 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] [@media(pointer:coarse)]:h-9 [@media(pointer:coarse)]:px-3"
+        >
+          {copied ? (
+            <Check className="size-3.5" style={{ color: 'var(--success)' }} aria-hidden />
+          ) : (
+            <Copy className="size-3.5" aria-hidden />
+          )}
+          <span aria-live="polite">{copied ? 'Copied' : 'Copy'}</span>
+        </button>
       </div>
 
       {highlightedHtml ? (
-        <div
-          className="w-full overflow-x-auto text-xs [&>pre]:px-4 [&>pre]:py-4"
-          dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-        />
+        <div className="chat-code-body" dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
       ) : (
-        <div className="w-full overflow-x-auto text-xs">
-          <pre className="px-4 py-4">
+        <div className="chat-code-body">
+          <pre>
             <code>{codeText}</code>
           </pre>
         </div>
       )}
-    </Card>
+    </div>
   );
 }

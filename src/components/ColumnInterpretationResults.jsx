@@ -1,8 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Trash2, Check, Filter, Stethoscope, Tags, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, FileText, Info, Trash2, Filter, Stethoscope, Tags, X } from 'lucide-react';
 import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
 import { formatAcmgPhenotypeMeterLabel } from '@/lib/filterDisplayNames';
-import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Accordion,
   AccordionContent,
@@ -10,7 +19,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 
-/** Dark theme tokens — aligned with App.css */
+/** Semantic tokens only (src/design/tokens.css). Status colours carry meaning, never decoration. */
 const C = {
   surface: 'var(--bg-surface-raised)',
   surfaceCard: 'var(--bg-surface)',
@@ -22,25 +31,59 @@ const C = {
   textDim: 'var(--text-tertiary)',
   success: 'var(--success)',
   successSoft: 'var(--success-soft)',
-  warning: 'var(--accent-teal)',
-  warningSoft: 'var(--accent-teal-soft)',
-  warningText: 'var(--accent-teal)',
+  warning: 'var(--warning)',
+  warningSoft: 'var(--warning-soft)',
+  warningText: 'var(--warning)',
   info: 'var(--info)',
   infoSoft: 'var(--info-soft)',
-  teal: 'var(--accent-teal)',
+  teal: 'hsl(var(--primary))',
   onAccent: 'var(--accent-teal-contrast)',
   tealSoft: 'var(--accent-teal-soft)',
-  tealHover: 'var(--accent-teal-hover)',
   error: 'var(--error)',
   errorSoft: 'var(--error-soft)',
-  track: 'var(--bg-surface-hover)',
-  tooltip: 'var(--bg-surface-hover)',
-  shadow: 'var(--shadow-xl)',
+  track: 'var(--segment-track)',
 };
 
 // Tokens are CSS variables, so a hex alpha suffix (tint(C.success, 40)) is invalid CSS and the
 // browser drops it. Mix with transparent instead.
 const tint = (color, pct) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+
+const CHIP_TONES = {
+  success: [C.successSoft, C.success],
+  info: [C.infoSoft, C.info],
+  warning: [C.warningSoft, C.warning],
+  error: [C.errorSoft, C.error],
+  neutral: [C.track, C.textMuted],
+};
+
+/** Status as a word plus a small dot. */
+function Chip({ tone = 'neutral', children }) {
+  const [bg, fg] = CHIP_TONES[tone] || CHIP_TONES.neutral;
+  return (
+    <span
+      className="inline-flex h-5 max-w-full shrink-0 items-center gap-1.5 rounded-full px-2 text-2xs font-medium"
+      style={{ background: bg, color: fg }}
+    >
+      <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: fg }} />
+      <span className="truncate">{children}</span>
+    </span>
+  );
+}
+
+/** Inline notice: hairline border, soft status fill, readable foreground text. */
+function Notice({ tone = 'info', icon: Icon = Info, children }) {
+  const [bg, fg] = CHIP_TONES[tone] || CHIP_TONES.info;
+  return (
+    <div
+      role={tone === 'error' ? 'alert' : 'status'}
+      className="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs leading-relaxed"
+      style={{ background: bg, borderColor: tint(fg, 30), color: C.text }}
+    >
+      <Icon className="mt-0.5 size-3.5 shrink-0" style={{ color: fg }} aria-hidden />
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
 
 const ColumnInterpretationResults = ({
   interpretationResult,
@@ -71,22 +114,25 @@ const ColumnInterpretationResults = ({
   isRunningAnnovar = false,
   hasAnnotatedFile = false,
   initialStep = null,
+  // Workspace mode: render as plain panel content (no overlay, no close button, no Escape).
+  // Default false keeps today's modal mount in ChatPage working.
+  embedded = false,
 }) => {
   const [expandedStep, setExpandedStep] = useState(initialStep ?? (hasAnnotatedFile ? 2 : null)); // Track which step is expanded
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // Explicit remove-file confirmation only
   const [showAnnovarConfirm, setShowAnnovarConfirm] = useState(false); // Confirm Annotation when all columns present
 
-  // Close on ESC — a nested confirm dialog takes precedence over closing the whole modal.
+  // Close on ESC (modal mode only). A nested confirm takes precedence over closing the whole view.
   useEffect(() => {
+    if (embedded) return undefined;
     const onKeyDown = (e) => {
       if (e.key !== 'Escape') return;
-      if (showDeleteConfirm) { setShowDeleteConfirm(false); return; }
-      if (showAnnovarConfirm) { setShowAnnovarConfirm(false); return; }
+      if (showDeleteConfirm || showAnnovarConfirm) return;
       onClose?.();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showDeleteConfirm, showAnnovarConfirm, onClose]);
+  }, [embedded, showDeleteConfirm, showAnnovarConfirm, onClose]);
 
   const backgroundJobActive = isRunningAnnovar || isApplyingProprietaryFilter;
   const genomeMismatch = interpretationResult?.genome_build_check?.status === 'mismatch';
@@ -248,27 +294,6 @@ const ColumnInterpretationResults = ({
     if (status === 'pending') return 'Pending';
     if (status === 'partial') return 'Partially met';
     return 'Needs columns';
-  };
-
-  const getStepBadgeStyle = (status) => {
-    if (status === 'passed') return { backgroundColor: C.successSoft, color: C.success };
-    if (status === 'pending') return { backgroundColor: C.infoSoft, color: C.info };
-    return { backgroundColor: C.warningSoft, color: C.warning };
-  };
-
-  const tooltipStyle = {
-    backgroundColor: C.tooltip,
-    color: C.text,
-    fontSize: '13px',
-    fontWeight: '500',
-    border: `1px solid ${C.border}`,
-    boxShadow: C.shadow,
-  };
-
-  const tooltipArrowStyle = {
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderTopColor: C.tooltip,
   };
 
   /** Render a column group with exception-only display:
@@ -474,15 +499,15 @@ const ColumnInterpretationResults = ({
       const columnsNoValidValues = stepData.columns_no_valid_values || [];
       return (
         <div className="space-y-2 text-sm">
-          {renderColumnGroup(`step1_required`, 'Required Columns', required, columnsNoValidValues)}
+          {renderColumnGroup(`step1_required`, 'Required columns', required, columnsNoValidValues)}
         </div>
       );
     } else if (stepNumber === 2) {
       if (stepData.not_implemented) {
         return (
-          <div className="mt-3 p-2 rounded text-sm" style={{ backgroundColor: C.infoSoft, color: C.info, border: `1px solid ${C.info}` }}>
-            Column definitions pending. Proprietary filters will be unavailable until column list is provided.
-          </div>
+          <Notice tone="info" icon={Info}>
+            Column definitions are pending. Proprietary filters stay unavailable until the column list is provided.
+          </Notice>
         );
       }
 
@@ -493,18 +518,18 @@ const ColumnInterpretationResults = ({
 
       return (
         <div className="space-y-3 text-sm">
-          {renderColumnGroup(`step2_required`, 'Required Columns', required, columnsNoValidValues)}
-          {renderColumnGroup(`step2_pathogenicity`, 'Pathogenicity Predictors (At Least 2 Required)', pathogenicity_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 2 })}
+          {renderColumnGroup(`step2_required`, 'Required columns', required, columnsNoValidValues)}
+          {renderColumnGroup(`step2_pathogenicity`, 'Pathogenicity predictors (at least 2 required)', pathogenicity_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 2 })}
 
           {missing_groups.length > 0 && (
-            <div className="p-2 rounded" style={{ backgroundColor: C.errorSoft, border: `1px solid ${tint(C.error, 40)}` }}>
-              <p className="mb-1 font-medium" style={{ color: C.error }}>Missing Groups</p>
-              <ul className="list-inside" style={{ color: C.error }}>
+            <Notice tone="error" icon={AlertCircle}>
+              <p className="font-medium">Missing groups</p>
+              <ul className="mt-1 list-inside list-disc">
                 {missing_groups.map((group, idx) => (
                   <li key={idx}>{group}</li>
                 ))}
               </ul>
-            </div>
+            </Notice>
           )}
         </div>
       );
@@ -523,21 +548,21 @@ const ColumnInterpretationResults = ({
 
       return (
         <div className="space-y-3 text-sm">
-          {renderColumnGroup(`step3_required`, 'Required Columns', required, columnsNoValidValues)}
-          {renderColumnGroup(`step3_genotype`, 'Sample Genotype (Any One Required)', sample_genotype_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 1 })}
-          {renderColumnGroup(`step3_pathscore`, 'Pathogenicity Scores (Any One Required)', pathogenicity_score_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 1 })}
-          {renderConditionalGroup(`step3_conditional`, 'Conditional Columns', conditional)}
-          {renderColumnGroup(`step3_optional`, 'Optional Columns', optional, [], { missingLabel: 'Not found', missingColor: C.textDim })}
+          {renderColumnGroup(`step3_required`, 'Required columns', required, columnsNoValidValues)}
+          {renderColumnGroup(`step3_genotype`, 'Sample genotype (any one required)', sample_genotype_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 1 })}
+          {renderColumnGroup(`step3_pathscore`, 'Pathogenicity scores (any one required)', pathogenicity_score_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 1 })}
+          {renderConditionalGroup(`step3_conditional`, 'Conditional columns', conditional)}
+          {renderColumnGroup(`step3_optional`, 'Optional columns', optional, [], { missingLabel: 'Not found', missingColor: C.textDim })}
 
           {missing_groups.length > 0 && (
-            <div className="p-2 rounded" style={{ backgroundColor: C.warningSoft, border: `1px solid ${C.warning}` }}>
-              <p className="font-semibold mb-1" style={{ color: C.warning }}>Missing Column Groups:</p>
-              <ul className="list-disc list-inside" style={{ color: C.warningText }}>
+            <Notice tone="warning" icon={AlertCircle}>
+              <p className="font-medium">Missing column groups</p>
+              <ul className="mt-1 list-inside list-disc">
                 {missing_groups.map((group, idx) => (
                   <li key={idx}>{group}</li>
                 ))}
               </ul>
-            </div>
+            </Notice>
           )}
         </div>
       );
@@ -555,18 +580,14 @@ const ColumnInterpretationResults = ({
       await onDeleteDocument();
     }
     setShowDeleteConfirm(false);
-    onClose();
+    onClose?.();
   };
 
-  const handleCancelDelete = () => {
-    setShowDeleteConfirm(false);
-  };
-
-  // --- Stepper model (horizontal stepper + detail layout) ---
+  // --- Stepper model ---
   const stepperSteps = [
     {
       n: 1,
-      name: isVcfFile ? 'Ready for Annotation' : 'VCF Reconstruction',
+      name: isVcfFile ? 'Ready for annotation' : 'VCF reconstruction',
       icon: FileText,
       status: step1Status,
       progress: step1Progress,
@@ -574,7 +595,7 @@ const ColumnInterpretationResults = ({
     },
     {
       n: 2,
-      name: step2?.step_name || 'Annotation Stage',
+      name: step2?.step_name || 'Annotation stage',
       icon: Filter,
       status: step2Status,
       progress: step2Progress,
@@ -582,7 +603,7 @@ const ColumnInterpretationResults = ({
     },
     {
       n: 3,
-      name: 'Clinical Decision',
+      name: 'Clinical decision',
       icon: Stethoscope,
       status: step3Status,
       progress: step3Progress,
@@ -598,304 +619,174 @@ const ColumnInterpretationResults = ({
   const nextIsPrimary = selectedStepData?.status !== 'failed';
   const goToStep = (n) => setExpandedStep(Math.max(1, Math.min(stepperSteps.length, n)));
 
-  return (
-    <>
-      {/* Delete Confirmation Dialog */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 flex items-center justify-center z-[60]" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", backgroundColor: 'rgba(0,0,0,0.72)' }}>
-          <div 
-            className="rounded-2xl max-w-md w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
-            style={{ border: `1px solid ${C.border}`, backgroundColor: C.surface, boxShadow: C.shadow }}
-          >
-            <div className="px-6 py-4 flex items-center gap-2.5" style={{ borderBottom: `1px solid ${C.border}` }}>
-              <Trash2 className="w-4 h-4" />
-              <h2 className="text-base font-semibold" style={{ color: C.text }}>Remove file?</h2>
-            </div>
+  const rowsFlagged = (() => {
+    const r = interpretationResult || {};
+    return (
+      (r.variants_skipped_invalid_alleles || 0) +
+      (r.variants_skipped_invalid_predictors || 0) +
+      (r.variants_skipped_invalid_genotype || 0) +
+      (r.variants_skipped_invalid_mandatory_annotation || 0)
+    );
+  })();
+  const gbc = interpretationResult?.genome_build_check;
 
-            {/* Content */}
-            <div className="p-6 space-y-4">
-              <p className="text-sm" style={{ color: C.textMuted }}>
-                This removes the uploaded file from this conversation. Annotation and filters in progress will stop. This cannot be undone.
-              </p>
-            </div>
+  const stepTone = (status) =>
+    status === 'passed' ? 'success' : status === 'pending' ? 'info' : status === 'partial' ? 'warning' : 'error';
 
-            {/* Actions */}
-            <div className="px-6 py-4 flex items-center justify-end gap-3 rounded-b-2xl" style={{ borderColor: C.border }}>
-              <button
-                onClick={handleCancelDelete}
-                className="px-6 py-2 text-sm font-semibold rounded-xl transition-colors shadow-sm"
-                style={{ 
-                  backgroundColor: C.surfaceCard, 
-                  border: `1px solid ${C.border}`, 
-                  color: C.textMuted,
-                }}
-                onMouseEnter={(e) => { 
-                  e.target.style.backgroundColor = C.surfaceHover; 
-                  e.target.style.color = C.text; 
-                }}
-                onMouseLeave={(e) => { 
-                  e.target.style.backgroundColor = C.surfaceCard; 
-                  e.target.style.color = C.textMuted; 
-                }}
-              >
-                Go Back
-              </button>
-              <button
-                onClick={handleConfirmDelete}
-                className="px-6 py-2 text-sm font-semibold rounded-xl transition-colors shadow-sm flex items-center gap-2"
-                style={{ 
-                  backgroundColor: C.errorSoft, 
-                  color: C.error,
-                  border: `1px solid ${C.error}`,
-                }}
-                onMouseEnter={(e) => { 
-                  e.target.style.backgroundColor = C.error; 
-                  e.target.style.color = C.text; 
-                }}
-                onMouseLeave={(e) => { 
-                  e.target.style.backgroundColor = C.errorSoft; 
-                  e.target.style.color = C.error; 
-                }}
-              >
-                Delete File
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Annotation Confirmation - When all required columns already present */}
-      {showAnnovarConfirm && (
-        <div className="fixed inset-0 flex items-center justify-center z-[60]" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", backgroundColor: 'rgba(0,0,0,0.72)' }}>
-          <div 
-            className="rounded-2xl max-w-md w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
-            style={{ border: `1px solid ${C.border}`, backgroundColor: C.surface, boxShadow: C.shadow }}
-          >
-            <div className="px-6 py-4 flex items-center gap-2.5" style={{ borderBottom: `1px solid ${C.border}` }}>
-              <Info className="w-5 h-5" style={{ color: C.teal }} />
-              <h2 className="text-base font-semibold" style={{ color: C.text }}>Run Annotation?</h2>
-            </div>
-            <div className="p-6 space-y-4">
-              <p className="text-sm" style={{ color: C.textMuted }}>
-                All required columns are already present in your file. Do you really want to proceed?
-              </p>
-              <p className="text-sm" style={{ color: C.textMuted }}>
-                Running Annotation will add more information to some columns and make the analysis more streamlined.
-              </p>
-            </div>
-            <div className="px-6 py-4 border-t flex items-center justify-end gap-3 rounded-b-2xl" style={{ borderColor: C.border }}>
-              <button
-                onClick={() => setShowAnnovarConfirm(false)}
-                className="px-6 py-2 text-sm font-semibold rounded-xl transition-colors shadow-sm"
-                style={{ backgroundColor: 'transparent', border: `1px solid ${C.borderStrong}`, color: C.textMuted }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setShowAnnovarConfirm(false);
-                  onAnnovarClick?.();
-                }}
-                className="px-6 py-2 text-sm font-semibold rounded-xl transition-colors"
-                style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
-              >
-                Run Annotation
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Main Modal — backdrop does not close (avoids stacked-modal mis-clicks); use X or Continue */}
-      <div className="fixed inset-0 flex items-center justify-center z-50" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", backgroundColor: 'rgba(0,0,0,0.72)' }}>
-        <div 
-          className="rounded-2xl max-w-2xl w-full mx-4 max-h-[min(90vh,900px)] flex flex-col overflow-hidden"
-          onClick={(e) => e.stopPropagation()}
-          style={{ border: `1px solid ${C.border}`, backgroundColor: C.surface, boxShadow: C.shadow }}
-        >
-        {/* Header — matches Sample Metadata style: plain title + subtitle, no divider */}
-        <div className="flex-shrink-0 px-6 pt-5 pb-3 relative">
-          <button
-            onClick={() => onClose?.()}
-            className="absolute top-4 right-4 transition-colors p-1.5 rounded-lg"
-            style={{ color: C.textMuted }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = C.text; e.currentTarget.style.backgroundColor = C.surfaceHover; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = C.textMuted; e.currentTarget.style.backgroundColor = 'transparent'; }}
-            aria-label="Close"
-            title="Close"
-          >
-            <X className="w-4 h-4" />
-          </button>
-          <h2 className="text-sm font-semibold pr-8" style={{ color: C.text }}>File Analysis</h2>
-          <p className="text-xs mt-0.5" style={{ color: C.textMuted }}>
+  const header = (
+    <div className="flex-shrink-0 border-b border-border px-4 pb-3 pt-4 sm:px-6">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 id="file-analysis-title" className="text-sm font-semibold" style={{ color: C.text }}>
+            File analysis
+          </h2>
+          <p className="mt-0.5 text-xs" style={{ color: C.textMuted }}>
             {overall_status === 'passed' ? 'Your file is ready for analysis.' : 'Some features may be limited.'}
           </p>
         </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 pb-3 space-y-4">
-          {backgroundJobActive && (
-            <div
-              className="p-3 rounded-lg text-xs"
-              style={{ backgroundColor: C.successSoft, border: `1px solid ${C.success}`, color: C.text }}
+        <div className="flex shrink-0 items-center gap-2">
+          <Chip tone={overall_status === 'passed' ? 'success' : 'warning'}>
+            {overall_status === 'passed' ? 'Ready' : 'Limited'}
+          </Chip>
+          {!embedded && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => onClose?.()}
+              aria-label="Close"
+              className="-mr-1.5 max-md:size-11"
             >
-              {isRunningAnnovar
-                ? 'Annotation is running in the background. You can close this window and continue in chat, progress appears in the pipeline bar at the top.'
-                : 'The ACMG filter is running in the background. You can close this window and continue in chat.'}
-            </div>
+              <X aria-hidden />
+            </Button>
           )}
+        </div>
+      </div>
+    </div>
+  );
 
-          {/* Single-line warning: total rows that may have data quality issues */}
-          {(() => {
-            const r = interpretationResult || {};
-            const total = (r.variants_skipped_invalid_alleles || 0) + (r.variants_skipped_invalid_predictors || 0) + (r.variants_skipped_invalid_genotype || 0) + (r.variants_skipped_invalid_mandatory_annotation || 0);
-            return total > 0 ? (
-              <p className="text-xs" style={{ color: C.textMuted }}>
-                <span className="font-medium" style={{ color: C.warning }}>{total.toLocaleString()}</span> rows flagged for quality review. All stored.
-              </p>
-            ) : null;
-          })()}
+  const content = (
+    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
+      {backgroundJobActive && (
+        <Notice tone="info" icon={Info}>
+          {isRunningAnnovar
+            ? 'Annotation is running in the background. You can leave this view and continue in chat. Progress shows in the pipeline bar.'
+            : 'The ACMG filter is running in the background. You can leave this view and continue in chat.'}
+        </Notice>
+      )}
 
-          {/* Genome build mismatch warning */}
-          {(() => {
-            const gbc = interpretationResult?.genome_build_check;
-            if (!gbc) return null;
-            if (gbc.status === 'mismatch') {
-              return (
-                <div
-                  className="p-3 rounded-lg text-xs flex items-start gap-2"
-                  style={{ backgroundColor: C.errorSoft, border: `1px solid ${C.error}`, color: C.text }}
-                >
-                  <div>
-                    <span className="font-semibold" style={{ color: C.error }}>Genome mismatch</span>
-                    <span className="ml-1">{gbc.message || `You selected ${(gbc.declared || '').toUpperCase()}, but coordinates match ${(gbc.likely || '').toUpperCase()}. Annotation and phenotype prioritization cannot run until this is resolved — update the genome in sample information or re-upload.`}</span>
-                  </div>
-                </div>
-              );
-            }
-            if (gbc.status === 'match') {
-              return (
-                <p className="text-xs flex items-center gap-1.5" style={{ color: C.textMuted }}>
-                  Genome build verified: {(gbc.declared || '').toUpperCase()}
-                </p>
-              );
-            }
-            if (gbc.status === 'inconclusive') {
-              return (
-                <p className="text-xs flex items-center gap-1.5" style={{ color: C.textMuted }}>
-                  <AlertCircle className="w-3.5 h-3.5" style={{ color: C.warning }} />
-                  {gbc.message || `Could not verify genome build — double-check before running Annotation.`}
-                </p>
-              );
-            }
-            return null;
-          })()}
+      {rowsFlagged > 0 && (
+        <Notice tone="warning" icon={AlertCircle}>
+          <span className="font-medium tabular-nums">{rowsFlagged.toLocaleString()}</span> rows flagged for quality
+          review. All stored.
+        </Notice>
+      )}
 
-          {/* Horizontal stepper */}
-          <div className="flex items-start p-4">
-            {stepperSteps.map((s, i) => {
-              const isSel = s.n === selectedStep;
-              const passed = s.status === 'passed';
-              const prevDone = i > 0 && stepperSteps[i - 1].status === 'passed';
-              const StepIcon = s.icon;
+      {gbc?.status === 'mismatch' && (
+        <Notice tone="error" icon={AlertCircle}>
+          <span className="font-medium">Genome mismatch.</span>{' '}
+          {gbc.message ||
+            `You selected ${(gbc.declared || '').toUpperCase()}, but coordinates match ${(gbc.likely || '').toUpperCase()}. Annotation and phenotype prioritization cannot run until this is resolved. Update the genome in sample information or re-upload.`}
+        </Notice>
+      )}
+      {gbc?.status === 'match' && (
+        <p className="flex items-center gap-1.5 text-xs" style={{ color: C.textMuted }}>
+          <CheckCircle2 className="size-3.5" style={{ color: C.success }} aria-hidden />
+          Genome build verified: {(gbc.declared || '').toUpperCase()}
+        </p>
+      )}
+      {gbc?.status === 'inconclusive' && (
+        <Notice tone="warning" icon={AlertCircle}>
+          {gbc.message || 'Could not verify the genome build. Double-check it before running Annotation.'}
+        </Notice>
+      )}
 
-              const failed = s.status === 'failed';
-              let nodeStyle;
-              let iconColor;
-              let NodeGlyph = StepIcon;
-              if (passed) {
-                nodeStyle = { backgroundColor: C.teal, border: 'none' };
-                iconColor = C.onAccent;
-                NodeGlyph = Check;
-              } else if (failed) {
-                nodeStyle = { backgroundColor: C.error, border: 'none' };
-                iconColor = C.surfaceCard;
-              } else if (isSel) {
-                nodeStyle = { backgroundColor: C.teal, border: 'none' };
-                iconColor = C.onAccent;
-              } else {
-                nodeStyle = { backgroundColor: C.surfaceCard, border: `1.5px solid ${C.border}` };
-                iconColor = C.textDim;
-              }
+      {/* Steps */}
+      <div role="tablist" aria-label="Analysis steps" className="grid grid-cols-3 gap-2">
+        {stepperSteps.map((s) => {
+          const isSel = s.n === selectedStep;
+          const tone = stepTone(s.status);
+          return (
+            <button
+              key={s.n}
+              type="button"
+              role="tab"
+              id={`file-step-tab-${s.n}`}
+              aria-selected={isSel}
+              aria-controls="file-step-panel"
+              onClick={() => setExpandedStep(s.n)}
+              className="flex min-w-0 flex-col items-start gap-1.5 rounded-lg border px-2.5 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/55 max-md:min-h-11"
+              style={{
+                borderColor: isSel ? 'hsl(var(--primary))' : C.border,
+                background: isSel ? C.tealSoft : 'transparent',
+              }}
+            >
+              <span className="text-2xs tabular-nums" style={{ color: C.textDim }}>
+                Step {s.n}
+              </span>
+              <span className="text-[13px] font-medium leading-tight" style={{ color: C.text }}>
+                {s.name}
+              </span>
+              <Chip tone={tone}>{getStepSubtitle(s.status)}</Chip>
+              <span
+                aria-hidden
+                className="block h-1 w-full overflow-hidden rounded-full"
+                style={{ background: C.track }}
+              >
+                <span
+                  className="block h-full rounded-full"
+                  style={{
+                    width: `${s.progress}%`,
+                    background: s.status === 'passed' ? C.success : s.status === 'failed' ? C.error : C.teal,
+                  }}
+                />
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
-              const selectedRing = `0 0 0 3px ${C.surface}, 0 0 0 5px ${failed ? C.error : C.teal}`;
-
-              return (
-                <React.Fragment key={s.n}>
-                  {i > 0 && (
-                    <div
-                      className="flex-1 h-px mt-5 -mx-4 rounded-full transition-colors"
-                      style={{ backgroundColor: prevDone ? C.teal : C.border }}
-                    />
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setExpandedStep(s.n)}
-                    className="flex flex-col items-center gap-2.5 flex-shrink-0 px-2 group whitespace-nowrap"
-                  >
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center transition-all"
-                      style={{ ...nodeStyle, boxShadow: isSel ? selectedRing : 'none' }}
-                    >
-                      <NodeGlyph className="w-[16px] h-[16px]" style={{ color: iconColor }} strokeWidth={2} />
-                    </div>
-                    <div className="text-center">
-                      <div
-                        className="text-xs font-semibold leading-tight"
-                        style={{ color: isSel ? C.text : C.textMuted }}
-                      >
-                        {s.name}
-                      </div>
-                      <div
-                        className="text-2xs leading-tight mt-1"
-                        style={{ color: failed ? C.error : isSel ? C.teal : C.textDim }}
-                      >
-                        {getStepSubtitle(s.status)}
-                      </div>
-                    </div>
-                  </button>
-                </React.Fragment>
-              );
-            })}
-          </div>
-
-          {/* Selected step detail panel */}
-          {selectedStepData && (
-            <Card className="border-green-900 ring-0 border rounded-lg py-0 gap-0" style={{ borderColor: C.border }}>
-              <CardContent className="p-4">
-                {renderStepDetails(selectedStepData.n, selectedStepData.data) || (
-                  <p className="mt-3 text-sm" style={{ color: C.textMuted }}>
-                    No column details available for this step yet.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Limitation: not all Pathog predictor columns present (Step 2) */}
-          {step2?.pathogenicity_predictor_limitation && (
-            <div className="p-3 rounded-lg border" style={{ backgroundColor: C.warningSoft, borderColor: C.warning }}>
-              <p className="text-sm font-medium" style={{ color: C.textMuted }}>
-                All the needed columns for Pathog predictor are not present. Filtering is allowed using the available predictors (e.g. SIFT, PolyPhen); results may be limited.
-              </p>
-            </div>
-          )}
-
-          {/* Tools — per-step actions */}
-          <div className="pt-1">
-            <p className="text-2xs font-semibold uppercase tracking-wide mb-2" style={{ color: C.textDim }}>
-              {selectedStep === 1 ? 'Review' : selectedStep === 2 ? 'Annotate' : 'Apply filters'}
+      {/* Selected step detail */}
+      {selectedStepData && (
+        <div
+          role="tabpanel"
+          id="file-step-panel"
+          aria-labelledby={`file-step-tab-${selectedStepData.n}`}
+          className="space-y-3 border-t border-border pt-4"
+        >
+          <h3 className="text-[13px] font-semibold" style={{ color: C.text }}>
+            {selectedStepData.name}
+          </h3>
+          {renderStepDetails(selectedStepData.n, selectedStepData.data) || (
+            <p className="text-xs" style={{ color: C.textMuted }}>
+              No column details available for this step yet.
             </p>
-            <div className="flex flex-wrap items-center gap-2">
-            {selectedStep === 1 && (
-              <>
-              {/* VCF Upload Button - Highlighted when recommended */}
+          )}
+        </div>
+      )}
+
+      {/* Limitation: not all Pathog predictor columns present (Step 2) */}
+      {step2?.pathogenicity_predictor_limitation && (
+        <Notice tone="warning" icon={AlertCircle}>
+          Not all pathogenicity predictor columns are present. Filtering works with the predictors you have
+          (for example SIFT, PolyPhen); results may be limited.
+        </Notice>
+      )}
+
+      {/* Actions for this step. Reasons are plain text under the button, never hover-only. */}
+      <div className="space-y-2 border-t border-border pt-4">
+        <p className="text-xs font-medium" style={{ color: C.textMuted }}>
+          {selectedStep === 1 ? 'Review' : selectedStep === 2 ? 'Annotate' : 'Apply filters'}
+        </p>
+        <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
+          {selectedStep === 1 && (
+            <>
               {showVcfTabHighlight && (
                 <>
-                  <div className="relative group">
-                    <button
+                  <div className="max-w-xs space-y-1">
+                    <Button
+                      type="button"
+                      variant={recommendedButton === 'vcf' || recommendedButton === 'fastq' ? 'default' : 'outline'}
                       onClick={() => {
                         if (recommendedButton === 'vcf' && onTryVcfUpload) {
                           onTryVcfUpload();
@@ -903,280 +794,271 @@ const ColumnInterpretationResults = ({
                           onUploadRawSequencing();
                         }
                       }}
-                      className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all ${
-                        recommendedButton === 'vcf' || recommendedButton === 'fastq' ? 'animate-pulse ring-2 ring-offset-2' : ''
-                      }`}
-                      style={{
-                        backgroundColor: recommendedButton === 'vcf' || recommendedButton === 'fastq' ? C.tealSoft : C.surfaceCard,
-                        color: recommendedButton === 'vcf' || recommendedButton === 'fastq' ? C.teal : C.textMuted,
-                        border: recommendedButton === 'vcf' || recommendedButton === 'fastq' ? `2px solid ${C.teal}` : `1px solid ${C.border}`,
-                      }}
-                      onMouseEnter={(e) => { e.target.style.backgroundColor = C.tealSoft; e.target.style.borderColor = C.teal; }}
-                      onMouseLeave={(e) => {
-                        if (recommendedButton === 'vcf' || recommendedButton === 'fastq') { e.target.style.backgroundColor = C.tealSoft; e.target.style.borderColor = C.teal; }
-                        else { e.target.style.backgroundColor = C.surfaceCard; e.target.style.borderColor = C.border; }
-                      }}
+                      className="max-md:h-11"
                     >
                       {isVcfFile ? 'Upload raw sequencing data' : 'Try VCF upload for better results'}
-                    </button>
+                    </Button>
                     {primaryRecommendation && (recommendedButton === 'vcf' || recommendedButton === 'fastq') && (
-                      <div
-                        className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10"
-                        style={{ ...tooltipStyle, maxWidth: '250px', whiteSpace: 'normal', textAlign: 'left' }}
-                      >
+                      <p className="text-xs" style={{ color: C.textMuted }}>
                         {primaryRecommendation}
-                        <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
-                      </div>
+                      </p>
                     )}
                   </div>
                   {!isVcfFile && onConvertToVcf && (
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
                       onClick={() => onConvertToVcf()}
                       disabled={isConvertingToVcf || backgroundJobActive}
-                      className="px-4 py-2 text-sm font-semibold rounded-xl transition-all disabled:opacity-60"
-                      style={{ backgroundColor: C.surfaceCard, color: C.teal, border: `1px solid ${C.teal}` }}
+                      className="max-md:h-11"
                     >
                       {isConvertingToVcf ? 'Converting…' : 'Convert file to VCF'}
-                    </button>
+                    </Button>
                   )}
                 </>
               )}
 
               {!showVcfTabHighlight && step1?.passed && (
                 <p className="text-xs" style={{ color: C.textMuted }}>
-                  All required columns present, proceed to the next step.
+                  All required columns are present. Continue to the next step.
                 </p>
               )}
-              </>
-            )}
+            </>
+          )}
 
-            {selectedStep === 2 && (
-              <>
-              {/* Annotation complete indicator */}
+          {selectedStep === 2 && (
+            <>
               {hasAnnotatedFile && (
-                <div className="flex items-center gap-2">
-                  {/* <span
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border"
-                    style={{
-                      backgroundColor: C.successSoft,
-                      borderColor: tint(C.success, 40),
-                      color: C.success,
-                    }}
-                  >
-                    Annotation complete
-                  </span> */}
-                  <p className="text-xs" style={{ color: C.success }}>
-                    Columns added, proceed to the next step to apply filters.
-                  </p>
-                </div>
+                <p className="w-full text-xs" style={{ color: C.success }}>
+                  Columns added. Continue to apply filters.
+                </p>
               )}
 
-              {/* Run Annotation — stays on screen once the file is annotated, disabled, so the
-                * step keeps the same shape before and after the run instead of the button
-                * vanishing and leaving only a line of green text. */}
+              {/* Run Annotation stays on screen once the file is annotated, disabled, so the
+                * step keeps the same shape before and after the run. */}
               {(() => {
                 const annovarAlreadyRun = hasAnnotatedFile || step2?.passed;
                 const annovarActionable = annovarEnabled && !annovarAlreadyRun;
+                const reason = genomeMismatch
+                  ? 'Annotation and phenotype prioritization need a matching genome build. Fix the mismatch first.'
+                  : !step1?.passed
+                    ? isVcfFile
+                      ? 'Essential VCF columns are missing. Upload raw data when available.'
+                      : 'Upload a VCF to enable annotation.'
+                    : annovarQuotaBlocked
+                      ? annovarGate.reason
+                      : annovarAlreadyRun
+                        ? 'Already run on this file.'
+                        : recommendedButton === 'annovar'
+                          ? primaryRecommendation
+                          : null;
                 return (
-              <div className="relative group">
-                <button
-                  onClick={annovarActionable ? () => {
-                    const allComplete = step1?.passed && step2?.passed && step3?.passed;
-                    if (allComplete) { setShowAnnovarConfirm(true); } else { onAnnovarClick?.(); }
-                  } : undefined}
-                  disabled={!annovarActionable}
-                  title={annovarAlreadyRun ? 'Already run on this file' : annovarQuotaBlocked ? annovarGate.reason : undefined}
-                  className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${
-                    annovarActionable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
-                  }`}
-                  style={{
-                  // Primary outline only on a step that needs columns (annotating unblocks it); otherwise Next leads.
-                    backgroundColor: annovarActionable ? C.surfaceCard : C.surfaceHover,
-                    border: `1px solid ${genomeMismatch ? C.error : annovarActionable && !nextIsPrimary ? C.teal : C.borderStrong}`,
-                    color: annovarActionable ? (nextIsPrimary ? C.textMuted : C.teal) : C.textDim,
-                  }}
-                  onMouseEnter={(e) => { if (annovarActionable) e.currentTarget.style.backgroundColor = nextIsPrimary ? C.surfaceHover : C.tealSoft; }}
-                  onMouseLeave={(e) => { if (annovarActionable) e.currentTarget.style.backgroundColor = C.surfaceCard; }}
-                >
-                  <Tags className="w-4 h-4 shrink-0" aria-hidden style={{ color: annovarActionable ? 'var(--accent-teal)' : 'var(--text-disabled)' }} />
-                  {annovarAlreadyRun ? 'Annotation complete' : 'Run Annotation'}
-                </button>
-                {annovarMeterLabel && (
-                  <p className="text-2xs mt-1" style={{ color: annovarQuotaBlocked ? C.error : C.textDim }}>
-                    {annovarQuotaBlocked ? annovarGate.reason : annovarMeterLabel}
-                    {!annovarQuotaBlocked && annovarMeterDetail && (
-                      <span style={{ color: C.textDim }}> · {annovarMeterDetail}</span>
+                  <div className="max-w-xs space-y-1">
+                    <Button
+                      type="button"
+                      variant={annovarActionable && !nextIsPrimary ? 'default' : 'outline'}
+                      onClick={
+                        annovarActionable
+                          ? () => {
+                              const allComplete = step1?.passed && step2?.passed && step3?.passed;
+                              if (allComplete) setShowAnnovarConfirm(true);
+                              else onAnnovarClick?.();
+                            }
+                          : undefined
+                      }
+                      disabled={!annovarActionable}
+                      className="max-md:h-11"
+                    >
+                      <Tags aria-hidden />
+                      {annovarAlreadyRun ? 'Annotation complete' : 'Run Annotation'}
+                    </Button>
+                    {reason && (
+                      <p className="text-xs" style={{ color: genomeMismatch || annovarQuotaBlocked ? C.error : C.textMuted }}>
+                        {reason}
+                      </p>
                     )}
-                  </p>
-                )}
-                {genomeMismatch && (
-                  <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '250px', whiteSpace: 'normal', textAlign: 'left' }}>
-                    <div className="flex items-center gap-2">
-                      <AlertCircle className="w-3 h-3 flex-shrink-0" style={{ color: C.error }} />
-                      <span>Annotation and phenotype prioritization require a matching genome build. Please fix the mismatch first.</span>
-                    </div>
-                    <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
+                    {annovarMeterLabel && !annovarQuotaBlocked && (
+                      <p className="text-2xs tabular-nums" style={{ color: C.textDim }}>
+                        {annovarMeterLabel}
+                        {annovarMeterDetail && <span> · {annovarMeterDetail}</span>}
+                      </p>
+                    )}
                   </div>
-                )}
-                {!step1?.passed && !genomeMismatch && (
-                  <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '250px', whiteSpace: 'normal', textAlign: 'left' }}>
-                    <div className="flex items-center gap-2">
-                      <ArrowRight className="w-3 h-3 flex-shrink-0" />
-                      <span>{isVcfFile ? 'Essential VCF columns are missing. Please upload raw data when available.' : 'Upload VCF to enable'}</span>
-                    </div>
-                    <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
-                  </div>
-                )}
-                {primaryRecommendation && recommendedButton === 'annovar' && step1?.passed && (
-                  <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '250px', whiteSpace: 'normal', textAlign: 'left' }}>
-                    {primaryRecommendation}
-                    <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
-                  </div>
-                )}
-              </div>
                 );
               })()}
 
-              {/* Step 2 all passed, no Annotation needed */}
               {!hasAnnotatedFile && step2?.passed && (
-                <p className="text-xs" style={{ color: C.textMuted }}>
-                  All annotation columns present — proceed to the next step.
+                <p className="w-full text-xs" style={{ color: C.textMuted }}>
+                  All annotation columns are present. Continue to the next step.
                 </p>
               )}
-              </>
-            )}
+            </>
+          )}
 
-            {selectedStep === 3 && (
-              <>
-              {/* ACMG Filter */}
-              <div className="relative group">
-                <button
+          {selectedStep === 3 && (
+            <>
+              <div className="max-w-xs space-y-1">
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => onProprietaryFilterClick?.('filter_1')}
                   disabled={!acmgFilterCanApply || isApplyingProprietaryFilter || acmgFilterActive}
-                  className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${
-                    acmgFilterCanApply && !acmgFilterActive && !isApplyingProprietaryFilter ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
-                  }`}
-                  style={{
-                    backgroundColor: acmgFilterActive ? C.tealSoft : acmgFilterCanApply ? C.surfaceCard : C.surfaceHover,
-                    border: acmgFilterActive ? `1px solid ${C.teal}` : `1px solid ${C.border}`,
-                    color: acmgFilterCanApply ? C.teal : C.textDim,
-                  }}
-                  onMouseEnter={(e) => { if (acmgFilterCanApply && !acmgFilterActive && !isApplyingProprietaryFilter) { e.target.style.backgroundColor = C.surfaceHover; } }}
-                  onMouseLeave={(e) => { if (acmgFilterCanApply && !acmgFilterActive && !isApplyingProprietaryFilter) { e.target.style.backgroundColor = C.surfaceCard; } }}
+                  className="max-md:h-11"
+                  style={acmgFilterActive ? { borderColor: 'hsl(var(--primary))', background: C.tealSoft } : undefined}
                 >
                   {isApplyingProprietaryFilter ? 'Applying…' : acmgFilterActive ? 'ACMG applied' : 'ACMG'}
-                </button>
+                </Button>
                 {/* Quota and readiness are different problems, so they get different copy. */}
                 {!acmgFilterCanApply && !acmgFilterActive && step1?.passed && !acmgQuotaBlocked && (
-                  <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '280px', whiteSpace: 'normal', textAlign: 'left' }}>
-                    Run Annotation first — the ACMG filter needs ClinVar or InterVar annotations and gnomAD frequency.
-                    <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
-                  </div>
+                  <p className="text-xs" style={{ color: C.textMuted }}>
+                    Run Annotation first. The ACMG filter needs ClinVar or InterVar annotations and gnomAD frequency.
+                  </p>
                 )}
                 {(acmgMeterLabel || acmgQuotaBlocked) && !acmgFilterActive && (
-                  <p className="text-2xs mt-1" style={{ color: acmgQuotaBlocked ? C.error : C.textDim }}>
+                  <p className="text-2xs tabular-nums" style={{ color: acmgQuotaBlocked ? C.error : C.textDim }}>
                     {acmgQuotaBlocked ? acmgExomiserGate.reason : acmgMeterLabel}
-                    {!acmgQuotaBlocked && acmgMeterDetail && (
-                      <span style={{ color: C.textDim }}> · {acmgMeterDetail}</span>
-                    )}
+                    {!acmgQuotaBlocked && acmgMeterDetail && <span> · {acmgMeterDetail}</span>}
                   </p>
                 )}
               </div>
 
-              {/* Exomiser — needs an annotated file; remaining eligibility (phenotype, germline) is checked in the sidebar tab */}
+              {/* Exomiser needs an annotated file; remaining eligibility (phenotype, germline) is checked in the sidebar tab */}
               {onOpenExomiser && (() => {
                 // Exomiser applies draw on the same metered budget as ACMG.
                 const exomiserEnabled =
                   exomiserCanApply && !genomeMismatch && !acmgQuotaBlocked && !phenotypeMissing;
+                const reason = genomeMismatch
+                  ? 'Annotation and phenotype prioritization need a matching genome build. Fix the mismatch first.'
+                  : phenotypeMissing
+                    ? 'Add a phenotype description in sample info to enable phenotype-driven prioritization. Everything else runs without one.'
+                    : 'Run Annotation first. Phenotype prioritization needs an annotated file.';
                 return (
-                  <div className="relative group">
-                    <button
+                  <div className="max-w-xs space-y-1">
+                    <Button
                       type="button"
+                      variant="outline"
                       onClick={() => onOpenExomiser()}
                       disabled={!exomiserEnabled}
-                      className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${
-                        exomiserEnabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
-                      }`}
-                      style={{
-                        backgroundColor: exomiserEnabled ? C.surfaceCard : C.surfaceHover,
-                        border: `1px solid ${genomeMismatch ? C.error : C.borderStrong}`,
-                        color: exomiserEnabled ? C.teal : C.textDim,
-                      }}
-                      onMouseEnter={(e) => { if (exomiserEnabled) e.currentTarget.style.backgroundColor = C.surfaceHover; }}
-                      onMouseLeave={(e) => { if (exomiserEnabled) e.currentTarget.style.backgroundColor = C.surfaceCard; }}
+                      className="max-md:h-11"
                     >
                       <PhenotypeAiLabel variant="inline" />
-                    </button>
+                    </Button>
                     {!exomiserEnabled && step1?.passed && (
-                      <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" style={{ ...tooltipStyle, maxWidth: '280px', whiteSpace: 'normal', textAlign: 'left' }}>
-                        {genomeMismatch
-                          ? 'Annotation and phenotype prioritization require a matching genome build. Please fix the mismatch first.'
-                          : phenotypeMissing
-                            ? 'Add a phenotype description in sample info to enable phenotype-driven prioritization. Everything else runs without one.'
-                            : 'Run Annotation first — phenotype prioritization requires an annotated file.'}
-                        <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4" style={tooltipArrowStyle} />
-                      </div>
+                      <p className="text-xs" style={{ color: genomeMismatch ? C.error : C.textMuted }}>
+                        {reason}
+                      </p>
                     )}
                   </div>
                 );
               })()}
 
-              <p className="text-xs w-full mt-1" style={{ color: C.textDim }}>
+              <p className="w-full text-xs" style={{ color: C.textDim }}>
                 You can also skip filters and chat directly.
               </p>
-              </>
-            )}
-            </div>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex-shrink-0 px-6 py-4 flex items-center justify-between gap-3 rounded-b-2xl">
-          <button
-            type="button"
-            onClick={() => goToStep(selectedStep - 1)}
-            disabled={!canGoBack}
-            className="px-4 py-2 text-sm font-medium rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ backgroundColor: 'transparent', border: `1px solid ${C.borderStrong}`, color: C.textMuted }}
-            onMouseEnter={(e) => { if (canGoBack) e.currentTarget.style.backgroundColor = C.surfaceHover; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-          >
-            ← Previous
-          </button>
-          <div className="flex items-center gap-2">
-            {canGoForward ? (
-              <button
-                type="button"
-                onClick={() => goToStep(selectedStep + 1)}
-                className="px-4 py-2 text-sm font-medium rounded-xl transition-colors"
-                style={{
-                  backgroundColor: 'transparent',
-                  border: `1px solid ${nextIsPrimary ? C.teal : C.borderStrong}`,
-                  color: nextIsPrimary ? C.teal : C.textMuted,
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = nextIsPrimary ? C.tealSoft : C.surfaceHover; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-              >
-                Next →
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleDismiss}
-                className="px-4 py-2 text-sm font-semibold rounded-xl transition-colors"
-                style={{ backgroundColor: 'var(--accent-teal)', border: 'none', color: 'var(--accent-teal-contrast)' }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal-hover)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal)'; }}
-              >
-                {backgroundJobActive ? 'Continue in background' : chatAllowed ? 'Continue' : 'Continue to chat'}
-              </button>
-            )}
-          </div>
+            </>
+          )}
         </div>
       </div>
     </div>
+  );
+
+  const footer = (
+    <div className="flex flex-shrink-0 items-center justify-between gap-3 border-t border-border bg-background px-4 py-3 sm:px-6">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => goToStep(selectedStep - 1)}
+        disabled={!canGoBack}
+        className="max-md:h-11"
+      >
+        Previous
+      </Button>
+      {canGoForward ? (
+        <Button
+          type="button"
+          variant={nextIsPrimary ? 'default' : 'outline'}
+          onClick={() => goToStep(selectedStep + 1)}
+          className="max-md:h-11"
+        >
+          Next
+        </Button>
+      ) : (
+        <Button type="button" onClick={handleDismiss} className="max-md:h-11">
+          {backgroundJobActive ? 'Continue in background' : chatAllowed ? 'Continue' : 'Continue to chat'}
+        </Button>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove file?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the uploaded file from this conversation. Annotation and filters in progress will stop.
+              This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go back</AlertDialogCancel>
+            <Button type="button" variant="destructive" onClick={handleConfirmDelete}>
+              <Trash2 aria-hidden /> Remove file
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Annotation confirmation: all required columns are already present */}
+      <AlertDialog open={showAnnovarConfirm} onOpenChange={setShowAnnovarConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Run Annotation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              All required columns are already in your file. Running Annotation adds more information to some
+              columns and makes the analysis more streamlined.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button
+              type="button"
+              onClick={() => {
+                setShowAnnovarConfirm(false);
+                onAnnovarClick?.();
+              }}
+            >
+              Run Annotation
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {embedded ? (
+        // Workspace mode: plain content that fills the panel the lead mounts it in.
+        <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+          {header}
+          {content}
+          {footer}
+        </div>
+      ) : (
+        // Modal mode (current ChatPage mount). The backdrop does not close, which avoids
+        // stacked-modal mis-clicks; use the close button or Continue.
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 supports-backdrop-filter:backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="file-analysis-title"
+            className="flex max-h-[min(90vh,900px)] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {header}
+            {content}
+            {footer}
+          </div>
+        </div>
+      )}
     </>
   );
 };

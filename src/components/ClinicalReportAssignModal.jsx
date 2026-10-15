@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, Loader2 } from 'lucide-react';
+import { Download } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -182,139 +183,119 @@ export default function ClinicalReportAssignModal({
     row.gene ||
     row.id;
 
+  const includeCount = selectedIds.clinical.length;
+  const additionalCount = selectedIds.additional.length;
+
+  const toggleClass = (active) =>
+    `h-7 max-md:h-10 rounded-md px-2.5 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/60 ${
+      active
+        ? 'bg-background text-foreground shadow-sm'
+        : 'text-muted-foreground hover:text-foreground'
+    }`;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="!max-w-2xl w-full max-h-[min(90vh,820px)] flex flex-col p-0 gap-0 overflow-hidden"
-        style={{ backgroundColor: 'var(--bg-surface-raised)', borderColor: 'var(--border-default)' }}
-      >
-        <div className="flex-shrink-0 px-5 py-3 border-b border-[var(--border-subtle)]">
-          <DialogTitle className="text-base font-semibold text-[var(--text-primary)]">
-            Review ranking & report
-          </DialogTitle>
-          <DialogDescription className="text-xs text-[var(--text-secondary)] mt-1">
+      <DialogContent className="flex max-h-[min(88vh,760px)] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+        {/* Header: what this is, and the one number that matters */}
+        <div className="shrink-0 border-b border-border px-5 py-4 pr-12">
+          <DialogTitle className="text-base font-semibold text-foreground">Choose variants for the report</DialogTitle>
+          <DialogDescription className="mt-1 text-[13px] leading-snug text-muted-foreground">
             {gaReady
-              ? 'GA pre-checked Primary and Strong for Include. Edit if needed, then Proceed.'
+              ? 'Ranking pre-checked the Primary and Strong variants as Include. Change anything, then generate the report.'
               : automaticMode
-                ? 'Automatic mode · assign Include manually (GA ranking not ready).'
-                : 'Select Include and/or Additional. Unselected variants stay out of the PDF.'}
-            {meta?.workflow_display_name
-              ? ` · ${meta.workflow_display_name}`
-              : ''}
-            {typeof meta?.working_set_count === 'number'
-              ? ` · ${meta.working_set_count.toLocaleString()} under consideration`
-              : ''}
-            {gaReady
-              ? ` · ${suggestionCount} Include pick${suggestionCount === 1 ? '' : 's'}`
-              : ''}
+                ? 'Ranking is not ready. Mark the variants to include, then generate the report.'
+                : 'Mark variants as Include or Additional. Unmarked variants stay out of the PDF.'}
           </DialogDescription>
-          {!loading && gaReady ? (
-            <p className="text-2xs mt-2" style={{ color: 'var(--accent-teal)' }}>
-              Include: {selectedIds.clinical.length}
-              {selectedIds.additional.length
-                ? ` · Additional: ${selectedIds.additional.length}`
-                : ''}
-              {' · '}unselected stay out of the PDF
-            </p>
-          ) : null}
+          <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground tabular-nums">
+            <span>
+              <span className="font-medium text-foreground">{includeCount}</span> Include
+            </span>
+            <span>
+              <span className="font-medium text-foreground">{additionalCount}</span> Additional
+            </span>
+            {typeof meta?.working_set_count === 'number' && (
+              <span>{meta.working_set_count.toLocaleString()} under consideration</span>
+            )}
+            {meta?.workflow_display_name && <span>{meta.workflow_display_name}</span>}
+          </p>
           {!loading && pfraGateMessage && !pfraAvailable ? (
-            <p className="text-2xs text-[var(--text-tertiary)] mt-2">
-              {pfraGateMessage}
-            </p>
+            <p className="mt-1 text-xs text-muted-foreground">{pfraGateMessage}</p>
           ) : null}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-2">
+        {/* List */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
           {loading && (
-            <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)] py-8 justify-center">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Loading candidates…
+            <ul className="divide-y divide-border" aria-busy="true" aria-label="Loading candidates">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <li key={i} className="flex items-center gap-3 px-3 py-3">
+                  <span className="h-3 w-40 animate-pulse rounded bg-muted motion-reduce:animate-none" />
+                  <span className="ml-auto h-7 w-36 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
+                </li>
+              ))}
+            </ul>
+          )}
+          {!loading && error && candidates.length === 0 && (
+            <div className="px-4 py-8 text-center" role="alert">
+              <p className="text-[13px] font-medium text-[var(--error)]">Could not load the candidates</p>
+              <p className="mt-1 text-[13px] text-muted-foreground">{error}</p>
+              <Button type="button" variant="outline" size="sm" onClick={load} className="mt-3">
+                Try again
+              </Button>
             </div>
           )}
           {!loading && candidates.length === 0 && !error && (
-            <p className="text-sm text-[var(--text-secondary)] py-6 text-center">
-              No variants available in the current working set.
+            <p className="px-4 py-10 text-center text-[13px] text-muted-foreground">
+              No variants are in the current working set. Apply a filter, then come back.
             </p>
           )}
           {!loading && candidates.length > 0 && (
-            <ul className="divide-y divide-[var(--border-subtle)]">
+            <ul className="divide-y divide-border">
               {displayRows.map(({ row, index }) => {
                 const key = rowKeyOf(row, index);
                 const selected = assignments[key];
                 const badge = (row.badge || '').trim();
                 const suggested = Boolean(row.suggested_section);
-                const preselected = selected === INCLUDE || selected === ADDITIONAL;
+                const why = whyText(row);
                 return (
                   <li
                     key={key}
-                    className="flex items-center gap-2 py-1.5 min-h-[2rem] px-1 rounded-md"
-                    style={
-                      preselected
-                        ? {
-                            background:
-                              'color-mix(in srgb, var(--accent-teal) 10%, transparent)',
-                          }
-                        : undefined
-                    }
+                    className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 ${selected ? 'bg-primary/5' : ''}`}
                   >
-                    <span
-                      className="flex-1 min-w-0 text-xs font-mono text-[var(--text-primary)] truncate"
-                      title={whyText(row)}
-                    >
-                      {suggested ? (
-                        <span
-                          className="mr-1.5 text-2xs font-sans font-medium"
-                          style={{ color: 'var(--accent-teal)' }}
-                        >
-                          Include pick
-                        </span>
-                      ) : null}
-                      {rowLabel(row)}
-                      {Array.isArray(row.pfra_caveats) &&
-                      row.pfra_caveats.includes('VUS_CANDIDATE_NOT_ACTIONABLE') ? (
-                        <span className="ml-1 text-2xs text-[var(--text-tertiary)]">
-                          (VUS candidate)
-                        </span>
-                      ) : null}
-                    </span>
-                    {suggested ? (
-                      <span
-                        className="flex-shrink-0 text-2xs text-[var(--text-tertiary)] cursor-help"
-                        title={whyText(row)}
-                      >
-                        why
-                      </span>
-                    ) : null}
-                    {badge ? (
-                      <span
-                        className="flex-shrink-0 text-2xs font-medium text-[var(--text-tertiary)] tabular-nums min-w-[3.25rem] text-right"
-                        title={badge}
-                      >
-                        {badge}
-                      </span>
-                    ) : (
-                      <span className="flex-shrink-0 min-w-[3.25rem]" />
-                    )}
-                    <div className="flex-shrink-0 flex items-center gap-1.5 text-xs">
+                    <div className="min-w-0 flex-1 basis-48">
+                      <p className="truncate font-mono text-xs text-foreground" title={why}>
+                        {rowLabel(row)}
+                        {Array.isArray(row.pfra_caveats) && row.pfra_caveats.includes('VUS_CANDIDATE_NOT_ACTIONABLE') ? (
+                          <span className="ml-1.5 font-sans text-2xs text-muted-foreground">VUS candidate</span>
+                        ) : null}
+                      </p>
+                      {(suggested || badge) && (
+                        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-2xs text-muted-foreground">
+                          {suggested && <span className="font-medium text-primary">Include pick</span>}
+                          {badge && <span className="tabular-nums">{badge}</span>}
+                        </p>
+                      )}
+                      {suggested && why && (
+                        <details className="text-2xs text-muted-foreground">
+                          <summary className="cursor-pointer select-none rounded outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60">Why</summary>
+                          <p className="mt-0.5 whitespace-pre-line">{why}</p>
+                        </details>
+                      )}
+                    </div>
+                    <div className="inline-flex shrink-0 rounded-lg bg-muted p-0.5" role="group" aria-label={`Assign ${rowLabel(row)}`}>
                       <button
                         type="button"
+                        aria-pressed={selected === INCLUDE}
                         onClick={() => setBucket(key, INCLUDE)}
-                        className={`h-7 px-2 rounded-md border transition-colors ${
-                          selected === INCLUDE
-                            ? 'border-[var(--accent-teal)] bg-[var(--accent-teal)]/15 text-[var(--accent-teal)]'
-                            : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]'
-                        }`}
+                        className={toggleClass(selected === INCLUDE)}
                       >
                         Include
                       </button>
                       <button
                         type="button"
+                        aria-pressed={selected === ADDITIONAL}
                         onClick={() => setBucket(key, ADDITIONAL)}
-                        className={`h-7 px-2 rounded-md border transition-colors ${
-                          selected === ADDITIONAL
-                            ? 'border-[var(--accent-teal)] bg-[var(--accent-teal)]/15 text-[var(--accent-teal)]'
-                            : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]'
-                        }`}
+                        className={toggleClass(selected === ADDITIONAL)}
                       >
                         Additional
                       </button>
@@ -326,73 +307,50 @@ export default function ClinicalReportAssignModal({
           )}
         </div>
 
-        <div className="flex-shrink-0 px-5 py-3 border-t border-[var(--border-subtle)] space-y-2">
-          {error && (
-            <p className="text-xs text-[var(--error)]" title={error}>
+        {/* Footer: one primary, quiet extras */}
+        <div className="shrink-0 space-y-2 border-t border-border px-5 py-3">
+          {error && candidates.length > 0 && (
+            <p role="alert" className="text-[13px] text-[var(--error)]">
               {error}
             </p>
           )}
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-2xs text-[var(--text-tertiary)]">
-              Include: {selectedIds.clinical.length} · Additional: {selectedIds.additional.length}
-              {selectedIds.clinical.length < 1 ? ' · select ≥1 Include' : ''}
-            </p>
-            <div className="flex gap-2">
-              {gaReady ? (
-                <button
+          {!loading && includeCount < 1 && candidates.length > 0 && (
+            <p className="text-xs text-muted-foreground">Mark at least one variant as Include to generate the report.</p>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {gaReady ? (
+              <>
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={handleDownloadTsv}
                   disabled={downloadingTsv}
-                  className="h-9 px-3 rounded-lg text-xs border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] inline-flex items-center gap-1.5 disabled:opacity-50"
-                  title="Download the full GA ranking table"
+                  className="max-md:h-11"
                 >
-                  {downloadingTsv ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Download className="w-3.5 h-3.5" />
-                  )}
-                  GA table
-                </button>
-              ) : null}
-              {gaReady ? (
-                <button
+                  <Download aria-hidden />
+                  {downloadingTsv ? 'Downloading…' : 'Ranking table'}
+                </Button>
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={applySuggestions}
                   disabled={suggestionCount === 0}
-                  className={`h-9 px-3 rounded-lg text-xs border border-[var(--border-subtle)] ${
-                    suggestionCount > 0
-                      ? 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]'
-                      : 'text-[var(--text-tertiary)] opacity-50 cursor-not-allowed'
-                  }`}
-                  title={
-                    suggestionCount > 0
-                      ? `Apply ${suggestionCount} GA Include pick${suggestionCount === 1 ? '' : 's'} (Primary/Strong). You can still edit.`
-                      : 'No GA Include picks (Primary/Strong) to apply'
-                  }
+                  className="max-md:h-11"
+                  title={`Reset to the ${suggestionCount} Include pick${suggestionCount === 1 ? '' : 's'} (Primary and Strong)`}
                 >
-                  Accept GA picks
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => onOpenChange(false)}
-                className="h-9 px-3 rounded-lg text-xs border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
-              >
+                  Use ranking picks
+                </Button>
+              </>
+            ) : null}
+            <div className="ml-auto flex items-center gap-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="max-md:h-11">
                 Cancel
-              </button>
-              <button
-                type="button"
-                disabled={!canProceed}
-                onClick={handleProceed}
-                className={`h-9 px-3 rounded-lg text-xs font-medium flex items-center gap-2 ${
-                  canProceed
-                    ? 'bg-[var(--accent-teal)] text-white hover:opacity-90'
-                    : 'bg-[var(--bg-surface)] text-[var(--text-tertiary)] cursor-not-allowed border border-[var(--border-subtle)]'
-                }`}
-              >
-                {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                {generating ? 'Generating…' : 'Proceed'}
-              </button>
+              </Button>
+              <Button type="button" disabled={!canProceed} onClick={handleProceed} aria-busy={generating || undefined} className="max-md:h-11">
+                {generating ? 'Generating report…' : 'Generate report'}
+              </Button>
             </div>
           </div>
         </div>

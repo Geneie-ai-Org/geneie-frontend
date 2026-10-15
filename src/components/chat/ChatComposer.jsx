@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
+import ExploratoryModeToggle from '@/components/ExploratoryModeToggle';
 import { PanelRight, ArrowUp, Plus, Square, FileText, Dna } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,11 @@ function useAutosizeTextarea(ref, value, maxHeight = 240) {
 }
 
 const TEXTAREA_BASE =
-  'w-full resize-none border-none bg-transparent dark:bg-transparent disabled:bg-transparent dark:disabled:bg-transparent shadow-none rounded-none px-0 outline-none focus-visible:ring-0 focus-visible:border-transparent';
+  'w-full resize-none border-none bg-transparent dark:bg-transparent disabled:bg-transparent dark:disabled:bg-transparent shadow-none rounded-none px-0 outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:border-transparent disabled:opacity-100 disabled:cursor-not-allowed placeholder:text-[var(--text-tertiary)] disabled:placeholder:text-[var(--text-secondary)]';
+
+/* One shape for every toolbar button: 32px on desktop, 44px for coarse pointers. */
+const TOOL_BTN =
+  'chat-chrome-btn !size-8 [@media(pointer:coarse)]:!size-11 rounded-[8px] [&_svg]:!size-4 text-muted-foreground hover:text-foreground';
 
 /**
  * Two rows, one decision: which *kind* of data is being added. Where the file comes
@@ -23,48 +28,50 @@ const TEXTAREA_BASE =
 const FileTypeDropdown = ({ showFileTypeDropdown, onSelectVariantFile, onSelectFastq }) => {
   if (!showFileTypeDropdown) return null;
 
+  const item =
+    'w-full px-3 py-2 text-[13px] text-left flex items-center gap-2.5 text-foreground transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none [@media(pointer:coarse)]:py-3';
+
   return (
     <div
-      className="chat-upload-menu absolute bottom-full left-0 mb-2 rounded-lg border overflow-hidden shadow-xl min-w-[260px] z-50"
-      style={{
-        backgroundColor: 'var(--bg-surface-raised)',
-        borderColor: 'var(--border-default)',
-      }}
+      role="menu"
+      aria-label="Add data"
+      className="chat-upload-menu absolute bottom-full left-0 mb-2 rounded-lg border border-border bg-popover text-popover-foreground overflow-hidden shadow-[var(--shadow-md)] min-w-[260px] z-50 py-1"
     >
-      <button
-        type="button"
-        onClick={onSelectVariantFile}
-        className="w-full px-3 py-2.5 text-sm text-left flex items-center gap-2.5 transition-colors hover:bg-white/5"
-        style={{ color: 'var(--text-primary)' }}
-      >
-        <FileText className="w-3.5 h-3.5" style={{ color: 'var(--accent-teal)' }} />
+      <button type="button" role="menuitem" onClick={onSelectVariantFile} className={item}>
+        <FileText className="size-4 text-muted-foreground" aria-hidden />
         Variants file (VCF/TSV)
       </button>
       {onSelectFastq && (
-        <>
-          <div style={{ height: '1px', backgroundColor: 'var(--border-default)' }} />
-          <button
-            type="button"
-            onClick={onSelectFastq}
-            className="w-full px-3 py-2.5 text-sm text-left flex items-center gap-2.5 transition-colors hover:bg-white/5"
-            style={{ color: 'var(--text-primary)' }}
-          >
-            <Dna className="w-3.5 h-3.5" style={{ color: 'var(--text-secondary)' }} />
-            Raw sequencing data (FASTQ)
-          </button>
-        </>
+        <button type="button" role="menuitem" onClick={onSelectFastq} className={item}>
+          <Dna className="size-4 text-muted-foreground" aria-hidden />
+          Raw sequencing data (FASTQ)
+        </button>
       )}
     </div>
   );
 };
 
 /**
+ * Why sending is blocked, as a one-line note inside the composer with the next action as a text
+ * link. The copy comes from the parent's placeholder; `blockedAction` ({ label, onClick }) lets the
+ * parent name the exact next step, otherwise a safe one is inferred from the reason.
+ */
+function inferBlockedAction({ placeholder, isVariantSidebarOpen, onToggleVariantSidebar, hasDocument }) {
+  if (!placeholder || !onToggleVariantSidebar || isVariantSidebarOpen || !hasDocument) return null;
+  if (/apply a filter/i.test(placeholder)) return { label: 'Open filters', onClick: onToggleVariantSidebar };
+  if (/(upload in progress|annotation is running|applying filter|enriching|indexing|preparing chat|running phenotype)/i.test(placeholder)) {
+    return { label: 'View progress', onClick: onToggleVariantSidebar };
+  }
+  return null;
+}
+
+/**
  * The chat composer, and the primary object on the page.
  *
- * `layout` is the only difference between the two call sites: `stacked` puts the
- * textarea above its own button row (the empty state has room to breathe), `inline`
- * keeps everything on one line. Everything else is shared — there is deliberately no
- * second copy of the textarea, send button or upload menu.
+ * One rounded surface: the textarea on top, a toolbar inside it (attach on the left; answer
+ * mode, workspace toggle and send on the right). `layout` only changes density: `stacked` gives
+ * the empty state a taller field, `inline` is the compact conversation dock. There is
+ * deliberately no second copy of the textarea, send button or upload menu.
  *
  * `pipelineDrawer` renders *behind* this component and appears to slide out from
  * underneath it. The layering is pure flow: the drawer pads its own bottom by
@@ -93,6 +100,10 @@ const ChatComposer = ({
   onToggleVariantSidebar,
   hasDocument = false,
   pipelineDrawer = null,
+  /* Optional: { label, onClick } shown as a text link beside the blocked reason. */
+  blockedAction = null,
+  /* The Standard/Explore switch lives in the toolbar. Set false to keep it elsewhere. */
+  showModeToggle = true,
 }) => {
   const isStacked = layout === 'stacked';
   // Two separate gates. Typing is only blocked by the hard gates (no auth, quota
@@ -114,21 +125,35 @@ const ChatComposer = ({
     textareaRef.current?.focus();
   }, [canType]);
 
-  const handleContainerClick = () => {
-    if (canType) textareaRef.current?.focus();
+  const handleContainerClick = (e) => {
+    if (!canType) return;
+    // Clicks on buttons/links keep their own focus; only the empty surface focuses the field.
+    if (e.target.closest?.('button, a, [role="menu"]')) return;
+    textareaRef.current?.focus();
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent?.isComposing) {
       e.preventDefault();
       if (!sendDisabled) onSend?.();
     }
   };
 
-  const sendButtonStyle = {
-    backgroundColor: sendDisabled ? 'var(--bg-surface-hover)' : 'var(--text-primary)',
-    color: sendDisabled ? 'var(--text-disabled)' : 'var(--bg-app)',
+  const menuOpen = !!showUpload && showFileTypeDropdown === dropdownSource;
+  const handleSurfaceKeyDown = (e) => {
+    // The attach menu is a plain conditional render owned by the page; Escape toggles it shut.
+    if (e.key === 'Escape' && menuOpen) {
+      e.stopPropagation();
+      onUploadButtonClick?.(dropdownSource);
+    }
   };
+
+  const blocked = !canType;
+  const blockedLink =
+    blockedAction ||
+    (blocked
+      ? inferBlockedAction({ placeholder, isVariantSidebarOpen, onToggleVariantSidebar, hasDocument })
+      : null);
 
   const uploadButton = showUpload && (
     <div
@@ -143,16 +168,19 @@ const ChatComposer = ({
               variant="ghost"
               size="icon"
               onClick={() => onUploadButtonClick(dropdownSource)}
-              className="chat-chrome-btn chat-chrome-btn-plus size-9 rounded-[0.5rem]"
+              className={`${TOOL_BTN} chat-chrome-btn-plus`}
+              aria-label="Add data"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
             >
-              <Plus className="size-5" />
+              <Plus className="size-4" />
             </Button>
           }
         />
         <TooltipContent>Add data</TooltipContent>
       </Tooltip>
       <FileTypeDropdown
-        showFileTypeDropdown={showFileTypeDropdown === dropdownSource}
+        showFileTypeDropdown={menuOpen}
         onSelectVariantFile={onSelectVariantFile}
         onSelectFastq={onSelectFastq}
       />
@@ -168,8 +196,9 @@ const ChatComposer = ({
       disabled={!canType}
       rows={1}
       placeholder={placeholder}
+      aria-label="Message Geneie"
       className={`${TEXTAREA_BASE} text-sm py-1.5 ${
-        isStacked ? 'min-h-[44px] max-h-[160px]' : 'min-h-[36px] max-h-[120px]'
+        !canType ? 'min-h-[28px] max-h-[56px]' : isStacked ? 'min-h-[48px] max-h-[200px]' : 'min-h-[32px] max-h-[160px]'
       }`}
       style={{ color: 'var(--text-primary)' }}
     />
@@ -191,11 +220,10 @@ const ChatComposer = ({
             variant="ghost"
             size="icon"
             onClick={onStop}
-            className="chat-send-btn size-9 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: 'var(--bg-surface-hover)', color: 'var(--text-secondary)' }}
+            className="chat-send-btn !size-8 [@media(pointer:coarse)]:!size-11 [&_svg]:!size-3.5 rounded-full flex items-center justify-center border border-border bg-muted text-foreground hover:bg-accent"
             aria-label="Stop generation"
           >
-            <Square className="size-5" />
+            <Square className="size-3.5 fill-current" />
           </Button>
         }
       />
@@ -206,14 +234,13 @@ const ChatComposer = ({
   const sendOrStop = isCurrentlyActive ? (
     stopButton
   ) : (
-    <SendButton onClick={onSend} disabled={sendDisabled} style={sendButtonStyle} />
+    <SendButton onClick={onSend} disabled={sendDisabled} />
   );
 
   return (
-    /* A fragment, not a wrapping div: the three boxes below are block-level and the
-     * parent is already the full column width, so a container would add nothing but a
-     * phantom box in the elements tree. TooltipProvider is a context provider and
-     * renders no DOM of its own. */
+    /* A fragment, not a wrapping div: the boxes below are block-level and the parent is already
+     * the full column width, so a container would add nothing but a phantom box in the elements
+     * tree. TooltipProvider is a context provider and renders no DOM of its own. */
     <TooltipProvider>
       <>
         {/* Drawer and composer are siblings on purpose — no wrapper. Both are
@@ -222,39 +249,43 @@ const ChatComposer = ({
         {pipelineDrawer}
         <div
           onClick={handleContainerClick}
-          className={`pipeline-composer ${
-            isStacked ? 'flex flex-col px-3 py-2' : 'flex items-end gap-1 px-2 py-1.5'
+          onKeyDown={handleSurfaceKeyDown}
+          className={`pipeline-composer flex flex-col transition-[border-color,box-shadow] focus-within:!border-[hsl(var(--ring)/0.55)] focus-within:shadow-[0_0_0_3px_hsl(var(--ring)/0.14)] ${
+            isStacked ? 'px-4 pt-3 pb-2' : 'px-3 pt-2 pb-1.5'
           }`}
         >
-          {isStacked ? (
-            <>
-              {textarea}
-              <div className="flex items-center justify-between pt-1">
-                <div className="flex items-center gap-1">{uploadButton}</div>
-                <div className="flex items-center gap-1">
-                  {sidebarToggle}
-                  <SendButton onClick={onSend} disabled={sendDisabled} style={sendButtonStyle} />
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              {uploadButton}
-              {textarea}
-              <div className="flex items-center gap-0.5 mb-0.5">
-                {sidebarToggle}
-                {sendOrStop}
-              </div>
-            </>
+          {textarea}
+          {blocked && blockedLink && (
+            <div className="flex items-center gap-1.5 pb-1 text-xs text-[var(--text-secondary)]" aria-live="polite">
+              <span aria-hidden className="size-1.5 rounded-full bg-[var(--warning)]" />
+              <span>Chat is paused.</span>
+              <button
+                type="button"
+                onClick={blockedLink.onClick}
+                className="font-medium text-[var(--accent-teal)] underline-offset-2 hover:underline rounded-sm"
+              >
+                {blockedLink.label}
+              </button>
+            </div>
           )}
+          <div className="flex items-center justify-between gap-2 pt-1">
+            <div className="flex items-center gap-1 min-w-0">{uploadButton}</div>
+            <div className="flex items-center gap-1 shrink-0">
+              {showModeToggle && <ExploratoryModeToggle variant="inline" />}
+              {sidebarToggle}
+              {sendOrStop}
+            </div>
+          </div>
         </div>
-        <p
-          /* Positioned so the dock's blur layers paint behind it, not over it. */
-          className={`relative z-10 text-center text-2xs leading-tight ${isStacked ? 'mt-2' : 'mt-1.5'}`}
-          style={{ color: 'var(--text-disabled)' }}
-        >
-          Geneie can make mistakes. Verify important information.
-        </p>
+        {isStacked && (
+          <p
+            /* Positioned so the dock's blur layers paint behind it, not over it. */
+            className="relative z-10 text-center text-2xs leading-tight mt-2"
+            style={{ color: 'var(--text-tertiary)' }}
+          >
+            Geneie can make mistakes. Verify important information.
+          </p>
+        )}
       </>
     </TooltipProvider>
   );
@@ -269,19 +300,19 @@ const VariantSidebarToggle = ({ isVariantSidebarOpen, onToggleVariantSidebar }) 
           variant="ghost"
           size="icon"
           onClick={onToggleVariantSidebar}
-          className={`chat-chrome-btn size-9 rounded-[0.5rem] ${isVariantSidebarOpen ? 'is-active' : ''}`}
-          aria-label={isVariantSidebarOpen ? 'Close variant filters' : 'Open variant filters'}
+          className={`${TOOL_BTN} ${isVariantSidebarOpen ? 'is-active bg-muted !text-foreground' : ''}`}
+          aria-label={isVariantSidebarOpen ? 'Close workspace' : 'Open workspace'}
           aria-pressed={isVariantSidebarOpen}
         >
-          <PanelRight className="size-5" />
+          <PanelRight className="size-4" />
         </Button>
       }
     />
-    <TooltipContent>{isVariantSidebarOpen ? 'Close variant filters' : 'Open variant filters'}</TooltipContent>
+    <TooltipContent>{isVariantSidebarOpen ? 'Close workspace' : 'Open workspace'}</TooltipContent>
   </Tooltip>
 );
 
-const SendButton = ({ onClick, disabled, style }) => (
+const SendButton = ({ onClick, disabled }) => (
   <Tooltip>
     <TooltipTrigger
       render={
@@ -291,12 +322,14 @@ const SendButton = ({ onClick, disabled, style }) => (
           size="icon"
           onClick={onClick}
           disabled={disabled}
-          className={`chat-send-btn size-9 rounded-full flex items-center justify-center transition-all
-            ${disabled ? 'cursor-not-allowed disabled:opacity-30' : 'hover:opacity-80 active:scale-95'}`}
-          style={style}
+          className={`chat-send-btn !size-8 [@media(pointer:coarse)]:!size-11 [&_svg]:!size-4 rounded-full flex items-center justify-center transition-colors ${
+            disabled
+              ? 'cursor-not-allowed bg-muted text-[var(--text-disabled)] disabled:opacity-100'
+              : 'bg-primary text-primary-foreground hover:bg-[var(--accent-teal-hover)] hover:text-primary-foreground'
+          }`}
           aria-label="Send message"
         >
-          <ArrowUp className="size-5" />
+          <ArrowUp className="size-4" />
         </Button>
       }
     />

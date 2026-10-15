@@ -1,56 +1,72 @@
-import React, { useEffect, useState } from 'react';
-import { CheckCircle, Loader2 } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
+const cleanUrl = () => window.history.replaceState({}, document.title, window.location.pathname);
+
+/**
+ * Calm confirmation after checkout. The parent supplies the overlay, so this renders as a
+ * plain panel: working (waiting for the payment webhook), then done with one next action.
+ */
 const SubscriptionSuccess = ({ onClose }) => {
   const [loading, setLoading] = useState(true);
+  // ChatPage passes a fresh inline onClose on every render; keep the countdown independent of it.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     // Wait a moment for webhook to process, then show success
+    let closeTimer;
     const timer = setTimeout(() => {
       setLoading(false);
       // Auto-close after 5 seconds
-      if (onClose) {
-        setTimeout(() => {
-          onClose();
+      if (onCloseRef.current) {
+        closeTimer = setTimeout(() => {
+          onCloseRef.current?.();
           // Clean up URL
-          window.history.replaceState({}, document.title, window.location.pathname);
+          cleanUrl();
         }, 5000);
       }
     }, 2000);
 
-    return () => clearTimeout(timer);
-  }, [onClose]);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(closeTimer);
+    };
+  }, []);
+
+  const handleContinue = () => {
+    if (onClose) onClose();
+    cleanUrl();
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#F9FBFF' }}>
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-8 text-center">
-        {loading ? (
-          <>
-            <Loader2 className="w-16 h-16 animate-spin mx-auto mb-4" style={{ color: '#3E8E7E' }} />
-            <h2 className="text-2xl font-bold mb-2" style={{ color: '#1F2A44' }}>Processing Your Subscription</h2>
-            <p style={{ color: '#5F6F82' }}>Please wait while we confirm your payment...</p>
-          </>
-        ) : (
-          <>
-            <CheckCircle className="w-16 h-16 mx-auto mb-4" style={{ color: '#3E8E7E' }} />
-            <h2 className="text-2xl font-bold mb-2" style={{ color: '#1F2A44' }}>Welcome to Pro! 🎉</h2>
-            <p className="mb-6" style={{ color: '#5F6F82' }}>
-              Your subscription has been activated. You now have access to all Pro features!
-            </p>
-            <div className="rounded-lg p-4 mb-6" style={{ backgroundColor: '#F1F6F3', border: '1px solid #3E8E7E' }}>
-              <p className="text-sm font-semibold mb-2" style={{ color: '#1F3D2B' }}>What's Next?</p>
-              <ul className="text-sm text-left space-y-1" style={{ color: '#1F3D2B' }}>
-                <li>✓ Unlimited chat exchanges</li>
-                <li>✓ Bioinformatics pipelines access</li>
-              </ul>
-            </div>
-            <p className="text-sm" style={{ color: '#5F6F82' }}>Redirecting you to the app...</p>
-          </>
-        )}
-      </div>
+    <div
+      role="status"
+      aria-live="polite"
+      className="mx-4 w-full max-w-md rounded-xl border border-border bg-card p-8 text-center shadow-lg"
+    >
+      {loading ? (
+        <>
+          <Loader2 aria-hidden="true" className="mx-auto mb-4 size-8 animate-spin text-muted-foreground motion-reduce:animate-none" />
+          <h2 className="text-base font-medium text-foreground">Confirming your payment</h2>
+          <p className="mt-1.5 text-sm text-muted-foreground">This usually takes a few seconds.</p>
+        </>
+      ) : (
+        <>
+          <CheckCircle2 aria-hidden="true" className="mx-auto mb-4 size-8 text-[var(--success)]" />
+          <h2 className="text-base font-medium text-foreground">Pro is active</h2>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            You now have unlimited chat exchanges and access to bioinformatics pipelines.
+          </p>
+          <Button size="lg" className="mt-6 h-10 w-full" onClick={handleContinue} autoFocus>
+            Continue to Geneie
+          </Button>
+          <p className="mt-3 text-xs text-muted-foreground">This closes on its own in a few seconds.</p>
+        </>
+      )}
     </div>
   );
 };
 
 export default SubscriptionSuccess;
-

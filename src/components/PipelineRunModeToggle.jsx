@@ -49,17 +49,6 @@ export function applyPipelineRunModeChange(prev = {}, mode) {
   return { ...next, ...clearPhenotypeMetadataFields(prev) };
 }
 
-/** Gradient border that respects border-radius (padding-box + border-box). */
-function earlyAccessSurface(paddingBg = 'var(--bg-input)') {
-  const padLayer = /gradient|color-mix/i.test(paddingBg)
-    ? paddingBg
-    : `linear-gradient(${paddingBg}, ${paddingBg})`;
-  return {
-    border: '1.5px solid transparent',
-    background: `${padLayer} padding-box, var(--early-access-gradient) border-box`,
-  };
-}
-
 const AUTOMATIC_INFO =
   'Early access. Automatic advances annotation and phenotype prioritization when ready, and pre-selects strong disease matches (score ≥ 0.90) plus high-confidence findings. Review before clinical use.';
 
@@ -87,14 +76,7 @@ function AutomaticInfoButton() {
     <span className="relative inline-flex" ref={wrapRef}>
       <button
         type="button"
-        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
-        style={{
-          color: 'var(--early-access-from)',
-          borderColor: 'color-mix(in srgb, var(--early-access-from) 45%, transparent)',
-          background: open
-            ? 'color-mix(in srgb, var(--early-access-from) 18%, transparent)'
-            : 'color-mix(in srgb, var(--early-access-from) 10%, transparent)',
-        }}
+        className="-m-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55"
         aria-label="About Automatic mode"
         aria-expanded={open}
         onClick={(e) => {
@@ -103,17 +85,12 @@ function AutomaticInfoButton() {
           setOpen((v) => !v);
         }}
       >
-        <Info className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+        <Info className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
       </button>
       {open ? (
         <div
           role="tooltip"
-          className="absolute left-0 top-full z-50 mt-1.5 w-60 rounded-md border px-2.5 py-2 text-2xs leading-snug shadow-md"
-          style={{
-            color: 'var(--text-secondary)',
-            background: 'var(--bg-surface-raised)',
-            borderColor: 'var(--border-default)',
-          }}
+          className="absolute left-0 top-full z-50 mt-1.5 w-60 rounded-md border border-border bg-popover px-2.5 py-2 text-2xs leading-snug text-[var(--text-secondary)] shadow-md"
         >
           {AUTOMATIC_INFO}
         </div>
@@ -122,6 +99,11 @@ function AutomaticInfoButton() {
   );
 }
 
+/**
+ * Manual vs Automatic for the whole case. A quiet row: the label and one line of what it means on
+ * the left, the two-way switch on the right. Automatic is an early-access mode, so it carries a
+ * text tag rather than a decorative border.
+ */
 export default function PipelineRunModeToggle({
   value = PIPELINE_RUN_MANUAL,
   onChange,
@@ -132,38 +114,35 @@ export default function PipelineRunModeToggle({
   const isAutomatic = mode === PIPELINE_RUN_AUTOMATIC;
   return (
     <div
-      className={`p-3 rounded-lg space-y-1.5 ${className}`}
-      style={
-        isAutomatic
-          ? earlyAccessSurface('var(--bg-input)')
-          : {
-              border: '1px solid var(--border-default)',
-              background: 'var(--bg-input)',
-            }
-      }
+      className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg border px-3 py-2.5 ${
+        isAutomatic ? 'border-primary' : 'border-border'
+      } ${className}`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0 flex items-center gap-1.5">
-          <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-            Analysis mode
-          </p>
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5">
+          <p className="text-xs font-medium text-foreground">Analysis mode</p>
+          {isAutomatic && (
+            <span className="inline-flex h-[18px] items-center rounded-full bg-[var(--accent-teal-soft)] px-1.5 text-2xs font-semibold text-primary">
+              Early access
+            </span>
+          )}
           {isAutomatic && <AutomaticInfoButton />}
         </div>
-        <PillToggle
-          value={mode}
-          onChange={(next) => {
-            if (disabled) return;
-            onChange?.(normalizePipelineRunMode(next));
-          }}
-          options={[
-            { value: PIPELINE_RUN_MANUAL, label: 'Manual' },
-            { value: PIPELINE_RUN_AUTOMATIC, label: 'Automatic' },
-          ]}
-        />
+        <p className="mt-0.5 text-2xs text-muted-foreground">
+          {isAutomatic ? 'Runs the full analysis for you.' : 'You control each step.'}
+        </p>
       </div>
-      <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-        {isAutomatic ? 'Runs the full analysis for you.' : 'You control each step.'}
-      </p>
+      <PillToggle
+        value={mode}
+        onChange={(next) => {
+          if (disabled) return;
+          onChange?.(normalizePipelineRunMode(next));
+        }}
+        options={[
+          { value: PIPELINE_RUN_MANUAL, label: 'Manual' },
+          { value: PIPELINE_RUN_AUTOMATIC, label: 'Automatic' },
+        ]}
+      />
     </div>
   );
 }

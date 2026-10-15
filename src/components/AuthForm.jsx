@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { postLoginPath } from '@/lib/postLoginPath';
 import { auth, GoogleAuthProvider, OAuthProvider } from '../services/firebase';
 import {
@@ -12,10 +12,64 @@ import {
     applyActionCode,
     linkWithCredential,
     EmailAuthProvider,
-    reauthenticateWithCredential
 } from 'firebase/auth';
-import { Loader2, Eye, EyeOff, AlertCircle, CheckCircle2, Info } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { authErrorMessage } from '@/lib/authErrors';
+import { Button } from '@/components/ui/button';
+import {
+    TextField,
+    PasswordField,
+    Notice,
+    SubmitButton,
+    PasswordRules,
+} from '@/components/public/AuthFields';
+
+const MIN_PASSWORD_LENGTH = 6;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Sign-in and sign-up codes get specific sentences; anything else falls back to the shared helper. */
+function signInErrorMessage(code) {
+    switch (code) {
+        case 'auth/user-not-found':
+        case 'auth/invalid-credential':
+        case 'auth/wrong-password':
+            return 'Email or password is incorrect. Check them and try again, or reset your password.';
+        case 'auth/email-already-in-use':
+            return 'This email is already registered. Log in instead, or reset your password.';
+        default:
+            return authErrorMessage(code, 'Could not complete that. Please try again.');
+    }
+}
+
+function providerFailureMessage(providerName, err) {
+    switch (err?.code) {
+        case 'auth/popup-closed-by-user':
+        case 'auth/cancelled-popup-request':
+            return 'Sign-in was cancelled. Try again when you are ready.';
+        case 'auth/popup-blocked':
+            return 'Your browser blocked the sign-in window. Allow popups for this site and try again.';
+        default:
+            return authErrorMessage(err?.code, `${providerName} sign-in failed. Please try again.`);
+    }
+}
+
+const GoogleMark = () => (
+    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+    </svg>
+);
+
+const MicrosoftMark = () => (
+    <svg className="h-[18px] w-[18px]" viewBox="0 0 23 23" fill="none" aria-hidden="true">
+        <rect width="11" height="11" fill="#F25022" />
+        <rect x="12" width="11" height="11" fill="#7FBA00" />
+        <rect y="12" width="11" height="11" fill="#00A4EF" />
+        <rect x="12" y="12" width="11" height="11" fill="#FFB900" />
+    </svg>
+);
 
 const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificationPending }) => {
     const navigate = useNavigate();
@@ -25,7 +79,9 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
     const [password, setPassword] = useState('');
     const [isLogin, setIsLogin] = useState(true);
     const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
+    /* Which request is in flight: 'google' | 'microsoft' | 'email' | 'link' | null. */
+    const [busy, setBusy] = useState(null);
+    const loading = busy !== null;
     const [signupSuccess, setSignupSuccess] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [verifyingEmail, setVerifyingEmail] = useState(false);
@@ -35,10 +91,16 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
      * label — overloading it with a third value would touch all of those. */
     const [resetMode, setResetMode] = useState(false);
 
+    // Inline validation: a field shows its error once it has been left or a submit was tried.
+    const [touched, setTouched] = useState({ email: false, password: false });
+    const emailRef = useRef(null);
+    const passwordRef = useRef(null);
+
     // Account linking state
     const [pendingCredential, setPendingCredential] = useState(null);
     const [showLinkingPrompt, setShowLinkingPrompt] = useState(false);
     const [linkingEmail, setLinkingEmail] = useState('');
+    const [linkingPassword, setLinkingPassword] = useState('');
 
     // Handle email verification from URL
     useEffect(() => {
@@ -58,12 +120,15 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         onEmailVerificationPending(false);
                     }
                     window.history.replaceState({}, '', window.location.pathname);
-                    setInlineMessage({ type: 'success', text: 'Email verified! You can now log in.' });
+                    setInlineMessage({ type: 'success', text: 'Email verified. You can log in now.' });
                 })
                 .catch((err) => {
                     setVerifyingEmail(false);
                     window.history.replaceState({}, '', window.location.pathname);
-                    setInlineMessage({ type: 'error', text: 'Email verification failed: ' + err.message });
+                    setInlineMessage({
+                        type: 'error',
+                        text: authErrorMessage(err.code, 'We could not verify your email. The link may have expired; log in to request a new one.'),
+                    });
                 });
         }
     }, []);
@@ -76,7 +141,8 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
     // Google Sign-In handler
     const handleGoogleSignIn = async () => {
         setError('');
-        setLoading(true);
+        setInlineMessage(null);
+        setBusy('google');
 
         try {
             const provider = new GoogleAuthProvider();
@@ -98,32 +164,20 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                 setLinkingEmail(linkingEmail);
                 setShowLinkingPrompt(true);
                 setError('');
-                setLoading(false);
+                setBusy(null);
                 return;
             }
 
-            let friendlyError = 'Google sign-in failed.';
-            if (err.code) {
-                switch (err.code) {
-                    case 'auth/popup-closed-by-user':
-                        friendlyError = 'Sign-in cancelled.';
-                        break;
-                    case 'auth/popup-blocked':
-                        friendlyError = 'Popup was blocked. Please allow popups for this site.';
-                        break;
-                    default:
-                        friendlyError = `Google sign-in failed: ${err.code.replace('auth/', '')}`;
-                }
-            }
-            setInlineMessage({ type: 'error', text: friendlyError });
-            setLoading(false);
+            setInlineMessage({ type: 'error', text: providerFailureMessage('Google', err) });
+            setBusy(null);
         }
     };
 
     // Microsoft Sign-In handler
     const handleMicrosoftSignIn = async () => {
         setError('');
-        setLoading(true);
+        setInlineMessage(null);
+        setBusy('microsoft');
 
         try {
             const provider = new OAuthProvider('microsoft.com');
@@ -145,32 +199,20 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                 setLinkingEmail(linkingEmail);
                 setShowLinkingPrompt(true);
                 setError('');
-                setLoading(false);
+                setBusy(null);
                 return;
             }
 
-            let friendlyError = 'Microsoft sign-in failed.';
-            if (err.code) {
-                switch (err.code) {
-                    case 'auth/popup-closed-by-user':
-                        friendlyError = 'Sign-in cancelled.';
-                        break;
-                    case 'auth/popup-blocked':
-                        friendlyError = 'Popup was blocked. Please allow popups for this site.';
-                        break;
-                    default:
-                        friendlyError = `Microsoft sign-in failed: ${err.code.replace('auth/', '')}`;
-                }
-            }
-            setInlineMessage({ type: 'error', text: friendlyError });
-            setLoading(false);
+            setInlineMessage({ type: 'error', text: providerFailureMessage('Microsoft', err) });
+            setBusy(null);
         }
     };
 
     // Account linking handler
     const handleAccountLinking = async (linkingEmail, linkingPassword) => {
         setError('');
-        setLoading(true);
+        setInlineMessage(null);
+        setBusy('link');
 
         try {
             // Sign in with email/password first
@@ -192,22 +234,23 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
             }
             navigate(postLoginPath(location));
         } catch (err) {
-            let friendlyError = 'Failed to link accounts.';
+            let friendlyError = 'We could not link the accounts. Please try again.';
             if (err.code) {
                 switch (err.code) {
                     case 'auth/wrong-password':
                     case 'auth/user-not-found':
-                        friendlyError = 'Incorrect email or password. Please try again.';
+                    case 'auth/invalid-credential':
+                        friendlyError = 'That password is not correct. Try again.';
                         break;
                     case 'auth/credential-already-in-use':
-                        friendlyError = 'This account is already linked.';
+                        friendlyError = 'This account is already linked. Log in with it directly.';
                         break;
                     default:
-                        friendlyError = `Linking failed: ${err.code.replace('auth/', '')}`;
+                        friendlyError = authErrorMessage(err.code, friendlyError);
                 }
             }
             setInlineMessage({ type: 'error', text: friendlyError });
-            setLoading(false);
+            setBusy(null);
         }
     };
 
@@ -215,16 +258,40 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
         setPendingCredential(null);
         setShowLinkingPrompt(false);
         setLinkingEmail('');
+        setLinkingPassword('');
+        setInlineMessage(null);
         setError('');
     };
+
+    // Field-level validation (presentation only; the request is still made by handleSubmit).
+    const emailError = !email.trim()
+        ? 'Enter your email address.'
+        : !EMAIL_PATTERN.test(email.trim())
+            ? 'Enter a valid email address, like name@lab.org.'
+            : '';
+    const passwordError = resetMode
+        ? ''
+        : !password
+            ? (isLogin ? 'Enter your password.' : 'Choose a password.')
+            : (!isLogin && password.length < MIN_PASSWORD_LENGTH)
+                ? `Use at least ${MIN_PASSWORD_LENGTH} characters.`
+                : '';
+    const showEmailError = touched.email && emailError;
+    const showPasswordError = touched.password && passwordError;
 
     // Email/Password form submission
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setTouched({ email: true, password: true });
+        if (emailError || passwordError) {
+            setInlineMessage(null);
+            (emailError ? emailRef : passwordRef).current?.focus();
+            return;
+        }
         setError('');
         setSignupSuccess(false);
         setInlineMessage(null);
-        setLoading(true);
+        setBusy('email');
 
         try {
             if (resetMode) {
@@ -238,7 +305,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                     type: 'success',
                     text: `If an account exists for ${email}, we've sent a reset link. Check your inbox, including spam.`,
                 });
-                setEmail('');
+                setTouched({ email: false, password: false });
                 return;
             }
 
@@ -258,7 +325,10 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                 }
 
                 if (!emailVerified) {
-                    setInlineMessage({ type: 'error', text: 'Your email may not be verified yet. Please check your inbox.' });
+                    setInlineMessage({
+                        type: 'error',
+                        text: 'Your email is not verified yet. Open the verification link we sent you (check spam), then log in.',
+                    });
                     await signOut(auth);
                     return;
                 }
@@ -282,10 +352,13 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
 
                 await signOut(auth);
 
-                setInlineMessage({ type: 'success', text: `Account created! We've sent a verification email to ${email}.` });
+                setInlineMessage({
+                    type: 'success',
+                    text: `Account created. We sent a verification link to ${email}. Verify it, then log in here.`,
+                });
                 setIsLogin(true); // Automatically toggle to login flow
-                setEmail('');
                 setPassword('');
+                setTouched({ email: false, password: false });
             }
         } catch (err) {
             /* A reset request answers the same way whether or not the address has an
@@ -299,38 +372,34 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         type: 'success',
                         text: `If an account exists for ${email}, we've sent a reset link. Check your inbox, including spam.`,
                     });
-                    setEmail('');
                 }
                 return;
             }
 
-            let friendlyError = 'An unknown error occurred.';
-            if (err.code) {
-                switch (err.code) {
-                    case 'auth/user-not-found':
-                    case 'auth/invalid-credential':
-                    case 'auth/wrong-password':
-                        friendlyError = 'Invalid email or password. Please try again or sign up.';
-                        break;
-                    case 'auth/email-already-in-use':
-                        friendlyError = 'This email is already registered. Try logging in instead.';
-                        break;
-                    case 'auth/weak-password':
-                        friendlyError = 'Password should be at least 6 characters.';
-                        break;
-                    default:
-                        friendlyError = `Authentication failed: ${err.code.replace('auth/', '')}`;
-                }
-            }
-            setInlineMessage({ type: 'error', text: friendlyError });
+            setInlineMessage({ type: 'error', text: signInErrorMessage(err.code) });
         } finally {
-            setLoading(false);
+            setBusy(null);
         }
     };
 
+    const switchMode = () => {
+        if (resetMode) {
+            setResetMode(false);
+            setIsLogin(true);
+        } else {
+            setIsLogin(!isLogin);
+        }
+        setError('');
+        setSignupSuccess(false);
+        setInlineMessage(null);
+        setTouched({ email: false, password: false });
+    };
+
     // Contextual heading
-    let mainHeading = isLogin ? 'Log in to Geneie' : 'Create an account';
-    let subMessage = null;
+    let mainHeading = isLogin ? 'Log in to Geneie' : 'Create your account';
+    let subMessage = isLogin
+        ? 'Welcome back. Continue with your work account or email.'
+        : 'Start with your work account or email.';
 
     if (resetMode) {
         mainHeading = 'Reset your password';
@@ -338,250 +407,198 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
     }
 
     if (triggerReason === 'guestLimit') {
-        mainHeading = 'Guest Access Ended';
-        subMessage = "Your 5 free exchanges have been used. Please sign up or log in to save your progress and continue chatting!";
+        mainHeading = 'Free preview ended';
+        subMessage = 'Your 5 free exchanges are used. Log in or create an account to keep your progress and continue.';
     }
+
+    const submitLabel = resetMode ? 'Send reset link' : isLogin ? 'Log in' : 'Create account';
+    const submitBusyLabel = resetMode ? 'Sending link…' : isLogin ? 'Logging in…' : 'Creating account…';
 
     return (
         <div className="w-full">
             {/* === Header === */}
-            <div className="text-center mb-6 sm:mb-8">
-                <h2 className="text-2xl sm:text-3xl font-medium text-white mb-2 tracking-tight">
-                    {showLinkingPrompt ? 'Link Your Account' : mainHeading}
+            <div className="mb-6">
+                <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+                    {showLinkingPrompt ? 'Link your account' : mainHeading}
                 </h2>
-                {showLinkingPrompt ? (
-                    <p className="text-sm text-zinc-400 mt-2">
-                        An account already exists for <strong className="text-white">{linkingEmail}</strong>. Sign in with your email to link your Microsoft/Google account.
-                    </p>
-                ) : subMessage ? (
-                    <p className="text-sm text-zinc-400">
-                        {subMessage}
-                    </p>
-                ) : (
-                    <p className="text-sm text-zinc-400 mt-2">
-                        Connect to <span className="font-semibold text-white">Geneie</span> with:
-                    </p>
-                )}
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    {showLinkingPrompt ? (
+                        <>
+                            An account already exists for <strong className="font-medium text-foreground">{linkingEmail}</strong>.
+                            Enter its password once to connect your{' '}
+                            {pendingCredential?.providerId?.includes('google') ? 'Google' : 'Microsoft'} sign-in.
+                        </>
+                    ) : (
+                        subMessage
+                    )}
+                </p>
             </div>
+
+            {verifyingEmail && (
+                <Notice type="info" className="mb-5">
+                    <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Verifying your email…
+                    </span>
+                </Notice>
+            )}
+
+            {inlineMessage && (
+                <Notice type={inlineMessage.type} className="mb-5">
+                    {inlineMessage.text}
+                </Notice>
+            )}
 
             {/* === Account Linking Prompt === */}
             {showLinkingPrompt && (
-                <div className="mb-6 p-4 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)]">
-                    <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0">
-                            <svg className="w-5 h-5 text-[var(--text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
-                        </div>
-                        <div className="flex-1 space-y-3">
-                            <div>
-                                <h3 className="text-sm font-medium text-white">Account Already Exists</h3>
-                                <p className="text-xs text-zinc-400 mt-1">
-                                    Sign in with your email password to link your {pendingCredential?.providerId?.includes('google') ? 'Google' : 'Microsoft'} account.
-                                </p>
-                            </div>
-                            <div className="space-y-2">
-                                <input
-                                    type="email"
-                                    value={linkingEmail}
-                                    readOnly
-                                    className="w-full h-9 px-3 border border-zinc-700 rounded-md bg-zinc-900/50 text-sm text-zinc-400 cursor-not-allowed"
-                                />
-                                <input
-                                    type="password"
-                                    id="linking-password"
-                                    placeholder="Enter your email password"
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            handleAccountLinking(linkingEmail, e.target.value);
-                                        }
-                                    }}
-                                    className="w-full h-9 px-3 border border-zinc-700 rounded-md bg-black/90 backdrop-blur-sm text-sm text-white placeholder-zinc-500 focus:border-zinc-500 focus:outline-none transition-colors"
-                                />
-                            </div>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={(e) => {
-                                        const passwordInput = e.target.parentElement.querySelector('input[type="password"]');
-                                        if (passwordInput) handleAccountLinking(linkingEmail, passwordInput.value);
-                                    }}
-                                    disabled={loading}
-                                    className="flex-1 h-9 bg-[#0a0a0a] border border-zinc-700/80 hover:bg-zinc-900 disabled:opacity-50 rounded-md text-sm font-medium text-white transition-all"
-                                >
-                                    {loading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'Link Accounts'}
-                                </button>
-                                <button
-                                    onClick={cancelAccountLinking}
-                                    disabled={loading}
-                                    className="px-4 h-9 border border-zinc-700/80 hover:bg-zinc-900 rounded-md text-sm font-medium text-zinc-400 transition-all"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* === Social Login Buttons === */}
-            {!showLinkingPrompt && !resetMode && (
-                <div className="space-x-3 mb-6 flex flex-row">
-                    {/* Google Button */}
-                    <button
-                        type="button"
-                        onClick={handleGoogleSignIn}
-                        disabled={loading}
-                        className="w-full h-10 px-4 flex items-center justify-center gap-3 border border-zinc-700/80 rounded-md bg-black/80 backdrop-blur-sm hover:bg-zinc-900 transition-colors duration-200 text-sm font-medium text-zinc-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24">
-                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                        </svg>
-                        <span>Google</span>
-                    </button>
-
-                    {/* Microsoft Button */}
-                    <button
-                        type="button"
-                        onClick={handleMicrosoftSignIn}
-                        disabled={loading}
-                        className="w-full h-10 px-4 flex items-center justify-center gap-3 border border-zinc-700/80 rounded-md bg-black/80 backdrop-blur-sm hover:bg-zinc-900 transition-colors duration-200 text-sm font-medium text-zinc-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <svg className="w-4 h-4" viewBox="0 0 23 23" fill="none">
-                            <rect width="11" height="11" fill="#F25022" />
-                            <rect x="12" width="11" height="11" fill="#7FBA00" />
-                            <rect y="12" width="11" height="11" fill="#00A4EF" />
-                            <rect x="12" y="12" width="11" height="11" fill="#FFB900" />
-                        </svg>
-                        <span>Microsoft</span>
-                    </button>
-                </div>
-            )}
-
-            {/* === Divider === */}
-            {!showLinkingPrompt && !resetMode && (
-                <div className="flex items-center gap-3 my-6">
-                    <div className="flex-1 h-px bg-zinc-800"></div>
-                    <span className="text-xs text-zinc-500 shrink-0">or continue with</span>
-                    <div className="flex-1 h-px bg-zinc-800"></div>
-                </div>
-            )}
-
-            {/* === Auth Form === */}
-            {!showLinkingPrompt && (
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* Email Field */}
-                    <div className="space-y-1.5">
-                        <label htmlFor="email" className="block text-xs font-medium text-zinc-400">
-                            Email
-                        </label>
-                        <input
-                            id="email"
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                            autoComplete="email"
-                            className="w-full h-10 px-3 border border-zinc-800 rounded-md bg-black/90 backdrop-blur-sm text-sm text-white focus:border-zinc-500 focus:outline-none transition-colors"
-                        />
-                    </div>
-
-                    {/* Password Field */}
-                    {!resetMode && (
-                    <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                            <label htmlFor="password" className="block text-xs font-medium text-zinc-400">
-                                Password
-                            </label>
-                            {isLogin && (
-                                <button
-                                    type="button"
-                                    onClick={() => { setResetMode(true); setPassword(''); setInlineMessage(null); }}
-                                    className="text-xs text-[#4ad6cd] hover:underline"
-                                    disabled={loading}
-                                >
-                                    Forgot password?
-                                </button>
-                            )}
-                        </div>
-                        <div className="relative">
-                            <input
-                                id="password"
-                                type={showPassword ? 'text' : 'password'}
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                                autoComplete={isLogin ? "current-password" : "new-password"}
-                                className="w-full h-10 px-3 pr-10 border border-zinc-800 rounded-md bg-black/90 backdrop-blur-sm text-sm text-white focus:border-zinc-500 focus:outline-none transition-colors"
-                                placeholder=""
-                            />
-                            <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-400"
-                                aria-label={showPassword ? "Hide password" : "Show password"}
-                                tabIndex={-1}
-                            >
-                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                            </button>
-                        </div>
-                    </div>
-                    )}
-
-                    {inlineMessage && (
-                        <div className={`flex items-start gap-2 px-3 py-2.5 rounded-md text-xs ${
-                            inlineMessage.type === 'error' ? 'bg-red-500/10 border border-red-500/20 text-red-300' :
-                            inlineMessage.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300' :
-                            'bg-blue-500/10 border border-blue-500/20 text-blue-300'
-                        }`}>
-                            {inlineMessage.type === 'error' && <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />}
-                            {inlineMessage.type === 'success' && <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />}
-                            {inlineMessage.type === 'info' && <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />}
-                            <span>{inlineMessage.text}</span>
-                        </div>
-                    )}
-
-                    {/* Submit Button */}
-                    <div className="pt-2 flex justify-center">
-                        <button
-                            type="submit"
-                            disabled={loading || email.length < 3 || (!resetMode && password.length < 6)}
-                            className="hover:animate-none w-[60%] h-10 bg-gradient-to-b from-zinc-700 to-black hover:from-neutral-800 hover:to-black disabled:opacity-65 disabled:cursor-not-allowed rounded-xl text-sm font-medium text-white shadow-[0px_0.5px_0px_0px_#404040_inset,1px_4px_4px_1px_#171717] [text-shadow:0px_1px_2px_black] transition-all duration-200 flex items-center justify-center gap-2"
+                <form
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        if (linkingPassword) handleAccountLinking(linkingEmail, linkingPassword);
+                    }}
+                    className="space-y-4"
+                >
+                    <TextField id="linking-email" label="Email" type="email" value={linkingEmail} readOnly />
+                    <PasswordField
+                        id="linking-password"
+                        label="Password"
+                        value={linkingPassword}
+                        onChange={(e) => setLinkingPassword(e.target.value)}
+                        autoComplete="current-password"
+                        autoFocus
+                    />
+                    <div className="flex gap-2 pt-1">
+                        <SubmitButton
+                            loading={busy === 'link'}
+                            loadingLabel="Linking…"
+                            disabled={!linkingPassword}
+                            className="flex-1"
                         >
-                            {loading ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                                resetMode ? 'Send reset link' : isLogin ? 'Log in' : 'Sign up'
-                            )}
-                        </button>
+                            Link accounts
+                        </SubmitButton>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 px-4"
+                            onClick={cancelAccountLinking}
+                            disabled={loading}
+                        >
+                            Cancel
+                        </Button>
                     </div>
                 </form>
             )}
 
-            {/* === Toggle Link === */}
-            <p className="mt-8 text-center text-sm text-zinc-400">
-                {resetMode ? 'Remembered it? ' : isLogin ? 'New to Geneie? ' : 'Already have an account? '}
-                <button
-                    type="button"
-                    onClick={() => {
-                        if (resetMode) {
-                            setResetMode(false);
-                            setIsLogin(true);
-                        } else {
-                            setIsLogin(!isLogin);
-                        }
-                        setError('');
-                        setSignupSuccess(false);
-                        setInlineMessage(null);
-                    }}
-                    className="font-medium text-[#60a5fa] hover:text-[#3b82f6] hover:underline transition-colors duration-200"
-                    disabled={loading}
-                >
-                    {resetMode ? 'Back to log in' : isLogin ? 'Sign up' : 'Log in'}
-                </button>
-            </p>
+            {/* === Social sign-in: the fastest path, so it comes first === */}
+            {!showLinkingPrompt && !resetMode && (
+                <>
+                    <div className="space-y-2.5">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleGoogleSignIn}
+                            disabled={loading}
+                            aria-busy={busy === 'google' || undefined}
+                            className="h-11 w-full gap-2.5 text-sm font-medium"
+                        >
+                            {busy === 'google' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <GoogleMark />}
+                            Continue with Google
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleMicrosoftSignIn}
+                            disabled={loading}
+                            aria-busy={busy === 'microsoft' || undefined}
+                            className="h-11 w-full gap-2.5 text-sm font-medium"
+                        >
+                            {busy === 'microsoft' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <MicrosoftMark />}
+                            Continue with Microsoft
+                        </Button>
+                    </div>
+
+                    <div className="my-6 flex items-center gap-3" role="separator" aria-label="or">
+                        <div className="h-px flex-1 bg-border" />
+                        <span className="shrink-0 text-xs text-[var(--text-tertiary)]">or use email</span>
+                        <div className="h-px flex-1 bg-border" />
+                    </div>
+                </>
+            )}
+
+            {/* === Email form === */}
+            {!showLinkingPrompt && (
+                <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+                    <TextField
+                        id="email"
+                        ref={emailRef}
+                        label="Email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+                        autoComplete="email"
+                        inputMode="email"
+                        error={showEmailError || undefined}
+                        placeholder="name@lab.org"
+                    />
+
+                    {!resetMode && (
+                        <div className="space-y-3">
+                            <PasswordField
+                                id="password"
+                                ref={passwordRef}
+                                label="Password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                onBlur={() => setTouched((t) => ({ ...t, password: true }))}
+                                autoComplete={isLogin ? 'current-password' : 'new-password'}
+                                show={showPassword}
+                                onToggle={() => setShowPassword((v) => !v)}
+                                error={showPasswordError && (isLogin || !password) ? showPasswordError : undefined}
+                                labelAction={isLogin ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setResetMode(true); setPassword(''); setInlineMessage(null); setTouched({ email: false, password: false }); }}
+                                        className="-my-2 rounded-md py-2 text-xs font-medium text-primary hover:underline"
+                                        disabled={loading}
+                                    >
+                                        Forgot password?
+                                    </button>
+                                ) : null}
+                            />
+                            {!isLogin && <PasswordRules password={password} minLength={MIN_PASSWORD_LENGTH} />}
+                        </div>
+                    )}
+
+                    <SubmitButton loading={busy === 'email'} loadingLabel={submitBusyLabel} disabled={loading} className="mt-2">
+                        {submitLabel}
+                    </SubmitButton>
+                </form>
+            )}
+
+            {/* === Toggle + consent === */}
+            {!showLinkingPrompt && (
+                <>
+                    <p className="mt-6 text-center text-sm text-muted-foreground">
+                        {resetMode ? 'Remembered it? ' : isLogin ? 'New to Geneie? ' : 'Already have an account? '}
+                        <button
+                            type="button"
+                            onClick={switchMode}
+                            className="rounded-sm py-2 font-medium text-primary hover:underline"
+                            disabled={loading}
+                        >
+                            {resetMode ? 'Back to log in' : isLogin ? 'Create an account' : 'Log in'}
+                        </button>
+                    </p>
+                    {!isLogin && !resetMode && (
+                        <p className="mt-2 text-center text-xs leading-5 text-[var(--text-tertiary)]">
+                            By creating an account you agree to the{' '}
+                            <Link to="/legal/terms" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Terms</Link>
+                            {' '}and{' '}
+                            <Link to="/legal/privacy" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Privacy Policy</Link>.
+                        </p>
+                    )}
+                </>
+            )}
         </div>
     );
 };

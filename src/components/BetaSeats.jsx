@@ -6,12 +6,8 @@ import { joinWaitlist } from '@/services/backendApi';
 /**
  * Closed-beta seat badge and waitlist form for the landing page.
  *
- * Styled with the landing page's own hard-coded zinc/teal palette rather than the
- * semantic shadcn tokens — every other element in these sections does the same, and the
- * page forces its own theme, so a token-styled control would be the odd one out.
+ * Styled with the design tokens, so the controls follow the landing page in light and dark.
  */
-
-const BRAND_TEAL = '#2F7F7A';
 
 /** "7 of 10 beta seats left". Renders nothing until the count is known. */
 export function BetaSeatsBadge({ seats, className = '', style }) {
@@ -21,13 +17,12 @@ export function BetaSeatsBadge({ seats, className = '', style }) {
 
   return (
     <div className={`flex flex-col items-center ${className}`} style={style}>
-      <div className="flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900/70 px-4 py-1.5">
+      <div className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5">
         <span
-          className="h-2 w-2 shrink-0 rounded-full"
-          style={{ backgroundColor: remaining > 0 ? BRAND_TEAL : '#a1a1aa' }}
+          className={`h-2 w-2 shrink-0 rounded-full ${remaining > 0 ? 'bg-primary' : 'bg-muted-foreground'}`}
           aria-hidden="true"
         />
-        <span className="text-sm font-medium text-zinc-200">
+        <span className="text-sm font-medium text-foreground">
           {remaining > 0
             ? `${remaining} of ${total} beta seats left`
             : `All ${total} beta seats taken`}
@@ -92,7 +87,7 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
   if (joined) {
     return (
       <div className={`flex flex-col items-center gap-2 ${className}`}>
-        <p className="text-base text-zinc-200">{confirmationFor(joined, isFull)}</p>
+        <p className="text-base text-foreground" role="status">{confirmationFor(joined, isFull)}</p>
         <SignInHint onSignIn={onSignIn} />
       </div>
     );
@@ -103,7 +98,7 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
       onSubmit={handleSubmit}
       className={`flex w-full max-w-md flex-col items-center gap-3 ${className}`}
     >
-      <p className="text-sm text-zinc-400">
+      <p className="text-sm text-muted-foreground">
         {isFull
           ? 'All beta seats are taken right now. Leave your email and we\u2019ll get in touch when one opens.'
           : 'Geneie is in closed beta. Leave your email to enrol, we\u2019ll set up your seat and let you know.'}
@@ -116,7 +111,8 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
           placeholder="you@lab.org"
           autoComplete="email"
           disabled={submitting}
-          className="h-12 flex-1 rounded-md border border-zinc-700 bg-zinc-900/70 px-4 text-base text-white placeholder:text-zinc-500 outline-none transition-colors focus:border-zinc-400 disabled:opacity-60"
+          aria-label="Email address"
+          className="h-12 flex-1 rounded-md border border-border bg-card px-4 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground hover:border-[var(--border-strong)] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/55 disabled:opacity-60"
         />
         {/* Honeypot: off-screen and hidden from assistive tech, so only a bot fills it. */}
         <input
@@ -132,7 +128,7 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
           type="submit"
           size="lg"
           disabled={submitting}
-          className="h-12 bg-white px-8 text-base font-medium text-black transition-all hover:bg-zinc-200 active:scale-95"
+          className="h-12 px-8 text-base font-medium"
         >
           {submitting ? 'Sending\u2026' : isFull ? 'Join waitlist' : 'Apply for beta'}
         </Button>
@@ -168,7 +164,7 @@ function SignInHint({ onSignIn }) {
     <button
       type="button"
       onClick={onSignIn}
-      className="text-sm text-zinc-400 underline-offset-4 transition-colors hover:text-zinc-200 hover:underline"
+      className="rounded text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55"
     >
       Already have an account? Sign in
     </button>

@@ -118,9 +118,13 @@ export default function LegalConsentGate({ children }) {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center gap-2 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        Loading…
+      <div
+        role="status"
+        aria-live="polite"
+        className="flex min-h-dvh items-center justify-center gap-2 bg-background text-sm text-muted-foreground"
+      >
+        <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+        Checking your agreement…
       </div>
     );
   }
@@ -129,55 +133,88 @@ export default function LegalConsentGate({ children }) {
     return children;
   }
 
+  // Could not even load the current versions: there is nothing to accept yet, so the one
+  // useful action is to retry (the gate stays closed).
+  const loadFailed = !required;
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-xl">
-        <h1 className="text-xl font-semibold tracking-tight">Before you continue</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Geneie is a research and decision-support tool — not a substitute for clinical judgment.
-          Please review and accept our Terms and Privacy Policy to use the app.
-        </p>
-        <ul className="mt-4 space-y-1 text-sm">
-          <li>
-            <Link className="text-primary underline" to="/legal/terms" target="_blank" rel="noreferrer">
-              Terms of Use
-            </Link>
-            {required?.termsVersion ? (
-              <span className="text-muted-foreground"> (v{required.termsVersion})</span>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-background p-5">
+      <div className="w-full max-w-md">
+        <h1 className="text-xl font-semibold tracking-tight">
+          {loadFailed ? 'We could not check your agreement' : 'Review and accept to continue'}
+        </h1>
+
+        {loadFailed ? (
+          <>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              {error || 'Check your connection and try again.'}
+            </p>
+            <Button className="mt-6 h-11 w-full sm:h-10" onClick={refresh}>
+              Try again
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Geneie supports research and decision-making by qualified professionals. It is not a
+              substitute for clinical judgment. Please read and accept the documents below to use the app.
+            </p>
+
+            <ul className="mt-5 divide-y divide-border rounded-lg border border-border text-sm">
+              <li className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <Link className="font-medium text-primary underline-offset-2 hover:underline" to="/legal/terms" target="_blank" rel="noreferrer">
+                  Terms of Use
+                </Link>
+                {required?.termsVersion ? (
+                  <span className="font-mono text-xs text-[var(--text-tertiary)]">v{required.termsVersion}</span>
+                ) : null}
+              </li>
+              <li className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <Link className="font-medium text-primary underline-offset-2 hover:underline" to="/legal/privacy" target="_blank" rel="noreferrer">
+                  Privacy Policy
+                </Link>
+                {required?.privacyVersion ? (
+                  <span className="font-mono text-xs text-[var(--text-tertiary)]">v{required.privacyVersion}</span>
+                ) : null}
+              </li>
+            </ul>
+
+            <label className="mt-5 flex min-h-11 cursor-pointer items-start gap-3 text-sm leading-5">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[hsl(var(--primary))]"
+                checked={checked}
+                onChange={(e) => setChecked(e.target.checked)}
+              />
+              <span>I have read and agree to the Terms of Use and Privacy Policy.</span>
+            </label>
+
+            {error ? (
+              <p role="alert" className="mt-3 text-sm text-[var(--error)]">
+                {error}
+              </p>
             ) : null}
-          </li>
-          <li>
-            <Link className="text-primary underline" to="/legal/privacy" target="_blank" rel="noreferrer">
-              Privacy Policy
-            </Link>
-            {required?.privacyVersion ? (
-              <span className="text-muted-foreground"> (v{required.privacyVersion})</span>
-            ) : null}
-          </li>
-        </ul>
-        <label className="mt-5 flex cursor-pointer items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={checked}
-            onChange={(e) => setChecked(e.target.checked)}
-          />
-          <span>I have read and agree to the Terms of Use and Privacy Policy.</span>
-        </label>
-        {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
-        <Button
-          className="mt-5 w-full"
-          disabled={!checked || submitting}
-          onClick={onAccept}
-        >
-          {submitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving…
-            </>
-          ) : (
-            'Accept and continue'
-          )}
-        </Button>
+
+            <Button
+              className="mt-5 h-11 w-full sm:h-10"
+              disabled={!checked || submitting}
+              onClick={onAccept}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Saving…
+                </>
+              ) : (
+                'Accept and continue'
+              )}
+            </Button>
+            {!checked && (
+              <p className="mt-2 text-center text-xs text-[var(--text-tertiary)]">
+                Tick the box to enable this button.
+              </p>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

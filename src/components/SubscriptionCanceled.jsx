@@ -1,5 +1,6 @@
 import React from 'react';
-import { XCircle, ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 
 const SubscriptionCanceled = ({ onClose }) => {
   const handleClose = () => {
@@ -9,30 +10,18 @@ const SubscriptionCanceled = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleClose}>
-      <div 
-        className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 p-8 text-center" 
-        onClick={(e) => e.stopPropagation()}
-      >
-        <XCircle className="w-16 h-16 mx-auto mb-4" style={{ color: '#5F6F82' }} />
-        <h2 className="text-2xl font-bold mb-2" style={{ color: '#1F2A44' }}>Subscription Canceled</h2>
-        <p className="mb-6" style={{ color: '#5F6F82' }}>
-          You canceled the subscription process. No charges were made.
-        </p>
-        <button
-          onClick={handleClose}
-          className="w-full px-4 py-2 text-white rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
-          style={{ backgroundColor: '#2F7F7A' }}
-          onMouseEnter={(e) => { e.target.style.backgroundColor = '#256B67'; }}
-          onMouseLeave={(e) => { e.target.style.backgroundColor = '#2F7F7A'; }}
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Return to App
-        </button>
-      </div>
-    </div>
+    <Dialog open onOpenChange={(open) => { if (!open) handleClose(); }}>
+      <DialogContent showCloseButton={false} className="gap-0 p-6 text-center sm:max-w-sm">
+        <DialogTitle className="text-base">Checkout canceled</DialogTitle>
+        <DialogDescription className="mt-1.5">
+          No charges were made. You can upgrade any time from Settings.
+        </DialogDescription>
+        <Button size="lg" className="mt-6 h-10 w-full" onClick={handleClose}>
+          Back to Geneie
+        </Button>
+      </DialogContent>
+    </Dialog>
   );
 };
 
 export default SubscriptionCanceled;
-

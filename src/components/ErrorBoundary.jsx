@@ -28,35 +28,44 @@ export default class ErrorBoundary extends React.Component {
   render() {
     if (!this.state.error) return this.props.children;
 
+    // Plain elements only: this renders when the app tree is broken, so it must not depend
+    // on routing, theme or UI primitives. Tokens come from <html> and still apply.
     return (
       <div
         role="alert"
-        className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[var(--bg-app)] px-6 py-8 text-center text-[var(--text-primary)]"
+        className="flex min-h-dvh flex-col items-center justify-center bg-background px-5 py-8 text-foreground"
       >
-        <p className="m-0 text-base font-medium">Something went wrong.</p>
-        <p className="m-0 max-w-sm text-sm text-[var(--text-secondary)]">
-          The page hit an unexpected error. Reloading usually clears it.
-        </p>
-        <div className="mt-2 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="inline-flex h-10 items-center justify-center rounded-full bg-[var(--text-primary)] px-5 text-sm font-medium text-[var(--bg-app)] transition-opacity hover:opacity-85"
-          >
-            Reload page
-          </button>
-          <a
-            href="/app"
-            className="inline-flex h-10 items-center justify-center rounded-full border border-[var(--border-subtle)] px-5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-          >
-            Back to app
-          </a>
+        <div className="w-full max-w-md">
+          <h1 className="text-xl font-semibold tracking-tight">Something went wrong</h1>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            This page hit an unexpected error.
+            Reloading usually clears it. If it keeps happening, email{' '}
+            <a className="text-primary underline underline-offset-2" href="mailto:support@geneie.chat">
+              support@geneie.chat
+            </a>
+            .
+          </p>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 sm:h-10"
+            >
+              Reload page
+            </button>
+            <a
+              href="/app"
+              className="inline-flex h-11 items-center justify-center rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:h-10"
+            >
+              Back to Geneie
+            </a>
+          </div>
+          {import.meta.env.DEV && (
+            <pre className="mt-6 max-h-64 overflow-auto rounded-lg border border-border bg-muted p-3 text-left font-mono text-xs text-[var(--error)]">
+              {this.state.error?.stack || String(this.state.error)}
+            </pre>
+          )}
         </div>
-        {import.meta.env.DEV && (
-          <pre className="mt-4 max-w-3xl overflow-x-auto text-left text-[13px] text-[var(--error)]">
-            {this.state.error?.stack || String(this.state.error)}
-          </pre>
-        )}
       </div>
     );
   }

@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 import {
   adminGetConfig,
   adminGetInfraStatus,
@@ -7,21 +9,22 @@ import {
   MODULE1_KEYS,
   WORKER_KINDS,
 } from '@/services/infraApi';
+import { AdminHeader, Banner, HelpBody, HelpPopover } from './adminUi';
 import {
   ConfirmModal,
   describeApiError,
   findPanelError,
   fmtRelative,
   fmtTime,
-  mutedText,
-  Section,
+  latestAudit,
+  targetText,
 } from './infraShared';
 import WorkerCard from './WorkerCard';
 import Module1Card from './Module1Card';
 import IntakePanel from './IntakePanel';
 import DataPlaneCard from './DataPlaneCard';
 import ExomiserFastCard from './ExomiserFastCard';
-import { AlarmStrip, AuditTable, DlqSection, EcsTable } from './InfraReadOnly';
+import { AuditTable, DlqSection, EcsTable, HealthOverview, PgxCard, ReadOnlyBadge } from './InfraReadOnly';
 import { INTRO, SECTION_HELP } from './infraHelp';
 
 const POLL_MS = 30_000;
@@ -94,6 +97,26 @@ function applyMerge(prev, m) {
   return prev;
 }
 
+/** A titled group of cards. The heading is a landmark so the page is navigable by section. */
+function Group({ title, help, badge, children }) {
+  return (
+    <section className="mt-8" aria-label={title}>
+      <div className="mb-2 flex items-center gap-1.5">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h2>
+        {badge}
+        {help && (
+          <HelpPopover title={title} align="start">
+            <HelpBody what={help.what} items={help.items} />
+          </HelpPopover>
+        )}
+      </div>
+      <div className="space-y-4">{children}</div>
+    </section>
+  );
+}
+
+const isWorkerAction = (row) => /worker|floor|raise|scale/i.test(String(row.action || ''));
+
 /**
  * Body of the admin infra page (/admin-haha/infra): one aggregated status read, polled every 30 s while the browser
  * tab is visible, plus the levers the contract allows. Every write goes through ConfirmModal.
@@ -110,7 +133,6 @@ export default function InfraPanel() {
   const [auditError, setAuditError] = useState(null);
   const [capDefaults, setCapDefaults] = useState({ gpu: null, cpu: null });
   const [confirm, setConfirm] = useState(null);
-  const [message, setMessage] = useState(null); // { type: 'ok' | 'error', text }
 
   const inFlight = useRef(false);
   const refetchTimer = useRef(null);
@@ -184,7 +206,9 @@ export default function InfraPanel() {
     }
     request.onSuccess?.();
     setConfirm(null);
-    setMessage({ type: 'ok', text: `${request.successText || 'Saved.'} Takes effect within ~1-2 min.` });
+    toast.success(request.successText || 'Saved.', {
+      description: 'Takes effect within ~1-2 min. Recorded in the audit log.',
+    });
     loadAudit();
     quietUntil.current = Date.now() + POST_WRITE_REFETCH_MS;
     if (refetchTimer.current) clearTimeout(refetchTimer.current);
@@ -199,57 +223,61 @@ export default function InfraPanel() {
       ? 'the last refresh failed'
       : findPanelError(errors, ['bounds']) || (bounds ? null : 'bounds missing');
 
+  /* "Last changed by / at" for each card, from the audit rows already loaded. Deliberately
+   * narrow matches: the audit list is only the last N and its target shape is loose, so a card
+   * shows the line only when a row clearly belongs to it. */
+  const lastChange = useMemo(() => ({
+    annovar: latestAudit(audit, (r) => isWorkerAction(r) && targetText(r).includes('annovar')),
+    exomiser: latestAudit(audit, (r) => isWorkerAction(r) && targetText(r).includes('exomiser') && !targetText(r).includes('dataplane')),
+    module1: latestAudit(audit, (r) => targetText(r).includes('module1')),
+    dataplane: latestAudit(audit, (r) => targetText(r).includes('dataplane.annotation')),
+    exomiserFast: latestAudit(audit, (r) => targetText(r).includes('dataplane.exomiser')),
+  }), [audit]);
+
+  const asOf = status?.as_of ? `As of ${fmtTime(status.as_of)} (${fmtRelative(status.as_of)})` : 'Not loaded yet';
+
   return (
     <div>
-      <div className="flex flex-wrap items-baseline justify-between gap-4 mb-1">
-        <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>Infra</h1>
-        <div className="flex items-center gap-3">
-          <Link to="/admin-haha" className="text-xs underline" style={{ color: 'var(--text-secondary)' }}>
-            &larr; Users &amp; tiers
-          </Link>
-          <span className="text-2xs" style={mutedText}>
-            {status?.as_of ? `As of ${fmtTime(status.as_of)} (${fmtRelative(status.as_of)})` : 'Not loaded yet'}
-          </span>
-          <button
-            type="button"
-            onClick={() => { load(); loadAudit(); }}
-            disabled={loading}
-            className="text-xs px-3 py-1.5 rounded-lg border disabled:opacity-50"
-            style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-          >
+      <AdminHeader
+        current="infra"
+        title="Infra"
+        subtitle={`${asOf} · refreshes every 30 s`}
+        help={(
+          <HelpPopover title="How this page works" align="start">
+            <HelpBody
+              what={INTRO[0]}
+              items={[
+                ['What the levers do', INTRO[1]],
+                ['When changes land', INTRO[2]],
+                ['Refreshing', `Auto-refreshes every 30 s while this browser tab is visible (the server caches ~15 s).${fetchedAt ? ` Last fetched ${fmtTime(fetchedAt)}.` : ''}`],
+              ]}
+            />
+          </HelpPopover>
+        )}
+        actions={(
+          <Button variant="outline" size="sm" onClick={() => { load(); loadAudit(); }} disabled={loading}>
+            <RefreshCw className={loading ? 'size-3.5 animate-spin motion-reduce:animate-none' : 'size-3.5'} aria-hidden="true" />
             {loading ? 'Refreshing…' : 'Refresh'}
-          </button>
-        </div>
-      </div>
-      <div
-        className="rounded-xl border p-4 mt-3 mb-4 text-xs space-y-1"
-        style={{ backgroundColor: 'var(--bg-surface-raised)', borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-      >
-        {INTRO.map((line) => <p key={line}>{line}</p>)}
-      </div>
-      <p className="text-2xs mb-4" style={mutedText}>
-        Auto-refreshes every 30 s while this browser tab is visible (the server caches ~15 s).
-        {fetchedAt ? ` Last fetched ${fmtTime(fetchedAt)}.` : ''}
-      </p>
+          </Button>
+        )}
+      />
 
       {fetchError && (
-        <p className="text-xs mb-3" style={{ color: 'var(--error)' }}>
-          Could not refresh status: {fetchError}
-          {status ? ' Showing the last good snapshot; levers are disabled until a refresh succeeds.' : ''}
-        </p>
-      )}
-      {message && (
-        <p className="text-xs mb-3" style={{ color: message.type === 'error' ? 'var(--error)' : 'var(--text-tertiary)' }}>
-          {message.text}
-        </p>
+        <div className="mb-4">
+          <Banner
+            tone="error"
+            action={<Button variant="ghost" size="xs" onClick={load} disabled={loading}>Retry</Button>}
+          >
+            Could not refresh status: {fetchError}
+            {status ? ' Showing the last good snapshot; controls are disabled until a refresh succeeds.' : ''}
+          </Banner>
+        </div>
       )}
 
-      <Section title="Alarms" help={SECTION_HELP.alarms}>
-        <AlarmStrip alarms={status?.alarms} error={findPanelError(errors, ['alarms']) || (status ? null : fetchError)} />
-      </Section>
+      <HealthOverview status={status} fetchError={fetchError} />
 
-      <Section title="Workers" help={SECTION_HELP.workers}>
-        <div className="grid gap-4 md:grid-cols-2">
+      <Group title="Workers">
+        <div className="grid items-start gap-4 lg:grid-cols-2">
           {WORKER_KINDS.map((kind) => (
             <WorkerCard
               key={kind}
@@ -258,22 +286,42 @@ export default function InfraPanel() {
               bounds={bounds}
               blockedReason={globalBlock || findPanelError(errors, ['workers', `workers.${kind}`, kind])}
               onRequest={setConfirm}
+              lastChange={lastChange[kind]}
             />
           ))}
         </div>
-      </Section>
+        <PgxCard ecs={status?.ecs} intake={status?.intake} error={findPanelError(errors, ['ecs'])} />
+      </Group>
 
-      <Section title="Module-1" help={SECTION_HELP.module1}>
+      <Group title="Module-1">
         <Module1Card
           module1={status?.module1 || null}
           bounds={bounds}
           defaults={capDefaults}
           blockedReason={globalBlock || findPanelError(errors, ['module1'])}
           onRequest={setConfirm}
+          lastChange={lastChange.module1}
         />
-      </Section>
+      </Group>
 
-      <Section title="Pause intake" help={SECTION_HELP.intake}>
+      <Group title="Annotation routing">
+        <DataPlaneCard
+          dataplane={status?.dataplane || null}
+          errors={errors}
+          blockedReason={globalBlock}
+          onRequest={setConfirm}
+          lastChange={lastChange.dataplane}
+        />
+        <ExomiserFastCard
+          exomiser={status?.exomiser_fast || null}
+          errors={errors}
+          blockedReason={globalBlock}
+          onRequest={setConfirm}
+          lastChange={lastChange.exomiserFast}
+        />
+      </Group>
+
+      <Group title="Pause intake" help={SECTION_HELP.intake}>
         <IntakePanel
           intake={status?.intake || null}
           errors={errors}
@@ -281,55 +329,18 @@ export default function InfraPanel() {
           blockedReason={globalBlock}
           onRequest={setConfirm}
         />
-      </Section>
+      </Group>
 
-      <Section title="Data plane (annotation v2)" help={SECTION_HELP.dataplane}>
-        <DataPlaneCard
-          dataplane={status?.dataplane || null}
-          errors={errors}
-          blockedReason={globalBlock}
-          onRequest={setConfirm}
-        />
-      </Section>
-
-      <Section title="Exomiser fast path" help={SECTION_HELP.exomiserFast}>
-        <ExomiserFastCard
-          exomiser={status?.exomiser_fast || null}
-          errors={errors}
-          blockedReason={globalBlock}
-          onRequest={setConfirm}
-        />
-      </Section>
-
-      <Section title="ECS services" help={SECTION_HELP.ecs}>
+      <Group title="Read-only status" badge={<ReadOnlyBadge />}>
         <EcsTable ecs={status?.ecs} error={findPanelError(errors, ['ecs'])} />
-      </Section>
-
-      <Section title="Dead-letter queues (failed jobs)" help={SECTION_HELP.dlqs}>
         <DlqSection
           dlqs={status?.dlqs}
           deadLetters={status?.dead_letters}
           dlqError={findPanelError(errors, ['dlqs'])}
           deadLettersError={findPanelError(errors, ['dead_letters'])}
         />
-      </Section>
-
-      <Section
-        title={`Audit (last ${AUDIT_LIMIT})`}
-        help={SECTION_HELP.audit}
-        right={(
-          <button
-            type="button"
-            onClick={loadAudit}
-            className="text-xs px-3 py-1.5 rounded-lg border"
-            style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-          >
-            Reload
-          </button>
-        )}
-      >
-        <AuditTable audit={audit} error={auditError} />
-      </Section>
+        <AuditTable audit={audit} error={auditError} limit={AUDIT_LIMIT} onReload={loadAudit} />
+      </Group>
 
       {confirm && (
         <ConfirmModal

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown } from 'lucide-react';
+import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown, Dna, Workflow, ListChecks } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
 import { toast } from 'sonner';
@@ -32,6 +32,7 @@ import ProfileManagement from '../components/ProfileManagement';
 import SubscriptionSuccess from '../components/SubscriptionSuccess';
 import SubscriptionCanceled from '../components/SubscriptionCanceled';
 import ColumnInterpretationResults from '../components/ColumnInterpretationResults';
+import GaTriagePanel from '../components/GaTriagePanel';
 import PipelineDrawer from '../components/PipelineDrawer';
 import Module1UploadForm from '../components/Module1UploadForm';
 import Module1PipelineStepper from '../components/Module1PipelineStepper';
@@ -53,6 +54,8 @@ import { useAutomaticPipelineConductor } from '@/hooks/useAutomaticPipelineCondu
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { getClinicalReportGate } from '@/components/CaseReportDownloadButton';
 import ClinicalReportAssignModal from '@/components/ClinicalReportAssignModal';
+import WorkspacePanel, { useWorkspaceWidth } from '@/components/workspace/WorkspacePanel';
+import PipelineStatusStrip, { derivePipelineStrip } from '@/components/workspace/PipelineStatusStrip';
 import AutomaticPipelinePanel from '@/components/AutomaticPipelinePanel';
 import {
   normalizePipelineRunMode,
@@ -82,6 +85,9 @@ const ChatPage = () => {
   const [currentDocument, setCurrentDocument] = useState(null);
   const [variantData, setVariantData] = useState(null);
   const [isVariantSidebarOpen, setIsVariantSidebarOpen] = useState(false);
+  // Right-hand workspace: which tab is showing, and its drag-resizable width.
+  const [workspaceTab, setWorkspaceTab] = useState('variants');
+  const [workspaceWidth, setWorkspaceWidth] = useWorkspaceWidth();
   const [sidebarRequestedTab, setSidebarRequestedTab] = useState(null);
   const [isEditSampleModalOpen, setIsEditSampleModalOpen] = useState(false);
 
@@ -1179,6 +1185,14 @@ const ChatPage = () => {
     columnInterpretationResult &&
     currentDocument;
 
+  // When the file-check results appear, open the workspace on that tab instead of a modal.
+  useEffect(() => {
+    if (showFileAnalysisModal) {
+      setWorkspaceTab('file');
+      setIsVariantSidebarOpen(true);
+    }
+  }, [showFileAnalysisModal]);
+
   const showAnalysisPipeline =
     (currentDocument || variantUploadInProgress) &&
     (userTier === 'guest' || activeConversationId);
@@ -1257,6 +1271,7 @@ const ChatPage = () => {
       module1.module1CancelledVisible ||
       module1.module1StoppingVisible) ? (
       <Module1PipelineStepper
+        variant="panel"
         job={module1.module1Job}
         onStartOver={module1.openModule1Form}
         onCancel={module1.cancelModule1Run}
@@ -1458,6 +1473,7 @@ const ChatPage = () => {
 
   const pipelineDrawer = showAnalysisPipeline ? (
     <PipelineDrawer
+      variant="panel"
       module1Job={showModule1Phase ? module1.module1Job : null}
       onModule1StartOver={module1.openModule1Form}
       fileName={currentDocument?.name ?? currentDocument?.file_name}
@@ -1498,6 +1514,7 @@ const ChatPage = () => {
   const automaticPipelineBanner =
     automaticPipeline.active && automaticPipeline.message ? (
       <AutomaticPipelinePanel
+        variant="panel"
         message={automaticPipeline.message}
         phase={automaticPipeline.phase}
         steps={automaticPipeline.steps}
@@ -1511,6 +1528,118 @@ const ChatPage = () => {
         }}
       />
     ) : null;
+
+  // The full pipeline UI (banner, Module 1 stepper, variant pipeline card) now lives in the
+  // workspace "Pipeline" tab. The thread keeps one status line with the next action.
+  const pipelineStack =
+    automaticPipelineBanner || module1PipelineBlock || pipelineDrawer ? (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-3">
+        {automaticPipelineBanner}
+        {module1PipelineBlock}
+        {pipelineDrawer}
+      </div>
+    ) : null;
+
+  const openWorkspaceTab = (tab) => {
+    setWorkspaceTab(tab);
+    setIsVariantSidebarOpen(true);
+  };
+
+  const pipelineStripStatus = derivePipelineStrip({
+    module1Job: module1.module1Job,
+    module1JobActive: module1.module1JobActive,
+    fileName: currentDocument?.name ?? currentDocument?.file_name,
+    uploadInProgress: variantUploadInProgress,
+    uploadProgress,
+    isRunningAnnovar,
+    isApplyingProprietaryFilter,
+    isRunningExomiser,
+    chatEligibility,
+    hasDocument: Boolean(showAnalysisPipeline && (currentDocument || variantUploadInProgress)),
+    filteredVariantCount: conversationFilterState.filteredVariantCount ?? pipelineVariantsUnderConsideration,
+  });
+
+  const pipelineStrip = pipelineStripStatus ? (
+    <PipelineStatusStrip
+      status={{ ...pipelineStripStatus, action: pipelineStripStatus.state === 'running' ? null : gatedAction }}
+      onOpen={pipelineStack ? () => openWorkspaceTab('pipeline') : () => openWorkspaceTab('variants')}
+    />
+  ) : null;
+
+  // File-check results (was an auto-opening modal) now live in the workspace "File check" tab.
+  const fileCheckPanel = showFileAnalysisModal ? (
+    <div className="h-full min-h-0 overflow-y-auto">
+        <ColumnInterpretationResults
+          embedded
+          interpretationResult={columnInterpretationResult}
+          initialStep={interpretationModalStep}
+          chatAllowed={!isChatPipelineGated}
+          chatBlockedMessage={chatEligibility.message}
+          onChatBlocked={() => promptChatBlocked()}
+          isVcfFile={(() => {
+            const t = (currentDocument.file_type ?? currentDocument.type)?.toLowerCase() || '';
+            const name = (currentDocument.file_name ?? currentDocument.name ?? '').toLowerCase();
+            return t === 'vcf' || name.endsWith('.vcf') || name.endsWith('.vcf.gz');
+          })()}
+          onClose={async () => {
+            interpretationDismissedRef.current = true;
+            setShowInterpretationModal(false);
+            setInterpretationModalStep(null);
+            if (columnInterpretationResult && activeConversationId) {
+              await syncAfterColumnInterpretation(activeConversationId, columnInterpretationResult);
+            }
+          }}
+          onTryVcfUpload={() => {
+            interpretationDismissedRef.current = true;
+            setShowInterpretationModal(false);
+            setInterpretationModalStep(null);
+            setActiveFileTypeTab('vcf');
+            setShowUploadModal(true);
+          }}
+          onUploadRawSequencing={() => {
+            interpretationDismissedRef.current = true;
+            setShowInterpretationModal(false);
+            setInterpretationModalStep(null);
+            module1.openModule1Form();
+          }}
+          onConvertToVcf={async () => {
+            interpretationDismissedRef.current = true;
+            setShowInterpretationModal(false);
+            setInterpretationModalStep(null);
+            const genome = currentDocument?.sample_metadata?.genome;
+            const refGenome = genome?.includes('37') || genome?.includes('hg19') ? 'hg19' : 'hg38';
+            await convertTabularToVcfForConversation(refGenome);
+          }}
+          onAnnovarClick={runAnnovarForCurrentConversation}
+          onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
+          onOpenExomiser={async () => {
+            interpretationDismissedRef.current = true;
+            setShowInterpretationModal(false);
+            setInterpretationModalStep(null);
+            if (columnInterpretationResult && activeConversationId) {
+              await syncAfterColumnInterpretation(activeConversationId, columnInterpretationResult);
+            }
+            setIsVariantSidebarOpen(true);
+            setSidebarRequestedTab('exomiser');
+            const eligibility = await fetchExomiserEligibility();
+            if (eligibility?.can_run === true) runExomiser();
+          }}
+          isApplyingProprietaryFilter={isApplyingProprietaryFilter}
+          isRunningAnnovar={isRunningAnnovar}
+          hasAnnotatedFile={pipelineSnapshot.hasAnnotatedFile}
+          acmgFilterActive={conversationFilterState.activeProprietaryFilter === 'filter_1'}
+          acmgFilterCanApply={acmgFilterCanApply}
+          annovarGate={annovarGate}
+          acmgExomiserGate={acmgExomiserGate}
+          annovarMeterDetail={formatMeterDetail(limits, annovarGate?.meter)}
+          acmgMeterDetail={formatMeterDetail(limits, acmgExomiserGate?.meter)}
+          exomiserCanApply={pipelineSnapshot.hasAnnotatedFile || !chatEligibility.requires_annovar}
+          phenotypeMissing={!sampleHasPhenotype(currentDocument?.sample_metadata)}
+          showVcfTabHighlight={columnInterpretationResult?.step1?.passed === false}
+          onDeleteDocument={() => handleDocumentUpload(null)}
+        />
+    </div>
+  ) : null;
 
   // Both composer call sites are the same component with the same wiring; only the
   // layout and the dropdown's identity differ.
@@ -1533,13 +1662,7 @@ const ChatPage = () => {
     hasDocument: !!currentDocument,
     // Module 1's stepper shares the drawer slot with the variant pipeline; only one of
     // the two is ever non-null for a given conversation.
-    pipelineDrawer: (
-      <>
-        {automaticPipelineBanner}
-        {module1PipelineBlock}
-        {pipelineDrawer}
-      </>
-    ),
+    pipelineDrawer: pipelineStrip,
   };
 
   const shellLeftState =
@@ -1863,7 +1986,7 @@ const ChatPage = () => {
                         <div className="flex-1 min-w-0">
                           <div className="chat-prose" style={{ color: 'var(--text-primary)' }}>
                             {typingText ? (
-                              <Markdown className="break-words">
+                              <Markdown className="break-words" streaming>
                                 {typingText}
                               </Markdown>
                             ) : (
@@ -1937,6 +2060,18 @@ const ChatPage = () => {
       </main>
 
       <aside className="chat-shell-right" aria-hidden={!isVariantSidebarOpen}>
+        <WorkspacePanel
+          width={workspaceWidth}
+          onWidthChange={setWorkspaceWidth}
+          activeId={workspaceTab}
+          onActiveChange={setWorkspaceTab}
+          onClose={() => setIsVariantSidebarOpen(false)}
+          tabs={[
+            {
+              id: 'variants',
+              label: 'Variants',
+              icon: Dna,
+              content: (
           <VariantFilterSidebar
             conversationId={activeConversationId || 'guest-session'}
             userId={userId || 'guest'}
@@ -2025,6 +2160,38 @@ const ChatPage = () => {
             onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
             onGuestRefreshMetadata={handleGuestRefreshMetadata}
           />
+              ),
+            },
+            {
+              id: 'pipeline',
+              label: 'Pipeline',
+              icon: Workflow,
+              hidden: !pipelineStack,
+              content: pipelineStack,
+            },
+            {
+              id: 'file',
+              label: 'File check',
+              icon: FileText,
+              hidden: !fileCheckPanel,
+              content: fileCheckPanel,
+            },
+            {
+              id: 'triage',
+              label: 'Triage',
+              icon: ListChecks,
+              hidden: userTier === 'guest' || !activeConversationId || !gaTriageStatus,
+              content: (
+                <GaTriagePanel
+                  conversationId={activeConversationId}
+                  isGuest={userTier === 'guest'}
+                  variantData={variantData}
+                  refreshKey={gaTriageUpdatedAt}
+                />
+              ),
+            },
+          ]}
+        />
       </aside>
 
       {userTier !== 'guest' && activeConversationId ? (
@@ -2172,77 +2339,6 @@ const ChatPage = () => {
         <SubscriptionCanceled onClose={() => setShowSubscriptionCanceled(false)} />
       )}
 
-      {/* Column Interpretation Results Modal */}
-      {showFileAnalysisModal && (
-        <ColumnInterpretationResults
-          interpretationResult={columnInterpretationResult}
-          initialStep={interpretationModalStep}
-          chatAllowed={!isChatPipelineGated}
-          chatBlockedMessage={chatEligibility.message}
-          onChatBlocked={() => promptChatBlocked()}
-          isVcfFile={(() => {
-            const t = (currentDocument.file_type ?? currentDocument.type)?.toLowerCase() || '';
-            const name = (currentDocument.file_name ?? currentDocument.name ?? '').toLowerCase();
-            return t === 'vcf' || name.endsWith('.vcf') || name.endsWith('.vcf.gz');
-          })()}
-          onClose={async () => {
-            interpretationDismissedRef.current = true;
-            setShowInterpretationModal(false);
-            setInterpretationModalStep(null);
-            if (columnInterpretationResult && activeConversationId) {
-              await syncAfterColumnInterpretation(activeConversationId, columnInterpretationResult);
-            }
-          }}
-          onTryVcfUpload={() => {
-            interpretationDismissedRef.current = true;
-            setShowInterpretationModal(false);
-            setInterpretationModalStep(null);
-            setActiveFileTypeTab('vcf');
-            setShowUploadModal(true);
-          }}
-          onUploadRawSequencing={() => {
-            interpretationDismissedRef.current = true;
-            setShowInterpretationModal(false);
-            setInterpretationModalStep(null);
-            module1.openModule1Form();
-          }}
-          onConvertToVcf={async () => {
-            interpretationDismissedRef.current = true;
-            setShowInterpretationModal(false);
-            setInterpretationModalStep(null);
-            const genome = currentDocument?.sample_metadata?.genome;
-            const refGenome = genome?.includes('37') || genome?.includes('hg19') ? 'hg19' : 'hg38';
-            await convertTabularToVcfForConversation(refGenome);
-          }}
-          onAnnovarClick={runAnnovarForCurrentConversation}
-          onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
-          onOpenExomiser={async () => {
-            interpretationDismissedRef.current = true;
-            setShowInterpretationModal(false);
-            setInterpretationModalStep(null);
-            if (columnInterpretationResult && activeConversationId) {
-              await syncAfterColumnInterpretation(activeConversationId, columnInterpretationResult);
-            }
-            setIsVariantSidebarOpen(true);
-            setSidebarRequestedTab('exomiser');
-            const eligibility = await fetchExomiserEligibility();
-            if (eligibility?.can_run === true) runExomiser();
-          }}
-          isApplyingProprietaryFilter={isApplyingProprietaryFilter}
-          isRunningAnnovar={isRunningAnnovar}
-          hasAnnotatedFile={pipelineSnapshot.hasAnnotatedFile}
-          acmgFilterActive={conversationFilterState.activeProprietaryFilter === 'filter_1'}
-          acmgFilterCanApply={acmgFilterCanApply}
-          annovarGate={annovarGate}
-          acmgExomiserGate={acmgExomiserGate}
-          annovarMeterDetail={formatMeterDetail(limits, annovarGate?.meter)}
-          acmgMeterDetail={formatMeterDetail(limits, acmgExomiserGate?.meter)}
-          exomiserCanApply={pipelineSnapshot.hasAnnotatedFile || !chatEligibility.requires_annovar}
-          phenotypeMissing={!sampleHasPhenotype(currentDocument?.sample_metadata)}
-          showVcfTabHighlight={columnInterpretationResult?.step1?.passed === false}
-          onDeleteDocument={() => handleDocumentUpload(null)}
-        />
-      )}
 
       {/* Variant file upload — blocks chat while POST /api/upload-variant-file runs */}
       {userTier !== 'guest' && (

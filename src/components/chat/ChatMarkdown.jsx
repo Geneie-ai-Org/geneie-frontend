@@ -1,9 +1,10 @@
 import { cn } from '@/lib/utils';
 import { marked } from 'marked';
-import { memo, useId, useMemo } from 'react';
+import { memo, useCallback, useId, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
+import { Check, Copy } from 'lucide-react';
 import { CodeBlock } from './CodeBlock';
 
 function parseMarkdownIntoBlocks(markdown) {
@@ -18,6 +19,40 @@ function extractLanguage(className) {
   return match ? match[1] : 'plaintext';
 }
 
+/**
+ * Tables scroll inside their own box (both axes, header sticky) and carry a copy button that
+ * puts the table on the clipboard as tab-separated text, ready for a spreadsheet.
+ */
+function ChatTable({ node, children, ...props }) {
+  const tableRef = useRef(null);
+  const [copied, setCopied] = useState(false);
+
+  const copy = useCallback(() => {
+    const rows = tableRef.current?.querySelectorAll('tr');
+    if (!rows || !navigator.clipboard) return;
+    const tsv = [...rows]
+      .map((tr) => [...tr.children].map((c) => c.textContent.replace(/\s+/g, ' ').trim()).join('\t'))
+      .join('\n');
+    navigator.clipboard.writeText(tsv);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, []);
+
+  return (
+    <div className="chat-table-wrap">
+      <button type="button" className="chat-table-copy" onClick={copy} aria-label={copied ? 'Copied' : 'Copy table'}>
+        {copied ? <Check className="size-3.5" style={{ color: 'var(--success)' }} aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+        <span aria-live="polite">{copied ? 'Copied' : 'Copy'}</span>
+      </button>
+      <div className="chat-table-scroll" tabIndex={0} role="region" aria-label="Table, scrollable">
+        <table ref={tableRef} {...props}>
+          {children}
+        </table>
+      </div>
+    </div>
+  );
+}
+
 const INITIAL_COMPONENTS = {
   code: function CodeComponent({ className, children, ...props }) {
     const isInline =
@@ -26,13 +61,9 @@ const INITIAL_COMPONENTS = {
 
     if (isInline) {
       return (
-        <span
-          className={cn('rounded-sm px-1 font-mono text-sm', className)}
-          style={{ backgroundColor: 'var(--code-inline-bg)', color: 'var(--code-inline)' }}
-          {...props}
-        >
+        <code className={cn('chat-inline-code', className)} {...props}>
           {children}
-        </span>
+        </code>
       );
     }
 
@@ -43,6 +74,7 @@ const INITIAL_COMPONENTS = {
   pre: function PreComponent({ children }) {
     return <>{children}</>;
   },
+  table: ChatTable,
 };
 
 const MemoizedMarkdownBlock = memo(
@@ -60,7 +92,11 @@ const MemoizedMarkdownBlock = memo(
 
 MemoizedMarkdownBlock.displayName = 'MemoizedMarkdownBlock';
 
-function MarkdownComponent({ children, id, className, components }) {
+/**
+ * `streaming` marks the answer as still arriving: a fixed-size caret is drawn after the last
+ * rendered element in CSS (`.chat-prose[data-streaming]`), so it adds no layout of its own.
+ */
+function MarkdownComponent({ children, id, className, components, streaming = false }) {
   const generatedId = useId();
   const blockId = id ?? generatedId;
   const blocks = useMemo(() => parseMarkdownIntoBlocks(children), [children]);
@@ -71,7 +107,7 @@ function MarkdownComponent({ children, id, className, components }) {
   );
 
   return (
-    <div className={cn('chat-prose', className)}>
+    <div className={cn('chat-prose', className)} data-streaming={streaming ? 'true' : undefined}>
       {blocks.map((block, index) => (
         <MemoizedMarkdownBlock
           key={`${blockId}-block-${index}`}

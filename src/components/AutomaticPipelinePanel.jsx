@@ -1,59 +1,7 @@
-import React, { useState } from 'react';
-import {
-  AlertCircle,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Circle,
-  FileText,
-  Info,
-  Loader2,
-  Minus,
-} from 'lucide-react';
-
-function StepGlyph({ status }) {
-  const slot = 'inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center';
-  if (status === 'failed') {
-    return (
-      <span className={slot} aria-hidden>
-        <AlertCircle className="h-3 w-3" style={{ color: 'var(--error)' }} />
-      </span>
-    );
-  }
-  if (status === 'done') {
-    return (
-      <span className={slot} aria-hidden>
-        <Check className="h-3 w-3" strokeWidth={3} style={{ color: 'var(--accent-teal)' }} />
-      </span>
-    );
-  }
-  if (status === 'running') {
-    return (
-      <span className={slot} aria-hidden>
-        <Loader2 className="h-3 w-3 animate-spin" style={{ color: 'var(--accent-teal)' }} />
-      </span>
-    );
-  }
-  if (status === 'waiting') {
-    return (
-      <span className={slot} aria-hidden>
-        <Circle className="h-2.5 w-2.5" style={{ color: 'var(--accent-teal)' }} fill="currentColor" />
-      </span>
-    );
-  }
-  if (status === 'skipped') {
-    return (
-      <span className={slot} aria-hidden>
-        <Minus className="h-3 w-3" style={{ color: 'var(--text-tertiary)' }} />
-      </span>
-    );
-  }
-  return (
-    <span className={slot} aria-hidden>
-      <Circle className="h-2.5 w-2.5" style={{ color: 'var(--text-tertiary)' }} />
-    </span>
-  );
-}
+import React, { useEffect, useState } from 'react';
+import { FileText, Sparkles } from 'lucide-react';
+import PipelineJobCard from '@/components/PipelineJobCard';
+import { Button } from '@/components/ui/button';
 
 function formatEventTime(at) {
   if (!at) return '';
@@ -64,8 +12,20 @@ function formatEventTime(at) {
   }
 }
 
+/** Conductor phase -> the one status vocabulary. Waiting on a gate or on you is "Queued". */
+function phaseToStatus(phase) {
+  if (phase === 'failed') return 'failed';
+  if (phase === 'ready_report') return 'done';
+  if (typeof phase === 'string' && phase.startsWith('waiting')) return 'queued';
+  return 'running';
+}
+
 /**
- * Expandable Early Access panel: current Automatic status + checklist of what ran.
+ * Early Access panel: current Automatic status as one sentence, with the checklist of what ran
+ * behind a "Steps" toggle (collapsed unless something failed).
+ *
+ * `variant="card"` (default) keeps the inline placement above the composer; `variant="panel"`
+ * renders plain, scrolling content for a workspace tab.
  */
 export default function AutomaticPipelinePanel({
   message,
@@ -76,143 +36,78 @@ export default function AutomaticPipelinePanel({
   reportGate = null,
   reportCtaLabel = 'Generate report',
   onGenerateReport,
+  variant = 'card',
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [stepsOpen, setStepsOpen] = useState(false);
   const reportBlocked = reportGate?.blocked === true;
+  const status = phaseToStatus(phase);
+
+  // A failure is the one case where the checklist is worth opening for the user.
+  useEffect(() => {
+    if (phase === 'failed') setStepsOpen(true);
+  }, [phase]);
+
+  const timeline = stepsOpen && events.length > 0 ? (
+    <div>
+      <h4 className="mb-1 text-2xs font-semibold text-muted-foreground">Timeline</h4>
+      <ul className="m-0 max-h-32 list-none space-y-1 overflow-y-auto p-0">
+        {[...events].reverse().map((ev) => (
+          <li key={ev.id} className="flex gap-2 text-2xs">
+            <span className="shrink-0 tabular-nums text-muted-foreground">{formatEventTime(ev.at)}</span>
+            <span className="text-[var(--text-secondary)]">{ev.message}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  ) : null;
+
+  const stepRows = steps.map((step) => ({
+    id: step.id,
+    label: step.label,
+    status: step.status,
+    detail: step.detail,
+  }));
 
   return (
-    <div
-      className="mx-3 mb-2 rounded-lg border text-2xs overflow-hidden"
-      style={{
-        borderColor: 'color-mix(in srgb, var(--accent-teal) 35%, transparent)',
-        background: 'color-mix(in srgb, var(--accent-teal) 10%, transparent)',
-        color: 'var(--text-secondary)',
-      }}
+    <PipelineJobCard
+      variant={variant}
+      className={variant === 'card' ? 'mx-3' : undefined}
+      ariaLabel="Automatic pipeline"
+      title="Automatic pipeline"
+      icon={<Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />}
+      engine={{ label: 'Early access' }}
+      status={status}
+      statusText={message || 'Automatic pipeline'}
+      steps={stepRows}
+      stepsOpen={stepsOpen}
+      onStepsToggle={() => setStepsOpen((v) => !v)}
+      stepsLabel="Activity"
     >
-      <div className="flex flex-wrap items-center gap-2 px-3 py-2">
-        <span
-          className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
-          style={{
-            color: 'var(--accent-teal)',
-            borderColor: 'color-mix(in srgb, var(--accent-teal) 45%, transparent)',
-            background: 'color-mix(in srgb, var(--accent-teal) 10%, transparent)',
-          }}
-          title="Early access — Automatic advances ready pipeline steps. Review results before clinical use."
-          aria-label="Early access"
-        >
-          <Info className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
-        </span>
-        <span className="flex-1 min-w-0 font-medium" style={{ color: 'var(--text-primary)' }}>
-          {message || 'Automatic pipeline'}
-        </span>
-        {showReportCta ? (
-          <button
+      {timeline}
+      {phase === 'failed' ? (
+        <p className="m-0 text-xs text-[var(--error)]" role="alert">
+          Automatic paused. Fix the step above or switch the case to Manual.
+        </p>
+      ) : null}
+      {showReportCta ? (
+        <div className="flex items-center justify-end border-t border-border pt-3">
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             disabled={reportBlocked}
             title={reportGate?.title}
             onClick={() => {
               if (reportBlocked || typeof onGenerateReport !== 'function') return;
               onGenerateReport();
             }}
-            className={`shrink-0 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-2xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${
-              reportBlocked ? 'cursor-not-allowed opacity-60' : 'hover:bg-[var(--bg-surface-hover)]'
-            }`}
-            style={{
-              borderColor: 'color-mix(in srgb, var(--accent-teal) 40%, transparent)',
-              color: reportBlocked ? 'var(--text-tertiary)' : 'var(--accent-teal)',
-            }}
+            className="max-sm:h-11"
           >
-            <FileText className="h-3 w-3" aria-hidden />
+            <FileText className="h-3.5 w-3.5" aria-hidden />
             {reportBlocked ? reportGate?.label : reportCtaLabel}
-          </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="shrink-0 inline-flex items-center gap-0.5 rounded-md px-1.5 py-1 hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
-          aria-expanded={expanded}
-          aria-label={expanded ? 'Hide Automatic activity' : 'Show Automatic activity'}
-          title={expanded ? 'Hide activity' : 'Show what happened'}
-        >
-          <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-            Activity
-          </span>
-          {expanded ? (
-            <ChevronUp className="h-3 w-3" aria-hidden />
-          ) : (
-            <ChevronDown className="h-3 w-3" aria-hidden />
-          )}
-        </button>
-      </div>
-
-      {expanded ? (
-        <div
-          className="border-t px-3 py-2 space-y-3"
-          style={{ borderColor: 'color-mix(in srgb, var(--accent-teal) 22%, transparent)' }}
-          role="region"
-          aria-label="Automatic pipeline activity"
-        >
-          <ol className="space-y-1.5 m-0 p-0 list-none">
-            {steps.map((step) => (
-              <li key={step.id} className="flex items-start gap-2">
-                <StepGlyph status={step.status} />
-                <div className="min-w-0 flex-1">
-                  <div
-                    className={
-                      step.status === 'skipped' ? 'line-through' : undefined
-                    }
-                    style={{
-                      color:
-                        step.status === 'failed'
-                          ? 'var(--error)'
-                          : step.status === 'done' || step.status === 'running' || step.status === 'waiting'
-                            ? 'var(--text-primary)'
-                            : 'var(--text-tertiary)',
-                      fontWeight:
-                        step.status === 'running' || step.status === 'waiting' ? 600 : 400,
-                    }}
-                  >
-                    {step.label}
-                  </div>
-                  {step.detail ? (
-                    <div style={{ color: 'var(--text-tertiary)' }}>{step.detail}</div>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ol>
-
-          {events.length > 0 ? (
-            <div>
-              <div
-                className="mb-1 font-medium"
-                style={{ color: 'var(--text-tertiary)' }}
-              >
-                Timeline
-              </div>
-              <ul className="m-0 max-h-28 overflow-y-auto space-y-1 p-0 list-none">
-                {[...events].reverse().map((ev) => (
-                  <li key={ev.id} className="flex gap-2">
-                    <span
-                      className="shrink-0 tabular-nums"
-                      style={{ color: 'var(--text-tertiary)' }}
-                    >
-                      {formatEventTime(ev.at)}
-                    </span>
-                    <span style={{ color: 'var(--text-secondary)' }}>{ev.message}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          {phase === 'failed' ? (
-            <p className="m-0" style={{ color: 'var(--error)' }}>
-              Automatic paused. Fix the step above or switch the case to Manual.
-            </p>
-          ) : null}
+          </Button>
         </div>
       ) : null}
-    </div>
+    </PipelineJobCard>
   );
 }

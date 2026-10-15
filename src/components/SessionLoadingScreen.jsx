@@ -1,20 +1,15 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 
-/** Full-screen auth bootstrap loader — matches Geneie dark theme. */
-const SessionLoadingScreen = ({ message = 'Loading user session...' }) => (
+/** Full-screen auth bootstrap loader. Says what is happening; nothing to click while it runs. */
+const SessionLoadingScreen = ({ message = 'Loading your session…' }) => (
   <div
-    className="flex items-center justify-center h-screen min-h-dvh w-full"
-    style={{ backgroundColor: 'var(--bg-app, #0F0F0F)', color: 'var(--text-primary, #E8EAED)' }}
+    role="status"
+    aria-live="polite"
+    className="flex min-h-dvh w-full flex-col items-center justify-center gap-3 bg-background text-foreground"
   >
-    <Loader2
-      className="h-8 w-8 animate-spin shrink-0"
-      style={{ color: 'var(--accent-teal, #4DB6AC)' }}
-      aria-hidden
-    />
-    <p className="ml-3 text-sm" style={{ color: 'var(--text-secondary, #9AA0A6)' }}>
-      {message}
-    </p>
+    <Loader2 className="h-5 w-5 shrink-0 animate-spin text-primary motion-reduce:animate-none" aria-hidden="true" />
+    <p className="text-sm text-muted-foreground">{message}</p>
   </div>
 );
 

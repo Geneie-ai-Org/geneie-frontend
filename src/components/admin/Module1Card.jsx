@@ -9,25 +9,23 @@ import {
   validateInstanceTypes,
   validateModule1CapForm,
 } from '@/services/infraApi';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { HelpBody, HelpPopover, Panel, StatusChip, inputCls, selectCls, toneText } from './adminUi';
 import {
-  cardStyle,
+  ChangeLine,
+  Field,
+  Lever,
   fmtAge,
   fmtHours,
   fmtRelative,
   fmtTime,
-  inputStyle,
   isFutureIso,
-  mutedText,
-  primaryButtonClass,
-  primaryButtonStyle,
-  secondaryButtonClass,
-  secondaryButtonStyle,
   Stat,
   Stepper,
   Unavailable,
-  Help,
 } from './infraShared';
-import { capHelp, INSTANCE_TYPES_HELP, SUBNETS_HELP } from './infraHelp';
+import { capHelp, INSTANCE_TYPES_HELP, SECTION_HELP, SUBNETS_HELP } from './infraHelp';
 
 /** A raise above the recorded default reverts after this many hours unless the admin says otherwise. */
 const DEFAULT_RAISE_REVERT_HOURS = 4;
@@ -67,6 +65,7 @@ function CapLever({ lane, label, lanePanel, currentCap, defaultCap, range, block
   const withExpiry = expiryDraft ?? suggestExpiry;
   const capUntil = lanePanel?.cap_until || null;
   const disabled = Boolean(blocked || !range);
+  const raised = capUntil && isFutureIso(capUntil);
 
   const submit = () => {
     const h = withExpiry ? hours : null;
@@ -78,8 +77,9 @@ function CapLever({ lane, label, lanePanel, currentCap, defaultCap, range, block
     const why = reason.trim();
     onRequest({
       title: `Module-1 ${label} cap → ${cap}`,
+      confirmLabel: 'Set cap',
       rows: [
-        { label: 'Cap', before: currentCap ?? '—', after: cap },
+        { label: 'Cap', before: currentCap ?? '–', after: cap },
         {
           label: 'Expiry',
           before: capUntil ? `${fmtTime(capUntil)}` : 'permanent',
@@ -88,6 +88,12 @@ function CapLever({ lane, label, lanePanel, currentCap, defaultCap, range, block
         { label: 'Reason', before: '', after: why },
       ],
       note: 'Applies to new dispatches; running jobs are not stopped.',
+      undo: {
+        undoable: true,
+        text: hoursNum === null
+          ? 'Use Reset on this card to go back to the recorded default.'
+          : 'It reverts by itself at the expiry, or use Reset on this card to go back sooner.',
+      },
       run: () => adminSetModule1Cap({ lane, cap, hours: hoursNum, reason: why }),
       merge: (response) => ({ kind: 'module1Cap', lane, configKey, cap, hours: hoursNum, response }),
       successText: `Module-1 ${label} cap set to ${cap}${hoursNum === null ? '' : ` for ${fmtHours(hoursNum)}`}.`,
@@ -98,7 +104,9 @@ function CapLever({ lane, label, lanePanel, currentCap, defaultCap, range, block
   const reset = () => {
     onRequest({
       title: `Reset Module-1 ${label} cap`,
-      rows: [{ label: 'Cap', before: currentCap ?? '—', after: defaultCap ?? 'recorded default' }],
+      confirmLabel: 'Reset cap',
+      rows: [{ label: 'Cap', before: currentCap ?? '–', after: defaultCap ?? 'recorded default' }],
+      undo: { undoable: true, text: 'Set the previous cap again from this card.' },
       run: () => adminResetConfig(configKey),
       merge: (response) => ({ kind: 'config', configKey, response }),
       successText: `Module-1 ${label} cap reset to default.`,
@@ -107,52 +115,57 @@ function CapLever({ lane, label, lanePanel, currentCap, defaultCap, range, block
   };
 
   return (
-    <div className="mb-3">
-      <div className="text-2xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-        {label} cap{range ? ` (${range[0]}–${range[1]})` : ''}
-        {defaultCap !== null ? ` · default ${defaultCap}` : ''}
-        {capUntil && isFutureIso(capUntil) ? ` · reverts ${fmtTime(capUntil)} (${fmtRelative(capUntil)})` : ''}
+    <Lever title={`${label} cap`} help={capHelp(lane)}>
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted-foreground tabular-nums">
+        <span>Now <span className="text-sm font-semibold text-foreground">{currentCap ?? '–'}</span></span>
+        {defaultCap !== null && <span>Default {defaultCap}</span>}
+        {range && <span>Allowed {range[0]}–{range[1]}</span>}
+        {raised && (
+          <StatusChip tone="warning" title={fmtTime(capUntil)}>
+            Raised, reverts {fmtRelative(capUntil)}
+          </StatusChip>
+        )}
       </div>
-      <Help {...capHelp(lane)} />
       <div className="flex flex-wrap items-end gap-3">
-        <Stepper value={capValue} onChange={setCapDraft} min={range?.[0] ?? 0} max={range?.[1] ?? 0} disabled={disabled} />
-        <label className="flex items-center gap-1 text-2xs" style={mutedText}>
+        <Field label="Cap" hint={range ? `${range[0]}–${range[1]}` : undefined}>
+          <Stepper label={`${label} cap`} value={capValue} onChange={setCapDraft} min={range?.[0] ?? 0} max={range?.[1] ?? 0} disabled={disabled} />
+        </Field>
+        <label className="flex h-8 items-center gap-1.5 text-xs text-muted-foreground max-md:h-10">
           <input
             type="checkbox"
             checked={withExpiry}
             disabled={disabled}
             onChange={(e) => setExpiryDraft(e.target.checked)}
+            className="size-3.5 accent-[hsl(var(--primary))]"
           />
           Revert after
         </label>
         {withExpiry && (
-          <Stepper
-            value={hours}
-            onChange={setHours}
-            min={MODULE1_CAP_HOURS_MIN}
-            max={MODULE1_CAP_HOURS_MAX}
-            step={0.5}
-            disabled={disabled}
-          />
+          <Field label="Hours" hint={`${MODULE1_CAP_HOURS_MIN}–${MODULE1_CAP_HOURS_MAX}`}>
+            <Stepper
+              label="Revert hours"
+              value={hours}
+              onChange={setHours}
+              min={MODULE1_CAP_HOURS_MIN}
+              max={MODULE1_CAP_HOURS_MAX}
+              step={0.5}
+              disabled={disabled}
+            />
+          </Field>
         )}
-        {withExpiry && <span className="text-2xs" style={mutedText}>h</span>}
-        <input
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          disabled={disabled}
-          placeholder="Reason (required)"
-          className="flex-1 min-w-[120px] px-2 py-1 text-xs rounded-md border disabled:opacity-50"
-          style={inputStyle}
-        />
-        <button type="button" disabled={disabled} onClick={submit} className={primaryButtonClass} style={primaryButtonStyle}>
-          Set
-        </button>
-        <button type="button" disabled={Boolean(blocked)} onClick={reset} className={secondaryButtonClass} style={secondaryButtonStyle}>
-          Reset
-        </button>
+        <Field label="Reason" hint="required" className="min-w-[140px] flex-1">
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            disabled={disabled}
+            className={cn(inputCls, 'w-full max-md:h-10')}
+          />
+        </Field>
+        <Button variant="outline" disabled={disabled} onClick={submit} className="max-md:h-10">Set cap…</Button>
+        <Button variant="ghost" disabled={Boolean(blocked)} onClick={reset} className="max-md:h-10">Reset to default…</Button>
       </div>
-      {error && <p className="text-2xs mt-1" style={{ color: 'var(--error)' }}>{error}</p>}
-    </div>
+      {error && <p role="alert" className="mt-1 text-2xs text-[var(--error)]">{error}</p>}
+    </Lever>
   );
 }
 
@@ -180,8 +193,10 @@ function InstanceTypesLever({ current, allowlist, blocked, onRequest }) {
     const value = list.join(',');
     onRequest({
       title: 'Module-1 GPU instance types',
-      rows: [{ label: 'Order', before: current.join(', ') || '—', after: list.join(', ') }],
+      confirmLabel: 'Save order',
+      rows: [{ label: 'Order', before: current.join(', ') || '–', after: list.join(', ') }],
       note: 'Tried in this order when a GPU job is dispatched.',
+      undo: { undoable: true, text: 'Reorder again from this card, or use Reset to go back to the recorded default.' },
       run: () => adminSetConfig(MODULE1_KEYS.gpuTypes, value),
       merge: (response) => ({ kind: 'config', configKey: MODULE1_KEYS.gpuTypes, response, fallbackValue: value }),
       successText: 'GPU instance types updated.',
@@ -192,7 +207,9 @@ function InstanceTypesLever({ current, allowlist, blocked, onRequest }) {
   const reset = () => {
     onRequest({
       title: 'Reset Module-1 GPU instance types',
-      rows: [{ label: 'Order', before: current.join(', ') || '—', after: 'recorded default' }],
+      confirmLabel: 'Reset order',
+      rows: [{ label: 'Order', before: current.join(', ') || '–', after: 'recorded default' }],
+      undo: { undoable: true, text: 'Enter the previous order again from this card.' },
       run: () => adminResetConfig(MODULE1_KEYS.gpuTypes),
       merge: (response) => ({ kind: 'config', configKey: MODULE1_KEYS.gpuTypes, response }),
       successText: 'GPU instance types reset to default.',
@@ -200,24 +217,24 @@ function InstanceTypesLever({ current, allowlist, blocked, onRequest }) {
     });
   };
 
+  const iconBtn = 'size-8 max-md:size-10';
+
   return (
-    <div className="mb-3">
-      <div className="text-2xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-        GPU instance types (in order of preference)
-      </div>
-      <Help {...INSTANCE_TYPES_HELP} />
-      <ol className="text-xs space-y-1 mb-2">
-        {list.length === 0 && <li style={mutedText}>None selected.</li>}
+    <Lever title="GPU instance types, in order of preference" help={INSTANCE_TYPES_HELP}>
+      <ol className="mb-2 space-y-1">
+        {list.length === 0 && <li className="text-xs text-muted-foreground">None selected.</li>}
         {list.map((t, i) => (
-          <li key={t} className="flex items-center gap-2">
-            <span className="w-4 text-2xs tabular-nums" style={mutedText}>{i + 1}.</span>
-            <code style={{ color: 'var(--text-primary)' }}>{t}</code>
+          <li key={t} className="flex min-h-8 items-center gap-2 rounded-md bg-muted/50 px-2 text-xs">
+            <span className="w-4 tabular-nums text-muted-foreground">{i + 1}</span>
+            <code className="font-mono text-foreground">{t}</code>
             {allowlist && !allowlist.includes(t) && (
-              <span className="text-2xs" style={{ color: 'var(--warning)' }}>not in allowlist</span>
+              <StatusChip tone="warning">not in allowlist</StatusChip>
             )}
-            <button type="button" disabled={disabled || i === 0} onClick={() => move(i, -1)} className={secondaryButtonClass} style={secondaryButtonStyle} aria-label={`Move ${t} up`}>↑</button>
-            <button type="button" disabled={disabled || i === list.length - 1} onClick={() => move(i, 1)} className={secondaryButtonClass} style={secondaryButtonStyle} aria-label={`Move ${t} down`}>↓</button>
-            <button type="button" disabled={disabled} onClick={() => setDraft(list.filter((x) => x !== t))} className={secondaryButtonClass} style={secondaryButtonStyle}>Remove</button>
+            <span className="ml-auto flex items-center gap-1">
+              <Button variant="ghost" size="icon" className={iconBtn} disabled={disabled || i === 0} onClick={() => move(i, -1)} aria-label={`Move ${t} up`}>↑</Button>
+              <Button variant="ghost" size="icon" className={iconBtn} disabled={disabled || i === list.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${t} down`}>↓</Button>
+              <Button variant="ghost" size="sm" disabled={disabled} onClick={() => setDraft(list.filter((x) => x !== t))} aria-label={`Remove ${t}`}>Remove</Button>
+            </span>
           </li>
         ))}
       </ol>
@@ -225,31 +242,25 @@ function InstanceTypesLever({ current, allowlist, blocked, onRequest }) {
         <select
           value=""
           disabled={disabled || remaining.length === 0}
+          aria-label="Add a GPU instance type"
           onChange={(e) => e.target.value && setDraft([...list, e.target.value])}
-          className="px-2 py-1 text-2xs rounded-md border disabled:opacity-50"
-          style={inputStyle}
+          className={cn(selectCls, 'max-md:h-10')}
         >
           <option value="">{remaining.length ? 'Add a type…' : 'All allowed types added'}</option>
           {remaining.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <button type="button" disabled={disabled || !dirty} onClick={save} className={primaryButtonClass} style={primaryButtonStyle}>
-          Save order
-        </button>
+        <Button variant="outline" disabled={disabled || !dirty} onClick={save} className="max-md:h-10">Save order…</Button>
         {draft !== null && (
-          <button type="button" onClick={() => { setDraft(null); setError(null); }} className={secondaryButtonClass} style={secondaryButtonStyle}>
-            Discard
-          </button>
+          <Button variant="ghost" onClick={() => { setDraft(null); setError(null); }} className="max-md:h-10">Discard</Button>
         )}
-        <button type="button" disabled={Boolean(blocked)} onClick={reset} className={secondaryButtonClass} style={secondaryButtonStyle}>
-          Reset
-        </button>
+        <Button variant="ghost" disabled={Boolean(blocked)} onClick={reset} className="max-md:h-10">Reset to default…</Button>
       </div>
-      {error && <p className="text-2xs mt-1" style={{ color: 'var(--error)' }}>{error}</p>}
-    </div>
+      {error && <p role="alert" className="mt-1 text-2xs text-[var(--error)]">{error}</p>}
+    </Lever>
   );
 }
 
-export default function Module1Card({ module1, bounds, defaults, blockedReason, onRequest }) {
+export default function Module1Card({ module1, bounds, defaults, blockedReason, onRequest, lastChange }) {
   const blocked = blockedReason || (!module1 ? 'no Module-1 data' : null);
   const config = module1?.config || {};
   const gpuRange = Array.isArray(bounds?.[MODULE1_KEYS.gpuCap]) ? bounds[MODULE1_KEYS.gpuCap] : null;
@@ -263,60 +274,75 @@ export default function Module1Card({ module1, bounds, defaults, blockedReason, 
   const cpuCap = num(module1?.cpu?.cap) ?? num(config[MODULE1_KEYS.cpuCap]);
   const types = parseTypes(config[MODULE1_KEYS.gpuTypes]);
 
+  let chip = { tone: 'muted', text: 'No data' };
+  if (module1) {
+    if (!module1.head_in_service) chip = { tone: 'error', text: 'Head box down' };
+    else if (module1.gpu_capacity_unavailable) chip = { tone: 'warning', text: 'GPU capacity unavailable' };
+    else chip = { tone: 'success', text: 'Running' };
+  }
+
   return (
-    <div className="rounded-xl border p-4" style={cardStyle}>
-      {blocked && <div className="mb-3"><Unavailable reason={blocked} /></div>}
+    <Panel
+      title="Module-1"
+      badge={<StatusChip tone={chip.tone}>{chip.text}</StatusChip>}
+      help={(
+        <HelpPopover title="Module-1" align="start">
+          <HelpBody what={SECTION_HELP.module1.what} items={SECTION_HELP.module1.items} />
+        </HelpPopover>
+      )}
+      bodyClassName="flex flex-col gap-3"
+    >
+      {blocked && <Unavailable reason={blocked} />}
 
       {module1 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-          <Stat label="GPU running / cap" value={`${module1.gpu?.running ?? '—'} / ${module1.gpu?.cap ?? '—'}`} />
-          <Stat label="CPU running / cap" value={`${module1.cpu?.running ?? '—'} / ${module1.cpu?.cap ?? '—'}`} />
-          <Stat label="Queued GPU / CPU" value={`${module1.queued_gpu ?? '—'} / ${module1.queued_cpu ?? '—'}`} />
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
+          <Stat label="GPU running / cap" value={`${module1.gpu?.running ?? '–'} / ${module1.gpu?.cap ?? '–'}`} />
+          <Stat label="CPU running / cap" value={`${module1.cpu?.running ?? '–'} / ${module1.cpu?.cap ?? '–'}`} />
+          <Stat label="Queued GPU / CPU" value={`${module1.queued_gpu ?? '–'} / ${module1.queued_cpu ?? '–'}`} />
           <Stat label="Oldest queued" value={fmtAge(module1.oldest_queued_age_sec)} />
           <Stat
             label="GPU capacity"
             value={module1.gpu_capacity_unavailable ? 'Unavailable' : 'OK'}
-            tone={module1.gpu_capacity_unavailable ? 'var(--error)' : 'var(--success)'}
+            tone={toneText(module1.gpu_capacity_unavailable ? 'error' : 'success')}
           />
           <Stat
             label="Head box"
             value={module1.head_in_service ? 'In service' : 'Not in service'}
-            tone={module1.head_in_service ? 'var(--success)' : 'var(--error)'}
+            tone={toneText(module1.head_in_service ? 'success' : 'error')}
           />
         </div>
       )}
 
-      <div className="border-t pt-3" style={{ borderColor: 'var(--border-subtle)' }}>
-        <CapLever
-          lane="gpu"
-          label="GPU"
-          lanePanel={module1?.gpu}
-          currentCap={gpuCap}
-          defaultCap={num(defaults?.gpu)}
-          range={gpuRange}
-          blocked={blocked}
-          onRequest={onRequest}
-        />
-        <CapLever
-          lane="cpu"
-          label="CPU"
-          lanePanel={module1?.cpu}
-          currentCap={cpuCap}
-          defaultCap={num(defaults?.cpu)}
-          range={cpuRange}
-          blocked={blocked}
-          onRequest={onRequest}
-        />
-        <InstanceTypesLever current={types} allowlist={allowlist} blocked={blocked} onRequest={onRequest} />
+      <ChangeLine by={lastChange?.actor} at={lastChange?.at} reason={lastChange?.reason} />
 
-        <div className="text-2xs" style={mutedText}>
-          GPU subnets (read-only):{' '}
-          <code className="break-all" style={{ color: 'var(--text-secondary)' }}>
-            {config[MODULE1_KEYS.gpuSubnets] || '—'}
-          </code>
-          <div>{SUBNETS_HELP}</div>
-        </div>
+      <CapLever
+        lane="gpu"
+        label="GPU"
+        lanePanel={module1?.gpu}
+        currentCap={gpuCap}
+        defaultCap={num(defaults?.gpu)}
+        range={gpuRange}
+        blocked={blocked}
+        onRequest={onRequest}
+      />
+      <CapLever
+        lane="cpu"
+        label="CPU"
+        lanePanel={module1?.cpu}
+        currentCap={cpuCap}
+        defaultCap={num(defaults?.cpu)}
+        range={cpuRange}
+        blocked={blocked}
+        onRequest={onRequest}
+      />
+      <InstanceTypesLever current={types} allowlist={allowlist} blocked={blocked} onRequest={onRequest} />
+
+      <div className="border-t border-border pt-3 text-2xs text-muted-foreground">
+        <span className="font-medium text-foreground">GPU subnets</span>
+        <StatusChip tone="muted" className="ml-2">Read-only</StatusChip>
+        <code className="mt-1 block break-all font-mono">{config[MODULE1_KEYS.gpuSubnets] || '–'}</code>
+        <p className="mt-1">{SUBNETS_HELP}</p>
       </div>
-    </div>
+    </Panel>
   );
 }

@@ -44,50 +44,6 @@ const TypingText = React.memo(({ text, speed = 30, className, startDelay = 0 }) 
   );
 });
 
-const CHAT_TABLE_COMPONENTS = {
-  table: ({ node, ...props }) => (
-    <div
-      className="isolate my-4 max-h-[420px] overflow-auto rounded-lg border"
-      style={{ borderColor: 'var(--border-default)' }}
-    >
-      <table
-        className="w-max min-w-full border-collapse text-sm"
-        style={{ borderColor: 'var(--border-default)' }}
-        {...props}
-      />
-    </div>
-  ),
-  thead: ({ node, ...props }) => (
-    <thead
-      className="sticky top-0 z-10"
-      style={{ backgroundColor: 'var(--bg-surface-raised)' }}
-      {...props}
-    />
-  ),
-  tbody: ({ node, ...props }) => <tbody {...props} />,
-  tr: ({ node, ...props }) => (
-    <tr
-      className="border-b hover:bg-white/5"
-      style={{ borderColor: 'var(--border-subtle)' }}
-      {...props}
-    />
-  ),
-  th: ({ node, ...props }) => (
-    <th
-      className="px-3 py-2 text-left font-semibold whitespace-nowrap border-b border-r last:border-r-0"
-      style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
-      {...props}
-    />
-  ),
-  td: ({ node, ...props }) => (
-    <td
-      className="px-3 py-2 align-top whitespace-nowrap border-r last:border-r-0"
-      style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }}
-      {...props}
-    />
-  ),
-};
-
 const MarkdownWithReferences = React.memo(({ content, placeholders, scrollToSource }) => {
   const containerRef = useRef(null);
 
@@ -111,15 +67,14 @@ const MarkdownWithReferences = React.memo(({ content, placeholders, scrollToSour
         parts.push(
           <button
             key={`ref-btn-${match.index}-${refInfo.number}`}
+            type="button"
             onClick={(e) => {
               e.preventDefault();
               scrollToSource(refInfo.index);
             }}
-            className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 mx-0.5 text-xs font-semibold border rounded hover:bg-white/10 transition-colors cursor-pointer align-middle"
-            style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--accent-teal)', borderColor: 'var(--border-default)' }}
-            onMouseEnter={(e) => { e.target.style.color = 'var(--accent-teal-hover)'; }}
-            onMouseLeave={(e) => { e.target.style.color = 'var(--accent-teal)'; }}
-            title={`Click to view source ${refInfo.number}`}
+            className="chat-cite"
+            aria-label={`Source ${refInfo.number}`}
+            title={`Source ${refInfo.number}`}
           >
             {refInfo.number}
           </button>
@@ -199,14 +154,11 @@ const MarkdownWithReferences = React.memo(({ content, placeholders, scrollToSour
           const refInfo = placeholders.get(placeholderKey);
           if (refInfo) {
             const button = document.createElement('button');
+            button.type = 'button';
             button.textContent = refInfo.number;
-            button.className = 'inline-flex items-center justify-center min-w-[20px] h-5 px-1 mx-0.5 text-xs font-semibold border rounded hover:bg-white/10 transition-colors cursor-pointer align-middle';
-            button.style.backgroundColor = 'var(--bg-surface)';
-            button.style.color = 'var(--accent-teal)';
-            button.style.borderColor = 'var(--border-default)';
-            button.addEventListener('mouseenter', () => { button.style.color = 'var(--accent-teal-hover)'; });
-            button.addEventListener('mouseleave', () => { button.style.color = 'var(--accent-teal)'; });
-            button.title = `Click to view source ${refInfo.number}`;
+            button.className = 'chat-cite';
+            button.setAttribute('aria-label', `Source ${refInfo.number}`);
+            button.title = `Source ${refInfo.number}`;
             button.onclick = (e) => {
               e.preventDefault();
               scrollToSource(refInfo.index);
@@ -237,7 +189,6 @@ const MarkdownWithReferences = React.memo(({ content, placeholders, scrollToSour
           em: createProcessedComponent('em'),
           li: createProcessedComponent('li'),
           span: createProcessedComponent('span'),
-          ...CHAT_TABLE_COMPONENTS,
         }}
       >
         {content}
@@ -256,9 +207,9 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, showRe
       const sourceElement = messageRef.current.querySelector(`[data-source-index="${index}"]`);
       if (sourceElement) {
         sourceElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        sourceElement.classList.add('bg-white/5', 'border-white/20');
+        sourceElement.classList.add('chat-source-flash');
         setTimeout(() => {
-          sourceElement.classList.remove('bg-white/5', 'border-white/20');
+          sourceElement.classList.remove('chat-source-flash');
         }, 2000);
       }
     }
@@ -292,14 +243,13 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, showRe
     return { type: 'withRefs', content: processedContent, placeholders: placeholderMap };
   }, [text, sources]);
 
-  const markdownComponents = { ...CHAT_TABLE_COMPONENTS };
   const thinkingTime = formatDuration(durationMs);
 
   if (isUser) {
     return (
-      <div className="flex w-full justify-end" ref={messageRef}>
+      <div className="chat-msg flex w-full justify-end" ref={messageRef}>
         <div
-          className="max-w-[75%] px-4 py-2.5 rounded-3xl text-sm"
+          className="max-w-[80%] rounded-2xl rounded-br-md px-3.5 py-2 text-sm whitespace-pre-wrap"
           style={{
             backgroundColor: 'var(--bg-surface-raised)',
             color: 'var(--text-primary)',
@@ -314,7 +264,7 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, showRe
   }
 
   return (
-    <div className="group flex w-full gap-3" ref={messageRef}>
+    <div className="chat-msg group flex w-full" ref={messageRef}>
       <div className="flex-1 min-w-0">
         <div className="text-sm break-words whitespace-normal overflow-wrap-anywhere">
           {processedText.type === 'withRefs' ? (
@@ -324,24 +274,26 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, showRe
               scrollToSource={scrollToSource}
             />
           ) : (
-            <Markdown className="break-words" components={markdownComponents}>
+            <Markdown className="break-words">
               {processedText.content}
             </Markdown>
           )}
         </div>
 
         {sources && sources.length > 0 && (
-          <div className="mt-3 pt-2.5 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
-            <div className="flex flex-wrap gap-1.5">
-              {sources.map((source, idx) => (
-                <Source key={idx} href={source.url || '#'}>
+          <div className="mt-3 flex flex-wrap items-center gap-1.5" role="list" aria-label="Sources">
+            <span className="mr-0.5 text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>
+              Sources
+            </span>
+            {sources.map((source, idx) => (
+              <span key={idx} role="listitem" className="inline-flex">
+                <Source href={source.url || '#'}>
                   <SourceTrigger
                     data-source-index={idx}
-                    showFavicon
                     label={
-                      <span className="flex items-center gap-1">
-                        <span className="font-bold" style={{ color: 'var(--accent-teal)' }}>{idx + 1}</span>
-                        <span className="truncate max-w-[120px]">{source.title || source.url || `Source ${idx + 1}`}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="font-semibold tabular-nums" style={{ color: 'var(--accent-teal)' }}>{idx + 1}</span>
+                        <span className="truncate max-w-[160px]">{source.title || source.url || `Source ${idx + 1}`}</span>
                       </span>
                     }
                   />
@@ -350,23 +302,23 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, showRe
                     description={source.url || ''}
                   />
                 </Source>
-              ))}
-            </div>
+              </span>
+            ))}
           </div>
         )}
 
-        {thinkingTime && (
-          <p
-            className="mt-1.5 text-2xs tabular-nums"
-            style={{ color: 'var(--text-tertiary)' }}
-            title="Time taken to produce this answer"
-          >
-            Thought for {thinkingTime}
-          </p>
-        )}
-
         <TooltipProvider>
-          <div className="flex items-center gap-0.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <div className="mt-1.5 flex items-center gap-1">
+            {thinkingTime && (
+              <span
+                className="text-2xs tabular-nums"
+                style={{ color: 'var(--text-tertiary)' }}
+                title="Time taken to produce this answer"
+              >
+                Thought for {thinkingTime}
+              </span>
+            )}
+          <div className="chat-msg-actions flex items-center gap-0.5" data-pinned={copied ? 'true' : undefined}>
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -375,14 +327,14 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, showRe
                     variant="ghost"
                     size="icon"
                     onClick={handleCopy}
-                    className="chat-chrome-btn-sm rounded-[0.375rem]"
-                    aria-label={copied ? 'Copied!' : 'Copy'}
+                    className="chat-chrome-btn-sm rounded-[0.375rem] [@media(pointer:coarse)]:!size-10"
+                    aria-label={copied ? 'Copied' : 'Copy answer'}
                   >
                     {copied ? <CheckCircle2 style={{ color: 'var(--success)' }} /> : <Copy />}
                   </Button>
                 }
               />
-              <TooltipContent>{copied ? 'Copied!' : 'Copy'}</TooltipContent>
+              <TooltipContent>{copied ? 'Copied' : 'Copy'}</TooltipContent>
             </Tooltip>
             {showRegenerate && onRegenerate && (
               <Tooltip>
@@ -394,8 +346,8 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, showRe
                       size="icon"
                       onClick={onRegenerate}
                       disabled={regenerateDisabled}
-                      className="chat-chrome-btn-sm rounded-[0.375rem] disabled:opacity-40 disabled:cursor-not-allowed"
-                      aria-label="Regenerate"
+                      className="chat-chrome-btn-sm rounded-[0.375rem] disabled:opacity-40 disabled:cursor-not-allowed [@media(pointer:coarse)]:!size-10"
+                      aria-label="Regenerate answer"
                     >
                       <RotateCw />
                     </Button>
@@ -404,6 +356,7 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, showRe
                 <TooltipContent>Regenerate</TooltipContent>
               </Tooltip>
             )}
+          </div>
           </div>
         </TooltipProvider>
       </div>

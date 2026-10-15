@@ -14,12 +14,12 @@
  *    ("Copy candidate config").
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Sliders, Play, Loader2, Copy, Check, RotateCcw, X, SlidersHorizontal } from 'lucide-react';
 import { buildOverridesHeader } from '@/services/streamCompare';
 import TuningConfigModal from '@/components/TuningConfigModal';
 
-/** Small pill button that matches the app's control styling. */
+/** Small button for the tuning panel: outline by default, filled for the one primary action. */
 function PillButton({ children, active, disabled, title, onClick, icon: Icon, tone = 'default' }) {
   const tones = {
     default:
@@ -35,7 +35,7 @@ function PillButton({ children, active, disabled, title, onClick, icon: Icon, to
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 [@media(pointer:coarse)]:h-9 ${
         active ? tones.primary : tones[tone]
       }`}
     >
@@ -43,6 +43,34 @@ function PillButton({ children, active, disabled, title, onClick, icon: Icon, to
       {children}
     </button>
   );
+}
+
+/**
+ * Keep the fixed control clear of the composer and the workspace: sit just above the composer dock
+ * (when there is one) and just left of the workspace panel (when it is open). Measured, not
+ * guessed, because both move with the layout.
+ */
+function useClearOfChrome() {
+  const [pos, setPos] = useState({ right: 14, bottom: 14 });
+  useEffect(() => {
+    const measure = () => {
+      const dock = document.querySelector('.chat-composer-dock');
+      const aside = document.querySelector('.chat-shell-right');
+      const dockH = dock ? dock.getBoundingClientRect().height : 0;
+      const asideRect = aside && aside.getAttribute('aria-hidden') !== 'true' ? aside.getBoundingClientRect() : null;
+      const inline = asideRect && asideRect.width > 0 && asideRect.left > window.innerWidth * 0.4 ? asideRect : null;
+      const next = {
+        right: inline ? Math.round(window.innerWidth - inline.left + 14) : 14,
+        bottom: dockH ? Math.round(dockH + 12) : 14,
+      };
+      setPos((p) => (p.right === next.right && p.bottom === next.bottom ? p : next));
+    };
+    measure();
+    const t = setInterval(measure, 500);
+    window.addEventListener('resize', measure);
+    return () => { clearInterval(t); window.removeEventListener('resize', measure); };
+  }, []);
+  return pos;
 }
 
 /**
@@ -56,14 +84,14 @@ export default function TuningMode({ tuning, onClose }) {
   } = tuning;
   const [editorOpen, setEditorOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const pos = useClearOfChrome();
 
   if (!isAdmin) return null; // non-admins never see this at all
 
   // This panel is a DIRECT child of .chat-app-shell (a 3-column CSS grid). position:fixed takes it
-  // out of the grid entirely so it can never reflow the chat shell — same escape hatch
-  // ExploratoryModeToggle uses. Anchored bottom-right, ABOVE that toggle (bottom:14) so they never
-  // overlap. The ANSWER columns live in the thread and config editing lives in a full-screen modal,
-  // so this panel stays compact (just the switch + actions).
+  // out of the grid entirely so it can never reflow the chat shell. It is anchored bottom-right,
+  // above the composer dock and beside the workspace, so it never overlaps either. The ANSWER
+  // columns live in the thread and config editing lives in a modal, so this stays compact.
 
   return (
    <>
@@ -71,33 +99,30 @@ export default function TuningMode({ tuning, onClose }) {
       className="tune-root"
       style={{
         position: 'fixed',
-        right: 14,
-        bottom: 58,
-        zIndex: 9998,
+        right: pos.right,
+        bottom: pos.bottom,
+        zIndex: 30,
         width: 'auto',
         maxWidth: 'calc(100vw - 28px)',
         maxHeight: 'min(72vh, 720px)',
         overflowY: 'auto',
-        // When OFF the panel must not sit as an opaque box over the results/download area and swallow
-        // clicks (Alfu 2026-09-29: the download button was unclickable behind this). Inactive => the
-        // container is click-through; only the toggle row re-enables pointer events.
+        // When OFF the container must not sit as a box over the results/download area and swallow
+        // clicks: inactive => click-through, only the toggle row re-enables pointer events.
         pointerEvents: active ? 'auto' : 'none',
       }}
     >
       <div
         className={
           active
-            ? 'rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface-raised)] p-3 shadow-[var(--shadow-xl)]'
+            ? 'rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface-raised)] p-2 shadow-[var(--shadow-md)]'
             : ''
         }
       >
-        {/* Toggle row. Parent is click-through when inactive; this row re-enables pointer events and
-            carries its own compact chrome so the switch is visible without overlaying results. */}
         <div
           className={
             active
-              ? 'flex flex-wrap items-center gap-2'
-              : 'inline-flex flex-wrap items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface-raised)] px-3 py-1.5 shadow-[var(--shadow-md)]'
+              ? 'flex flex-wrap items-center gap-1.5'
+              : 'inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)] px-2.5 py-1 shadow-[var(--shadow-sm)]'
           }
           style={{ pointerEvents: 'auto' }}
         >
@@ -106,34 +131,34 @@ export default function TuningMode({ tuning, onClose }) {
             role="switch"
             aria-checked={active}
             onClick={() => setActive((v) => !v)}
-            title={active ? undefined : 'Off — chat behaves exactly as it does normally (no header, no second column).'}
-            className="inline-flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]"
+            title={active ? undefined : 'Off: chat behaves exactly as it does normally (no header, no second column).'}
+            className="inline-flex h-7 items-center gap-2 rounded-md px-1 text-xs font-medium text-[var(--text-primary)] [@media(pointer:coarse)]:h-9"
           >
             <span
-              className={`relative inline-flex h-[18px] w-8 items-center rounded-full transition-colors ${
-                active ? 'bg-[var(--accent-teal)]' : 'bg-[var(--segment-track)]'
+              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
+                active ? 'bg-[var(--accent-teal)]' : 'bg-[var(--border-strong)]'
               }`}
               aria-hidden
             >
               <span
-                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                  active ? 'translate-x-[15px]' : 'translate-x-[3px]'
+                className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${
+                  active ? 'translate-x-[14px]' : 'translate-x-[2px]'
                 }`}
               />
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <Sliders className="h-3.5 w-3.5 text-[var(--accent-teal)]" aria-hidden />
-              Tuning mode
+              <Sliders className="h-3.5 w-3.5 text-[var(--text-secondary)]" aria-hidden />
+              Tuning
             </span>
           </button>
 
           {active ? (
             <>
-              <span className="mx-0.5 h-5 w-px bg-[var(--border-subtle)]" aria-hidden />
+              <span className="mx-0.5 h-4 w-px bg-[var(--border-default)]" aria-hidden />
               <PillButton onClick={() => setEditorOpen(true)} icon={SlidersHorizontal}>
                 Edit config
                 {dirtyKeys.length ? (
-                  <span className="ml-0.5 rounded-full bg-[var(--accent-teal-soft)] px-1.5 py-px text-[10px] text-[var(--accent-teal)]">
+                  <span className="ml-0.5 rounded-full bg-[var(--accent-teal-soft)] px-1.5 text-[10px] leading-4 text-[var(--accent-teal)]">
                     {dirtyKeys.length}
                   </span>
                 ) : null}
@@ -167,7 +192,7 @@ export default function TuningMode({ tuning, onClose }) {
                 tone="ghost"
                 disabled={!dirtyKeys.length && !hasColumns}
               >
-                Reset all
+                Reset
               </PillButton>
             </>
           ) : null}
@@ -180,7 +205,7 @@ export default function TuningMode({ tuning, onClose }) {
       </div>
     </div>
 
-    {/* Full-screen config editor. Opened from "Edit config"; edits the same session override set. */}
+    {/* Config editor. Opened from "Edit config"; edits the same session override set. */}
     <TuningConfigModal
       open={editorOpen}
       onClose={() => setEditorOpen(false)}

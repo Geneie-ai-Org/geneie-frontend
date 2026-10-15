@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Maximize2, RotateCcw } from 'lucide-react';
+import { AlertCircle, Loader2, Maximize2, RotateCcw, RotateCw } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import { fetchModule1BamArtifacts, uploadModule1ReportFigure } from '@/services/backendApi';
 import { useTheme } from '@/hooks/useTheme';
@@ -10,6 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { QcHeading } from '@/components/Module1QcPanel';
+import { cn } from '@/lib/utils';
 import {
   assemblyForGenome,
   buildGeneieJbrowseConfiguration,
@@ -27,12 +29,22 @@ function getLgView(viewState) {
 
 /**
  * Geneie-themed JBrowse 2 linear genome view for retained Module 1 markdup BAM.
- * Opens in a full dialog (not the bottom drawer) so pan/zoom is not clipped.
- * Snapshot is saved the first time the user opens the viewer (not on page load).
+ *
+ * `variant="card"` (default): a quiet row that opens the viewer in a full dialog, so pan/zoom is
+ * not clipped by the card.
+ * `variant="panel"`: plain content for a workspace tab. The viewer mounts inline, fills its parent
+ * (`h-full min-h-0 flex flex-col`), and shows an explicit loading, error or empty state instead of
+ * a blank box. No dialog, no fixed width.
+ *
+ * Snapshot is saved the first time the viewer is shown (not on page load).
  */
-const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
+const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint, variant = 'card' }) => {
   const { isDark } = useTheme();
+  const inline = variant === 'panel';
   const [open, setOpen] = useState(false);
+  // The viewer is "active" when its dialog is open, or always in a workspace panel.
+  const active = inline || open;
+  const [attempt, setAttempt] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [snapshotStatus, setSnapshotStatus] = useState(null);
@@ -53,7 +65,7 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
   }, [conversationId]);
 
   useEffect(() => {
-    if (!open || !conversationId || !hasBam) return undefined;
+    if (!active || !conversationId || !hasBam) return undefined;
 
     let cancelled = false;
     setLoading(true);
@@ -140,11 +152,11 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
     return () => {
       cancelled = true;
     };
-  }, [open, conversationId, hasBam, genomeHint, isDark]);
+  }, [active, attempt, conversationId, hasBam, genomeHint, isDark]);
 
   // Soft-cap zoom-out: BAM pileup cannot render chromosome-scale windows.
   useEffect(() => {
-    if (!open || !viewState) return undefined;
+    if (!active || !viewState) return undefined;
     const view = getLgView(viewState);
     if (!view?.zoomTo) return undefined;
 
@@ -161,7 +173,7 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [open, viewState]);
+  }, [active, viewState]);
 
   const resetView = useCallback(() => {
     const view = getLgView(viewState);
@@ -178,17 +190,19 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
 
   // Capture viewport → durable report (once per conversation while BAM live).
   useEffect(() => {
-    if (!open || !viewState || !captureRootRef.current || capturedRef.current || loading || error) {
+    if (!active || !viewState || !captureRootRef.current || capturedRef.current || loading || error) {
       return undefined;
     }
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
         setSnapshotStatus('Saving alignment snapshot…');
+        // toBlob needs a concrete colour, not a var(): read what the themed surface resolved to.
+        const matte = window.getComputedStyle(captureRootRef.current).backgroundColor;
         const blob = await toBlob(captureRootRef.current, {
           cacheBust: true,
           pixelRatio: 2,
-          backgroundColor: isDark ? '#0f0f0f' : '#ffffff',
+          backgroundColor: matte && matte !== 'rgba(0, 0, 0, 0)' ? matte : undefined,
         });
         if (cancelled || !blob) {
           setSnapshotStatus(null);
@@ -212,101 +226,124 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [open, viewState, loading, error, conversationId, isDark, bamMeta]);
+  }, [active, viewState, loading, error, conversationId, isDark, bamMeta]);
 
   const Browser = useMemo(() => JBrowse, [JBrowse]);
 
   if (!hasBam) return null;
 
+  const retry = () => {
+    setViewState(null);
+    setError(null);
+    setAttempt((n) => n + 1);
+  };
+
+  /** Loading, error, or the browser itself. Never a blank box. */
+  const browserArea = (
+    <>
+      {loading && (
+        <div className="flex min-h-[320px] flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border" role="status">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />
+          <p className="text-xs text-muted-foreground">Loading the alignment browser…</p>
+        </div>
+      )}
+      {error && !loading && (
+        <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-border px-6 text-center" role="alert">
+          <AlertCircle className="h-5 w-5 text-[var(--error)]" aria-hidden />
+          <div>
+            <p className="text-sm font-medium text-foreground">The alignment browser could not open</p>
+            <p className="mt-1 text-xs text-muted-foreground">{error}</p>
+          </div>
+          <button
+            type="button"
+            onClick={retry}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-xs font-medium text-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/55"
+          >
+            <RotateCw className="h-3 w-3" aria-hidden />
+            Try again
+          </button>
+        </div>
+      )}
+      {!loading && !error && Browser && viewState && (
+        <div
+          ref={captureRootRef}
+          className={cn('module1-jbrowse-root min-h-[420px] flex-1 rounded-lg border border-border bg-background', inline && 'min-h-[360px]')}
+          style={{ touchAction: 'none' }}
+        >
+          <Browser viewState={viewState} />
+        </div>
+      )}
+      {!loading && !error && !(Browser && viewState) && (
+        <div className="flex min-h-[240px] flex-1 items-center justify-center rounded-lg border border-dashed border-border px-6 text-center text-xs text-muted-foreground">
+          No alignment loaded yet.
+        </div>
+      )}
+    </>
+  );
+
+  const resetButton = (
+    <button
+      type="button"
+      onClick={resetView}
+      disabled={!viewState || !bamMeta}
+      className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/55 disabled:opacity-40"
+    >
+      <RotateCcw className="h-3 w-3" aria-hidden />
+      Reset view
+    </button>
+  );
+
+  const hint = `Drag to pan. Zoom in to load reads; zooming out too far is blocked for BAM size${bamMeta?.genome ? ` · ${bamMeta.genome}` : ''}.`;
+
+  if (inline) {
+    return (
+      <section className="flex min-h-0 flex-1 flex-col gap-3" aria-label="Module 1 alignment viewer">
+        <QcHeading
+          title={`Alignment browser${bamMeta?.sample ? ` · ${bamMeta.sample}` : ''}`}
+          hint={snapshotStatus ? `${hint} ${snapshotStatus}` : hint}
+          trailing={resetButton}
+        />
+        {browserArea}
+      </section>
+    );
+  }
+
   return (
     <>
-      <div
-        className="mt-3 rounded-lg border"
-        style={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-subtle)' }}
-        aria-label="Module 1 alignment viewer"
-      >
+      <section aria-label="Module 1 alignment viewer" className="space-y-2.5">
+        <QcHeading title="Alignment browser" hint="Pan, zoom and search the reads while the BAM is retained." />
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
+          className="flex min-h-10 w-full items-center gap-2 rounded-lg border border-border px-3 text-left text-sm font-medium text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/55"
         >
-          <div className="min-w-0">
-            <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-              Alignment browser
-            </p>
-            <p className="text-2xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-              Open full interactive view · pan, zoom, and search while BAM is retained
-              {bamMeta?.genome ? ` · ${bamMeta.genome}` : ''}.
-            </p>
-          </div>
-          <Maximize2 className="w-4 h-4 shrink-0" style={{ color: 'var(--text-tertiary)' }} />
+          <span className="min-w-0 flex-1 truncate">Open interactive view{bamMeta?.genome ? ` · ${bamMeta.genome}` : ''}</span>
+          <Maximize2 className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
         </button>
-      </div>
+      </section>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           showCloseButton
-          className="!max-w-[min(96vw,1100px)] !min-w-[min(96vw,720px)] w-full h-[min(90vh,860px)] flex flex-col p-0 gap-0 overflow-hidden"
-          style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-strong)' }}
+          className="!max-w-[min(96vw,1100px)] !min-w-[min(96vw,720px)] w-full h-[min(90vh,860px)] flex flex-col p-0 gap-0 overflow-hidden bg-popover border border-border max-sm:!min-w-full max-sm:!h-[100dvh] max-sm:rounded-none"
         >
-          <DialogHeader className="px-4 pt-4 pb-2 shrink-0 pr-12">
+          <DialogHeader className="shrink-0 px-4 pb-2 pt-4 pr-12">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <DialogTitle className="text-sm" style={{ color: 'var(--text-primary)' }}>
+                <DialogTitle className="text-sm text-foreground">
                   Alignment browser
                   {bamMeta?.sample ? ` · ${bamMeta.sample}` : ''}
                 </DialogTitle>
-                <DialogDescription className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                  Drag to pan · zoom in to load reads (zooming out too far is blocked for BAM size)
-                  {bamMeta?.genome ? ` · ${bamMeta.genome}` : ''}.
+                <DialogDescription className="text-2xs text-muted-foreground">
+                  {hint}
                   {snapshotStatus ? ` ${snapshotStatus}` : ''}
                 </DialogDescription>
               </div>
-              <button
-                type="button"
-                onClick={resetView}
-                disabled={!viewState || !bamMeta}
-                className="shrink-0 inline-flex items-center gap-1 text-2xs px-2 py-1 rounded-md border mt-0.5 disabled:opacity-40"
-                style={{
-                  borderColor: 'var(--border-subtle)',
-                  color: 'var(--text-secondary)',
-                  backgroundColor: 'var(--bg-elevated)',
-                }}
-              >
-                <RotateCcw className="w-3 h-3" />
-                Reset view
-              </button>
+              {resetButton}
             </div>
           </DialogHeader>
 
-          <div className="flex-1 min-h-0 px-3 pb-3 flex flex-col">
-            {loading && (
-              <div className="flex items-center gap-2 py-12 justify-center">
-                <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--text-tertiary)' }} />
-                <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                  Loading browser…
-                </span>
-              </div>
-            )}
-            {error && (
-              <p className="text-2xs px-1 py-2" style={{ color: 'var(--error)' }}>
-                {error}
-              </p>
-            )}
-            {!loading && !error && Browser && viewState && (
-              <div
-                ref={captureRootRef}
-                className="module1-jbrowse-root flex-1 min-h-[480px] rounded-md border"
-                style={{
-                  borderColor: 'var(--border-subtle)',
-                  backgroundColor: isDark ? '#0f0f0f' : '#ffffff',
-                  touchAction: 'none',
-                }}
-              >
-                <Browser viewState={viewState} />
-              </div>
-            )}
-          </div>
+          <div className="flex min-h-0 flex-1 flex-col px-3 pb-3">{browserArea}</div>
         </DialogContent>
       </Dialog>
     </>

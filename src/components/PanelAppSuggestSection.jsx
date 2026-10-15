@@ -1,11 +1,157 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { AlertCircle, Check, Info, Loader2, Search, X } from 'lucide-react';
 import {
   fetchPanelAppSuggestions,
   persistPanelAppSelection,
   resolvePanelAppSelection,
   searchPanelAppPanels,
 } from '@/services/backendApi';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+
+const fmt = (n) => Number(n || 0).toLocaleString();
+
+/** Role=switch, 44px hit area on mobile. Teal when on. */
+function Switch({ checked, onChange, disabled, labelledBy }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-labelledby={labelledBy}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-ring/55 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 after:absolute after:-inset-x-1 after:-inset-y-3 max-md:after:-inset-y-3.5"
+      style={{ background: checked ? 'hsl(var(--primary))' : 'var(--border-strong)' }}
+    >
+      <span
+        aria-hidden
+        className="block size-4 rounded-full bg-background shadow-sm transition-transform duration-150 motion-reduce:transition-none"
+        style={{ transform: checked ? 'translateX(18px)' : 'translateX(2px)' }}
+      />
+    </button>
+  );
+}
+
+/** Click-to-open help (never hover-only). */
+function HelpPopover({ label, children }) {
+  return (
+    <Popover>
+      <PopoverTrigger
+        aria-label={label}
+        className="relative inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55 after:absolute after:-inset-2.5"
+      >
+        <Info className="size-3.5" aria-hidden />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 text-xs leading-snug">
+        {children}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Relative match meter. Strong rows use the accent, weak rows stay neutral so
+ * generic panels never read as "relevant" just because they are listed. */
+function RelevanceBar({ ratio }) {
+  const strong = ratio >= 0.6;
+  return (
+    <span
+      className="block h-1 w-12 overflow-hidden rounded-full"
+      style={{ background: 'var(--segment-track)' }}
+      aria-hidden
+    >
+      <span
+        className="block h-full rounded-full"
+        style={{
+          width: `${Math.max(6, Math.round(ratio * 100))}%`,
+          background: strong ? 'hsl(var(--primary))' : 'var(--border-strong)',
+        }}
+      />
+    </span>
+  );
+}
+
+function PanelRow({ row, checked, disabled, onToggle, topScore, rank, showCue }) {
+  const id = String(row.panel_id || '').trim();
+  const geneN = Array.isArray(row.matched_genes) ? row.matched_genes.length : 0;
+  const score = Number(row.score);
+  const hasScore = Number.isFinite(score) && score > 0 && topScore > 0;
+  const ratio = hasScore ? Math.min(1, score / topScore) : 0;
+  const green = Number(row.green_count) || 0;
+  const amber = Number(row.amber_count) || 0;
+  const metaBits = [];
+  if (geneN > 0) {
+    metaBits.push(
+      `${fmt(geneN)} ${showCue ? 'matching ' : ''}gene${geneN === 1 ? '' : 's'}`
+    );
+    if (showCue && (green || amber)) {
+      const parts = [];
+      if (green) parts.push(`${green} high-confidence`);
+      if (amber) parts.push(`${amber} lower`);
+      metaBits.push(parts.join(', '));
+    }
+  } else if (showCue && row.reason) {
+    metaBits.push(row.reason);
+  }
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onToggle(id)}
+      title={row.reason || undefined}
+      className="group flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/55 disabled:opacity-60 max-md:min-h-11"
+      style={{
+        background: checked ? 'var(--accent-teal-soft)' : undefined,
+      }}
+    >
+      <span
+        aria-hidden
+        className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-[4px] border"
+        style={{
+          borderColor: checked ? 'hsl(var(--primary))' : 'var(--border-strong)',
+          background: checked ? 'hsl(var(--primary))' : 'var(--bg-input)',
+          color: 'hsl(var(--primary-foreground))',
+        }}
+      >
+        {checked ? <Check className="size-3" strokeWidth={3} /> : null}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline gap-2">
+          <span className="min-w-0 flex-1 break-words text-[13px] font-medium leading-snug text-foreground">
+            {row.panel_name || id}
+          </span>
+          {showCue && rank === 0 && hasScore ? (
+            <span className="shrink-0 text-2xs font-medium" style={{ color: 'hsl(var(--primary))' }}>
+              Top match
+            </span>
+          ) : null}
+        </span>
+        {metaBits.length > 0 ? (
+          <span className="mt-0.5 block truncate text-2xs tabular-nums text-muted-foreground">
+            {metaBits.join(' · ')}
+          </span>
+        ) : null}
+      </span>
+      {showCue && hasScore ? (
+        <span className="flex shrink-0 flex-col items-end gap-1 pt-1.5" title={`Match score ${score}`}>
+          <RelevanceBar ratio={ratio} />
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+function GroupHeader({ children, aside }) {
+  return (
+    <div className="flex items-baseline justify-between px-2 pb-0.5 pt-2 text-2xs font-medium text-muted-foreground">
+      <span>{children}</span>
+      {aside ? <span className="font-normal tabular-nums">{aside}</span> : null}
+    </div>
+  );
+}
 
 /**
  * Analyst-selected gene panels for GA ranking boost (Track 14.6).
@@ -31,6 +177,7 @@ export default function PanelAppSuggestSection({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchHits, setSearchHits] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
   const seqRef = useRef(0);
   const searchSeqRef = useRef(0);
   const onChangeRef = useRef(onChange);
@@ -95,7 +242,7 @@ export default function PanelAppSuggestSection({
       }
     }, delay);
     return () => clearTimeout(timer);
-  }, [hpoKey, suggestPhenotypeText, includeAmber, conversationId]);
+  }, [hpoKey, suggestPhenotypeText, includeAmber, conversationId, retryNonce]);
 
   // Manual: catalog search when query has 2+ chars.
   useEffect(() => {
@@ -191,189 +338,322 @@ export default function PanelAppSuggestSection({
     applySelection([...next]);
   };
 
+  const clearSelection = () => {
+    if (disabled || saving) return;
+    userTouchedRef.current = true;
+    applySelection([]);
+  };
+
   const suggestionIds = useMemo(
     () => new Set(suggestions.map((s) => String(s.panel_id || '').trim()).filter(Boolean)),
     [suggestions]
   );
 
-  const displayRows = useMemo(() => {
-    const q = String(searchQuery || '').trim();
-    const searching = !isAutomatic && q.length >= 2;
-    if (searching) {
-      // Keep already-selected panels visible even if not in search hits.
-      const byId = new Map();
-      for (const s of searchHits) {
-        const id = String(s.panel_id || '').trim();
-        if (id) byId.set(id, s);
+  const topScore = useMemo(
+    () => suggestions.reduce((m, s) => Math.max(m, Number(s.score) || 0), 0),
+    [suggestions]
+  );
+
+  // Selected panels that are not in the current list (e.g. picked from an earlier search).
+  const selectedExtras = useMemo(() => {
+    const out = [];
+    for (const p of value?.selected_panels || []) {
+      const id = String(p.panel_id || p || '').trim();
+      if (id && !suggestionIds.has(id)) {
+        out.push({ panel_id: id, panel_name: p.panel_name || id, matched_genes: [] });
       }
-      for (const p of value?.selected_panels || []) {
-        const id = String(p.panel_id || p || '').trim();
-        if (id && !byId.has(id)) {
-          byId.set(id, {
-            panel_id: id,
-            panel_name: p.panel_name || id,
-            matched_genes: [],
-          });
-        }
-      }
-      return [...byId.values()];
     }
-    // Suggestions + any selected panels not in the top list (e.g. from prior search).
+    return out;
+  }, [value?.selected_panels, suggestionIds]);
+
+  const q = String(searchQuery || '').trim();
+  const searching = !isAutomatic && q.length >= 2;
+
+  // While searching, keep already-selected panels visible even when not in the hits.
+  const searchRows = useMemo(() => {
+    if (!searching) return [];
     const byId = new Map();
-    for (const s of suggestions) {
+    for (const s of searchHits) {
       const id = String(s.panel_id || '').trim();
-      if (id) byId.set(id, { ...s, _fromSuggest: true });
+      if (id) byId.set(id, s);
     }
     for (const p of value?.selected_panels || []) {
       const id = String(p.panel_id || p || '').trim();
       if (id && !byId.has(id)) {
-        byId.set(id, {
-          panel_id: id,
-          panel_name: p.panel_name || id,
-          matched_genes: [],
-          _fromSuggest: false,
-        });
+        byId.set(id, { panel_id: id, panel_name: p.panel_name || id, matched_genes: [] });
       }
     }
     return [...byId.values()];
-  }, [isAutomatic, searchQuery, searchHits, suggestions, value?.selected_panels]);
+  }, [searching, searchHits, value?.selected_panels]);
 
   if (!hpoKey && !String(phenotypeText || '').trim()) return null;
 
-  const searching = !isAutomatic && String(searchQuery || '').trim().length >= 2;
+  const geneCount = Array.isArray(value?.selected_panel_gene_list)
+    ? value.selected_panel_gene_list.length
+    : 0;
+  const busy = disabled || saving;
+  const switchLabelId = 'panelapp-amber-label';
+  const showSkeleton = loading && suggestions.length === 0;
+  const noSuggestions = !loading && suggestions.length === 0 && !error;
 
   return (
-    <div
-      className="px-2.5 py-2 rounded-lg border text-xs space-y-2"
-      style={{ borderColor: 'var(--border-default)', background: 'var(--bg-muted)' }}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="font-medium" style={{ color: 'var(--text-primary)' }}>
-            Gene panel suggestions
-          </div>
-          <p className="text-2xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-            {isAutomatic
-              ? 'Optional — top panel is pre-selected for ranking. Change or clear if needed.'
-              : 'Optional — select panels to boost ranking. Search if the panel you need is not listed.'}
-          </p>
-        </div>
-        <label
-          className="inline-flex items-center gap-1.5 text-2xs shrink-0"
-          style={{ color: 'var(--text-secondary)' }}
-        >
-          <input
-            type="checkbox"
-            checked={includeAmber}
-            disabled={disabled || saving}
-            onChange={(e) => {
-              const next = e.target.checked;
-              setIncludeAmber(next);
-              if (selectedIds.size > 0) {
-                userTouchedRef.current = true;
-                applySelection([...selectedIds], next);
-              }
-            }}
-          />
-          Include lower-confidence genes
-        </label>
+    <div className="space-y-3" aria-busy={loading || searchLoading || undefined}>
+      <div>
+        <h3 className="text-[13px] font-semibold text-foreground">Gene panels</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {isAutomatic
+            ? 'Optional. The best match is selected for ranking. Change or clear it if needed.'
+            : 'Optional. Selected panels boost the ranking of their genes.'}
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 rounded-md border border-border px-2.5 py-2 max-md:min-h-11">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span id={switchLabelId} className="text-xs font-medium text-foreground">
+            Include lower-confidence genes
+          </span>
+          <HelpPopover label="About lower-confidence genes">
+            <p className="font-medium text-foreground">Lower-confidence genes</p>
+            <p className="mt-1 text-muted-foreground">
+              PanelApp rates each gene green (high confidence) or amber (some evidence). Turn this on
+              to add amber genes to the panels you pick. Turn it off to keep green genes only.
+            </p>
+          </HelpPopover>
+        </span>
+        <Switch
+          checked={includeAmber}
+          disabled={busy}
+          labelledBy={switchLabelId}
+          onChange={(next) => {
+            setIncludeAmber(next);
+            if (selectedIds.size > 0) {
+              userTouchedRef.current = true;
+              applySelection([...selectedIds], next);
+            }
+          }}
+        />
       </div>
 
       {!isAutomatic && (
-        <input
-          type="search"
-          value={searchQuery}
-          disabled={disabled}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search panels by name…"
-          className="w-full px-2.5 h-8 border rounded-md text-2xs"
-          style={{
-            borderColor: 'var(--border-default)',
-            background: 'var(--bg-input)',
-            color: 'var(--text-primary)',
-          }}
-        />
-      )}
-
-      {(loading || searchLoading) && (
-        <p className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
-          <Loader2 className="w-3 h-3 animate-spin" />
-          {searchLoading ? 'Searching panels…' : 'Loading panel suggestions…'}
-        </p>
-      )}
-
-      {!loading && !searching && suggestions.length === 0 && !error && (
-        <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-          No gene panels matched these findings.
-          {!isAutomatic ? ' Use search to pick a panel, or continue without a boost.' : ' Ranking will run without a panel boost.'}
-        </p>
-      )}
-
-      {!searchLoading && searching && searchHits.length === 0 && !error && (
-        <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-          No panels matched “{String(searchQuery).trim()}”.
-        </p>
-      )}
-
-      {error && (
-        <p className="text-2xs" style={{ color: 'var(--error)' }}>
-          {error}
-        </p>
-      )}
-
-      {displayRows.length > 0 && (
-        <div className="space-y-1 max-h-48 overflow-y-auto">
-          {displayRows.map((s) => {
-            const id = String(s.panel_id || '').trim();
-            if (!id) return null;
-            const checked = selectedIds.has(id);
-            const geneN = Array.isArray(s.matched_genes) ? s.matched_genes.length : 0;
-            const fromSuggest = suggestionIds.has(id) || s._fromSuggest;
-            return (
-              <label
-                key={id}
-                className="flex items-start gap-2 px-2 py-1.5 rounded-md border text-2xs cursor-pointer"
-                style={{
-                  borderColor: checked ? 'var(--accent-teal)' : 'var(--border-default)',
-                  background: checked
-                    ? 'color-mix(in srgb, var(--accent-teal) 12%, transparent)'
-                    : 'var(--bg-surface-raised)',
-                  color: 'var(--text-primary)',
-                  opacity: disabled || saving ? 0.7 : 1,
-                }}
-              >
-                <input
-                  type="checkbox"
-                  className="mt-0.5"
-                  checked={checked}
-                  disabled={disabled || saving}
-                  onChange={() => togglePanel(id)}
-                />
-                <span className="min-w-0">
-                  <span className="font-medium">{s.panel_name || id}</span>
-                  {geneN > 0 ? (
-                    <span style={{ color: 'var(--text-tertiary)' }}>
-                      {' '}
-                      · {geneN} {fromSuggest && !searching ? 'matching ' : ''}
-                      gene{geneN === 1 ? '' : 's'}
-                    </span>
-                  ) : null}
-                </span>
-              </label>
-            );
-          })}
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <input
+            type="search"
+            value={searchQuery}
+            disabled={disabled}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search all panels by name"
+            aria-label="Search gene panels"
+            className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-8 text-base text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60 md:text-[13px] max-md:h-11 [&::-webkit-search-cancel-button]:hidden"
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              aria-label="Clear search"
+              className="absolute right-1 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:text-foreground max-md:size-9"
+            >
+              <X className="size-3.5" aria-hidden />
+            </button>
+          ) : null}
         </div>
       )}
 
-      {selectedIds.size > 0 && (
-        <p className="text-2xs" style={{ color: 'var(--text-secondary)' }}>
-          {selectedIds.size} panel{selectedIds.size === 1 ? '' : 's'} selected
-          {Array.isArray(value?.selected_panel_gene_list) && value.selected_panel_gene_list.length
-            ? ` · ${value.selected_panel_gene_list.length} genes for ranking boost`
-            : ''}
-          {saving ? ' · saving…' : ''}
-        </p>
-      )}
+      {error ? (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs"
+          style={{
+            background: 'var(--error-soft)',
+            borderColor: 'color-mix(in srgb, var(--error) 30%, transparent)',
+            color: 'var(--text-primary)',
+          }}
+        >
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0" style={{ color: 'var(--error)' }} aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="font-medium">{error}.</span>{' '}
+            <span className="text-muted-foreground">
+              {isAutomatic
+                ? 'Ranking will run without a panel boost unless you retry.'
+                : 'You can retry, or continue without a boost.'}
+            </span>
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            className="shrink-0 max-md:h-9"
+            onClick={() => {
+              setError('');
+              setRetryNonce((n) => n + 1);
+            }}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="rounded-md border border-border">
+        {showSkeleton ? (
+          <div className="space-y-2 p-2" role="status" aria-label="Loading panel suggestions">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-start gap-2.5 px-2 py-1.5">
+                <Skeleton className="mt-0.5 size-4" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-3.5 w-3/5" />
+                  <Skeleton className="h-3 w-2/5" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {!searching && !showSkeleton && suggestions.length > 0 ? (
+          <div className="px-1 pb-1">
+            <GroupHeader
+              aside={
+                loading ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
+                    Updating
+                  </span>
+                ) : (
+                  `${suggestions.length} suggested`
+                )
+              }
+            >
+              Suggested for these findings
+            </GroupHeader>
+            {suggestions.map((s, i) => {
+              const id = String(s.panel_id || '').trim();
+              if (!id) return null;
+              return (
+                <PanelRow
+                  key={id}
+                  row={s}
+                  checked={selectedIds.has(id)}
+                  disabled={busy}
+                  onToggle={togglePanel}
+                  topScore={topScore}
+                  rank={i}
+                  showCue
+                />
+              );
+            })}
+            {suggestions.length > 0 && topScore > 0 ? (
+              <p className="px-2 pb-1 pt-1.5 text-2xs text-muted-foreground">
+                Bars compare each panel with the best match. A short bar means a weak match.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {noSuggestions && !searching ? (
+          <div className="px-3 py-4 text-center">
+            <p className="text-xs font-medium text-foreground">No panels matched these findings</p>
+            <p className="mt-0.5 text-2xs text-muted-foreground">
+              {isAutomatic
+                ? 'Ranking will run without a panel boost.'
+                : 'Search above to pick a panel, or continue without a boost.'}
+            </p>
+          </div>
+        ) : null}
+
+        {!searching && selectedExtras.length > 0 ? (
+          <div className="border-t border-border px-1 pb-1">
+            <GroupHeader>Also selected</GroupHeader>
+            {selectedExtras.map((s) => (
+              <PanelRow
+                key={s.panel_id}
+                row={s}
+                checked
+                disabled={busy}
+                onToggle={togglePanel}
+                topScore={0}
+                rank={-1}
+                showCue={false}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        {searching ? (
+          <div className="max-h-80 overflow-y-auto px-1 pb-1">
+            <GroupHeader
+              aside={
+                searchLoading ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
+                    Searching
+                  </span>
+                ) : (
+                  `${searchRows.length} result${searchRows.length === 1 ? '' : 's'}`
+                )
+              }
+            >
+              All panels matching &ldquo;{q}&rdquo;
+            </GroupHeader>
+            {!searchLoading && searchRows.length === 0 && !error ? (
+              <p className="px-2 py-3 text-xs text-muted-foreground">
+                No panels matched &ldquo;{q}&rdquo;. Try a shorter name.
+              </p>
+            ) : null}
+            {searchRows.map((s) => {
+              const id = String(s.panel_id || '').trim();
+              if (!id) return null;
+              return (
+                <PanelRow
+                  key={id}
+                  row={s}
+                  checked={selectedIds.has(id)}
+                  disabled={busy}
+                  onToggle={togglePanel}
+                  topScore={0}
+                  rank={-1}
+                  showCue={false}
+                />
+              );
+            })}
+          </div>
+        ) : !isAutomatic && !showSkeleton ? (
+          <p className="border-t border-border px-3 py-2 text-2xs text-muted-foreground">
+            Not listed? Search to browse all panels.
+          </p>
+        ) : null}
+      </div>
+
+      {selectedIds.size > 0 ? (
+        <div
+          className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 shadow-sm"
+          role="status"
+        >
+          <span className="text-xs tabular-nums text-foreground">
+            <span className="font-medium">
+              {selectedIds.size} panel{selectedIds.size === 1 ? '' : 's'}
+            </span>
+            {geneCount > 0 ? ` · ${fmt(geneCount)} genes` : ''}
+            {saving ? (
+              <span className="ml-1.5 inline-flex items-center gap-1 text-muted-foreground">
+                <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
+                Saving
+              </span>
+            ) : null}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            onClick={clearSelection}
+            disabled={busy}
+            className="max-md:h-9"
+          >
+            Clear
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

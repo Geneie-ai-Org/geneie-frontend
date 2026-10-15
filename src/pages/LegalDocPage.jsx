@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { Loader2, Printer } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useSeo } from '@/hooks/useSeo';
+import BrandLogo from '@/components/public/BrandLogo';
+import { Button } from '@/components/ui/button';
 
 const DOCS = {
   terms: {
@@ -50,9 +52,30 @@ function splitFrontMatter(markdown) {
   return { meta, body };
 }
 
+function nodeText(children) {
+  return React.Children.toArray(children)
+    .map((c) => (typeof c === 'string' ? c : c?.props?.children ? nodeText(c.props.children) : ''))
+    .join('');
+}
+
+const slugify = (text) =>
+  text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+/** Level-2 headings of the document body, for the in-page nav. */
+function extractSections(body) {
+  return body
+    .split('\n')
+    .map((l) => l.match(/^##\s+(.+?)\s*$/))
+    .filter(Boolean)
+    .map((m) => ({ id: slugify(m[1].replace(/[`*_]/g, '')), title: m[1].replace(/[`*_]/g, '') }));
+}
+
 const MARKDOWN_COMPONENTS = {
   h2: ({ children }) => (
-    <h2 className="mt-12 mb-3 text-lg font-semibold tracking-tight text-[var(--text-primary)] scroll-mt-24">
+    <h2 id={slugify(nodeText(children))} className="mt-10 mb-3 text-lg font-semibold tracking-tight text-[var(--text-primary)] scroll-mt-24 first:mt-0">
       {children}
     </h2>
   ),
@@ -62,15 +85,15 @@ const MARKDOWN_COMPONENTS = {
     </h3>
   ),
   p: ({ children }) => (
-    <p className="my-4 text-[0.9375rem] leading-7 text-[var(--text-secondary)]">{children}</p>
+    <p className="my-4 text-[0.9375rem] leading-[1.75] text-[var(--text-secondary)]">{children}</p>
   ),
   ul: ({ children }) => (
-    <ul className="my-4 space-y-2 pl-5 text-[0.9375rem] leading-7 text-[var(--text-secondary)] marker:text-[var(--text-tertiary)] list-disc">
+    <ul className="my-4 space-y-2 pl-5 text-[0.9375rem] leading-[1.75] text-[var(--text-secondary)] marker:text-[var(--text-tertiary)] list-disc">
       {children}
     </ul>
   ),
   ol: ({ children }) => (
-    <ol className="my-4 space-y-2 pl-5 text-[0.9375rem] leading-7 text-[var(--text-secondary)] marker:text-[var(--text-tertiary)] list-decimal">
+    <ol className="my-4 space-y-2 pl-5 text-[0.9375rem] leading-[1.75] text-[var(--text-secondary)] marker:text-[var(--text-tertiary)] list-decimal">
       {children}
     </ol>
   ),
@@ -93,9 +116,9 @@ const MARKDOWN_COMPONENTS = {
       {children}
     </code>
   ),
-  hr: () => <hr className="my-10 border-0 border-t border-[var(--border-subtle)]" />,
+  hr: () => <hr className="my-8 border-0 border-t border-[var(--border-subtle)] print:hidden" />,
   blockquote: ({ children }) => (
-    <blockquote className="my-4 rounded-lg px-4 py-3 text-[0.9375rem] leading-7 bg-[var(--bg-surface-raised)] text-[var(--text-secondary)]">
+    <blockquote className="my-4 rounded-lg px-4 py-3 text-[0.9375rem] leading-[1.75] bg-[var(--bg-surface-raised)] text-[var(--text-secondary)]">
       {children}
     </blockquote>
   ),
@@ -119,8 +142,11 @@ const MARKDOWN_COMPONENTS = {
 /** Renders public/legal/{terms|privacy}.md as a styled document. */
 export default function LegalDocPage({ doc }) {
   const active = DOCS[doc] || DOCS.terms;
+  const activeKey = DOCS[doc] ? doc : 'terms';
   const [raw, setRaw] = useState('');
   const [error, setError] = useState('');
+  const [attempt, setAttempt] = useState(0);
+  const [activeSection, setActiveSection] = useState('');
 
   // Without this the page keeps index.html's canonical (the landing page), which tells
   // search engines these documents are duplicates of `/` and keeps them out of the index.
@@ -144,81 +170,149 @@ export default function LegalDocPage({ doc }) {
     return () => {
       cancelled = true;
     };
-  }, [active.file]);
+  }, [active.file, attempt]);
 
   const { meta, body } = useMemo(() => splitFrontMatter(raw), [raw]);
+  const sections = useMemo(() => extractSections(body), [body]);
+
+  // Highlight the section being read in the in-page nav.
+  useEffect(() => {
+    if (!sections.length || typeof IntersectionObserver === 'undefined') return undefined;
+    const els = sections.map((s) => document.getElementById(s.id)).filter(Boolean);
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setActiveSection(visible[0].target.id);
+      },
+      { rootMargin: '-72px 0px -65% 0px', threshold: 0 },
+    );
+    els.forEach((el) => obs.observe(el));
+    return () => obs.disconnect();
+  }, [sections]);
+
+  const jump = (e, id) => {
+    e.preventDefault();
+    document.getElementById(id)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    setActiveSection(id);
+    try { window.history.replaceState(null, '', `#${id}`); } catch { /* ignore */ }
+  };
+
+  const navLink = (id, title) => (
+    <a
+      key={id}
+      href={`#${id}`}
+      onClick={(e) => jump(e, id)}
+      aria-current={activeSection === id ? 'location' : undefined}
+      className={`block rounded-md border-l-2 py-1.5 pl-3 pr-2 text-[0.8125rem] leading-5 transition-colors ${
+        activeSection === id
+          ? 'border-primary font-medium text-foreground'
+          : 'border-transparent text-muted-foreground hover:text-foreground'
+      }`}
+    >
+      {title}
+    </a>
+  );
 
   return (
-    <div className="min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
-      <header
-        className="sticky top-0 z-10 border-b border-[var(--border-subtle)] backdrop-blur-md"
-        style={{ backgroundColor: 'color-mix(in srgb, var(--bg-app) 85%, transparent)' }}
-      >
-        <div className="mx-auto flex max-w-[46rem] items-center justify-between gap-4 px-6 py-3">
-          <Link
-            to="/app"
-            className="inline-flex items-center gap-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to app
+    <div className="min-h-dvh bg-background text-foreground">
+      <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur print:hidden">
+        <div className="mx-auto flex h-14 max-w-[68rem] items-center justify-between gap-4 px-5 sm:px-8">
+          <Link to="/" aria-label="Geneie home" className="inline-flex rounded-md">
+            <BrandLogo className="h-7 w-auto" />
           </Link>
-          <nav className="flex items-center gap-1 rounded-full border border-[var(--border-subtle)] p-0.5">
-            {Object.entries(DOCS).map(([key, d]) => {
-              const isActive = key === (DOCS[doc] ? doc : 'terms');
-              return (
-                <Link
-                  key={key}
-                  to={d.path}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    isActive
-                      ? 'bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]'
-                      : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  {d.title.split(' ')[0]}
-                </Link>
-              );
-            })}
+          <nav aria-label="Legal documents" className="flex items-center gap-1">
+            {Object.entries(DOCS).map(([key, d]) => (
+              <Link
+                key={key}
+                to={d.path}
+                aria-current={key === activeKey ? 'page' : undefined}
+                className={`inline-flex h-9 items-center rounded-md px-3 text-sm transition-colors ${
+                  key === activeKey
+                    ? 'bg-muted font-medium text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {d.title.split(' ')[0]}
+              </Link>
+            ))}
+            <Link
+              to="/app"
+              className="ml-2 hidden h-9 items-center rounded-md px-3 text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
+            >
+              Open app
+            </Link>
           </nav>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[46rem] px-6 pb-24 pt-12">
-        <h1 className="text-[2rem] font-semibold leading-tight tracking-tight">{active.title}</h1>
+      <div className="mx-auto grid max-w-[68rem] gap-x-12 px-5 pb-24 pt-10 sm:px-8 lg:grid-cols-[13rem_minmax(0,1fr)] print:block print:px-0 print:pt-0">
+        {/* In-page nav: sticky column on desktop, collapsible on mobile */}
+        <aside className="print:hidden lg:order-first">
+          {sections.length > 0 && (
+            <>
+              <details className="mb-6 rounded-lg border border-border lg:hidden">
+                <summary className="flex min-h-11 cursor-pointer items-center px-3 text-sm font-medium">
+                  On this page
+                </summary>
+                <div className="border-t border-border p-2">{sections.map((s) => navLink(s.id, s.title))}</div>
+              </details>
+              <nav aria-label="On this page" className="sticky top-24 hidden max-h-[calc(100dvh-8rem)] overflow-y-auto lg:block">
+                <p className="mb-2 pl-3 text-xs font-medium uppercase tracking-wide text-[var(--text-tertiary)]">On this page</p>
+                {sections.map((s) => navLink(s.id, s.title))}
+              </nav>
+            </>
+          )}
+        </aside>
 
-        {(meta.version || meta.effective || meta.product) && (
-          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[var(--text-tertiary)]">
-            {meta.version && (
-              <span className="rounded-full bg-[var(--bg-surface-raised)] px-2.5 py-1 font-mono text-[0.6875rem] text-[var(--text-secondary)]">
-                v{meta.version}
-              </span>
-            )}
-            {meta.effective && <span>Effective {meta.effective}</span>}
-            {meta.product && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span>{meta.product}</span>
-              </>
-            )}
-          </div>
-        )}
+        <main className="min-w-0 max-w-[44rem]">
+          <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight sm:text-[2rem]">{active.title}</h1>
 
-        <hr className="mt-8 border-0 border-t border-[var(--border-subtle)]" />
+          {(meta.version || meta.effective) && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
+              {meta.effective && <span>Effective {meta.effective}</span>}
+              {meta.version && (
+                <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-xs">Version {meta.version}</span>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => window.print()}
+                className="ml-auto h-9 gap-1.5 px-2 text-muted-foreground print:hidden"
+              >
+                <Printer className="h-3.5 w-3.5" aria-hidden="true" /> Print
+              </Button>
+            </div>
+          )}
 
-        {error ? (
-          <p className="mt-8 text-sm text-[var(--error)]">{error}</p>
-        ) : !raw ? (
-          <div className="mt-10 flex items-center gap-2 text-sm text-[var(--text-tertiary)]">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-          </div>
-        ) : (
-          <article className="mt-2">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
-              {body}
-            </ReactMarkdown>
-          </article>
-        )}
-      </main>
+          <hr className="mt-6 border-0 border-t border-border" />
+
+          {error ? (
+            <div role="alert" className="mt-8 rounded-lg border border-border p-4 text-sm">
+              <p className="font-medium">We could not load this document.</p>
+              <p className="mt-1 text-muted-foreground">{error}. Check your connection and try again.</p>
+              <Button type="button" variant="outline" className="mt-3 h-10" onClick={() => setAttempt((n) => n + 1)}>
+                Try again
+              </Button>
+            </div>
+          ) : !raw ? (
+            <div role="status" className="mt-10 flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Loading document…
+            </div>
+          ) : (
+            <article className="mt-6">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+                {body}
+              </ReactMarkdown>
+            </article>
+          )}
+
+          <p className="mt-12 border-t border-border pt-6 text-sm text-muted-foreground">
+            Questions about this document? Email{' '}
+            <a className="text-primary underline underline-offset-2" href="mailto:support@geneie.chat">support@geneie.chat</a>.
+          </p>
+        </main>
+      </div>
     </div>
   );
 }

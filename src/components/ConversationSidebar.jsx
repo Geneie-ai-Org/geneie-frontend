@@ -1,6 +1,24 @@
-import { useState } from 'react';
+import { cloneElement, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, Plus, Trash2, ChevronLeft, ChevronRight, Settings, LogOut, Sun, Moon } from 'lucide-react';
+import {
+    Plus,
+    Search,
+    X,
+    MoreHorizontal,
+    Pencil,
+    Trash2,
+    PanelLeftClose,
+    PanelLeftOpen,
+    Settings,
+    LogOut,
+    Sun,
+    Moon,
+    ChevronsUpDown,
+    MessageSquare,
+    FileSpreadsheet,
+    Dna,
+} from 'lucide-react';
+import { toast } from 'sonner';
 import { getAuth } from 'firebase/auth';
 import { performLogout } from '@/lib/logout';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -10,6 +28,7 @@ import { meterFor } from '@/services/tierLimits';
 import NotificationBell from './NotificationBell';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
+import { cn } from '@/lib/utils';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -28,7 +47,143 @@ import {
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuItem,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
+
+/* ---------------------------------------------------------------------------
+ * Row data helpers
+ * ------------------------------------------------------------------------- */
+
+const UNTITLED = 'Untitled chat';
+
+/** A conversation is "named" once it has a real title; the server default does not count. */
+function isRealTitle(title) {
+    const t = (title || '').trim();
+    return t !== '' && t.toLowerCase() !== 'new conversation';
+}
+
+/** Title shown in the rail: real title, else the sample file name, else "Untitled chat". */
+export function conversationLabel(conv) {
+    if (isRealTitle(conv.title)) return conv.title.trim();
+    const file = conv.documentName || conv.document?.file_name;
+    if (file) return file;
+    return UNTITLED;
+}
+
+/** chat | variants | raw. Raw sequencing is FASTQ (or a BAM/CRAM); anything else with a file is a variants file. */
+function conversationKind(conv) {
+    const name = (conv.documentName || conv.document?.file_name || '').toLowerCase();
+    const type = (conv.documentType || conv.document?.file_type || '').toLowerCase();
+    if (!name && !type && !conv.documentUrl) return 'chat';
+    if (/(\.fastq|\.fq)(\.gz)?$/.test(name) || type.includes('fastq') || type === 'fq') return 'raw';
+    if (/\.(bam|cram)$/.test(name) || type === 'bam' || type === 'cram') return 'raw';
+    return 'variants';
+}
+
+const KIND_META = {
+    chat: { label: 'Chat', Icon: MessageSquare },
+    variants: { label: 'Variants file', Icon: FileSpreadsheet },
+    raw: { label: 'Raw sequencing', Icon: Dna },
+};
+
+/**
+ * Job status, only when the conversations list exposes it. The list endpoint does not carry
+ * pipeline state today, so this stays null until the lead maps `status` onto the record.
+ */
+function conversationStatus(conv) {
+    const raw = conv.status ?? conv.pipelineStatus ?? conv.jobStatus ?? (conv.isRunning ? 'running' : null);
+    if (!raw) return null;
+    const s = String(raw).toLowerCase();
+    if (['running', 'processing', 'in_progress', 'queued', 'pending'].includes(s)) return 'running';
+    if (['failed', 'error'].includes(s)) return 'failed';
+    return null;
+}
+
+function toDate(conv) {
+    const v = conv.updatedAt ?? conv.createdAt;
+    const d = v?.toDate ? v.toDate() : new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Newest first, grouped by calendar-day distance: Today / Previous 7 days / Previous 30 days / Older. */
+function groupConversations(convs) {
+    const stamp = (c) => toDate(c)?.getTime() ?? 0;
+    const sorted = [...convs].sort((a, b) => stamp(b) - stamp(a));
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const buckets = { today: [], week: [], month: [], older: [] };
+
+    sorted.forEach((conv) => {
+        const d = toDate(conv);
+        if (!d) { buckets.older.push(conv); return; }
+        const dayStart = new Date(d);
+        dayStart.setHours(0, 0, 0, 0);
+        const days = Math.round((startOfToday - dayStart) / 86400000);
+        if (days <= 0) buckets.today.push(conv);
+        else if (days < 7) buckets.week.push(conv);
+        else if (days < 30) buckets.month.push(conv);
+        else buckets.older.push(conv);
+    });
+
+    return [
+        { label: 'Today', items: buckets.today },
+        { label: 'Previous 7 days', items: buckets.week },
+        { label: 'Previous 30 days', items: buckets.month },
+        { label: 'Older', items: buckets.older },
+    ].filter((g) => g.items.length > 0);
+}
+
+/* ---------------------------------------------------------------------------
+ * Small pieces
+ * ------------------------------------------------------------------------- */
+
+const ICON_BTN =
+    'inline-flex shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 aria-expanded:bg-accent aria-expanded:text-foreground';
+
+/** Tooltip around a trigger element. Used on every icon-only control in the collapsed rail. */
+function Tip({ label, side = 'right', render, children, enabled = true }) {
+    if (!enabled) {
+        return cloneElement(render, undefined, children);
+    }
+    return (
+        <Tooltip>
+            <TooltipTrigger render={render}>{children}</TooltipTrigger>
+            <TooltipContent side={side}>{label}</TooltipContent>
+        </Tooltip>
+    );
+}
+
+function Avatar({ name, size = 24 }) {
+    return (
+        <span
+            aria-hidden="true"
+            className="flex shrink-0 items-center justify-center rounded-full bg-primary/10 text-2xs font-semibold text-primary"
+            style={{ width: size, height: size }}
+        >
+            {name.charAt(0).toUpperCase()}
+        </span>
+    );
+}
+
+function StatusDot({ status }) {
+    if (!status) return null;
+    return (
+        <span className="inline-flex shrink-0 items-center" role="img" aria-label={status === 'running' ? 'Running' : 'Failed'}>
+            <span
+                className={cn(
+                    'size-1.5 rounded-full',
+                    status === 'running' ? 'bg-[var(--info)] motion-safe:animate-pulse' : 'bg-[var(--error)]'
+                )}
+            />
+        </span>
+    );
+}
+
+/* ---------------------------------------------------------------------------
+ * Rail
+ * ------------------------------------------------------------------------- */
 
 const ConversationSidebar = ({
     conversations,
@@ -36,6 +191,8 @@ const ConversationSidebar = ({
     onSelectConversation,
     onCreateConversation,
     onDeleteConversation,
+    /** Optional. (id, title) => void | Promise. The Rename action only appears when this is passed. */
+    onRenameConversation,
     isOpen,
     onToggle,
     userTier,
@@ -44,16 +201,29 @@ const ConversationSidebar = ({
 }) => {
     const isMobile = useIsMobile();
     const navigate = useNavigate();
-    const { isDark, toggleTheme } = useTheme();
-    const themeLabel = isDark ? 'Light mode' : 'Dark mode';
+    const { theme, isDark, setTheme } = useTheme();
     const chatMeter = meterFor(useLimits(), 'chat');
-    const [pendingDeleteId, setPendingDeleteId] = useState(null);
+    const [pendingDelete, setPendingDelete] = useState(null); // { id, label }
+    const [query, setQuery] = useState('');
+    const [renamingId, setRenamingId] = useState(null);
+    const [renameValue, setRenameValue] = useState('');
+    const searchRef = useRef(null);
+    const focusSearchAfterOpen = useRef(false);
+    const renameCancelled = useRef(false);
+
+    // On a phone the rail is a drawer: whenever it is on screen it shows the full layout.
+    const expanded = isMobile || isOpen;
+
+    useEffect(() => {
+        if (expanded && focusSearchAfterOpen.current) {
+            focusSearchAfterOpen.current = false;
+            searchRef.current?.focus();
+        }
+    }, [expanded]);
 
     const confirmDelete = () => {
-        if (pendingDeleteId != null) {
-            onDeleteConversation(pendingDeleteId);
-        }
-        setPendingDeleteId(null);
+        if (pendingDelete) onDeleteConversation(pendingDelete.id);
+        setPendingDelete(null);
     };
 
     // Get display name from Firebase
@@ -67,255 +237,414 @@ const ConversationSidebar = ({
         await performLogout(navigate);
     };
 
-    // Group conversations by time period (newest first within each group)
-    const sortByRecent = (a, b) => {
-        const dateA = a.updatedAt?.toDate ? a.updatedAt.toDate() : new Date(a.updatedAt || a.createdAt);
-        const dateB = b.updatedAt?.toDate ? b.updatedAt.toDate() : new Date(b.updatedAt || b.createdAt);
-        return dateB - dateA;
+    const rows = useMemo(
+        () => (conversations || []).map((conv) => ({
+            conv,
+            label: conversationLabel(conv),
+            file: conv.documentName || conv.document?.file_name || '',
+            kind: conversationKind(conv),
+            status: conversationStatus(conv),
+        })),
+        [conversations]
+    );
+
+    const q = query.trim().toLowerCase();
+    const visibleRows = useMemo(() => {
+        if (!q) return rows;
+        return rows.filter((r) =>
+            r.label.toLowerCase().includes(q)
+            || (r.conv.title || '').toLowerCase().includes(q)
+            || r.file.toLowerCase().includes(q)
+        );
+    }, [rows, q]);
+
+    const rowByConv = useMemo(() => new Map(visibleRows.map((r) => [r.conv, r])), [visibleRows]);
+    const grouped = useMemo(
+        () => groupConversations(visibleRows.map((r) => r.conv)),
+        [visibleRows]
+    );
+
+    const startRename = (row) => {
+        renameCancelled.current = false;
+        setRenamingId(row.conv.id);
+        setRenameValue(isRealTitle(row.conv.title) ? row.conv.title : row.label === UNTITLED ? '' : row.label);
+    };
+    const commitRename = async (row) => {
+        const next = renameValue.trim();
+        setRenamingId(null);
+        if (renameCancelled.current) { renameCancelled.current = false; return; }
+        if (!next || next === row.label || !onRenameConversation) return;
+        try {
+            await onRenameConversation(row.conv.id, next);
+        } catch (err) {
+            console.error('[ConversationSidebar] rename failed:', err);
+            toast.error('Could not rename this chat. Try again.');
+        }
     };
 
-    const groupConversations = (convs) => {
-        const sorted = [...convs].sort(sortByRecent);
-        const now = new Date();
-        const groups = { today: [], yesterday: [], week: [], month: [], older: [] };
-
-        sorted.forEach((conv) => {
-            const date = conv.updatedAt?.toDate ? conv.updatedAt.toDate() : new Date(conv.updatedAt || conv.createdAt);
-            const diff = now - date;
-            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-            if (days === 0) groups.today.push(conv);
-            else if (days === 1) groups.yesterday.push(conv);
-            else if (days < 7) groups.week.push(conv);
-            else if (days < 30) groups.month.push(conv);
-            else groups.older.push(conv);
-        });
-
-        const result = [];
-        if (groups.today.length) result.push({ label: 'Today', items: groups.today });
-        if (groups.yesterday.length) result.push({ label: 'Yesterday', items: groups.yesterday });
-        if (groups.week.length) result.push({ label: 'Previous 7 days', items: groups.week });
-        if (groups.month.length) result.push({ label: 'Previous 30 days', items: groups.month });
-        if (groups.older.length) result.push({ label: 'Older', items: groups.older });
-        return result;
+    // Arrow keys walk the list; Tab still works as usual.
+    const onListKeyDown = (e) => {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        const items = [...e.currentTarget.querySelectorAll('[data-row-button]')];
+        const i = items.indexOf(document.activeElement);
+        if (i === -1) return;
+        e.preventDefault();
+        const next = items[i + (e.key === 'ArrowDown' ? 1 : -1)];
+        next?.focus();
     };
 
-    const grouped = groupConversations(conversations);
+    // Usage meter
+    const showMeter = chatMeter.tracked && !chatMeter.unlimited && chatMeter.limit != null;
+    const used = chatMeter.used || 0;
+    const usedPct = showMeter ? Math.min((used / chatMeter.limit) * 100, 100) : 0;
+    const meterTone = !showMeter ? '' : used >= chatMeter.limit ? 'error' : usedPct >= 80 ? 'warning' : 'ok';
+    const meterBar = cn(
+        '[&_[data-slot=progress-track]]:h-1 [&_[data-slot=progress-track]]:bg-border [&_[data-slot=progress-indicator]]:duration-500',
+        meterTone === 'error' && '[&_[data-slot=progress-indicator]]:bg-[var(--error)]',
+        meterTone === 'warning' && '[&_[data-slot=progress-indicator]]:bg-[var(--warning)]',
+        meterTone === 'ok' && '[&_[data-slot=progress-indicator]]:bg-primary'
+    );
+
+    const expandAndSearch = () => {
+        focusSearchAfterOpen.current = true;
+        onToggle?.();
+    };
+
+    /* ---- account menu (shared by expanded + collapsed) ---- */
+    const accountMenu = (side, align) => (
+        <DropdownMenuContent side={side} align={align} sideOffset={8} className="w-60">
+            <DropdownMenuGroup>
+                <DropdownMenuLabel className="truncate text-foreground">{email || displayName}</DropdownMenuLabel>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+                <DropdownMenuLabel>Theme</DropdownMenuLabel>
+                <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setTheme(v)}>
+                    <DropdownMenuRadioItem value="light"><Sun /> Light</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="dark"><Moon /> Dark</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onOpenProfile}>
+                <Settings /> Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
+                <LogOut /> Sign out
+            </DropdownMenuItem>
+        </DropdownMenuContent>
+    );
 
     return (
-        <>
-            {/* Circular collapse/expand arrow — desktop only */}
-            {!isMobile && (
-                <button
-                    onClick={onToggle}
-                    className="absolute z-50 w-5 h-5 rounded-full flex items-center justify-center right-[-10px] top-[calc(2.3rem)] bg-[var(--bg-surface-raised)] text-[var(--text-secondary)] border border-[var(--border-subtle)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
-                    aria-label={isOpen ? "Collapse sidebar" : "Expand sidebar"}
-                >
-                    {isOpen ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                </button>
-            )}
+        <TooltipProvider>
+            <div
+                className="relative z-40 flex h-full w-full flex-col overflow-hidden text-foreground"
+                // The phone drawer slides off-screen when closed; keep it out of the tab order and AT tree.
+                inert={isMobile && !isOpen ? true : undefined}
+            >
 
-            {/* Sidebar */}
-            <div className="relative z-40 h-full w-full flex flex-col overflow-hidden">
-
-                {/* Top: Logo — desktop only (mobile uses main top bar) */}
-                {!isMobile && (
-                    <div className={`flex items-center h-12 overflow-hidden shrink-0 ${isOpen ? 'px-3' : 'justify-center'}`}>
-                        {isOpen ? (
-                            <img
-                                src={isDark ? '/logo/Final gene dark.svg' : '/logo/Final gene light.svg'}
-                                alt="Geneie"
-                                className="ml-3 h-8 w-auto shrink-0"
-                            />
-                        ) : (
-                            <img src="/geneie-g.svg" alt="Geneie" className="h-6 w-auto shrink-0" />
-                        )}
-                    </div>
-                )}
-
-                {/* New Chat */}
-                <div className={`py-2 overflow-hidden shrink-0 ${isOpen ? 'px-3' : 'flex justify-center'}`}>
-                    <button
-                        onClick={onCreateConversation}
-                        className={`group rounded-lg text-sm text-[var(--text-primary)] transition-colors flex items-center overflow-hidden hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${isOpen ? 'w-full py-2.5 px-3 gap-2.5' : 'w-8 h-8 justify-center shrink-0'}`}
-                        title="New Chat"
-                    >
-                        {/* A plus is 4-fold symmetric, so the quarter turn lands on the same
-                          * glyph — the travel is the whole effect. */}
-                        <Plus
-                            className="hover-quarter-turn w-4 h-4 shrink-0 text-[var(--text-secondary)]"
+                {/* Header: logo + collapse toggle */}
+                <div className={cn('flex h-12 shrink-0 items-center', expanded ? 'justify-between pl-4 pr-2' : 'justify-center')}>
+                    {expanded && (
+                        <img
+                            src={isDark ? '/logo/Final gene dark.svg' : '/logo/Final gene light.svg'}
+                            alt="Geneie"
+                            className="h-7 w-auto shrink-0"
                         />
-                        {isOpen && (
-                            <span className="whitespace-nowrap">
-                                New Chat
-                            </span>
-                        )}
-                    </button>
+                    )}
+                    <Tip
+                        label={isMobile ? 'Close' : expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+                        render={
+                            <button
+                                type="button"
+                                onClick={onToggle}
+                                aria-label={isMobile ? 'Close sidebar' : expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+                                aria-expanded={expanded}
+                                className={cn(ICON_BTN, 'size-8 max-md:size-11')}
+                            />
+                        }
+                    >
+                        {isMobile ? <X className="size-4" /> : expanded ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
+                    </Tip>
                 </div>
 
-                {/* Conversations List — expanded only */}
-                <ScrollArea className="flex-1 min-h-0">
-                    <div className="px-3 pb-3">
-                    {isOpen && conversations.length === 0 && (
-                        <div className="text-center py-12 text-[var(--text-tertiary)]">
-                            <MessageSquare className="w-6 h-6 mx-auto mb-2 opacity-30" />
-                            <p className="text-sm">No conversations.</p>
-                            <p className="text-xs mt-1 text-[var(--text-disabled)]">Start one from “New Chat”.</p>
-                        </div>
-                    )}
-                    {isOpen && conversations.length > 0 && grouped.map((group) => (
-                            <div key={group.label} className="mb-3">
-                                <p className="px-3 pt-3 pb-1.5 text-2xs font-medium uppercase tracking-wider whitespace-nowrap overflow-hidden text-[var(--text-tertiary)]">
-                                    {group.label}
-                                </p>
-                                {group.items.map((conv) => {
-                                    const active = activeConversationId === conv.id;
-                                    const label = conv.documentName || conv.title || 'New Conversation';
-                                    return (
-                                        <div key={conv.id} className="group relative mb-0.5 last:mb-0">
-                                            <button
-                                                type="button"
-                                                onClick={() => onSelectConversation(conv.id)}
-                                                aria-current={active ? 'page' : undefined}
-                                                className={`w-full text-left px-3 py-2 rounded-lg transition-colors overflow-hidden hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] ${active ? 'bg-[var(--bg-surface-hover)]' : 'bg-transparent'}`}
-                                            >
-                                                <h3 className={`text-sm truncate whitespace-nowrap pr-6 ${active ? 'text-[var(--text-primary)] font-medium' : 'text-[var(--text-secondary)]'}`}>
-                                                    {label}
-                                                </h3>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setPendingDeleteId(conv.id);
-                                                }}
-                                                className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--error)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
-                                                aria-label={`Delete "${label}"`}
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        ))}
-                    </div>
-                </ScrollArea>
-
-                {/* Bottom section */}
-                <div className="mt-auto">
-                    {/* Account bar: profile + bell as one segmented unit */}
-                    {isOpen ? (
-                        <div className="px-3 pb-2">
-                            <div className="flex items-stretch gap-1 p-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger
-                                        className="flex-1 min-w-0 h-8 px-1.5 rounded-md flex items-center gap-2.5 cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)]"
-                                    >
-                                        <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-[var(--accent-teal-soft)]">
-                                            <span className="text-2xs font-semibold text-[var(--accent-teal)]">
-                                                {displayName.charAt(0).toUpperCase()}
-                                            </span>
-                                        </div>
-                                        <span className="text-sm truncate whitespace-nowrap text-[var(--text-secondary)]">
-                                            {displayName}
-                                        </span>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent side="top" align="start" className="w-56">
-                                        <DropdownMenuGroup>
-                                            <DropdownMenuLabel>{email || displayName}</DropdownMenuLabel>
-                                        </DropdownMenuGroup>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={toggleTheme}>
-                                            {isDark ? <Sun /> : <Moon />} {themeLabel}
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={onOpenProfile}>
-                                            <Settings /> Settings
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
-                                            <LogOut /> Sign out
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-
-                                {/* Two children, each with its own hover surface — no rules needed. */}
-                                <NotificationBell
-                                    onNavigateToConversation={(convId) => onSelectConversation(convId)}
-                                    triggerClassName="h-8 w-8 shrink-0 rounded-md flex items-center justify-center text-[var(--text-secondary)] cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-teal)]"
+                {/* New chat */}
+                <div className={cn('shrink-0 pb-2', expanded ? 'px-3' : 'flex justify-center')}>
+                    {expanded ? (
+                        <button
+                            type="button"
+                            onClick={onCreateConversation}
+                            className="flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 focus-visible:ring-offset-2 focus-visible:ring-offset-background max-md:h-11"
+                        >
+                            <Plus className="size-4" />
+                            New chat
+                        </button>
+                    ) : (
+                        <Tip
+                            label="New chat"
+                            render={
+                                <button
+                                    type="button"
+                                    onClick={onCreateConversation}
+                                    aria-label="New chat"
+                                    className="inline-flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55"
                                 />
-                            </div>
+                            }
+                        >
+                            <Plus className="size-4" />
+                        </Tip>
+                    )}
+                </div>
+
+                {/* Search */}
+                <div className={cn('shrink-0 pb-1', expanded ? 'px-3' : 'flex justify-center')}>
+                    {expanded ? (
+                        <div className="relative">
+                            <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                            <input
+                                ref={searchRef}
+                                type="search"
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Escape') setQuery(''); }}
+                                placeholder="Search chats"
+                                aria-label="Search chats"
+                                autoComplete="off"
+                                spellCheck={false}
+                                className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-8 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground hover:border-[var(--border-strong)] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/55 max-md:h-11 max-md:text-base [&::-webkit-search-cancel-button]:hidden"
+                            />
+                            {query && (
+                                <button
+                                    type="button"
+                                    onClick={() => { setQuery(''); searchRef.current?.focus(); }}
+                                    aria-label="Clear search"
+                                    className={cn(ICON_BTN, 'absolute right-1 top-1/2 size-6 -translate-y-1/2 max-md:size-9')}
+                                >
+                                    <X className="size-3.5" />
+                                </button>
+                            )}
                         </div>
                     ) : (
-                        <div className="flex flex-col items-center gap-1 pb-2">
+                        <Tip
+                            label="Search chats"
+                            render={<button type="button" onClick={expandAndSearch} aria-label="Search chats" className={cn(ICON_BTN, 'size-8')} />}
+                        >
+                            <Search className="size-4" />
+                        </Tip>
+                    )}
+                </div>
+
+                {/* Sessions */}
+                <ScrollArea className="min-h-0 flex-1">
+                    {expanded && (
+                        <nav aria-label="Conversations" className="px-2 pb-3" onKeyDown={onListKeyDown}>
+                            {rows.length === 0 && (
+                                <div className="px-3 py-10 text-center">
+                                    <MessageSquare aria-hidden="true" className="mx-auto mb-2 size-5 text-[var(--text-disabled)]" />
+                                    <p className="text-[13px] font-medium text-foreground">No chats yet</p>
+                                    <p className="mt-1 text-xs text-muted-foreground">Your conversations and samples show up here.</p>
+                                    <button
+                                        type="button"
+                                        onClick={onCreateConversation}
+                                        className="mt-3 text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 rounded"
+                                    >
+                                        Start a chat
+                                    </button>
+                                </div>
+                            )}
+
+                            {rows.length > 0 && visibleRows.length === 0 && (
+                                <div className="px-3 py-10 text-center" role="status">
+                                    <p className="text-[13px] font-medium text-foreground">No matches</p>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        Nothing in your chats matches &ldquo;{query.trim()}&rdquo;.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => setQuery('')}
+                                        className="mt-3 text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 rounded"
+                                    >
+                                        Clear search
+                                    </button>
+                                </div>
+                            )}
+
+                            {grouped.map((group) => (
+                                <section key={group.label} className="mb-2" aria-label={group.label}>
+                                    <h2 className="px-2.5 pb-1 pt-3 text-2xs font-medium tracking-wide text-muted-foreground">
+                                        {group.label}
+                                    </h2>
+                                    <ul className="m-0 list-none p-0">
+                                        {group.items.map((conv) => {
+                                            const row = rowByConv.get(conv);
+                                            const active = String(activeConversationId) === String(conv.id);
+                                            const { Icon, label: kindLabel } = KIND_META[row.kind];
+                                            const renaming = renamingId === conv.id;
+                                            return (
+                                                <li key={conv.id} className="group relative">
+                                                    {renaming ? (
+                                                        <div className="flex h-9 items-center gap-2 rounded-md bg-accent px-2.5 max-md:h-11">
+                                                            <Icon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+                                                            <input
+                                                                autoFocus
+                                                                value={renameValue}
+                                                                onChange={(e) => setRenameValue(e.target.value)}
+                                                                onFocus={(e) => e.target.select()}
+                                                                onBlur={() => commitRename(row)}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+                                                                    if (e.key === 'Escape') { renameCancelled.current = true; e.currentTarget.blur(); }
+                                                                }}
+                                                                aria-label="Chat title"
+                                                                maxLength={120}
+                                                                className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none"
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                data-row-button
+                                                                onClick={() => onSelectConversation(conv.id)}
+                                                                aria-current={active ? 'page' : undefined}
+                                                                title={row.file && row.file !== row.label ? `${row.label} (${row.file})` : row.label}
+                                                                className={cn(
+                                                                    'relative flex h-9 w-full items-center gap-2 rounded-md px-2.5 pr-8 text-left text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 max-md:h-11',
+                                                                    active
+                                                                        ? 'bg-accent font-medium text-foreground'
+                                                                        : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+                                                                )}
+                                                            >
+                                                                {active && (
+                                                                    <span aria-hidden="true" className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-primary" />
+                                                                )}
+                                                                <Icon
+                                                                    aria-hidden="true"
+                                                                    className={cn('size-3.5 shrink-0', active ? 'text-primary' : 'text-[var(--text-tertiary)]')}
+                                                                />
+                                                                <span className="sr-only">{kindLabel}: </span>
+                                                                <span className="min-w-0 flex-1 truncate">{row.label}</span>
+                                                                <StatusDot status={row.status} />
+                                                            </button>
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger
+                                                                    aria-label={`More actions for ${row.label}`}
+                                                                    className={cn(
+                                                                        ICON_BTN,
+                                                                        'absolute right-1 top-1/2 size-7 -translate-y-1/2 max-md:size-9',
+                                                                        'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 data-[popup-open]:opacity-100 [@media(hover:none)]:opacity-100',
+                                                                        active && 'opacity-100'
+                                                                    )}
+                                                                >
+                                                                    <MoreHorizontal className="size-4" />
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent side="bottom" align="end" sideOffset={4} className="w-44">
+                                                                    {onRenameConversation && (
+                                                                        <DropdownMenuItem onClick={() => startRename(row)}>
+                                                                            <Pencil /> Rename
+                                                                        </DropdownMenuItem>
+                                                                    )}
+                                                                    <DropdownMenuItem
+                                                                        variant="destructive"
+                                                                        onClick={() => setPendingDelete({ id: conv.id, label: row.label })}
+                                                                    >
+                                                                        <Trash2 /> Delete
+                                                                    </DropdownMenuItem>
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        </>
+                                                    )}
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </section>
+                            ))}
+                        </nav>
+                    )}
+                </ScrollArea>
+
+                {/* Footer: usage, account, notifications */}
+                <div className="mt-auto shrink-0 border-t border-border">
+                    {showMeter && expanded && (
+                        <div className="px-4 pb-1 pt-3" role="group" aria-label="Chat usage">
+                            <div className="mb-1.5 flex items-center justify-between text-xs">
+                                <span className="text-muted-foreground">Exchanges</span>
+                                <span className={cn('tabular-nums', meterTone === 'error' ? 'font-medium text-destructive' : 'text-foreground')}>
+                                    {used}/{chatMeter.limit}
+                                </span>
+                            </div>
+                            <Progress
+                                value={usedPct}
+                                aria-label={`Exchanges used: ${used} of ${chatMeter.limit}`}
+                                className={cn('w-full', meterBar)}
+                            />
+                        </div>
+                    )}
+
+                    {expanded ? (
+                        <div className="flex items-center gap-1 p-2">
                             <DropdownMenu>
                                 <DropdownMenuTrigger
-                                    className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
-                                    title="Profile & Settings"
+                                    className="flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 aria-expanded:bg-accent max-md:h-11"
+                                    aria-label="Account menu"
                                 >
-                                    <div className="w-6 h-6 rounded-full flex items-center justify-center bg-[var(--accent-teal-soft)]">
-                                        <span className="text-2xs font-semibold text-[var(--accent-teal)]">
-                                            {displayName.charAt(0).toUpperCase()}
-                                        </span>
-                                    </div>
+                                    <Avatar name={displayName} />
+                                    <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{displayName}</span>
+                                    <ChevronsUpDown aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent side="right" align="end" className="w-56">
-                                    <DropdownMenuGroup>
-                                        <DropdownMenuLabel>{email || displayName}</DropdownMenuLabel>
-                                    </DropdownMenuGroup>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={toggleTheme}>
-                                        {isDark ? <Sun /> : <Moon />} {themeLabel}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={onOpenProfile}>
-                                        <Settings /> Settings
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
-                                        <LogOut /> Sign out
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
+                                {accountMenu('top', 'start')}
                             </DropdownMenu>
 
                             <NotificationBell
                                 onNavigateToConversation={(convId) => onSelectConversation(convId)}
-                                triggerClassName="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--text-secondary)] cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                                side={isMobile ? 'top' : 'right'}
+                                triggerClassName={cn(ICON_BTN, 'size-9 max-md:size-11')}
                             />
                         </div>
-                    )}
-                    {/* Usage indicator */}
-                    {chatMeter.tracked && !chatMeter.unlimited && chatMeter.limit != null && (
-                        <div className="px-5 py-2.5 mb-1 overflow-hidden" style={{ opacity: isOpen ? 1 : 0, transition: 'opacity 150ms', height: isOpen ? 'auto' : 0 }}>
-                            <div className="flex items-center justify-between mb-1.5">
-                                <span className="text-xs whitespace-nowrap" style={{ color: 'var(--text-tertiary)' }}>Exchanges</span>
-                                <span className="text-xs tabular-nums whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>
-                                    {chatMeter.used || 0}/{chatMeter.limit}
-                                </span>
-                            </div>
-                            <Progress
-                                value={Math.min(((chatMeter.used || 0) / chatMeter.limit) * 100, 100)}
-                                className={`w-full [&_[data-slot=progress-track]]:h-1 [&_[data-slot=progress-track]]:bg-[var(--bg-surface-hover)] [&_[data-slot=progress-indicator]]:duration-500 ${
-                                    (chatMeter.used || 0) >= chatMeter.limit
-                                        ? '[&_[data-slot=progress-indicator]]:bg-[var(--error)]'
-                                        : '[&_[data-slot=progress-indicator]]:bg-[var(--accent-teal)]'
-                                }`}
+                    ) : (
+                        <div className="flex flex-col items-center gap-1 py-2">
+                            {showMeter && (
+                                <Tip
+                                    label={`Exchanges ${used}/${chatMeter.limit}`}
+                                    render={<div role="img" aria-label={`Exchanges used: ${used} of ${chatMeter.limit}`} className="mb-1 w-7 py-1.5" />}
+                                >
+                                    <Progress value={usedPct} className={cn('w-full', meterBar)} />
+                                </Tip>
+                            )}
+                            <NotificationBell
+                                onNavigateToConversation={(convId) => onSelectConversation(convId)}
+                                tooltip="Notifications"
+                                side="right"
+                                triggerClassName={cn(ICON_BTN, 'size-8')}
                             />
+                            <DropdownMenu>
+                                <Tip
+                                    label="Account"
+                                    render={
+                                        <DropdownMenuTrigger
+                                            aria-label="Account menu"
+                                            className="flex size-8 items-center justify-center rounded-md transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 aria-expanded:bg-accent"
+                                        />
+                                    }
+                                >
+                                    <Avatar name={displayName} />
+                                </Tip>
+                                {accountMenu('right', 'end')}
+                            </DropdownMenu>
                         </div>
                     )}
                 </div>
             </div>
 
             <AlertDialog
-                open={pendingDeleteId !== null}
-                onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+                open={pendingDelete !== null}
+                onOpenChange={(open) => { if (!open) setPendingDelete(null); }}
             >
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+                        <AlertDialogTitle>Delete this chat?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            Are you sure? This cannot be undone.
+                            &ldquo;{pendingDelete?.label}&rdquo; will be permanently deleted. This cannot be undone.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -326,8 +655,7 @@ const ConversationSidebar = ({
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-
-        </>
+        </TooltipProvider>
     );
 };
 

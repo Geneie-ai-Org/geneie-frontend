@@ -1,38 +1,318 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { useChatSimulation } from '@/hooks/useChatSimulation';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { BetaSeatsBadge, BetaApplyForm } from '@/components/BetaSeats';
-import { useBetaSeats } from '@/hooks/useBetaSeats';
-
-import CardSwap, { Card } from '@/components/ui/CardSwap';
-import Carousel from '@/components/ui/Carousel';
-import '@/components/ui/Carousel.css';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import wgsIcon from '@/WGS.svg';
-import wesIcon from '@/WES.svg';
-import Silk from '@/components/Silk';
-import ClickSpark from '@/components/ClickSpark';
-import { useScrollReveal, useStaggerReveal } from '@/hooks/useScrollReveal';
+import { toast } from 'sonner';
 import {
-  Shield, Stethoscope, Microscope,
-  Paperclip, Send, FileText,
-  Lock, Database, Check, Activity
+  ArrowRight,
+  Dna,
+  FileUp,
+  Filter,
+  Loader2,
+  MessageSquareText,
+  ScanSearch,
+  ShieldCheck,
+  Sheet,
+  Stethoscope,
 } from 'lucide-react';
-import { HugeiconsIcon } from '@hugeicons/react'
-import { useForcedTheme } from '@/hooks/useTheme'
-import { useSeo } from '@/hooks/useSeo'
-import BioEnergyIcon from '@hugeicons/core-free-icons/BioEnergyIcon'
-import MentoringIcon from '@hugeicons/core-free-icons/MentoringIcon'
-import SpeedTrain01Icon from '@hugeicons/core-free-icons/SpeedTrain01Icon'
-import ArcherIcon from '@hugeicons/core-free-icons/ArcherIcon'
-import AiSheetsIcon from '@hugeicons/core-free-icons/AiSheetsIcon'
-import FileTypeIcon from '@hugeicons/core-free-icons/FileTypeIcon'
-import DashboardSpeed01Icon from '@hugeicons/core-free-icons/DashboardSpeed01Icon'
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import BrandLogo from '@/components/public/BrandLogo';
+import { useBetaSeats } from '@/hooks/useBetaSeats';
+import { joinWaitlist } from '@/services/backendApi';
+import { useSeo } from '@/hooks/useSeo';
+
+/* ------------------------------------------------------------------ content */
+
+const STEPS = [
+  {
+    icon: FileUp,
+    title: 'Upload a variant file',
+    body: 'Start from a whole-genome or whole-exome VCF. Tabular variant exports can be converted to VCF in the app. Geneie checks the file for the columns each step needs and tells you what is missing.',
+  },
+  {
+    icon: Filter,
+    title: 'Annotate and filter',
+    body: 'Unannotated files are annotated with ANNOVAR. Then narrow the set with ACMG classification (ClinVar or InterVar plus gnomAD frequency) or phenotype-driven ranking with Exomiser.',
+  },
+  {
+    icon: MessageSquareText,
+    title: 'Ask and export',
+    body: 'Ask questions about the filtered variants in plain language and get answers tied to the underlying rows. Copy insights or export a variant table for your report.',
+  },
+];
+
+const CAPABILITIES = [
+  {
+    icon: Dna,
+    title: 'Annotation',
+    body: 'Functional consequence, population frequency and clinical significance added with ANNOVAR.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'ACMG classification',
+    body: 'Filter by ClinVar or InterVar classification together with gnomAD allele frequency.',
+  },
+  {
+    icon: Stethoscope,
+    title: 'Phenotype-driven ranking',
+    body: 'Describe the clinical picture in free text. HPO terms are derived and Exomiser ranks germline candidates.',
+  },
+  {
+    icon: ScanSearch,
+    title: 'Deterministic by design',
+    body: 'The language model translates your question into filters and lookups. Scoring and classification run in established pipelines, not in the model.',
+  },
+  {
+    icon: MessageSquareText,
+    title: 'Plain-language questions',
+    body: 'Ask about genes, consequences, inheritance or frequency without writing a query.',
+  },
+  {
+    icon: Sheet,
+    title: 'Export for reports',
+    body: 'Copy insights or export filtered variant tables to Excel for clinical reports and publications.',
+  },
+];
+
+const FAQS = [
+  {
+    q: 'Is Geneie intended for clinical or research use?',
+    a: 'It is designed to support both research and clinical workflows. It is a decision-support tool, not a diagnostic device. Results should be interpreted by qualified professionals within the appropriate clinical or scientific context.',
+  },
+  {
+    q: 'Can I filter variants by a patient’s symptoms?',
+    a: 'Yes. Describe the phenotype in natural language. Geneie derives HPO terms and uses Exomiser for phenotype-driven prioritization of germline variants. This needs an annotated file.',
+  },
+  {
+    q: 'Could the AI invent variant classifications?',
+    a: 'The language model is limited to translating your question into filter and lookup operations. Variant scoring, classification and filtering are executed by deterministic bioinformatics pipelines (ANNOVAR, ACMG criteria, Exomiser), so each result can be traced to the data.',
+  },
+  {
+    q: 'Can I export results for reports or publications?',
+    a: 'Yes. Results appear as interpretable tables. You can copy insights or export customised variant tables to Excel.',
+  },
+  {
+    q: 'How is my data handled?',
+    a: 'Application data is stored in AWS Mumbai (ap-south-1) and encrypted in transit with TLS. Prompts and derived text sent to language-model or literature tools may leave India. During the closed beta, upload de-identified or synthetic data unless you have a written agreement with us that allows otherwise. The Privacy Policy has the full detail.',
+  },
+  {
+    q: 'How do I get access?',
+    a: 'Geneie is in closed beta. Request access with your email and we will set up your seat and get in touch.',
+  },
+];
+
+// Both accordions are collapsed on load, so their answers are easy for a crawler
+// to miss. FAQPage schema states them outright and makes the page eligible for
+// FAQ rich results.
+const FAQ_SCHEMA = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: FAQS.map((item) => ({
+    '@type': 'Question',
+    name: item.q,
+    acceptedAnswer: { '@type': 'Answer', text: item.a },
+  })),
+};
+
+const NAV = [
+  { label: 'How it works', target: 'how-it-works' },
+  { label: 'Capabilities', target: 'capabilities' },
+  { label: 'FAQ', target: 'faq' },
+];
+
+/* ---------------------------------------------------------- access request */
+
+/** What to tell someone after they submit. A repeat submit gets its own line. */
+function confirmationFor(result, isFull) {
+  if (result?.alreadyApplied) {
+    if (result.status === 'invited' || result.status === 'contacted') {
+      return "You've already requested a seat and we've been in touch. Check your inbox, including spam.";
+    }
+    return "You've already requested a seat with this email. You're on the list and we'll come back to you.";
+  }
+  return isFull
+    ? "You're on the waitlist. We'll be in touch as soon as a seat opens."
+    : "You're on the list. We'll be in touch once your beta seat is ready.";
+}
+
+/**
+ * Closed beta: nobody self-serves an account, so the one call to action is a request for a
+ * seat. A repeat email is a success rather than an error on the backend, so a second submit
+ * shows the same confirmation instead of leaking whether an address is already listed.
+ */
+function AccessRequest({ seats, source, onSignIn, idPrefix }) {
+  const [email, setEmail] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [joined, setJoined] = useState(null);
+  const [error, setError] = useState('');
+  const [trap, setTrap] = useState(''); // honeypot; humans never see it
+
+  const isFull = Boolean(seats) && !seats.open;
+  const inputId = `${idPrefix}-email`;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (submitting || joined) return;
+    if (trap) {
+      // A bot filled the hidden field. Show the success state and write nothing.
+      setJoined(true);
+      return;
+    }
+    if (!email.trim()) {
+      setError('Enter your email so we can reach you.');
+      return;
+    }
+    setError('');
+    setSubmitting(true);
+    try {
+      const result = await joinWaitlist({ email: email.trim(), source });
+      setJoined(result);
+      toast.success(confirmationFor(result, isFull));
+    } catch (err) {
+      setError(err.message || 'We could not submit your request. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (joined) {
+    return (
+      <div role="status" className="max-w-md rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm leading-6 text-foreground">
+        {confirmationFor(joined, isFull)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full max-w-md">
+      <form onSubmit={handleSubmit} noValidate>
+        <label htmlFor={inputId} className="text-sm font-medium">
+          {isFull ? 'Join the waitlist' : 'Request beta access'}
+        </label>
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+          <Input
+            id={inputId}
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            placeholder="name@lab.org"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={submitting}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? `${inputId}-error` : `${inputId}-hint`}
+            className="h-11 flex-1 px-3 text-base sm:text-sm"
+          />
+          {/* Honeypot: off-screen and hidden from assistive tech, so only a bot fills it. */}
+          <input
+            type="text"
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            value={trap}
+            onChange={(e) => setTrap(e.target.value)}
+            className="pointer-events-none absolute left-[-9999px] h-0 w-0 opacity-0"
+          />
+          <Button type="submit" disabled={submitting} className="h-11 px-5 text-sm font-medium">
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Sending…
+              </>
+            ) : isFull ? (
+              'Join waitlist'
+            ) : (
+              <>
+                Request access <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </>
+            )}
+          </Button>
+        </div>
+        {error ? (
+          <p id={`${inputId}-error`} role="alert" className="mt-2 text-sm text-[var(--error)]">
+            {error}
+          </p>
+        ) : (
+          <p id={`${inputId}-hint`} className="mt-2 text-xs leading-5 text-muted-foreground">
+            {seats?.total
+              ? seats.remaining > 0
+                ? `${seats.remaining} of ${seats.total} beta seats left. `
+                : `All ${seats.total} beta seats are taken right now. `
+              : ''}
+            Closed beta. We set up each seat by hand and email you.
+          </p>
+        )}
+      </form>
+      <button
+        type="button"
+        onClick={onSignIn}
+        className="mt-3 inline-flex min-h-11 items-center rounded-md text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+      >
+        Already have an account? Log in
+      </button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------ product mock */
+
+/** Static, illustrative preview of the product. Labelled as synthetic so it reads as a sample. */
+function ProductPreview() {
+  const rows = [
+    { gene: 'SCN1A', variant: 'c.664C>T', cls: 'Pathogenic' },
+    { gene: 'KCNQ2', variant: 'c.1342G>A', cls: 'Likely pathogenic' },
+    { gene: 'STXBP1', variant: 'c.902+1G>A', cls: 'Pathogenic' },
+  ];
+  return (
+    <figure className="w-full" aria-label="Illustrative example of a Geneie conversation">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-[var(--elevation-md)]">
+        <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-2.5">
+          <span className="text-xs font-medium text-muted-foreground">Example conversation</span>
+          <span className="text-xs text-[var(--text-tertiary)]">Synthetic data</span>
+        </div>
+        <div className="space-y-4 p-4 sm:p-5">
+          <div className="flex justify-end">
+            <p className="max-w-[88%] rounded-xl rounded-br-sm bg-muted px-3.5 py-2.5 text-sm leading-5">
+              Which pathogenic variants fit infantile-onset seizures?
+            </p>
+          </div>
+          <div className="space-y-3 text-sm leading-6">
+            <p className="text-muted-foreground">
+              Filtered 1,284 annotated variants to <span className="font-medium text-foreground">3 candidates</span>:
+              ClinVar pathogenic or likely pathogenic, gnomAD allele frequency below 0.01, ranked against the HPO terms for the phenotype.
+            </p>
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full min-w-[19rem] text-left text-[0.8125rem]">
+                <thead className="bg-muted/50 text-xs text-muted-foreground">
+                  <tr>
+                    <th scope="col" className="px-3 py-2 font-medium">Gene</th>
+                    <th scope="col" className="px-3 py-2 font-medium">Variant</th>
+                    <th scope="col" className="px-3 py-2 font-medium">ClinVar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.gene} className="border-t border-border">
+                      <td className="px-3 py-2 font-medium">{r.gene}</td>
+                      <td className="px-3 py-2 font-mono text-xs">{r.variant}</td>
+                      <td className="px-3 py-2">{r.cls}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption className="mt-2 text-xs text-[var(--text-tertiary)]">
+        Illustration only. Not a real case.
+      </figcaption>
+    </figure>
+  );
+}
+
+/* ---------------------------------------------------------------------- page */
 
 const LandingPage = () => {
-  useForcedTheme('dark');
   useSeo({
     title: 'Geneie — Chat with Your Genomic Data | AI Variant Analysis',
     description:
@@ -44,825 +324,210 @@ const LandingPage = () => {
    * granted from /admin-haha. The seat count is shown as context when it is known, and
    * simply omitted when the call is slow or fails. */
   const { seats } = useBetaSeats();
-  const [isNavSolid, setIsNavSolid] = useState(false);
-  const [activeWord, setActiveWord] = useState(0);
-  const workflowWords = ["Upload.", "Annotate.", "Filter.", "Ask.", "Discover."];
-  const heroRef = useRef(null);
-  const footerRef = useRef(null);
-  const [footerHeight, setFooterHeight] = useState(0);
-  const chatSectionRef = useRef(null);
-  const [chatSectionVisible, setChatSectionVisible] = useState(false);
-  const sim = useChatSimulation({ isVisible: chatSectionVisible, startDelay: 2000 });
 
-  // Measure footer height for the margin-bottom on main
-  useEffect(() => {
-    const updateHeight = () => {
-      if (footerRef.current) {
-        setFooterHeight(footerRef.current.offsetHeight);
-      }
-    };
-    updateHeight();
-    window.addEventListener('resize', updateHeight);
-    return () => window.removeEventListener('resize', updateHeight);
-  }, []);
-
-  // Scroll reveal refs for each section
-  // assistantTitleRef/assistantChatRef removed — no fade on section 2
-  const askTitleRef = useScrollReveal();
-  const askQuestionsRef = useStaggerReveal(3, { staggerDelay: 150 });
-  const askCardsRef = useStaggerReveal(3, { staggerDelay: 120 });
-  const scienceTitleRef = useScrollReveal();
-
-  const faqTitleRef = useScrollReveal();
-  const faqListRef = useScrollReveal({ threshold: 0.1 });
-  const ctaRef = useScrollReveal({ threshold: 0.1 });
-
-  // Observe chat section visibility for simulation
-  useEffect(() => {
-    const el = chatSectionRef.current;
+  const scrollTo = (e, target) => {
+    e.preventDefault();
+    const el = document.getElementById(target);
     if (!el) return;
-    const obs = new IntersectionObserver(([entry]) => setChatSectionVisible(entry.isIntersecting), { threshold: 0.3 });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveWord((prev) => (prev + 1) % workflowWords.length);
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      if (heroRef.current) {
-        // Find bottom coordinate of hero block relative to viewport top
-        const heroBottom = heroRef.current.getBoundingClientRect().bottom;
-        const navHeight = 64; // 4rem = h-16
-
-        // When hero bottom is about to slide underneath the nav bar (+50px buffer),
-        // make the nav bar solid so the next white section doesn't show through.
-        if (heroBottom <= navHeight + 50) {
-          setIsNavSolid(true);
-        } else {
-          setIsNavSolid(false);
-        }
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    // Call once to set initial state if user loads halfway down the page
-    handleScroll();
-
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  const professionalCards = [
-    {
-      title: "Clinicians",
-      icon: <Stethoscope className="w-5 h-5" strokeWidth={1.5} />,
-    },
-    {
-      title: "Researchers",
-      icon: <Microscope className="w-5 h-5" strokeWidth={1.5} />,
-    },
-    {
-      title: "Genetic Counselors",
-      icon: <HugeiconsIcon icon={MentoringIcon} className="w-5 h-5" strokeWidth={1.5} />,
-    },
-    {
-      title: "Bioinformaticians",
-      icon: <HugeiconsIcon icon={BioEnergyIcon} size={24} strokeWidth={1.5} />,
-    }
-  ];
-
-  const sequencingTypes = [
-    { label: "Whole Genome Sequencing", icon: <img src={wgsIcon} alt="" aria-hidden className="w-full h-full object-contain" /> },
-    { label: "Whole Exome Sequencing", icon: <img src={wesIcon} alt="" aria-hidden className="w-full h-full object-contain" /> },
-  ];
-
-  const exampleQuestions = [
-    "What are the most clinically relevant pathogenic variants in this whole genome dataset?",
-    "Are there any variants that could explain a rare Mendelian disorder phenotype?",
-    "Are there any clinically significant structural variants in this genome?"
-  ];
-
-  const askAnythingFaqs = [
-    {
-      q: "Can I filter genomic variants based on a patient's actual physical symptoms?",
-      a: "Yes. Geneie uses phenotype-driven prioritization. Input clinical symptoms via natural language, and the platform will instantly highlight variants matching that specific patient profile."
-    },
-    {
-      q: "Can I export the data for my own clinical reports or research publications?",
-      a: "Absolutely. Geneie analyzes your complex genomic data into clean, interpretable tables. With a single click, users can copy insights or export customized variant tables directly into Excel sheets for seamless integration into medical reports or peer-reviewed publications."
-    },
-    {
-      q: "Since Geneie uses AI, is there a risk of it \"hallucinating\" medical data?",
-      a: "No. Geneie is engineered with a strict \"Zero-Hallucination\" architecture. Our in-house Large Language Model (LLM) is restricted exclusively to translating your natural language queries. All actual clinical scoring, data matching, and variant filtering are executed by deterministic, established bioinformatics pipelines, ensuring results are always scientifically defensible."
-    }
-  ];
-
-  const faqItems = [
-    {
-      q: "Is this intended for clinical or research use?",
-      a: "The platform is designed to support both research and clinical workflows. Results should be interpreted by qualified professionals within the appropriate clinical or scientific context."
-    },
-    {
-      q: "Is my genomic data secure?",
-      a: "All data is protected using end-to-end encryption and handled in compliance with HIPAA, GDPR, and other global data protection standards. Your data remains private throughout the analysis process."
-    },
-    {
-      q: "How accurate is the analysis?",
-      a: "Our platform uses validated pipelines for variant calling and annotation, aligned with established clinical standards. Interpretation is supported by curated databases and recognized guidelines to ensure reliable results."
-    }
-  ];
-
-  // Both accordions are collapsed on load, so their answers are easy for a crawler
-  // to miss. FAQPage schema states them outright and makes the page eligible for
-  // FAQ rich results.
-  const faqSchema = {
-    '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    mainEntity: [...askAnythingFaqs, ...faqItems].map((item) => ({
-      '@type': 'Question',
-      name: item.q,
-      acceptedAnswer: { '@type': 'Answer', text: item.a },
-    })),
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
   };
 
   return (
-    <ClickSpark sparkColor="#2F7F7A" sparkSize={12} sparkRadius={20} sparkCount={8} duration={400}>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
-      <div className="min-h-screen bg-white text-zinc-900 font-sans selection:bg-[#2F7F7A]/30">
-
-        {/* Main content wrapper - sits on top of fixed footer */}
-        <main
-          className="relative z-10 bg-white rounded-b-[2rem] sm:rounded-b-[3rem] shadow-[0_20px_60px_rgba(0,0,0,0.4)]"
-          style={{ marginBottom: footerHeight }}
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_SCHEMA) }} />
+      <div className="min-h-dvh bg-background font-sans text-foreground">
+        <a
+          href="#main"
+          className="sr-only z-50 rounded-md bg-background px-3 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
         >
+          Skip to content
+        </a>
 
-          {/* Navigation Bar */}
-          <nav className={`fixed top-0 w-full z-50 transition-colors duration-300 hero-fade ${isNavSolid ? 'bg-zinc-900 shadow-lg' : 'bg-transparent border-transparent'}`}>
-            <div className="container mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <img
-                  src="/logo/Final gene dark.svg"
-                  alt="Geneie"
-                  width="96"
-                  height="96"
-                  className="h-20 w-20 sm:h-24 sm:w-24 object-contain"
-                />
-                {/* <span className="text-xl font-bold font-brand tracking-tight text-white">geneie</span> */}
-              </div>
-              <div className="flex items-center gap-1 sm:gap-3">
-                {/* Real anchors, not buttons: crawlers follow them as internal links to
-                    the named sections, and they still smooth-scroll on click. */}
-                {[
-                  { label: 'Pricing', target: 'pricing' },
-                  { label: 'FAQ', target: 'faq' },
-                  { label: 'Contact', target: 'contact' },
-                ].map((item) => (
-                  <a
-                    key={item.target}
-                    href={`#${item.target}`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (item.target === 'contact') {
-                        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-                      } else {
-                        document.getElementById(item.target)?.scrollIntoView({ behavior: 'smooth' });
-                      }
-                    }}
-                    className="text-xs sm:text-sm font-medium text-zinc-400 hover:text-white transition-colors px-2 sm:px-3 py-1.5"
-                  >
-                    {item.label}
-                  </a>
-                ))}
-                <Button
-                  variant="ghost"
-                  className="text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors border border-white/60"
-                  onClick={() => { console.log('[LandingPage] Sign In clicked — navigating to /auth'); navigate('/auth'); }}
+        {/* ------------------------------------------------------------- nav */}
+        <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
+          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-5 sm:px-8">
+            <Link to="/" aria-label="Geneie home" className="inline-flex rounded-md">
+              <BrandLogo className="h-8 w-auto" />
+            </Link>
+            <nav aria-label="Primary" className="flex items-center gap-1">
+              {NAV.map((item) => (
+                <a
+                  key={item.target}
+                  href={`#${item.target}`}
+                  onClick={(e) => scrollTo(e, item.target)}
+                  className="hidden h-9 items-center rounded-md px-3 text-sm text-muted-foreground transition-colors hover:text-foreground md:inline-flex"
                 >
-                  Sign In
-                </Button>
-              </div>
-            </div>
-          </nav>
-
-          {/* 1. Hero Section (Dark Theme) */}
-          <section
-            ref={heroRef}
-            className="relative w-full bg-zinc-950 text-white flex flex-col items-center justify-center overflow-hidden min-h-[100dvh]"
-          >
-            <div className="absolute inset-0 z-0">
-              {/* <Silk
-                speed={7}
-                scale={1}
-                color="#7B7481"
-                noiseIntensity={3}
-                rotation={0}
-              /> */}
-              <video
-                autoPlay
-                loop
-                muted
-                playsInline
-                aria-hidden="true"
-                poster="/hero-helix.webp"
-                className="absolute inset-0 h-full w-full object-cover object-center pointer-events-none select-none"
-                src="/helix_2_ascii.mp4"
-              />
-            </div>
-            <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/40 via-zinc-950/60 to-zinc-950 z-0 pointer-events-none" />
-
-            <div className="container relative z-10 px-5 md:px-6 flex flex-col items-center text-center pt-24 pb-16 sm:pt-32 sm:pb-20 lg:py-0">
-              {/* Main headline + subtext */}
-              <h1
-                className="text-[2.25rem] leading-[1.1] sm:text-5xl md:text-6xl lg:text-7xl font-bold font-heading tracking-tight mb-4 sm:mb-6 max-w-4xl text-balance hero-reveal"
-                style={{ '--reveal-delay': '300ms' }}>
-                Chat with your Genomic Data
-              </h1>
-              <p className="text-base sm:text-lg md:text-xl text-zinc-300 max-w-lg sm:max-w-2xl mb-8 sm:mb-10 leading-relaxed hero-reveal" style={{ '--reveal-delay': '900ms' }}>
-                Explore your variants, ask complex questions, and receive instant insights backed by peer-reviewed research.
-              </p>
-
-              {/* Beta seats */}
-              <BetaSeatsBadge seats={seats} className="hero-reveal mb-6" style={{ '--reveal-delay': '1400ms' }} />
-
-              {/* CTA — closed beta, so this is an application rather than a signup */}
-              <div className="hero-reveal mb-10 sm:mb-14 flex flex-col items-center gap-4" style={{ '--reveal-delay': '1500ms' }}>
-                <BetaApplyForm
-                  seats={seats}
-                  source="landing-hero"
-                  onSignIn={() => navigate('/auth')}
-                />
-              </div>
-
-              {/* Professional cards — compact inline on mobile */}
-              <div className="hero-reveal w-full max-w-2xl" style={{ '--reveal-delay': '2100ms' }}>
-                <p className="text-zinc-300 sm:text-md sm:mb-4 uppercase font-medium text-center">
-                  Built for genomics professionals including
-                </p>
-                <div className="flex flex-wrap items-center justify-center gap-x-2 sm:gap-x-3 gap-y-1">
-                  {professionalCards.map((card, i) => (
-                    <div
-                      key={i}
-                      className="hero-reveal flex items-center gap-2 sm:gap-3"
-                      style={{ '--reveal-delay': `${2400 + i * 150}ms` }}
-                    >
-                      {i > 0 && (
-                        <span className="text-zinc-600 select-none" aria-hidden="true">·</span>
-                      )}
-                      <span className="text-[14px] sm:text-[14px] text-zinc-300/80 font-medium tracking-wide uppercase">
-                        {card.title}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* 2. Interactive Genomics Assistant */}
-          <section className="py-24 bg-white relative min-h-[100dvh] flex flex-col justify-center">
-            <div className="container px-4 md:px-6 max-w-5xl mx-auto text-center">
-              <div>
-                {/* One real heading for the section. The rotating words are the same
-                    copy animated, so they stay presentational rather than shipping
-                    five competing <h2>s. */}
-                <h2 className="sr-only">Upload. Annotate. Filter. Ask. Discover.</h2>
-                <div className="relative h-16 md:h-20 mb-6 flex items-center justify-center overflow-hidden" aria-hidden="true">
-                  {workflowWords.map((word, i) => (
-                    <span
-                      key={word}
-                      className={`absolute text-3xl md:text-5xl font-semibold font-heading tracking-tight transition-all duration-700 ease-in-out ${i === activeWord
-                        ? 'opacity-100 translate-y-0 scale-100'
-                        : i === (activeWord - 1 + workflowWords.length) % workflowWords.length
-                          ? 'opacity-0 -translate-y-8 scale-95'
-                          : 'opacity-0 translate-y-8 scale-95'
-                        }`}
-                      style={{ color: '#18181b' }}
-                    >
-                      {word}
-                    </span>
-                  ))}
-                </div>
-                <div className="flex justify-center gap-2 mb-16">
-                  {workflowWords.map((_, i) => (
-                    <div
-                      key={i}
-                      className={`h-1 rounded-full transition-all duration-500 ${i === activeWord ? 'w-6 bg-[#2F7F7A]' : 'w-2 bg-zinc-300'
-                        }`}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Mobile: iPhone-style phone frame mockup */}
-              <div className="mb-8 mx-auto md:hidden max-w-[280px]">
-                <div className="bg-gradient-to-b from-[#e0e0e0] to-[#c8c8c8] rounded-[3rem] p-[6px] shadow-[0_20px_60px_rgba(0,0,0,0.25)] relative">
-                  {/* Side button accents */}
-                  <div className="absolute -right-[2px] top-[100px] w-[3px] h-8 bg-[#d0d0d0] rounded-r-sm" />
-                  <div className="absolute -left-[2px] top-[80px] w-[3px] h-6 bg-[#d0d0d0] rounded-l-sm" />
-                  <div className="absolute -left-[2px] top-[120px] w-[3px] h-10 bg-[#d0d0d0] rounded-l-sm" />
-                  <div className="absolute -left-[2px] top-[140px] w-[3px] h-10 bg-[#d0d0d0] rounded-l-sm" />
-                  {/* Inner bezel */}
-                  <div className="bg-black rounded-[2.6rem] p-[3px]">
-                    {/* Screen */}
-                    <div className="bg-[#faf9f6] rounded-[2.4rem] aspect-[9/19] w-full flex flex-col items-center relative overflow-hidden">
-                      {/* Status bar */}
-                      <div className="w-full flex items-center justify-between px-6 pt-3 pb-1 relative z-10">
-                        <span className="text-[10px] font-semibold text-zinc-800">9:41</span>
-                        {/* Dynamic Island */}
-                        <div className="absolute left-1/2 -translate-x-1/2 top-2.5 w-20 h-[22px] bg-black rounded-full" />
-                        <div className="flex items-center gap-0.5">
-                          <div className="w-3 h-2 border border-zinc-800 rounded-[2px] relative">
-                            <div className="absolute inset-[1px] right-[2px] bg-zinc-800 rounded-[1px]" />
-                            <div className="absolute right-[-2px] top-1/2 -translate-y-1/2 w-[1px] h-1 bg-zinc-800 rounded-r-full" />
-                          </div>
-                        </div>
-                      </div>
-                      {/* Chat Body */}
-                      <div className="flex-1 w-full flex flex-col p-4 pb-16 overflow-hidden">
-                        <AnimatePresence mode="wait">
-                          {sim.showGreeting ? (
-                            <motion.div
-                              key="mob-greeting"
-                              className="flex-1 flex flex-col items-center justify-center"
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              exit={{ opacity: 0, scale: 0.95 }}
-                              transition={{ duration: 0.3 }}
-                            >
-                              <div className="animate-dynamic-breathe w-16 h-16 rounded-full bg-gradient-to-tr from-purple-100 via-white to-blue-50 border-[3px] border-white shadow-xl mb-4 relative overflow-hidden flex items-center justify-center">
-                                <div className="absolute inset-0 bg-[#2F7F7A]/10 backdrop-blur-3xl rounded-full" />
-                                <div className="w-10 h-10 bg-white/60 rounded-full shadow-inner blur-sm" />
-                              </div>
-                              <p className="text-[#2F7F7A] text-xs font-medium mb-0.5">Hello, John</p>
-                              <p className="text-base font-semibold font-heading text-zinc-800 tracking-tight">How can I assist you today?</p>
-                            </motion.div>
-                          ) : (
-                            <motion.div
-                              key="mob-chat"
-                              className="flex-1 flex flex-col justify-end gap-2 w-full"
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              exit={{ opacity: 0 }}
-                              transition={{ duration: 0.3 }}
-                            >
-                              {sim.messages.slice(-2).map((msg, i) => (
-                                <motion.div
-                                  key={i}
-                                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                                  initial={{ opacity: 0, y: 8 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                >
-                                  <div className={`px-3 py-1.5 rounded-xl text-[10px] leading-relaxed max-w-[80%] ${msg.role === 'user'
-                                    ? 'bg-[#2F7F7A] text-white rounded-br-sm'
-                                    : 'bg-zinc-100 text-zinc-800 rounded-bl-sm'
-                                    }`}>{msg.text}</div>
-                                </motion.div>
-                              ))}
-                              {sim.phase === 'thinking' && (
-                                <motion.div className="flex justify-start" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                                  <div className="bg-zinc-100 px-3 py-2 rounded-xl rounded-bl-sm flex items-center gap-1">
-                                    <span className="w-1 h-1 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                    <span className="w-1 h-1 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                    <span className="w-1 h-1 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                                  </div>
-                                </motion.div>
-                              )}
-                              {/* Response streamed directly into messages array */}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                      {/* Chat Input */}
-                      <div className="absolute bottom-5 left-3 right-3">
-                        <div className="bg-zinc-50 border border-zinc-200 rounded-2xl px-3 py-2 flex items-center gap-2 shadow-sm">
-                          <span className="text-xs flex-1 truncate text-left" style={{ color: sim.inputText ? '#18181b' : '#a1a1aa' }}>
-                            {sim.inputText || 'Ask me anything...'}
-                            {sim.phase === 'typing_input' && sim.inputText && <span className="blink-cursor" />}
-                          </span>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <div className="p-1.5 rounded-md"><Paperclip className="w-3 h-3 text-zinc-400" /></div>
-                            <motion.div
-                              className="bg-[#2F7F7A] text-white p-1.5 rounded-lg"
-                              animate={{ scale: sim.sendButtonPressed ? 0.85 : 1 }}
-                              transition={{ duration: 0.1 }}
-                            >
-                              <Send className="w-3 h-3 rounded-none" />
-                            </motion.div>
-                          </div>
-                        </div>
-                      </div>
-                      {/* Home indicator */}
-                      <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-24 h-1 bg-zinc-900 rounded-full" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Desktop: wide chat card with simulation */}
-              <div ref={chatSectionRef} className="mb-8 p-2 bg-zinc-100 border border-zinc-200 shadow-lg rounded-[2.5rem] relative overflow-hidden mx-auto hidden md:block">
-                <div className="bg-[#faf9f6] rounded-[2rem] aspect-video max-h-[680px] w-full flex flex-col relative border border-zinc-100 overflow-hidden">
-
-                  {/* Chat Body */}
-                  <div className="flex-1 w-full flex flex-col p-6 pb-24 overflow-hidden">
-                    <AnimatePresence mode="wait">
-                      {sim.showGreeting ? (
-                        <motion.div
-                          key="greeting"
-                          className="flex-1 flex flex-col items-center justify-center"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0, scale: 0.95 }}
-                          transition={{ duration: 0.4 }}
-                        >
-                          <div className="animate-dynamic-breathe w-28 h-28 rounded-full bg-gradient-to-tr from-purple-100 via-white to-blue-50 border-4 border-white shadow-xl mb-6 relative overflow-hidden flex items-center justify-center">
-                            <div className="absolute inset-0 bg-[#2F7F7A]/10 backdrop-blur-3xl rounded-full" />
-                            <div className="w-16 h-16 bg-white/60 rounded-full shadow-inner blur-sm" />
-                          </div>
-                          <p className="text-[#2F7F7A] text-base font-medium mb-1">Hello, John</p>
-                          <p className="text-3xl font-semibold font-heading text-zinc-800 tracking-tight mb-2">How can I assist you today?</p>
-                        </motion.div>
-                      ) : (
-                        <motion.div
-                          key="chat"
-                          className="flex-1 flex flex-col justify-end gap-3 w-full"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          transition={{ duration: 0.4 }}
-                        >
-                          {/* Rendered messages */}
-                          {sim.messages.map((msg, i) => (
-                            <motion.div
-                              key={i}
-                              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                              initial={{ opacity: 0, y: 12 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ duration: 0.3 }}
-                            >
-                              <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed max-w-[75%] text-left ${msg.role === 'user'
-                                ? 'bg-[#2F7F7A] text-white rounded-br-md'
-                                : 'bg-zinc-100 text-zinc-800 rounded-bl-md'
-                                }`}>
-                                {msg.text}
-                              </div>
-                            </motion.div>
-                          ))}
-
-                          {/* Thinking indicator */}
-                          {sim.phase === 'thinking' && (
-                            <motion.div
-                              className="flex justify-start"
-                              initial={{ opacity: 0, y: 8 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ duration: 0.2 }}
-                            >
-                              <div className="bg-zinc-100 text-zinc-500 px-4 py-3 rounded-2xl rounded-bl-md">
-                                <div className="flex items-center gap-1">
-                                  <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                  <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                  <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                                </div>
-                              </div>
-                            </motion.div>
-                          )}
-
-                          {/* Response text is now streamed directly into messages array — no separate bubble needed */}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-
-                  {/* Chat Input */}
-                  <div className="absolute bottom-6 left-6 right-6">
-                    <div className="bg-zinc-50 border border-zinc-200 rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm">
-                      <div className="flex-1 h-8 flex items-center text-base">
-                        {sim.inputText ? (
-                          <span className="text-zinc-800">
-                            {sim.inputText}
-                            {sim.phase === 'typing_input' && <span className="blink-cursor" />}
-                          </span>
-                        ) : (
-                          <span className="text-zinc-400">Ask me anything...</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <div className="p-2 rounded-md min-w-[36px] min-h-[36px] flex items-center justify-center text-zinc-400"><Paperclip className="w-4 h-4" /></div>
-                        <motion.div
-                          className="bg-[#2F7F7A] text-white p-2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-xl shadow-sm"
-                          animate={{ scale: sim.sendButtonPressed ? 0.85 : 1 }}
-                          transition={{ duration: 0.15 }}
-                        >
-                          <Send className="w-4 h-4" />
-                        </motion.div>
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-            </div>
-          </section>
-          
-{/* 3. Ask Anything Section */}
-<section className="bg-black py-24 text-white min-h-[100dvh] flex flex-col justify-center relative overflow-hidden">
-  
-  {/* Background Image with Left-to-Right Gradient Overlay */}
-  <div className="absolute inset-0 z-0 pointer-events-none select-none">
-    <img
-      src="/hero-helix.webp"
-      alt=""
-      aria-hidden="true"
-      width="1280"
-      height="711"
-      loading="lazy"
-      decoding="async"
-      className="absolute inset-0 h-full w-full object-cover object-right lg:translate-x-[28%]"
-    />
-    {/* Gradient: Dark on left for text readability, clearer on right */}
-    <div className="absolute inset-0 bg-gradient-to-r from-black via-black/85 to-black/20" />
-  </div>
-
-  {/* Foreground Content */}
-  <div className="relative z-10 container px-4 md:px-6 max-w-7xl mx-auto">
-    <div className="w-full lg:w-[60%] flex flex-col">
-      <div ref={askTitleRef} className="text-left mb-8">
-        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold font-heading tracking-tight mb-4 text-white">
-          Ask Anything About Your Data
-        </h2>
-        <p className="text-zinc-400 text-base sm:text-lg max-w-xl text-left">
-          Instant clinical insights for complex genomic data
-        </p>
-      </div>
-
-      {/* Cards */}
-      <div className="w-full grid grid-cols-2 gap-3 sm:gap-4 mb-8">
-        {sequencingTypes.map((type, i) => (
-          <div
-            key={i}
-            className="relative flex flex-col justify-between w-full rounded-2xl bg-zinc-900/70 backdrop-blur-sm border border-zinc-800/80 p-4 min-h-[180px] sm:min-h-[200px]"
-          >
-            {/* Icon Badge */}
-            <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center p-2 text-[#4ad6cd]">
-              {React.cloneElement(type.icon, {
-                className: 'w-8 h-8 sm:w-10 sm:h-10 text-[#4ad6cd] object-contain',
-              })}
-            </div>
-
-            {/* Centered Text */}
-            <div className="mt-auto text-center">
-              <h3 className="text-base sm:text-lg lg:text-xl text-zinc-100 leading-snug text-center">
-                {type.label}
-              </h3>
-            </div>
+                  {item.label}
+                </a>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                className="ml-1 h-10 px-4 text-sm font-medium md:h-9"
+                onClick={() => navigate('/auth')}
+              >
+                Log in
+              </Button>
+            </nav>
           </div>
-        ))}
-      </div>
+        </header>
 
-      {/* Accordion List */}
-      <div ref={askQuestionsRef} className="w-full">
-        <Accordion defaultValue={[]} className="w-full space-y-3">
-          {askAnythingFaqs.map((item, i) => (
-            <AccordionItem
-              key={i}
-              value={`ask-${i}`}
-              className="rounded-2xl border border-zinc-800/80 bg-zinc-900/70 backdrop-blur-sm px-5 sm:px-6 overflow-hidden data-[state=open]:border-[#2F7F7A]/50 data-[state=open]:bg-zinc-900/90 border-b-0"
-            >
-              <AccordionTrigger className="hover:no-underline font-medium text-zinc-100 text-left py-4 sm:py-5 text-sm sm:text-base items-center gap-4">
-                <span className="flex-1">{item.q}</span>
-              </AccordionTrigger>
-              <AccordionContent className="text-zinc-400 text-sm sm:text-base leading-relaxed pt-1 pb-5 pr-2">
-                {item.a}
-              </AccordionContent>
-            </AccordionItem>
-          ))}
-        </Accordion>
-      </div>
-    </div>
-  </div>
-</section>
-
-          {/* 4. Built for Genomics + FAQ (combined) */}
-          <section id="faq" className="py-24 bg-zinc-950 lg:bg-[#EDF7F6] relative isolate min-h-[100dvh] flex flex-col justify-center">
-            <div className="container px-4 md:px-6 max-w-6xl mx-auto">
-
-              {/* Desktop: bordered box | Mobile: no box, content flows on dark bg */}
-              <div className="relative lg:rounded-2xl lg:border lg:border-zinc-800 lg:bg-zinc-950 lg:overflow-hidden lg:min-h-[580px]">
-
-                {/* Heading + Collapsible FAQ */}
-                <div className="relative z-10 py-4 lg:p-16 max-w-full lg:max-w-lg" ref={faqTitleRef}>
-                  <h2 className="text-3xl md:text-4xl font-semibold font-heading tracking-tight text-white mb-1">
-                    Built for Genomics
-                  </h2>
-                  <p className="text-zinc-400 text-base mb-10">
-                    Have questions? We've got answers.
-                  </p>
-
-                  <div ref={faqListRef}>
-                    <Accordion defaultValue={[]} className="w-full space-y-3">
-                      {faqItems.map((item, i) => (
-                        <AccordionItem
-                          key={i}
-                          value={`item-${i}`}
-                          className="rounded-xl border border-zinc-800 bg-zinc-900/60 backdrop-blur-sm px-5 overflow-hidden transition-colors hover:border-zinc-700 border-b-0"
-                        >
-                          <AccordionTrigger className="hover:no-underline font-medium text-white text-left py-4 text-sm">
-                            {item.q}
-                          </AccordionTrigger>
-                          <AccordionContent className="text-zinc-400 text-sm leading-relaxed pb-4">
-                            {item.a}
-                          </AccordionContent>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
-                  </div>
-                </div>
-
-                {/* Desktop: Feature cards in CardSwap — anchored bottom-right */}
-                <div ref={scienceTitleRef} className="absolute inset-0 pointer-events-none hidden lg:block">
-                  <div className="pointer-events-auto" style={{ position: 'absolute', bottom: 0, right: 0, width: 580, height: 500 }}>
-                    <CardSwap
-                      width={530}
-                      height={420}
-                      cardDistance={60}
-                      verticalDistance={70}
-                      delay={3000}
-                      pauseOnHover={true}
-                      skewAmount={6}
-                      easing="elastic"
-                    >
-                      {[
-                        { icon: <Database className="w-6 h-6" />, title: 'Data Compatibility', desc: 'VCF, BAM, FASTA, and FASTQ files are fully supported for seamless ingestion and analysis.' },
-                        { icon: <Shield className="w-6 h-6" />, title: 'Clinical Trust & Security', desc: 'HIPAA/GDPR-compliant with end-to-end encryption and ACMG-guided databases for reliable interpretation.' },
-                        { icon: <HugeiconsIcon icon={SpeedTrain01Icon} className="w-6 h-6" />, title: 'Speed & Performance', desc: 'Delivers clinically relevant insights in minutes — optimized for fast turnaround without compromising accuracy.' },
-                      ].map((card, i) => (
-                        <Card
-                          key={i}
-                          className="rounded-2xl border border-zinc-700/50 bg-zinc-900 p-8 flex flex-col"
-                        >
-                          <div className="w-12 h-12 rounded-xl bg-[#2F7F7A]/15 flex items-center justify-center mb-5 text-[#2F7F7A]">
-                            {card.icon}
-                          </div>
-                          <h3 className="text-lg font-semibold font-heading text-white mb-2">{card.title}</h3>
-                          <p className="text-zinc-400 text-sm leading-relaxed">{card.desc}</p>
-                        </Card>
-                      ))}
-                    </CardSwap>
-                  </div>
-                </div>
+        <main id="main">
+          {/* ------------------------------------------------------------ hero */}
+          <section aria-labelledby="hero-title" className="mx-auto grid max-w-6xl items-center gap-12 px-5 pb-16 pt-14 sm:px-8 sm:pt-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:gap-16 lg:pb-24 lg:pt-24">
+            <div>
+              <p className="text-sm font-medium text-primary">Clinical genomics, in conversation</p>
+              <h1 id="hero-title" className="mt-4 max-w-xl text-[2.25rem] font-semibold leading-[1.1] tracking-tight text-balance sm:text-5xl">
+                From VCF to ranked variants you can question.
+              </h1>
+              <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
+                Upload a whole-genome or exome file. Geneie annotates it, applies ACMG and phenotype-driven
+                filters in deterministic pipelines, and lets you ask questions about the result in plain language.
+              </p>
+              <div className="mt-8">
+                <AccessRequest seats={seats} source="landing-hero" idPrefix="hero" onSignIn={() => navigate('/auth')} />
               </div>
+              <p className="mt-8 text-sm text-muted-foreground">
+                For clinicians, researchers, genetic counselors and bioinformaticians working with WGS and WES data.
+              </p>
+            </div>
+            <ProductPreview />
+          </section>
 
-              {/* Mobile: Carousel below, outside the box */}
-              {/* <div className="lg:hidden flex items-center justify-center mt-2" style={{ height: 340, position: 'relative' }}>
-                <Carousel
-                  baseWidth={340}
-                  autoplay={true}
-                  autoplayDelay={4000}
-                  pauseOnHover={true}
-                  loop={true}
-                  items={[
-                    { id: 1, icon: <Database className="w-5 h-5" />, title: 'Data Compatibility', description: 'VCF, BAM, FASTA, and FASTQ files are fully supported for seamless ingestion and analysis.' },
-                    { id: 2, icon: <Shield className="w-5 h-5" />, title: 'Clinical Trust & Security', description: 'HIPAA/GDPR-compliant with end-to-end encryption and ACMG-guided databases for reliable interpretation.' },
-                    { id: 3, icon: <HugeiconsIcon icon={SpeedTrain01Icon} className="w-5 h-5" />, title: 'Speed & Performance', description: 'Delivers clinically relevant insights in minutes — optimized for fast turnaround without compromising accuracy.' },
-                  ]}
-                />
-              </div> */}
-
+          {/* ---------------------------------------------------- how it works */}
+          <section id="how-it-works" aria-labelledby="how-title" className="scroll-mt-14 border-t border-border">
+            <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8 lg:py-20">
+              <h2 id="how-title" className="text-2xl font-semibold tracking-tight sm:text-3xl">How it works</h2>
+              <p className="mt-2 max-w-xl text-muted-foreground">Three steps from a raw file to answers you can cite.</p>
+              <ol className="mt-10 grid gap-10 md:grid-cols-3 md:gap-8">
+                {STEPS.map((step, i) => (
+                  <li key={step.title}>
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-sm font-medium tabular-nums">
+                        {i + 1}
+                      </span>
+                      <step.icon className="h-5 w-5 text-primary" aria-hidden="true" strokeWidth={1.75} />
+                    </div>
+                    <h3 className="mt-4 text-base font-semibold">{step.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{step.body}</p>
+                  </li>
+                ))}
+              </ol>
             </div>
           </section>
 
-          {/* 6. CTA / Pricing Section */}
-          <section id="pricing" className="py-24 bg-white relative min-h-[100dvh] flex flex-col justify-center">
-            <div className="container px-4 md:px-6 max-w-6xl mx-auto">
-              <div ref={ctaRef} className="bg-black text-white rounded-[2rem] lg:rounded-[3rem] px-6 py-12 sm:p-10 md:p-12 lg:p-16 flex flex-col lg:flex-row items-center gap-12 overflow-hidden relative shadow-2xl">
-                {/* Left Box */}
-                <div className="flex-1 relative z-10 w-full lg:max-w-xl">
-                  {/* Centered heading and subheading on mobile */}
-                  <h2 className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-semibold font-heading leading-tight mb-6 text-center lg:text-left">
-                    Ready to Transform Your Genomic Analysis?
-                  </h2>
-                  <p className="text-zinc-400 text-base md:text-lg mb-8 max-w-md mx-auto lg:mx-0 text-center lg:text-left text-pretty">
-                    Join today and accelerate research and clinical decisions with the help of AI.
-                  </p>
-
-                  {/* Feature list */}
-                  <div className="mb-10 lg:max-w-none max-w-sm mx-auto lg:mx-0 hidden lg:block">
-                    <div className="grid grid-cols-2 lg:flex lg:flex-col gap-2 lg:gap-3 text-sm text-zinc-300">
-                      {["Free queries included", "Export files instantly", "Real-time analysis", "HIPAA compliant"].map((item) => (
-                        <div key={item} className="flex items-center justify-center lg:justify-start gap-2 lg:gap-2.5 bg-zinc-900 lg:bg-transparent rounded-full lg:rounded-none px-3 py-2 lg:p-0 border border-zinc-800 lg:border-0">
-                          <Check className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-zinc-500 flex-shrink-0 hidden lg:block" />
-                          <span className="text-xs lg:text-sm whitespace-nowrap">{item}</span>
-                        </div>
-                      ))}
+          {/* ------------------------------------------------------ capabilities */}
+          <section id="capabilities" aria-labelledby="cap-title" className="scroll-mt-14 border-t border-border bg-[var(--bg-surface-sunken)]">
+            <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8 lg:py-20">
+              <h2 id="cap-title" className="text-2xl font-semibold tracking-tight sm:text-3xl">What you get</h2>
+              <p className="mt-2 max-w-xl text-muted-foreground">
+                Established tools for the analysis, a language interface for the questions.
+              </p>
+              <ul className="mt-10 grid gap-x-10 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
+                {CAPABILITIES.map((c) => (
+                  <li key={c.title} className="flex gap-3.5">
+                    <c.icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" strokeWidth={1.75} />
+                    <div>
+                      <h3 className="text-base font-semibold">{c.title}</h3>
+                      <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{c.body}</p>
                     </div>
-                  </div>
-
-                  {/* TODO: Change label to "Start Free Trial" and link to pricing/checkout when subscription breakdown is done (Dodo payment) */}
-                  <div className="flex flex-col items-center lg:items-start gap-3">
-                    <BetaSeatsBadge seats={seats} className="lg:items-start" />
-                    <BetaApplyForm
-                      seats={seats}
-                      source="landing-pricing"
-                      className="lg:items-start"
-                      onSignIn={() => navigate('/auth')}
-                    />
-                  </div>
-                </div>
-
-                {/* Right Clean Data Graphic */}
-                <div className="hidden lg:flex flex-1 w-full flex-col items-center lg:items-end justify-center relative mt-12 lg:mt-0">
-                  <div className="w-full max-w-sm space-y-4">
-                    <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-2xl flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center">
-                        <HugeiconsIcon icon={SpeedTrain01Icon} className="w-6 h-6 text-zinc-300" />
-                      </div>
-                      <div>
-                        <h3 className="text-white font-semibold font-heading text-lg tracking-tight">Fast Processing</h3>
-                        <p className="text-zinc-500 text-sm">Lightning quick variant analysis.</p>
-                      </div>
-                    </div>
-
-                    <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-2xl flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center">
-                        <HugeiconsIcon icon={ArcherIcon} className="w-6 h-6 text-zinc-300" />
-                      </div>
-                      <div>
-                        <h3 className="text-white font-semibold font-heading text-lg tracking-tight">Accurate Results</h3>
-                        <p className="text-zinc-500 text-sm">Cross-referenced with ClinVar.</p>
-                      </div>
-                    </div>
-
-                    <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-2xl flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center">
-                        <Lock className="w-6 h-6 text-zinc-300" />
-                      </div>
-                      <div>
-                        <h3 className="text-white font-semibold font-heading text-lg tracking-tight">Strict Security</h3>
-                        <p className="text-zinc-500 text-sm">HIPAA & GDPR compliant storage.</p>
-                      </div>
-                    </div>
-
-                    <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-2xl flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center">
-                        <Database className="w-6 h-6 text-zinc-300" />
-                      </div>
-                      <div>
-                        <h3 className="text-white font-semibold font-heading text-lg tracking-tight">Trusted Data</h3>
-                        <p className="text-zinc-500 text-sm">Peer-reviewed research sources.</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                  </li>
+                ))}
+              </ul>
             </div>
           </section>
 
+          {/* ---------------------------------------------------- data handling */}
+          <section aria-labelledby="data-title" className="border-t border-border">
+            <div className="mx-auto grid max-w-6xl gap-8 px-5 py-16 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16 lg:py-20">
+              <div>
+                <h2 id="data-title" className="text-2xl font-semibold tracking-tight sm:text-3xl">Data handling</h2>
+                <p className="mt-2 text-muted-foreground">What to know before you upload.</p>
+              </div>
+              <dl className="divide-y divide-border border-y border-border text-sm">
+                {[
+                  ['Closed beta', 'Use de-identified or synthetic data. Identifiable patient data needs a separate written agreement.'],
+                  ['Where data lives', 'Application data is stored in AWS Mumbai (ap-south-1) and encrypted in transit.'],
+                  ['AI processing', 'Prompts and derived text sent to language-model or literature tools may be processed outside India.'],
+                ].map(([k, v]) => (
+                  <div key={k} className="grid gap-1 py-4 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-6">
+                    <dt className="font-medium">{k}</dt>
+                    <dd className="leading-6 text-muted-foreground">{v}</dd>
+                  </div>
+                ))}
+                <div className="py-4 text-muted-foreground">
+                  Read the{' '}
+                  <Link to="/legal/privacy" className="text-primary underline underline-offset-2">Privacy Policy</Link>{' '}
+                  and{' '}
+                  <Link to="/legal/terms" className="text-primary underline underline-offset-2">Terms of Use</Link>.
+                </div>
+              </dl>
+            </div>
+          </section>
+
+          {/* ------------------------------------------------------------- FAQ */}
+          <section id="faq" aria-labelledby="faq-title" className="scroll-mt-14 border-t border-border bg-[var(--bg-surface-sunken)]">
+            <div className="mx-auto grid max-w-6xl gap-8 px-5 py-16 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16 lg:py-20">
+              <h2 id="faq-title" className="text-2xl font-semibold tracking-tight sm:text-3xl">Questions</h2>
+              <Accordion defaultValue={[]} className="w-full border-y border-border">
+                {FAQS.map((item, i) => (
+                  <AccordionItem key={item.q} value={`faq-${i}`}>
+                    <AccordionTrigger className="min-h-11 items-center gap-4 py-3.5 text-[0.9375rem] font-medium hover:no-underline">
+                      {item.q}
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-4 pr-8 text-sm leading-6 text-muted-foreground">
+                      {item.a}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </div>
+          </section>
+
+          {/* -------------------------------------------------------- closing CTA */}
+          <section aria-labelledby="cta-title" className="border-t border-border">
+            <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8 lg:py-20">
+              <h2 id="cta-title" className="max-w-xl text-2xl font-semibold tracking-tight sm:text-3xl">
+                Try Geneie on your own variant file.
+              </h2>
+              <div className="mt-6">
+                <AccessRequest seats={seats} source="landing-pricing" idPrefix="cta" onSignIn={() => navigate('/auth')} />
+              </div>
+            </div>
+          </section>
         </main>
 
-        {/* 7. Footer */}
-        <footer id="contact" ref={footerRef} className="fixed bottom-0 left-0 right-0 z-0 bg-zinc-950 overflow-hidden">
-
-          <div className="absolute inset-0 flex items-end justify-center pointer-events-none select-none overflow-hidden" aria-hidden="true">
-            <span className="text-[clamp(64px,20vw,280px)] font-bold font-heading tracking-tight leading-none text-white/[0.08] whitespace-nowrap translate-y-[2%]">
-              geneie
-            </span>
-          </div>
-
-          <div className="container px-6 md:px-8 mx-auto pt-16 md:pt-24 pb-12 md:pb-20 relative z-10">
-            <div className="flex flex-col gap-12 md:gap-16">
-              <div>
-                <p className="text-zinc-500 text-sm sm:text-base leading-relaxed mb-4">
-                  AI-powered genomic analysis for researchers and clinicians.
-                </p>
-                <a
-                  href="mailto:support@geneie.chat"
-                  className="text-[#2F7F7A] hover:text-[#4ad6cd] text-sm font-medium transition-colors"
-                >
-                  support@geneie.chat
-                </a>
-              </div>
-              <div className="flex items-center justify-between pt-10 pb-1 border-b border-zinc-800/60">
-                <span className="text-zinc-600 text-xs sm:text-sm">&copy; {new Date().getFullYear()} Geneie</span>
-                <a
-                  href="https://omixir.com/"
-                  target="_blank"
-                  rel="noopener"
-                  className="flex items-center gap-1.5 text-zinc-500 hover:text-zinc-300 text-xs sm:text-sm font-medium transition-colors"
-                >
-                  powered by
-                  <img src="/omixer-small-logo.png" alt="" className="h-4 sm:h-5 object-contain" />
-                  Omixir
-                </a>
-              </div>
+        {/* ---------------------------------------------------------- footer */}
+        <footer id="contact" className="border-t border-border">
+          <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10 sm:px-8 md:flex-row md:items-start md:justify-between">
+            <div className="max-w-xs">
+              <BrandLogo className="h-8 w-auto" />
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                Genomic variant analysis for researchers and clinicians. A decision-support tool, not a diagnostic device.
+              </p>
             </div>
+            <nav aria-label="Footer" className="grid grid-cols-2 gap-x-12 gap-y-1 text-sm sm:grid-cols-3">
+              <Link to="/legal/terms" className="py-2 text-muted-foreground hover:text-foreground hover:underline">Terms of Use</Link>
+              <Link to="/legal/privacy" className="py-2 text-muted-foreground hover:text-foreground hover:underline">Privacy Policy</Link>
+              <a href="mailto:support@geneie.chat" className="py-2 text-muted-foreground hover:text-foreground hover:underline">support@geneie.chat</a>
+              <Link to="/auth" className="py-2 text-muted-foreground hover:text-foreground hover:underline">Log in</Link>
+            </nav>
+          </div>
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-5 text-xs text-[var(--text-tertiary)] sm:px-8">
+            <span>&copy; {new Date().getFullYear()} Geneie</span>
+            <a
+              href="https://omixir.com/"
+              target="_blank"
+              rel="noopener"
+              className="inline-flex items-center gap-1.5 hover:text-foreground"
+            >
+              Powered by Omixir
+            </a>
           </div>
         </footer>
       </div>
-    </ClickSpark>
+    </>
   );
 };
 

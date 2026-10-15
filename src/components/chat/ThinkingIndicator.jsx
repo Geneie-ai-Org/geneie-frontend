@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ThinkingOrb } from 'thinking-orbs';
 import { formatDuration } from '@/lib/formatDuration';
 import { useElapsed } from '@/hooks/useRunTimer';
 
@@ -42,7 +41,12 @@ function shuffle(arr) {
 }
 
 
-export default function ThinkingIndicator({ intervalMs = 2600, startedAt = null }) {
+/**
+ * One quiet line: a small pulsing dot, the current step (when the caller knows it) or a rotating
+ * phrase, and the elapsed time. The row has a fixed height so a changing phrase never moves
+ * anything below it. The live region announces a stable label once, not every phrase.
+ */
+export default function ThinkingIndicator({ intervalMs = 2600, startedAt = null, step = null }) {
 
   const order = useMemo(() => shuffle(THINKING_PHRASES), []);
   const [idx, setIdx] = useState(0);
@@ -52,30 +56,29 @@ export default function ThinkingIndicator({ intervalMs = 2600, startedAt = null 
   const elapsed = elapsedMs != null && elapsedMs >= 1000 ? formatDuration(elapsedMs) : null;
 
   useEffect(() => {
+    if (step) return undefined;
     const timer = setInterval(() => {
       setIdx((i) => (i + 1) % order.length);
     }, intervalMs);
     return () => clearInterval(timer);
-  }, [order.length, intervalMs]);
+  }, [order.length, intervalMs, step]);
 
   return (
     <div
-      className="flex items-center gap-3 pt-1"
+      className="flex h-6 items-center gap-2 text-[13px]"
       role="status"
       aria-live="polite"
-      aria-label="Assistant is thinking"
+      aria-label={step ? `Geneie is working: ${step}` : 'Geneie is thinking'}
+      style={{ color: 'var(--text-secondary)' }}
     >
-      <ThinkingOrb state="solving" size={20} />
+      <span className="chat-thinking-dot shrink-0" aria-hidden />
       {/* key={idx} remounts the span so the fade-in re-triggers on each phrase change. */}
-      <span
-        key={idx}
-        className="text-sm animate-fade-in"
-      >
-        {order[idx]}
+      <span key={step || idx} className="animate-fade-in truncate" aria-hidden>
+        {step || `${order[idx]}…`}
       </span>
       {elapsed && (
         <span
-          className="text-xs tabular-nums"
+          className="shrink-0 text-xs tabular-nums"
           style={{ color: 'var(--text-tertiary)' }}
           title="Time spent on this answer so far"
         >

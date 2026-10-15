@@ -5,10 +5,11 @@ import {
     confirmPasswordReset,
     verifyPasswordResetCode,
 } from 'firebase/auth';
-import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { auth } from '../services/firebase';
 import { authErrorMessage } from '@/lib/authErrors';
-import { useForcedTheme } from '@/hooks/useTheme';
+import AuthPageLayout from '@/components/chat/AuthPageLayout';
+import { PasswordField, Notice, SubmitButton, PasswordRules } from '@/components/public/AuthFields';
 import { useSeo } from '@/hooks/useSeo';
 
 /**
@@ -21,11 +22,7 @@ import { useSeo } from '@/hooks/useSeo';
 
 const MIN_PASSWORD_LENGTH = 6;
 
-const inputClass =
-    'w-full h-10 px-3 pr-10 border border-zinc-800 rounded-md bg-black/90 text-sm text-white focus:border-zinc-500 focus:outline-none transition-colors';
-
 const AuthActionPage = () => {
-    useForcedTheme('dark');
     useSeo({
         title: 'Account · Geneie',
         description: 'Complete your account action',
@@ -44,7 +41,6 @@ const AuthActionPage = () => {
     const [errorText, setErrorText] = useState('');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
 
     useEffect(() => {
         if (!oobCode || !mode) {
@@ -117,132 +113,84 @@ const AuthActionPage = () => {
 
     const heading =
         mode === 'verifyEmail' ? 'Verifying your email' : 'Choose a new password';
+    const title = status === 'done' && mode === 'verifyEmail' ? 'Email verified' : status === 'invalid' ? 'This link cannot be used' : heading;
+
+    const linkClass = 'inline-flex h-11 items-center justify-center rounded-lg text-sm font-medium text-primary hover:underline';
 
     return (
-        <div className="min-h-[100dvh] bg-zinc-950 text-white flex items-center justify-center px-5 py-16">
-            <div className="w-full max-w-[400px]">
-                <h1 className="text-2xl sm:text-3xl font-medium tracking-tight mb-2 text-center">
-                    {status === 'done' && mode === 'verifyEmail' ? 'Email verified' : heading}
-                </h1>
+        <AuthPageLayout>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
 
-                {status === 'checking' && (
-                    <div className="flex items-center justify-center gap-2 text-sm text-zinc-400 mt-8">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Checking your link…</span>
-                    </div>
-                )}
+            {status === 'checking' && (
+                <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground" role="status">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    <span>{mode === 'verifyEmail' ? 'Verifying your email…' : 'Checking your link…'}</span>
+                </div>
+            )}
 
-                {status === 'invalid' && (
-                    <>
-                        <div className="flex items-start gap-2 px-3 py-2.5 mt-6 rounded-md text-xs bg-red-500/10 border border-red-500/20 text-red-300">
-                            <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                            <span>{errorText}</span>
+            {status === 'invalid' && (
+                <>
+                    <Notice type="error" className="mt-5">{errorText}</Notice>
+                    <p className="mt-6">
+                        <Link to="/auth" className={linkClass}>Back to log in to request a new link</Link>
+                    </p>
+                </>
+            )}
+
+            {status === 'done' && (
+                <>
+                    <Notice type="success" className="mt-5">
+                        {mode === 'verifyEmail'
+                            ? 'Your email is verified. You can log in now.'
+                            : 'Password updated. Taking you to the login page…'}
+                    </Notice>
+                    <p className="mt-6">
+                        <Link to="/auth" className={linkClass}>Go to log in</Link>
+                    </p>
+                </>
+            )}
+
+            {(status === 'ready' || status === 'saving') && (
+                <>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                        For <span className="font-medium text-foreground">{accountEmail}</span>
+                    </p>
+
+                    <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
+                        <div className="space-y-3">
+                            <PasswordField
+                                id="new-password"
+                                label="New password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                autoComplete="new-password"
+                                autoFocus
+                            />
+                            <PasswordRules password={password} minLength={MIN_PASSWORD_LENGTH} />
                         </div>
-                        <p className="mt-8 text-center text-sm text-zinc-400">
-                            <Link
-                                to="/auth"
-                                className="font-medium text-[#60a5fa] hover:text-[#3b82f6] hover:underline transition-colors"
-                            >
-                                Back to log in
-                            </Link>
-                        </p>
-                    </>
-                )}
 
-                {status === 'done' && (
-                    <>
-                        <div className="flex items-start gap-2 px-3 py-2.5 mt-6 rounded-md text-xs bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
-                            <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                            <span>
-                                {mode === 'verifyEmail'
-                                    ? 'Your email is verified. You can log in now.'
-                                    : 'Password updated. Taking you to the login page…'}
-                            </span>
-                        </div>
-                        <p className="mt-8 text-center text-sm text-zinc-400">
-                            <Link
-                                to="/auth"
-                                className="font-medium text-[#60a5fa] hover:text-[#3b82f6] hover:underline transition-colors"
-                            >
-                                Go to log in
-                            </Link>
-                        </p>
-                    </>
-                )}
+                        <PasswordField
+                            id="confirm-password"
+                            label="Confirm password"
+                            value={confirm}
+                            onChange={(e) => setConfirm(e.target.value)}
+                            autoComplete="new-password"
+                            error={confirm && password !== confirm ? 'The two passwords do not match.' : undefined}
+                        />
 
-                {(status === 'ready' || status === 'saving') && (
-                    <>
-                        <p className="text-sm text-zinc-400 text-center mb-6">
-                            For <span className="text-white">{accountEmail}</span>
-                        </p>
+                        {errorText && <Notice type="error">{errorText}</Notice>}
 
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div className="space-y-1.5">
-                                <label htmlFor="new-password" className="block text-xs font-medium text-zinc-400">
-                                    New password
-                                </label>
-                                <div className="relative">
-                                    <input
-                                        id="new-password"
-                                        type={showPassword ? 'text' : 'password'}
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        required
-                                        autoComplete="new-password"
-                                        className={inputClass}
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-400"
-                                        aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                        tabIndex={-1}
-                                    >
-                                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <label htmlFor="confirm-password" className="block text-xs font-medium text-zinc-400">
-                                    Confirm password
-                                </label>
-                                <input
-                                    id="confirm-password"
-                                    type={showPassword ? 'text' : 'password'}
-                                    value={confirm}
-                                    onChange={(e) => setConfirm(e.target.value)}
-                                    required
-                                    autoComplete="new-password"
-                                    className={inputClass}
-                                />
-                            </div>
-
-                            {errorText && (
-                                <div className="flex items-start gap-2 px-3 py-2.5 rounded-md text-xs bg-red-500/10 border border-red-500/20 text-red-300">
-                                    <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                                    <span>{errorText}</span>
-                                </div>
-                            )}
-
-                            <div className="pt-2 flex justify-center">
-                                <button
-                                    type="submit"
-                                    disabled={status === 'saving' || password.length < MIN_PASSWORD_LENGTH}
-                                    className="w-[60%] h-10 bg-gradient-to-b from-zinc-700 to-black hover:from-neutral-800 hover:to-black disabled:opacity-65 disabled:cursor-not-allowed rounded-xl text-sm font-medium text-white shadow-[0px_0.5px_0px_0px_#404040_inset,1px_4px_4px_1px_#171717] [text-shadow:0px_1px_2px_black] transition-all duration-200 flex items-center justify-center gap-2"
-                                >
-                                    {status === 'saving' ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        'Set new password'
-                                    )}
-                                </button>
-                            </div>
-                        </form>
-                    </>
-                )}
-            </div>
-        </div>
+                        <SubmitButton
+                            loading={status === 'saving'}
+                            loadingLabel="Saving…"
+                            disabled={password.length < MIN_PASSWORD_LENGTH}
+                        >
+                            Set new password
+                        </SubmitButton>
+                    </form>
+                </>
+            )}
+        </AuthPageLayout>
     );
 };
 

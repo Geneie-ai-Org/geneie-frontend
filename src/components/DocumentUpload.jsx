@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2, Link2, Info, Plus, ChevronLeft } from 'lucide-react';
+import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2, Plus, ChevronLeft } from 'lucide-react';
 import { optionalIdToken, requiredIdToken } from '@/lib/safeAuth';
 import { apiUrl as buildApiUrl } from '@/config/api';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,7 +21,19 @@ import PhenotypeInputPanel, {
   PHENOTYPE_MODE_NOTE,
   sampleHasPhenotype,
 } from '@/components/PhenotypeInputPanel';
-import GermlinePedigreeFields from '@/components/GermlinePedigreeFields';
+import GermlinePedigreeFields, { countPedigreeFieldsFilled } from '@/components/GermlinePedigreeFields';
+import {
+  Disclosure,
+  Field,
+  FieldGroup,
+  MissingHint,
+  QuietSummary,
+  TEXT_INPUT_CLASS,
+  UploadErrorBanner,
+  WizardSelect,
+  WizardStepper,
+} from '@/components/UploadWizardKit';
+import { Button } from '@/components/ui/button';
 import {
   EMPTY_PEDIGREE_FIELDS,
   pedigreeFieldsForSubmit,
@@ -50,13 +62,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -69,50 +74,18 @@ function isAllowedVariantFilename(fileName) {
   return false;
 }
 
-// Custom select — thin wrapper over shadcn Select (Base UI handles portal/positioning)
-const CustomSelect = ({ value, onChange, placeholder, options, error, className = '' }) => {
-  const items = Object.fromEntries((options || []).map((o) => [o.value, o.label]));
-  return (
-    <Select value={value || ''} onValueChange={onChange} items={items}>
-      <SelectTrigger
-        className={cn(
-          // Override the base-nova default (data-[size=default]:h-8) with an explicit h-10.
-          'w-full !h-10 px-3 text-sm rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] data-placeholder:text-[var(--text-tertiary)]',
-          className
-        )}
-        style={{ borderColor: error ? 'var(--error)' : 'var(--border-default)' }}
-      >
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent className="p-1.5">
-        {(options || []).map((opt) =>
-          opt.disabled ? (
-            <div
-              key={opt.value}
-              role="option"
-              aria-disabled="true"
-              aria-selected="false"
-              className="relative flex w-full cursor-not-allowed items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm select-none"
-              style={{ color: 'var(--text-tertiary)' }}
-              onPointerDown={(e) => e.preventDefault()}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                toast.info(opt.disabledReason);
-              }}
-            >
-              {opt.label}
-            </div>
-          ) : (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          )
-        )}
-      </SelectContent>
-    </Select>
-  );
-};
+// Shared select (ui/select wrapper; unavailable options toast their reason).
+const CustomSelect = WizardSelect;
+
+/** Human size for the file row, e.g. "1.4 MB". */
+function formatFileSize(bytes) {
+  if (bytes == null || Number.isNaN(bytes)) return '';
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+const hasValue = (v) => v === 0 || (v !== '' && v != null);
 
 const DocumentUpload = ({
   conversationId,
@@ -132,6 +105,8 @@ const DocumentUpload = ({
   editMode = false,
   initialMetadata = null,
   onEditSaved = null,
+  /** Optional: called with { message, code, status } whenever a submit fails. */
+  onUploadFailed = null,
 }) => {
   const { limits } = useAuth();
   const isGuestUser = userTier === 'guest' || userId === 'guest';
@@ -141,8 +116,19 @@ const DocumentUpload = ({
   // Live text in the phenotype box, for the "Skip & upload" label.
   const [phenotypeDraft, setPhenotypeDraft] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [error, setError] = useState('');
+  const [error, setErrorState] = useState('');
+  // Machine-readable half of the last failure (backend `detail.code`, HTTP status), so the
+  // banner can say "too many sessions" instead of echoing a raw message.
+  const [errorMeta, setErrorMeta] = useState(null);
+  const setError = useCallback((value) => {
+    setErrorState(value);
+    setErrorMeta(null);
+  }, []);
   const [success, setSuccess] = useState('');
+  const [touched, setTouched] = useState({});
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const lastSubmitRef = useRef(null);
+  const showInfoFormRef = useRef(false);
   const [showInfoForm, setShowInfoForm] = useState(false);
   /** Sample Metadata wizard: basics → analysis fields → (Germline) phenotype. */
   const [metadataStep, setMetadataStep] = useState('sample'); // 'sample' | 'analysis' | 'phenotype'
@@ -174,7 +160,6 @@ const DocumentUpload = ({
   const [existingProjects, setExistingProjects] = useState([]); // Will be fetched from backend later
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
-  const [showOptionalFieldsWarning, setShowOptionalFieldsWarning] = useState(false);
   const [validationAttempted, setValidationAttempted] = useState(false);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
@@ -225,6 +210,18 @@ const DocumentUpload = ({
       });
       setEditImpact(null);
       setError('');
+      setTouched({});
+      // Saved optional values must not hide behind the collapsed section.
+      setDetailsOpen(
+        [
+          initialMetadata.sampleSex || initialMetadata.patientSex,
+          initialMetadata.sampleSource,
+          initialMetadata.sampleRole,
+          initialMetadata.affectedStatus,
+          initialMetadata.inheritanceModel,
+          initialMetadata.tumorType,
+        ].some(hasValue) || countPedigreeFieldsFilled(pickPedigreeFields(initialMetadata)) > 0
+      );
       setMetadataStep('sample');
       setShowInfoForm(true);
     }
@@ -275,12 +272,25 @@ const DocumentUpload = ({
     }
   }, []);
 
-  const dismissUploadUiForBackgroundUpload = useCallback(() => {
-    setShowInfoForm(false);
-    setError('');
-    if (onDismissForUpload) onDismissForUpload();
-    else if (onCancel) onCancel();
-  }, [onDismissForUpload, onCancel]);
+  /**
+   * Single exit for every failed submit. The error lands in the wizard's banner (the dialog is
+   * re-shown if it was hidden while the transfer ran) and in a toast, so a failure can never
+   * pass unseen even if the host unmounts this component.
+   */
+  const failUpload = useCallback(
+    (message, meta = null, { reopenWizard = true } = {}) => {
+      setErrorState(message);
+      setErrorMeta(meta);
+      setIsUploading(false);
+      setUploadProgress(0);
+      onUploadProgressChange?.(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (reopenWizard) setShowInfoForm(true);
+      onUploadFailed?.({ message, ...(meta || {}) });
+      toast.error('Upload failed', { description: message });
+    },
+    [onUploadProgressChange, onUploadFailed]
+  );
 
   useEffect(() => {
     onUploadingChange?.(isUploading);
@@ -334,6 +344,7 @@ const DocumentUpload = ({
   }, [showInfoForm, userId, userTier]);
 
   useEffect(() => {
+    showInfoFormRef.current = showInfoForm;
     onMetadataFormChange?.(showInfoForm);
   }, [showInfoForm, onMetadataFormChange]);
 
@@ -372,7 +383,7 @@ const DocumentUpload = ({
   };
 
   // Core file processing logic — used by both handleFileSelect and preSelectedFile
-  const processFile = async (file) => {
+  const processFile = async (file, { skipReplace = false } = {}) => {
     setError('');
     setSuccess('');
 
@@ -396,7 +407,7 @@ const DocumentUpload = ({
       return;
     }
 
-    if (existingDocument) {
+    if (existingDocument && !skipReplace) {
       setPendingFile(file);
       setShowReplaceConfirm(true);
       return;
@@ -420,6 +431,8 @@ const DocumentUpload = ({
         sampleFileType: detectedFileType
       }));
       setValidationAttempted(false);
+      setTouched({});
+      setDetailsOpen(false);
       setError('');
       setGenomeDetection(null);
       setMetadataStep('sample');
@@ -511,26 +524,22 @@ const DocumentUpload = ({
   };
 
 
-  const analysisTypeHasDetailStep = (analysisType) =>
-    analysisType === 'Germline' ||
-    analysisType === 'Somatic' ||
-    analysisType === 'Tumor-Normal Paired' ||
-    analysisType === 'Tumor-Only';
+  /** Required essentials still empty, in the words used on screen. */
+  const missingEssentials = [
+    !sampleMetadata.genome && 'genome',
+    !sampleMetadata.sequencingType && 'sequencing type',
+    !sampleMetadata.analysisType && 'analysis type',
+  ].filter(Boolean);
+
+  // Inline validation: a field shows its error after it was touched (list closed / input
+  // blurred) or after a submit attempt, never while the user is still on their way to it.
+  const touch = (field) => setTouched((prev) => (prev[field] ? prev : { ...prev, [field]: true }));
+  const fieldError = (field, value, message) =>
+    (validationAttempted || touched[field]) && !value ? message : null;
 
   const validateSampleMetadataBasics = () => {
     setValidationAttempted(true);
-    if (!sampleMetadata.genome) {
-      setError('Please select a Genome (required)');
-      return false;
-    }
-    if (!sampleMetadata.sequencingType) {
-      setError('Please select a Sequencing Type (required)');
-      return false;
-    }
-    if (!sampleMetadata.analysisType) {
-      setError('Please select an Analysis Type (required)');
-      return false;
-    }
+    if (missingEssentials.length > 0) return false;
     setError('');
     return true;
   };
@@ -544,6 +553,36 @@ const DocumentUpload = ({
   const metadataTotalSteps = isGermlineFlow ? 3 : 2;
   const metadataStepIndex =
     metadataStep === 'phenotype' ? 3 : metadataStep === 'analysis' ? 2 : 1;
+  // The last screen is the phenotype step for Germline, the details step otherwise.
+  const isFinalMetadataStep = metadataStep === 'phenotype' || (metadataStep === 'analysis' && !isGermlineFlow);
+  const wizardSteps = [
+    { id: 'sample', label: 'Essentials' },
+    { id: 'analysis', label: 'Clinical details', optional: true },
+    // Until an analysis type is picked, show the Germline path: it is the one on offer today.
+    ...(isGermlineFlow || !sampleMetadata.analysisType ? [{ id: 'phenotype', label: 'Phenotype', optional: true }] : []),
+  ];
+  const isTumorFlow =
+    sampleMetadata.analysisType === 'Somatic' ||
+    sampleMetadata.analysisType === 'Tumor-Normal Paired' ||
+    sampleMetadata.analysisType === 'Tumor-Only';
+  const detailsFilledCount =
+    [
+      sampleMetadata.sampleSex,
+      sampleMetadata.sampleSource,
+      ...(isGermlineFlow
+        ? [sampleMetadata.sampleRole, sampleMetadata.affectedStatus, sampleMetadata.inheritanceModel]
+        : []),
+      ...(isTumorFlow ? [sampleMetadata.tumorType] : []),
+    ].filter(hasValue).length + (isGermlineFlow ? countPedigreeFieldsFilled(sampleMetadata) : 0);
+  /** Optional things left empty, listed once on the last step instead of a confirm dialog. */
+  const notProvided = [
+    !sampleMetadata.sampleSex && 'sample sex',
+    !sampleMetadata.sampleSource && 'sample source',
+    isGermlineFlow && !sampleMetadata.sampleRole && 'sample role',
+    isGermlineFlow && !sampleMetadata.affectedStatus && 'affected status',
+    isGermlineFlow && !sampleMetadata.inheritanceModel && 'inheritance model',
+    isGermlineFlow && !sampleHasPhenotype(sampleMetadata) && !phenotypeDraft.trim() && 'phenotype',
+  ].filter(Boolean);
 
   const handleInfoFormSubmit = async (e) => {
     e.preventDefault();
@@ -621,7 +660,8 @@ const DocumentUpload = ({
         setMetadataStep('sample');
         setEditImpact(null);
       } catch (err) {
-        setError(err.message || 'Failed to update sample metadata');
+        setErrorState(err.message || 'Failed to update sample metadata');
+        setErrorMeta({ status: err.status ?? null, code: err.code ?? null });
       } finally {
         setIsUploading(false);
       }
@@ -642,33 +682,38 @@ const DocumentUpload = ({
 
     if (!validateSampleMetadataBasics()) return;
 
-    // Check for optional fields that are empty - show encouragement but allow proceeding
-    const emptyOptionalFields = [];
-    if (!sampleMetadata.sampleSex) emptyOptionalFields.push('Sample Sex');
-    if (!sampleMetadata.sampleSource) emptyOptionalFields.push('Sample Source');
-    if (sampleMetadata.analysisType === 'Germline') {
-      if (!sampleMetadata.sampleRole) emptyOptionalFields.push('Sample Role');
-      if (!sampleMetadata.affectedStatus) emptyOptionalFields.push('Affected Status');
-      if (!sampleMetadata.inheritanceModel) emptyOptionalFields.push('Inheritance Model');
-      // Optional, but the phenotype-driven filter cannot run without it, so it is worth
-      // naming before the upload starts.
-      if (!sampleHasPhenotype(sampleMetadata)) emptyOptionalFields.push('Phenotype');
-    }
+    // No "continue without optional fields?" confirm: what was left out is named in a quiet
+    // line on the last step, and it can all be added later from Edit sample info.
+    await startSubmittedUpload();
+  };
 
-    // If optional fields are empty, show custom warning modal
-    if (emptyOptionalFields.length > 0) {
-      setShowOptionalFieldsWarning(true);
-      return; // Wait for user decision
-    }
+  /**
+   * Starts the upload with the metadata entered in the wizard. The dialog is NOT dismissed
+   * here: while the transfer runs it is hidden (the page's loading modal takes over) and it
+   * comes back with the reason if the request fails. Success closes everything through
+   * onUploadSuccess, as before.
+   */
+  const startSubmittedUpload = async () => {
+    const run = async () => {
+      notifyUploadStarting(importMode === 'url' ? { name: importUrlMeta.file_name } : selectedFile);
+      if (importMode === 'url') {
+        await performUrlImport(sampleMetadata);
+      } else {
+        await uploadFile(selectedFile, sampleMetadata);
+      }
+    };
+    lastSubmitRef.current = run;
+    setShowInfoForm(true);
+    await run();
+  };
 
-    // Notify parent first so DocumentUpload stays mounted while upload runs.
-    notifyUploadStarting(importMode === 'url' ? { name: importUrlMeta.file_name } : selectedFile);
-    dismissUploadUiForBackgroundUpload();
-    if (importMode === 'url') {
-      await performUrlImport(sampleMetadata);
-    } else {
-      await uploadFile(selectedFile, sampleMetadata);
+  const retryLastSubmit = async () => {
+    setError('');
+    if (editMode) {
+      await handleInfoFormSubmit({ preventDefault: () => {} });
+      return;
     }
+    if (lastSubmitRef.current) await lastSubmitRef.current();
   };
 
   const handleInfoFormCancel = () => {
@@ -715,6 +760,9 @@ const DocumentUpload = ({
     setShowCreateProject(false);
     setNewProjectName('');
     setValidationAttempted(false);
+    setTouched({});
+    setDetailsOpen(false);
+    setError('');
     setGenomeDetection(null);
     setIsDetectingGenome(false);
     if (fileInputRef.current) {
@@ -748,11 +796,13 @@ const DocumentUpload = ({
 
       const handleUploadFailure = (status, responseText) => {
         let errorMsg = `Upload failed (${status})`;
+        let errorCode = null;
         try {
           const errorData = JSON.parse(responseText);
           const detail = errorData.detail;
           if (detail && typeof detail === 'object') {
             const code = detail.code;
+            errorCode = code || null;
             if (code === 'GUEST_LIMIT_REACHED' || code === 'GUEST_UPLOAD_LIMIT_REACHED' || code === 'FREE_TIER_LIMIT_REACHED') {
               errorMsg = detail.message || 'Upload limit reached. Please upgrade to continue.';
             } else if (
@@ -770,10 +820,7 @@ const DocumentUpload = ({
         } catch {
           // keep default message
         }
-        setError(errorMsg);
-        setIsUploading(false);
-        onUploadProgressChange?.(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
+        failUpload(errorMsg, { status, code: errorCode }, { reopenWizard: Boolean(userInfo) });
       };
 
       const sampleMetaPayload = userInfo
@@ -851,8 +898,7 @@ const DocumentUpload = ({
             await finishUploadSuccess(response, file.name);
           } catch (error) {
             console.error('[DocumentUpload] Error parsing response:', error);
-            setError('Upload succeeded but failed to process response');
-            setIsUploading(false);
+            failUpload('Upload succeeded but the response could not be read. Check your files, then retry if it is missing.', null, { reopenWizard: Boolean(userInfo) });
           }
         } else {
           handleUploadFailure(xhr.status, xhr.responseText);
@@ -860,10 +906,7 @@ const DocumentUpload = ({
       });
 
       xhr.addEventListener('error', () => {
-        setError('Upload failed: Network error');
-        setIsUploading(false);
-        onUploadProgressChange?.(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
+        failUpload('Upload failed: Network error', null, { reopenWizard: Boolean(userInfo) });
       });
 
       xhr.open('POST', uploadUrl);
@@ -875,12 +918,11 @@ const DocumentUpload = ({
 
     } catch (error) {
       console.error('[DocumentUpload] Upload error:', error);
-      setError(`Upload failed: ${error.message}`);
-      setIsUploading(false);
-      onUploadProgressChange?.(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      failUpload(
+        `Upload failed: ${error.message}`,
+        { status: error.status ?? null, code: error.code ?? null },
+        { reopenWizard: Boolean(userInfo) }
+      );
     }
   };
 
@@ -914,10 +956,16 @@ const DocumentUpload = ({
         await onUploadSuccess(documentData);
       } catch (callbackError) {
         console.error('[DocumentUpload] Error in onUploadSuccess callback:', callbackError);
-        setError(`Upload succeeded but failed to save metadata: ${callbackError.message}`);
+        failUpload(`Upload succeeded but failed to save metadata: ${callbackError.message}`, null, {
+          reopenWizard: showInfoFormRef.current,
+        });
         return;
       }
     }
+
+    // The wizard stayed mounted (hidden) while the file transferred; close it now.
+    setShowInfoForm(false);
+    onDismissForUpload?.();
 
     setSuccess(
       `Document "${displayName}" uploaded successfully! ${response.is_variant_file ? `(${response.variant_count} variants)` : ''}`
@@ -927,7 +975,7 @@ const DocumentUpload = ({
     onUploadProgressChange?.(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     setTimeout(() => setSuccess(''), 5000);
-  }, [onUploadSuccess, onUploadProgressChange, sampleMetadata]);
+  }, [onUploadSuccess, onUploadProgressChange, sampleMetadata, failUpload, onDismissForUpload]);
 
   /** Preflight a pasted URL: validate, get filename/size/genome hint, then open metadata form. */
   const handleUrlContinue = async () => {
@@ -1002,7 +1050,7 @@ const DocumentUpload = ({
   /** Perform the actual URL import after metadata form submit. */
   const performUrlImport = async (metadata) => {
     if (!importUrlMeta) {
-      setError('URL preflight info missing. Please go back and validate the URL again.');
+      failUpload('URL preflight info missing. Please go back and validate the URL again.', null);
       return;
     }
 
@@ -1022,9 +1070,7 @@ const DocumentUpload = ({
       await finishUploadSuccess(response, displayName);
     } catch (err) {
       console.error('[DocumentUpload] URL import error:', err);
-      setError(`Import failed: ${err.message}`);
-      setIsUploading(false);
-      onUploadProgressChange?.(null);
+      failUpload(`Import failed: ${err.message}`, { status: err.status ?? null, code: err.code ?? null });
     }
   };
 
@@ -1359,28 +1405,33 @@ const DocumentUpload = ({
           {/* Error Message - Only show upload-related errors, not form validation errors.
           URL mode renders its own inline error under the panel. */}
           {error && !showInfoForm && importMode !== 'url' && (
-            <div className="mt-3 p-3 border rounded-lg flex items-start gap-2" style={{ backgroundColor: 'var(--bg-surface)', borderColor: '#8B2F3C' }}>
-              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#8B2F3C' }} />
-              <p className="text-sm" style={{ color: '#8B2F3C' }}>{error}</p>
-            </div>
+            <UploadErrorBanner
+              className="mt-3"
+              error={errorMeta ? { message: error, ...errorMeta } : error}
+              devices={limits?.devices}
+              onDismiss={() => setError('')}
+            />
           )}
 
           {/* Success Message */}
           {success && (
-            <div className="mt-3 p-3 border rounded-lg flex items-start gap-2" style={{ backgroundColor: 'var(--bg-surface)', borderColor: '#3E8E7E' }}>
-              <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#3E8E7E' }} />
-              <p className="text-sm" style={{ color: '#3E8E7E' }}>{success}</p>
+            <div className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--success)] bg-[var(--success-soft)] p-3" role="status">
+              <CheckCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--success)]" aria-hidden />
+              <p className="text-sm text-foreground">{success}</p>
             </div>
           )}
 
         </>
       )}
 
-      {/* Sample Metadata — always a centered popup (portal), never inline in sidebar/parent */}
-      {/* A stray click outside or Esc used to drop the whole three-step form. Those now ask
-        * first; Cancel stays immediate because it's a deliberate choice. */}
+      {/* Sample metadata wizard: a focused dialog with three steps.
+        *   1 Essentials (name, genome, sequencing, analysis type, run mode)
+        *   2 Clinical details, all optional and collapsed behind one disclosure
+        *   3 Phenotype, optional (Germline only)
+        * Outside click / Esc ask before discarding; Cancel stays immediate. The dialog is
+        * hidden (not unmounted) while a file transfers, and returns with the reason on failure. */}
       <Dialog
-        open={showInfoForm}
+        open={showInfoForm && !(isUploading && !editMode)}
         onOpenChange={(open, details) => {
           if (open) return;
           if (details?.reason === 'outside-press' || details?.reason === 'escape-key') {
@@ -1391,307 +1442,279 @@ const DocumentUpload = ({
         }}
       >
         {/* Pinned to the top rather than centred: the steps grow as results load, and a
-          * centred dialog jumped up each time it did. */}
+          * centred dialog jumped up each time it did. Full-height sheet on phones. */}
         <DialogContent
           showCloseButton={false}
-          className="!max-w-2xl w-full top-[5vh] translate-y-0 max-h-[min(90vh,900px)] flex flex-col p-0 gap-0 overflow-hidden ring-0 border"
-          style={{
-            backgroundColor: 'var(--bg-surface-raised)',
-            boxShadow: 'var(--shadow-lg)',
-            borderColor: 'var(--border-default)',
-          }}
+          className="!max-w-2xl w-full top-[5vh] translate-y-0 max-h-[min(90vh,900px)] flex flex-col p-0 gap-0 overflow-hidden ring-0 border border-border bg-popover shadow-[var(--shadow-lg)] max-sm:!top-0 max-sm:!h-[100dvh] max-sm:!max-h-[100dvh] max-sm:!max-w-full max-sm:rounded-none"
         >
-          <DialogTitle className="sr-only">{editMode ? 'Edit Sample Information' : 'Sample Metadata'}</DialogTitle>
+          <DialogTitle className="sr-only">{editMode ? 'Edit sample information' : 'Sample metadata'}</DialogTitle>
           <DialogDescription className="sr-only">
             {editMode ? 'Update metadata for this variant file.' : 'Provide details about your variant file for better analysis.'}
           </DialogDescription>
-          <div className="flex-shrink-0 px-7 pt-6 pb-4 relative">
-            {/* Header: what + which file on one line (constant across steps), the bar, then
-              * the current step's name, which doubles as the heading for the fields below. */}
-            <h3
-              id="sample-metadata-title"
-              className="flex items-baseline gap-1.5 min-w-0 text-base font-semibold pr-8"
-              style={{ color: 'var(--text-primary)' }}
-            >
-              <span className="shrink-0">{editMode ? 'Edit sample information' : 'Sample metadata'}</span>
-              {!editMode && (selectedFile || importUrlMeta) && (
+          <div className="flex-shrink-0 px-5 pb-4 pt-5 sm:px-7 sm:pt-6">
+            <div className="flex items-start justify-between gap-3">
+              <h3 id="sample-metadata-title" className="min-w-0 text-base font-semibold text-foreground">
+                {editMode ? 'Edit sample information' : 'Add sample details'}
+              </h3>
+              <button
+                type="button"
+                onClick={handleInfoFormCancel}
+                disabled={isUploading}
+                aria-label="Close"
+                className="-mr-2 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55 disabled:opacity-40 sm:h-8 sm:w-8"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+            {!editMode && (selectedFile || importUrlMeta) && (
+              <div className="mt-2 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 <span
-                  className="truncate text-sm font-normal"
-                  style={{ color: 'var(--text-secondary)' }}
+                  className="min-w-0 truncate font-mono"
                   title={selectedFile ? selectedFile.name : importUrlMeta?.file_name}
                 >
-                  · {selectedFile ? selectedFile.name : importUrlMeta?.file_name}
+                  {selectedFile ? selectedFile.name : importUrlMeta?.file_name}
                 </span>
-              )}
-            </h3>
-            <div className="flex items-center gap-1.5 mt-3" aria-hidden="true">
-              {Array.from({ length: metadataTotalSteps }, (_, i) => (
-                <span
-                  key={`meta-step-${i + 1}`}
-                  className="h-1 flex-1 rounded-full"
-                  style={{
-                    backgroundColor:
-                      metadataStepIndex >= i + 1
-                        ? 'var(--accent-teal)'
-                        : 'var(--border-default)',
-                  }}
-                />
-              ))}
-            </div>
-            <div className="flex items-baseline justify-between gap-3 mt-2.5">
-              <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                {metadataStep === 'sample' ? (
-                  'Sample'
-                ) : metadataStep === 'phenotype' ? (
-                  <>Phenotype <span className="text-2xs font-normal" style={{ color: 'var(--text-tertiary)' }}>(optional)</span></>
-                ) : (
-                  `${sampleMetadata.analysisType || 'Analysis'} details`
-                )}
-              </p>
-              <span className="text-2xs shrink-0" style={{ color: 'var(--text-tertiary)' }}>
-                {metadataStepIndex} of {metadataTotalSteps}
-              </span>
-            </div>
-            {error && showInfoForm && (
-              <div className="mt-4 p-3 border rounded-lg flex items-start gap-2" style={{ backgroundColor: 'var(--error-soft)', borderColor: 'var(--error)' }}>
-                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--error)' }} />
-                <p className="text-xs" style={{ color: 'var(--error)' }}>{error}</p>
+                {selectedFile ? (
+                  <span className="shrink-0 tabular-nums">{formatFileSize(selectedFile.size)}</span>
+                ) : importUrlMeta?.content_length != null ? (
+                  <span className="shrink-0 tabular-nums">{formatFileSize(importUrlMeta.content_length)}</span>
+                ) : null}
+                {sampleMetadata.sampleFileType ? (
+                  <span className="shrink-0 rounded-full bg-muted px-1.5 text-2xs font-medium text-muted-foreground">
+                    {sampleMetadata.sampleFileType}
+                  </span>
+                ) : null}
               </div>
+            )}
+            <WizardStepper steps={wizardSteps} current={metadataStepIndex - 1} className="mt-4" />
+            {error && showInfoForm && (
+              <UploadErrorBanner
+                className="mt-4"
+                error={errorMeta ? { message: error, ...errorMeta } : error}
+                devices={limits?.devices}
+                onRetry={retryLastSubmit}
+                onDismiss={() => setError('')}
+                retrying={isUploading}
+              />
             )}
           </div>
 
-          <form onSubmit={handleInfoFormSubmit} className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto px-7 pb-4 space-y-5">
+          <form onSubmit={handleInfoFormSubmit} className="flex min-h-0 flex-1 flex-col">
+            <div className="flex-1 space-y-5 overflow-y-auto px-5 pb-4 sm:px-7">
               {metadataStep === 'sample' && (
-              <div className="space-y-5">
-              <PipelineRunModeToggle
-                value={sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode}
-                onChange={(mode) =>
-                  setSampleMetadata((prev) => applyPipelineRunModeChange(prev, mode))
-                }
-              />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
-                {/* Name - Editable */}
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                    Name
-                  </label>
-                  <input
-                    type="text"
-                    value={sampleMetadata.name}
-                    onChange={(e) => setSampleMetadata({ ...sampleMetadata, name: e.target.value })}
-                    className="w-full px-3 h-10 border rounded-lg focus:outline-none focus:ring-1 text-sm transition-all"
-                    style={{
-                      borderColor: 'var(--border-default)',
-                      background: 'var(--bg-input)',
-                      color: 'var(--text-primary)',
-                      height: '40px'
-                    }}
-                    onFocus={(e) => e.currentTarget.style.borderColor = 'var(--border-focus)'}
-                    onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-default)'}
-                    placeholder="Enter sample name..."
-                  />
-                </div>
+                <div className="space-y-5">
+                  <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
+                    <Field label="Sample name" htmlFor="meta-name" className="sm:col-span-2">
+                      <input
+                        id="meta-name"
+                        type="text"
+                        value={sampleMetadata.name}
+                        onChange={(e) => setSampleMetadata({ ...sampleMetadata, name: e.target.value })}
+                        className={cn(TEXT_INPUT_CLASS, 'border-border')}
+                        placeholder="Enter sample name"
+                      />
+                    </Field>
 
-                {/* Genome - Mandatory Field (auto-detected when possible) */}
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                    Genome <span style={{ color: 'var(--error)' }}>*</span>
-                  </label>
-                  <CustomSelect
-                    value={sampleMetadata.genome}
-                    onChange={(val) => {
-                      setSampleMetadata({ ...sampleMetadata, genome: val });
-                      // Clear auto-detection badge when user manually picks
-                      if (genomeDetection) setGenomeDetection((prev) => prev ? { ...prev, _userOverride: true } : prev);
-                    }}
-                    placeholder={isDetectingGenome ? 'Detecting…' : 'Choose one'}
-                    options={[
-                      { value: 'hg19 (GRCh37)', label: 'hg19 (GRCh37)' },
-                      { value: 'hg38 (GRCh38)', label: 'hg38 (GRCh38)' },
-                    ]}
-                    error={validationAttempted && !sampleMetadata.genome}
-                  />
-                  {/* Auto-detection feedback */}
-                  {!editMode && isDetectingGenome && (
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--accent-teal)' }} />
-                      <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>Detecting genome build…</span>
-                    </div>
-                  )}
-                  {!editMode && genomeDetection?.detected_build && !isDetectingGenome && !genomeDetection._userOverride && (
-                    <div
-                      className="flex items-center gap-1.5 mt-1 min-w-0"
-                      title={genomeDetection.source ? `Source: ${genomeDetection.source.replace(/_/g, ' ')}` : undefined}
+                    <Field
+                      label="Genome build"
+                      required
+                      htmlFor="meta-genome"
+                      error={fieldError('genome', sampleMetadata.genome, 'Choose a genome build.')}
+                      helper={
+                        isDetectingGenome && !editMode
+                          ? 'Detecting the genome build from the file…'
+                          : !editMode && genomeDetection?.detected_build && !genomeDetection._userOverride
+                            ? `Auto-detected ${genomeDetection.detected_build.toUpperCase()}${genomeDetection.confidence !== 'high' ? ', please verify' : ''}.`
+                            : null
+                      }
                     >
-                      <span className="text-2xs truncate text-[var(--text-tertiary)]">
-                        Auto-detected {genomeDetection.detected_build.toUpperCase()}
-                        {genomeDetection.confidence !== 'high' && ' — verify'}
-                      </span>
-                    </div>
-                  )}
-                </div>
+                      <CustomSelect
+                        id="meta-genome"
+                        value={sampleMetadata.genome}
+                        onChange={(val) => {
+                          setSampleMetadata({ ...sampleMetadata, genome: val });
+                          // Clear auto-detection badge when user manually picks
+                          if (genomeDetection) setGenomeDetection((prev) => prev ? { ...prev, _userOverride: true } : prev);
+                        }}
+                        onTouched={() => touch('genome')}
+                        placeholder={isDetectingGenome ? 'Detecting…' : 'Choose one'}
+                        options={[
+                          { value: 'hg19 (GRCh37)', label: 'hg19 (GRCh37)' },
+                          { value: 'hg38 (GRCh38)', label: 'hg38 (GRCh38)' },
+                        ]}
+                        error={Boolean(fieldError('genome', sampleMetadata.genome, 'x'))}
+                      />
+                    </Field>
 
-                {/* Sequencing Type - Mandatory Field */}
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                    Sequencing Type <span style={{ color: 'var(--error)' }}>*</span>
-                  </label>
-                  <CustomSelect
-                    value={sampleMetadata.sequencingType}
-                    onChange={(val) => setSampleMetadata({ ...sampleMetadata, sequencingType: val })}
-                    placeholder="Choose one"
-                    options={[
-                      { value: 'Whole Exome (WES)', label: 'Whole Exome (WES)' },
-                      { value: 'Whole Genome (WGS)', label: 'Whole Genome (WGS)' },
-                      { value: 'Targeted', label: 'Targeted' },
-                    ]}
-                    error={validationAttempted && !sampleMetadata.sequencingType}
+                    <Field
+                      label="Sequencing type"
+                      required
+                      htmlFor="meta-seq"
+                      error={fieldError('sequencingType', sampleMetadata.sequencingType, 'Choose a sequencing type.')}
+                    >
+                      <CustomSelect
+                        id="meta-seq"
+                        value={sampleMetadata.sequencingType}
+                        onChange={(val) => setSampleMetadata({ ...sampleMetadata, sequencingType: val })}
+                        onTouched={() => touch('sequencingType')}
+                        placeholder="Choose one"
+                        options={[
+                          { value: 'Whole Exome (WES)', label: 'Whole Exome (WES)' },
+                          { value: 'Whole Genome (WGS)', label: 'Whole Genome (WGS)' },
+                          { value: 'Targeted', label: 'Targeted' },
+                        ]}
+                        error={Boolean(fieldError('sequencingType', sampleMetadata.sequencingType, 'x'))}
+                      />
+                    </Field>
+
+                    <Field
+                      label="Analysis type"
+                      required
+                      htmlFor="meta-analysis"
+                      error={fieldError('analysisType', sampleMetadata.analysisType, 'Choose an analysis type.')}
+                      className="sm:col-span-2"
+                    >
+                      <CustomSelect
+                        id="meta-analysis"
+                        value={sampleMetadata.analysisType}
+                        onChange={(val) => setSampleMetadata({ ...sampleMetadata, analysisType: val })}
+                        onTouched={() => touch('analysisType')}
+                        placeholder="Choose one"
+                        options={[
+                          { value: 'Germline', label: 'Germline' },
+                          { value: 'Somatic', label: 'Somatic', disabled: true, disabledReason: 'Somatic analysis is coming soon.' },
+                          { value: 'Tumor-Normal Paired', label: 'Tumor-Normal Paired', disabled: true, disabledReason: 'Tumor-Normal Paired analysis is coming soon.' },
+                          { value: 'Tumor-Only', label: 'Tumor-Only', disabled: true, disabledReason: 'Tumor-Only analysis is coming soon.' },
+                          { value: 'IVF', label: 'IVF', disabled: true, disabledReason: 'IVF analysis is coming soon.' },
+                          { value: 'PGT', label: 'PGT', disabled: true, disabledReason: 'PGT analysis is coming soon.' },
+                          { value: 'Unknown', label: 'Unknown', disabled: true, disabledReason: 'Unknown analysis type is not supported yet.' },
+                        ]}
+                        error={Boolean(fieldError('analysisType', sampleMetadata.analysisType, 'x'))}
+                      />
+                    </Field>
+                  </div>
+
+                  <PipelineRunModeToggle
+                    value={sampleMetadata.pipeline_run_mode || sampleMetadata.phenotype_run_mode}
+                    onChange={(mode) =>
+                      setSampleMetadata((prev) => applyPipelineRunModeChange(prev, mode))
+                    }
                   />
                 </div>
-
-                {/* Sample File Type - Auto-detected */}
-                <div>
-                  <label className="flex items-baseline gap-1.5 text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                    Sample File Type <span className="text-2xs font-normal items-baseline" style={{ color: 'var(--text-tertiary)' }}>(auto-detected)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={sampleMetadata.sampleFileType}
-                    className="w-full px-3 h-10 border rounded-lg focus:outline-none text-sm transition-all"
-                    style={{
-                      borderColor: 'var(--border-default)',
-                      background: 'var(--bg-surface-hover)',
-                      color: 'var(--text-tertiary)',
-                    }}
-                    readOnly
-                  />
-                </div>
-
-                {/* Sample Sex - Optional */}
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                    Sample Sex
-                  </label>
-                  <CustomSelect
-                    value={sampleMetadata.sampleSex}
-                    onChange={(val) => setSampleMetadata({ ...sampleMetadata, sampleSex: val })}
-                    placeholder="Choose one"
-                    options={[
-                      { value: 'Male', label: 'Male' },
-                      { value: 'Female', label: 'Female' },
-                      { value: 'Unknown', label: 'Unknown' },
-                    ]}
-                  />
-                </div>
-
-                {/* Analysis Type - Mandatory Field */}
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                    Analysis Type <span style={{ color: 'var(--error)' }}>*</span>
-                  </label>
-                  <CustomSelect
-                    value={sampleMetadata.analysisType}
-                    onChange={(val) => setSampleMetadata({ ...sampleMetadata, analysisType: val })}
-                    placeholder="Choose one"
-                    options={[
-                      { value: 'Germline', label: 'Germline' },
-                      { value: 'Somatic', label: 'Somatic', disabled: true, disabledReason: 'Somatic analysis is coming soon.' },
-                      { value: 'Tumor-Normal Paired', label: 'Tumor-Normal Paired', disabled: true, disabledReason: 'Tumor-Normal Paired analysis is coming soon.' },
-                      { value: 'Tumor-Only', label: 'Tumor-Only', disabled: true, disabledReason: 'Tumor-Only analysis is coming soon.' },
-                      { value: 'IVF', label: 'IVF', disabled: true, disabledReason: 'IVF analysis is coming soon.' },
-                      { value: 'PGT', label: 'PGT', disabled: true, disabledReason: 'PGT analysis is coming soon.' },
-                      { value: 'Unknown', label: 'Unknown', disabled: true, disabledReason: 'Unknown analysis type is not supported yet.' },
-                    ]}
-                    error={validationAttempted && !sampleMetadata.analysisType}
-                  />
-                </div>
-
-                {/* Sample Source - Optional */}
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                    Sample Source
-                  </label>
-                  <CustomSelect
-                    value={sampleMetadata.sampleSource}
-                    onChange={(val) => setSampleMetadata({ ...sampleMetadata, sampleSource: val })}
-                    placeholder="Choose one"
-                    options={[
-                      { value: 'Tissue', label: 'Tissue' },
-                      { value: 'Blood', label: 'Blood' },
-                      { value: 'FFPE', label: 'FFPE' },
-                      { value: 'Other', label: 'Other' },
-                    ]}
-                  />
-                </div>
-              </div>
-              </div>
               )}
 
-              {metadataStep === 'analysis' && sampleMetadata.analysisType === 'Germline' && (
-                <div className="disclosure-enter">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                    {/* Sample Role */}
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Sample Role
-                      </label>
-                      <CustomSelect
-                        value={sampleMetadata.sampleRole}
-                        onChange={(val) => setSampleMetadata({ ...sampleMetadata, sampleRole: val })}
-                        placeholder="Choose one"
-                        options={[
-                          { value: 'proband', label: 'Proband' },
-                          { value: 'mother', label: 'Mother' },
-                          { value: 'father', label: 'Father' },
-                          { value: 'sibling', label: 'Sibling' },
-                          { value: 'other', label: 'Other' },
-                        ]}
+              {metadataStep === 'analysis' && (
+                <div className="disclosure-enter space-y-4">
+                  <p className="text-xs text-muted-foreground">
+                    Nothing here is required. Clinical context sharpens prioritisation, and you can add it
+                    later from Edit sample info.
+                  </p>
+                  <Disclosure
+                    label="Add clinical details (optional)"
+                    summary={detailsFilledCount > 0 ? `${detailsFilledCount} added` : null}
+                    open={detailsOpen}
+                    onToggle={() => setDetailsOpen((v) => !v)}
+                  >
+                    <FieldGroup title="Individual">
+                      <Field label="Sample sex" htmlFor="meta-sex">
+                        <CustomSelect
+                          id="meta-sex"
+                          value={sampleMetadata.sampleSex}
+                          onChange={(val) => setSampleMetadata({ ...sampleMetadata, sampleSex: val })}
+                          placeholder="Choose one"
+                          options={[
+                            { value: 'Male', label: 'Male' },
+                            { value: 'Female', label: 'Female' },
+                            { value: 'Unknown', label: 'Unknown' },
+                          ]}
+                        />
+                      </Field>
+                      <Field label="Sample source" htmlFor="meta-source">
+                        <CustomSelect
+                          id="meta-source"
+                          value={sampleMetadata.sampleSource}
+                          onChange={(val) => setSampleMetadata({ ...sampleMetadata, sampleSource: val })}
+                          placeholder="Choose one"
+                          options={[
+                            { value: 'Tissue', label: 'Tissue' },
+                            { value: 'Blood', label: 'Blood' },
+                            { value: 'FFPE', label: 'FFPE' },
+                            { value: 'Other', label: 'Other' },
+                          ]}
+                        />
+                      </Field>
+                      {isGermlineFlow && (
+                        <>
+                          <Field label="Sample role" htmlFor="meta-role">
+                            <CustomSelect
+                              id="meta-role"
+                              value={sampleMetadata.sampleRole}
+                              onChange={(val) => setSampleMetadata({ ...sampleMetadata, sampleRole: val })}
+                              placeholder="Choose one"
+                              options={[
+                                { value: 'proband', label: 'Proband' },
+                                { value: 'mother', label: 'Mother' },
+                                { value: 'father', label: 'Father' },
+                                { value: 'sibling', label: 'Sibling' },
+                                { value: 'other', label: 'Other' },
+                              ]}
+                            />
+                          </Field>
+                          <Field label="Affected status" htmlFor="meta-affected">
+                            <CustomSelect
+                              id="meta-affected"
+                              value={sampleMetadata.affectedStatus}
+                              onChange={(val) => setSampleMetadata({ ...sampleMetadata, affectedStatus: val })}
+                              placeholder="Choose one"
+                              options={[
+                                { value: 'affected', label: 'Affected' },
+                                { value: 'unaffected', label: 'Unaffected' },
+                              ]}
+                            />
+                          </Field>
+                          <Field label="Inheritance model" htmlFor="meta-inheritance">
+                            <CustomSelect
+                              id="meta-inheritance"
+                              value={sampleMetadata.inheritanceModel}
+                              onChange={(val) => setSampleMetadata({ ...sampleMetadata, inheritanceModel: val })}
+                              placeholder="Choose one"
+                              options={[
+                                { value: 'Autosomal Dominant', label: 'Autosomal Dominant' },
+                                { value: 'Autosomal Recessive', label: 'Autosomal Recessive' },
+                                { value: 'X-linked', label: 'X-linked' },
+                                { value: 'De novo', label: 'De novo' },
+                                { value: 'Unknown', label: 'Unknown' },
+                              ]}
+                            />
+                          </Field>
+                        </>
+                      )}
+                      {isTumorFlow && (
+                        <Field label="Tumor type" htmlFor="meta-tumor" className="sm:col-span-2">
+                          <input
+                            id="meta-tumor"
+                            type="text"
+                            value={sampleMetadata.tumorType}
+                            onChange={(e) => setSampleMetadata({ ...sampleMetadata, tumorType: e.target.value })}
+                            placeholder="e.g. Breast cancer, Lung adenocarcinoma"
+                            className={cn(TEXT_INPUT_CLASS, 'border-border')}
+                          />
+                        </Field>
+                      )}
+                    </FieldGroup>
+
+                    {isGermlineFlow && (
+                      <GermlinePedigreeFields
+                        value={sampleMetadata}
+                        onChange={(fields) => setSampleMetadata((prev) => ({ ...prev, ...fields }))}
+                        Select={CustomSelect}
                       />
-                    </div>
-
-                    {/* Affected Status */}
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Affected Status
-                      </label>
-                      <CustomSelect
-                        value={sampleMetadata.affectedStatus}
-                        onChange={(val) => setSampleMetadata({ ...sampleMetadata, affectedStatus: val })}
-                        placeholder="Choose one"
-                        options={[
-                          { value: 'affected', label: 'Affected' },
-                          { value: 'unaffected', label: 'Unaffected' },
-                        ]}
-                      />
-                    </div>
-
-                    {/* Inheritance Model */}
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Inheritance Model
-                      </label>
-                      <CustomSelect
-                        value={sampleMetadata.inheritanceModel}
-                        onChange={(val) => setSampleMetadata({ ...sampleMetadata, inheritanceModel: val })}
-                        placeholder="Choose one"
-                        options={[
-                          { value: 'Autosomal Dominant', label: 'Autosomal Dominant' },
-                          { value: 'Autosomal Recessive', label: 'Autosomal Recessive' },
-                          { value: 'X-linked', label: 'X-linked' },
-                          { value: 'De novo', label: 'De novo' },
-                          { value: 'Unknown', label: 'Unknown' },
-                        ]}
-                      />
-                    </div>
-
-                    <GermlinePedigreeFields
-                      value={sampleMetadata}
-                      onChange={(fields) => setSampleMetadata((prev) => ({ ...prev, ...fields }))}
-                      Select={CustomSelect}
-                    />
-
-                  </div>
+                    )}
+                  </Disclosure>
+                  {detailsFilledCount === 0 && !detailsOpen && (
+                    <QuietSummary>No clinical details added.</QuietSummary>
+                  )}
                 </div>
               )}
 
@@ -1736,143 +1759,90 @@ const DocumentUpload = ({
                   />
                 </div>
               )}
-
-              {metadataStep === 'analysis' &&
-                (sampleMetadata.analysisType === 'Somatic' ||
-                  sampleMetadata.analysisType === 'Tumor-Normal Paired' ||
-                  sampleMetadata.analysisType === 'Tumor-Only') && (
-                  <div className="disclosure-enter">
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Tumor Type
-                      </label>
-                      <input
-                        type="text"
-                        value={sampleMetadata.tumorType}
-                        onChange={(e) => setSampleMetadata({ ...sampleMetadata, tumorType: e.target.value })}
-                        placeholder="Enter tumor type (e.g., Breast Cancer, Lung Adenocarcinoma)..."
-                        className="w-full px-3 h-10 border rounded-lg focus:outline-none focus:ring-1 text-sm transition-all"
-                        style={{
-                          borderColor: 'var(--border-default)',
-                          background: 'var(--bg-input)',
-                          color: 'var(--text-primary)',
-                          height: '40px'
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-              {metadataStep === 'analysis' && !analysisTypeHasDetailStep(sampleMetadata.analysisType) && (
-                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                  No extra fields for this analysis type. Continue to upload.
-                </p>
-              )}
-
             </div>
 
-            {/* Form Actions — pinned footer */}
-            <div className="flex-shrink-0 flex gap-2 justify-between px-7 py-4 border-t border-[var(--border-subtle)]">
-              <div className="flex gap-2">
-                {metadataStep === 'analysis' || metadataStep === 'phenotype' ? (
-                  <button
+            {/* Footer: pinned. What is missing / left out is plain text, not a tooltip or a confirm. */}
+            <div className="flex-shrink-0 space-y-2 border-t border-border px-5 py-3 sm:px-7 sm:py-4">
+              {metadataStep === 'sample' && missingEssentials.length > 0 && (
+                <MissingHint items={missingEssentials} />
+              )}
+              {isFinalMetadataStep && !editMode && notProvided.length > 0 && (
+                <QuietSummary>
+                  Not provided: {notProvided.join(', ')}. You can add these later from Edit sample info.
+                </QuietSummary>
+              )}
+              {/* Phones: the primary action first and full width, then Cancel, then Back. */}
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex gap-2">
+                  {metadataStep === 'analysis' || metadataStep === 'phenotype' ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="lg"
+                      onClick={() => {
+                        setError('');
+                        setMetadataStep(metadataStep === 'phenotype' ? 'analysis' : 'sample');
+                      }}
+                      disabled={isUploading}
+                      className="max-sm:h-11 max-sm:w-full"
+                    >
+                      <ChevronLeft className="h-4 w-4" aria-hidden />
+                      Back
+                    </Button>
+                  ) : null}
+                </div>
+                <div className="flex gap-2 max-sm:flex-col-reverse">
+                  <Button
                     type="button"
-                    onClick={() => {
-                      setError('');
-                      setMetadataStep(metadataStep === 'phenotype' ? 'analysis' : 'sample');
-                    }}
+                    variant="outline"
+                    size="lg"
+                    onClick={handleInfoFormCancel}
                     disabled={isUploading}
-                    className="h-10 px-3 rounded-lg transition-colors text-sm font-medium inline-flex items-center gap-1 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
-                    style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
+                    className="max-sm:h-11 max-sm:w-full"
                   >
-                    <ChevronLeft className="w-4 h-4" />
-                    Back
-                  </button>
-                ) : null}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleInfoFormCancel}
-                  disabled={isUploading}
-                  className="h-10 px-4 rounded-lg transition-colors text-sm font-medium disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
-                  style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
-                  onMouseEnter={(e) => { if (!isUploading) e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; }}
-                >
-                  Cancel
-                </button>
-                {metadataStep === 'sample' ||
-                (metadataStep === 'analysis' && isGermlineFlow) ? (
-                  <button
-                    type="submit"
-                    disabled={isUploading}
-                    className="h-10 px-5 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface-raised)]"
-                    style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
-                  >
-                    Continue
-                  </button>
-                ) : (
-                  <button
-                    type="submit"
-                    disabled={isUploading}
-                    className="h-10 px-5 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface-raised)]"
-                    style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
-                    onMouseEnter={(e) => { if (!isUploading) e.currentTarget.style.opacity = '0.9'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
-                  >
-                    {isUploading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        {editMode ? 'Saving…' : 'Processing…'}
-                      </>
-                    ) : (
-                      editMode
-                        ? 'Save Changes'
-                        : metadataStep === 'phenotype' &&
-                            sampleMetadata.analysisType === 'Germline' &&
-                            !phenotypeDraft.trim() &&
-                            !(sampleMetadata.phenotype || '').trim()
-                          ? (importMode === 'url' ? 'Skip & import' : 'Skip & upload')
-                          : (importMode === 'url' ? 'Import file' : 'Upload file')
-                    )}
-                  </button>
-                )}
+                    Cancel
+                  </Button>
+                  {!isFinalMetadataStep ? (
+                    <Button
+                      type="submit"
+                      size="lg"
+                      disabled={isUploading || (metadataStep === 'sample' && missingEssentials.length > 0)}
+                      title={
+                        metadataStep === 'sample' && missingEssentials.length > 0
+                          ? `Still needed: ${missingEssentials.join(', ')}`
+                          : undefined
+                      }
+                      className="max-sm:h-11 max-sm:w-full"
+                    >
+                      Continue
+                    </Button>
+                  ) : (
+                    <Button type="submit" size="lg" disabled={isUploading} className="max-sm:h-11 max-sm:w-full">
+                      {isUploading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                          {editMode ? 'Saving…' : 'Uploading…'}
+                        </>
+                      ) : editMode ? (
+                        'Save changes'
+                      ) : metadataStep === 'phenotype' &&
+                        sampleMetadata.analysisType === 'Germline' &&
+                        !phenotypeDraft.trim() &&
+                        !(sampleMetadata.phenotype || '').trim() ? (
+                        importMode === 'url' ? 'Skip phenotype and import' : 'Skip phenotype and upload'
+                      ) : importMode === 'url' ? (
+                        'Import file'
+                      ) : (
+                        'Upload file'
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </form>
         </DialogContent>
       </Dialog>
-
-      {/* Optional Fields Warning Modal */}
-      <AlertDialog open={showOptionalFieldsWarning} onOpenChange={(open) => { if (!open) setShowOptionalFieldsWarning(false); }}>
-        <AlertDialogContent className="max-w-md">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Continue without optional fields?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Some optional fields are empty. Filling them will improve analysis accuracy.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Go Back</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-[var(--accent-teal)] text-[var(--accent-teal-contrast)] hover:bg-[var(--accent-teal-hover)]"
-              onClick={async () => {
-                setShowOptionalFieldsWarning(false);
-                notifyUploadStarting(importMode === 'url' ? { name: importUrlMeta.file_name } : selectedFile);
-                dismissUploadUiForBackgroundUpload();
-                if (importMode === 'url') {
-                  await performUrlImport(sampleMetadata);
-                } else {
-                  await uploadFile(selectedFile, sampleMetadata);
-                }
-              }}
-            >
-              Continue
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Remove Document Confirmation Modal */}
       <AlertDialog open={showRemoveConfirm} onOpenChange={(open) => { if (!open) setShowRemoveConfirm(false); }}>
@@ -1954,36 +1924,13 @@ const DocumentUpload = ({
                 setPendingFile(null);
                 if (!file) return;
 
-                // Continue with file processing
+                // Same routing as a fresh pick: VCF/TSV/CSV go through the metadata wizard
+                // (a bare upload here would skip the sample details entirely).
                 const isGuest = userTier === 'guest' || userId === 'guest';
-                if (!isGuest) {
-                  const fileName = file.name.toLowerCase();
-                  const extension = fileName.substring(fileName.lastIndexOf('.'));
-                  if (extension === '.tsv' || extension === '.csv') {
-                    setSelectedFile(file);
-                    let detectedFileType = '';
-                    if (extension === '.tsv') {
-                      detectedFileType = 'TSV';
-                    } else if (extension === '.csv') {
-                      detectedFileType = 'CSV';
-                    }
-                    const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.'));
-                    setSampleMetadata(prev => ({
-                      ...prev,
-                      name: nameWithoutExt,
-                      sampleFileType: detectedFileType
-                    }));
-                    setValidationAttempted(false);
-                    setError('');
-                    setGenomeDetection(null);
-                    setMetadataStep('sample');
-                    setShowInfoForm(true);
-                    runGenomeDetection(file);
-                  } else {
-                    await uploadFile(file);
-                  }
-                } else {
+                if (isGuest) {
                   await uploadFile(file);
+                } else {
+                  await processFile(file, { skipReplace: true });
                 }
               }}
             >

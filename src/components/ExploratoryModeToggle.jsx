@@ -1,10 +1,12 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { Zap, Compass, ChevronDown, Check } from 'lucide-react';
+import { Zap, Compass, ChevronDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu';
 
 /**
@@ -86,52 +88,44 @@ export default function ExploratoryModeToggle({ variant = 'floating', className 
 
   if (isInline) {
     const Icon = on ? Compass : Zap;
-    // The orange is lifted a little in dark mode so it keeps contrast on the dark card.
-    const tone = on
-      ? 'text-[var(--perm-warn)] dark:text-[color-mix(in_srgb,var(--perm-warn)_72%,white)]'
-      : 'text-muted-foreground hover:text-foreground';
     const options = [
-      { id: false, label: 'Standard', hint: 'Fast, reproducible answers', icon: Zap },
-      { id: true, label: 'Explore', hint: 'An agent reasons across your data in steps', icon: Compass },
+      { id: 'standard', label: 'Standard', hint: 'Fast, reproducible answers', icon: Zap },
+      { id: 'explore', label: 'Explore', hint: 'An agent reasons across your data in steps', icon: Compass },
     ];
     return (
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label={`Answer mode: ${on ? 'Explore' : 'Standard'}`}
           title={TITLE}
-          className={[
-            'chat-mode-label inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] px-2 text-[13px] font-medium whitespace-nowrap',
-            'transition-colors outline-none hover:bg-[var(--bg-surface-hover)] focus-visible:ring-2 focus-visible:ring-ring/50 data-[popup-open]:bg-[var(--bg-surface-hover)]',
-            '[@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:px-3',
-            tone,
-            className,
-          ].join(' ')}
+          className={cn(
+            'chat-tool chat-tool--label chat-focus chat-mode-label',
+            on && 'chat-tool--explore',
+            className
+          )}
         >
-          <Icon className="size-3.5 shrink-0" aria-hidden />
+          <Icon aria-hidden />
           <span>{on ? 'Explore' : 'Standard'}</span>
-          <ChevronDown className="size-3.5 shrink-0 opacity-70" aria-hidden />
+          <ChevronDown className="opacity-70" aria-hidden />
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-64 !p-1">
-          {options.map((o) => {
-            const selected = o.id === on;
-            return (
-              <DropdownMenuItem
-                key={o.label}
-                onClick={() => set(o.id)}
-                className="items-start gap-2.5 px-2 py-1.5"
+          <DropdownMenuRadioGroup value={on ? 'explore' : 'standard'} onValueChange={(v) => set(v === 'explore')}>
+            {options.map((o) => (
+              <DropdownMenuRadioItem
+                key={o.id}
+                value={o.id}
+                className="items-start gap-2.5 px-2 py-1.5 pr-8"
               >
                 <o.icon
-                  className={`mt-0.5 size-4 ${o.id ? 'text-[var(--perm-warn)]' : 'text-muted-foreground'}`}
+                  className={`mt-0.5 size-4 ${o.id === 'explore' ? 'text-[var(--perm-warn)]' : 'text-muted-foreground'}`}
                   aria-hidden
                 />
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="text-[13px] font-medium text-foreground">{o.label}</span>
                   <span className="text-xs text-muted-foreground">{o.hint}</span>
                 </span>
-                {selected && <Check className="mt-0.5 size-4 text-foreground" aria-hidden />}
-              </DropdownMenuItem>
-            );
-          })}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
     );
@@ -139,8 +133,8 @@ export default function ExploratoryModeToggle({ variant = 'floating', className 
 
   const seg = (active) =>
     [
-      'inline-flex items-center justify-center rounded-[6px] px-2.5 text-xs font-medium whitespace-nowrap transition-colors',
-      'h-6',
+      'chat-focus inline-flex items-center justify-center rounded-[6px] px-2.5 text-xs font-medium whitespace-nowrap',
+      'h-6 transition-[background-color,color,transform] duration-150 active:scale-[.98] motion-reduce:transition-none',
       active
         ? 'bg-[var(--segment-thumb)] text-foreground shadow-[var(--shadow-sm)] dark:shadow-none'
         : 'text-muted-foreground hover:text-foreground',

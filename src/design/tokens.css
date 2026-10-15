@@ -31,7 +31,7 @@
   --destructive-foreground: 0 0% 100%;
 
   --border: 60 4% 90.5%;
-  --input: 60 4% 88%;
+  --input: 60 3% 60%;
   --ring: 0 0% 10%;
 
   --chart-1: 173 72% 30%;
@@ -165,7 +165,7 @@
   --destructive-foreground: 220 10% 7%;
 
   --border: 0 0% 16.5%;
-  --input: 0 0% 20%;
+  --input: 0 0% 40%;
   --ring: 0 0% 92%;
 
   --chart-1: 173 58% 52%;
@@ -249,7 +249,7 @@ html, body {
 }
 
 :focus-visible {
-  outline: 2px solid hsl(var(--ring) / 0.45);
+  outline: 2px solid hsl(var(--signal));
   outline-offset: 2px;
 }
 

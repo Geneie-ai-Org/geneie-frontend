@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { joinWaitlist } from '@/services/backendApi';
@@ -48,6 +48,8 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
   const [submitting, setSubmitting] = useState(false);
   const [joined, setJoined] = useState(null); // null | { alreadyApplied, status }
   const [trap, setTrap] = useState(''); // honeypot; humans never see it
+  const [error, setError] = useState('');
+  const uid = useId();
 
   const isFull = Boolean(seats) && !seats.open;
 
@@ -59,10 +61,11 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
       setJoined(true);
       return;
     }
-    if (!email.trim()) {
-      toast.error('Enter an email so we can reach you.');
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
+      setError(email.trim() ? 'Enter a full email address, like you@lab.org.' : 'Enter your email so we can reach you.');
       return;
     }
+    setError('');
 
     setSubmitting(true);
     try {
@@ -77,8 +80,8 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
             : "Request received. We'll be in touch once your seat is ready.",
         );
       }
-    } catch (error) {
-      toast.error(error.message || 'Could not submit your request.');
+    } catch (err) {
+      setError(err.message || 'Could not submit your request. Try again in a moment.');
     } finally {
       setSubmitting(false);
     }
@@ -98,7 +101,7 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
       onSubmit={handleSubmit}
       className={`flex w-full max-w-md flex-col items-center gap-3 ${className}`}
     >
-      <p className="text-sm text-muted-foreground">
+      <p id={`${uid}-help`} className="text-sm text-muted-foreground">
         {isFull
           ? 'All beta seats are taken right now. Leave your email and we\u2019ll get in touch when one opens.'
           : 'Geneie is in closed beta. Leave your email to enrol, we\u2019ll set up your seat and let you know.'}
@@ -107,12 +110,15 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
         <input
           type="email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => { setEmail(e.target.value); if (error) setError(''); }}
           placeholder="you@lab.org"
           autoComplete="email"
           disabled={submitting}
           aria-label="Email address"
-          className="h-12 flex-1 rounded-md border border-border bg-card px-4 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground hover:border-[var(--border-strong)] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/55 disabled:opacity-60"
+          aria-required="true"
+          aria-invalid={error ? 'true' : undefined}
+          aria-describedby={error ? `${uid}-help ${uid}-error` : `${uid}-help`}
+          className="h-12 flex-1 rounded-md border border-border aria-[invalid=true]:border-destructive bg-card px-4 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground hover:border-[var(--border-strong)] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/70 disabled:opacity-60"
         />
         {/* Honeypot: off-screen and hidden from assistive tech, so only a bot fills it. */}
         <input
@@ -133,6 +139,7 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
           {submitting ? 'Sending\u2026' : isFull ? 'Join waitlist' : 'Apply for beta'}
         </Button>
       </div>
+      {error && <p id={`${uid}-error`} role="alert" className="text-[13px] text-destructive">{error}</p>}
       <SignInHint onSignIn={onSignIn} />
     </form>
   );
@@ -164,7 +171,7 @@ function SignInHint({ onSignIn }) {
     <button
       type="button"
       onClick={onSignIn}
-      className="rounded text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55"
+      className="rounded text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
     >
       Already have an account? Sign in
     </button>

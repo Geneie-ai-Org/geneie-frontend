@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Check, Columns3, Copy, Search, SlidersHorizontal } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { ArrowDown, ArrowUp, Check, Columns3, Copy, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -20,6 +21,14 @@ const DEFAULT_GROUPS = [
   [/rank|priority/i],
   [/score/i],
 ];
+// Mono is for identifiers and sequences only; names, classes and numbers stay in the UI face.
+const MONO_RE = /hgvs|(^|_)(id|rsid|ref|alt|chrom|cdna|seq|sequence|transcript)($|_)|^rs_?|dbsnp|variant_?id/i;
+// Full-alpha 2px ring (the global one is 45% alpha, under 3:1 on white).
+const FOCUS = 'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--ring))]';
+const GUTTER_W = 44;
+const MIN_COL = 72;
+const MAX_COL = 260;
+const SAMPLE_ROWS = 60;
 const NUM_RE = /^-?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i;
 
 const readStoredCols = () => {
@@ -54,16 +63,37 @@ async function loadResults(conversationId, signal, onProgress) {
     const data = await res.json().catch(() => ({}));
     throw new Error(parseApiErrorDetail(data.detail) || 'Export failed');
   }
-  const out = await readTsvStream(res, { maxRows: MAX_ROWS, onProgress });
+  const out = await readTsvStream(res, { maxRows: MAX_ROWS, onProgress, signal });
   return { ...out, rowCount: eligData.row_count };
 }
 
-function Notice({ title, body, children }) {
+function Notice({ title, body, role, children }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-      <p className="text-[13px] font-medium text-foreground">{title}</p>
-      {body && <p className="max-w-xs text-xs text-muted-foreground">{body}</p>}
+    <div role={role} className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
+      <p className="text-[15px] font-medium text-foreground">{title}</p>
+      {body && <p className="max-w-xs text-[13px] leading-5 text-muted-foreground">{body}</p>}
       {children}
+    </div>
+  );
+}
+
+/** Loading placeholder with the same header, gutter and row height as the table, so nothing jumps. */
+function TableSkeleton() {
+  return (
+    <div role="status" aria-label="Loading variants" className="min-w-full">
+      <div className="flex h-[28px] items-center border-b border-border">
+        <span style={{ width: GUTTER_W }} className="shrink-0" />
+        {[88, 140, 72].map((w, i) => (
+          <span key={i} className="px-3"><span className="block h-2.5 rounded bg-muted" style={{ width: w }} /></span>
+        ))}
+      </div>
+      {Array.from({ length: 16 }, (_, i) => (
+        <div key={i} className="flex h-[28px] items-center border-b border-[var(--border-subtle)]">
+          <span style={{ width: GUTTER_W }} className="flex shrink-0 justify-end px-2"><span className="h-2.5 w-4 rounded bg-muted" /></span>
+          <span className="px-3"><span className="block h-2.5 animate-pulse rounded bg-muted motion-reduce:animate-none" style={{ width: 56 + ((i * 29) % 40) }} /></span>
+          <span className="px-3"><span className="block h-2.5 animate-pulse rounded bg-muted motion-reduce:animate-none" style={{ width: 96 + ((i * 53) % 90) }} /></span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -76,6 +106,11 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
   const [picked, setPicked] = useState(readStoredCols);
   const [selected, setSelected] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [scroll, setScroll] = useState({ x: false, y: false });
+  const copyTimer = useRef(null);
+  const scrollerRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(copyTimer.current), []);
 
   useEffect(() => {
     if (!conversationId) return undefined;
@@ -95,7 +130,7 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
         }
       } catch (e) {
         if (ctrl.signal.aborted || e?.name === 'AbortError') return;
-        setState({ status: 'error', message: e?.message || 'Could not load results' });
+        setState({ status: 'error', message: e?.message || 'The server did not return the results.' });
       }
     })();
     return () => ctrl.abort();
@@ -114,6 +149,20 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
     }),
     [colIdx, rows],
   );
+  const mono = useMemo(() => visibleCols.map((c) => MONO_RE.test(c)), [visibleCols]);
+
+  // Widths come from the header and the first rows only, never from the sorted or filtered view,
+  // so sorting and searching cannot move a column.
+  const widths = useMemo(
+    () => colIdx.map((i, k) => {
+      const ch = mono[k] ? 7.4 : 6.9;
+      let longest = (visibleCols[k] || '').length * 7.4 + 8;
+      for (let n = 0; n < Math.min(rows.length, SAMPLE_ROWS); n += 1) longest = Math.max(longest, (rows[n][i] || '').length * ch);
+      return Math.round(Math.min(MAX_COL, Math.max(MIN_COL, longest + 24)));
+    }),
+    [colIdx, rows, mono, visibleCols],
+  );
+  const tableWidth = GUTTER_W + widths.reduce((a, b) => a + b, 0);
 
   const view = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -140,6 +189,10 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
     setPicked(next);
     try { localStorage.setItem(COLS_KEY, JSON.stringify(next)); } catch { /* storage blocked */ }
   };
+  const resetCols = () => {
+    setPicked(null);
+    try { localStorage.removeItem(COLS_KEY); } catch { /* storage blocked */ }
+  };
   const cycleSort = (col) =>
     setSort((s) => (s?.col !== col ? { col, dir: 'asc' } : s.dir === 'asc' ? { col, dir: 'desc' } : null));
 
@@ -148,19 +201,42 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
     try {
       await navigator.clipboard.writeText(lines.join('\n'));
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch { /* clipboard unavailable */ }
+      toast.success(`Copied ${view.length.toLocaleString()} ${view.length === 1 ? 'row' : 'rows'} as TSV`, { duration: 3000 });
+      clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false), 1800);
+    } catch {
+      toast.error('Could not copy. Allow clipboard access for this site and try again.', { duration: 5000 });
+    }
   }, [visibleCols, view, colIdx]);
+
+  const onScroll = (e) => {
+    const x = e.currentTarget.scrollLeft > 2;
+    const y = e.currentTarget.scrollTop > 2;
+    setScroll((p) => (p.x === x && p.y === y ? p : { x, y }));
+  };
+
+  // Keyboard path for row selection: the scroller is one tab stop, Up/Down move the selection.
+  const onTableKey = (e) => {
+    if (e.key === 'Escape' && selected != null) { e.preventDefault(); setSelected(null); return; }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    if (!view.length) return;
+    e.preventDefault();
+    const at = view.findIndex(({ n }) => n === selected);
+    const next = e.key === 'ArrowDown' ? Math.min(view.length - 1, at + 1) : at < 0 ? 0 : Math.max(0, at - 1);
+    const n = view[next].n;
+    setSelected(n);
+    scrollerRef.current?.querySelector(`tr[data-n="${n}"]`)?.scrollIntoView({ block: 'nearest' });
+  };
 
   if (!conversationId) return <Notice title="No variants yet" body="Upload a file to see results here." />;
   if (state.status === 'blocked' || (state.status === 'ready' && !state.streaming && rows.length === 0)) {
     return (
       <Notice
-        title={state.status === 'blocked' ? 'Results are not available yet' : 'No variants in the current filters'}
-        body={state.reason || 'Loosen or reset your filters to see variants here.'}
+        title={state.status === 'blocked' ? 'Results are not available yet' : 'No variants match the current filters'}
+        body={state.reason || 'Loosen or reset the filters to bring variants back.'}
       >
         {onOpenFilters && (
-          <Button variant="outline" size="sm" onClick={onOpenFilters} className="mt-1 max-md:h-11">
+          <Button variant="outline" size="sm" onClick={onOpenFilters} className="mt-1">
             <SlidersHorizontal aria-hidden /> Open filters
           </Button>
         )}
@@ -169,8 +245,8 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
   }
   if (state.status === 'error') {
     return (
-      <Notice title="Could not load results" body={state.message}>
-        <Button variant="outline" size="sm" onClick={() => setAttempt((a) => a + 1)} className="mt-1 max-md:h-11">Retry</Button>
+      <Notice role="alert" title="Could not load results" body={`${state.message}. Your filters are unchanged. Retry, or reopen this tab if it keeps failing.`}>
+        <Button variant="outline" size="sm" onClick={() => setAttempt((a) => a + 1)} className="mt-1">Retry</Button>
       </Notice>
     );
   }
@@ -178,12 +254,28 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
   const loading = state.status === 'loading';
   const total = filteredCount ?? state.rowCount ?? null;
   const footer = loading ? 'Loading variants…'
-    : state.streaming ? `Loading… ${rows.length} rows`
+    : state.streaming ? `Loading… ${rows.length.toLocaleString()} rows`
     : state.truncated || (total != null && total > rows.length)
       ? `Showing first ${rows.length.toLocaleString()}${total != null ? ` of ${total.toLocaleString()}` : ''}`
       : `${rows.length.toLocaleString()} ${rows.length === 1 ? 'row' : 'rows'}`;
-  const th = 'sticky top-0 z-10 h-[28px] border-b border-border bg-background px-3 text-left text-[12px] font-medium text-muted-foreground';
-  const gutter = 'sticky left-0 z-[5] w-11 min-w-11 border-r border-border px-2 text-right text-[12px] tabular-nums text-muted-foreground select-none';
+  const searching = query.trim().length > 0;
+  const th = cn(
+    'sticky top-0 z-10 h-[28px] border-b border-border bg-background px-3 text-left text-[12px] font-medium text-muted-foreground transition-shadow duration-150 motion-reduce:transition-none',
+    scroll.y && 'shadow-[0_2px_6px_-3px_hsl(var(--foreground)/0.18)]'
+  );
+  // The gutter stays put on horizontal scroll; a soft edge shows that content passes under it.
+  const gutter = cn(
+    'sticky left-0 z-[5] border-r border-border px-2 text-right text-[12px] tabular-nums text-muted-foreground select-none',
+    'after:pointer-events-none after:absolute after:inset-y-0 after:left-full after:w-2 after:bg-gradient-to-r after:from-foreground/10 after:to-transparent after:transition-opacity after:duration-150 motion-reduce:after:transition-none',
+    scroll.x ? 'after:opacity-100' : 'after:opacity-0'
+  );
+  const selRow = selected != null ? view.find(({ n }) => n === selected) : null;
+  // Cells cut off by their column width: their full value is listed under the table for the selected row.
+  const cut = selRow
+    ? colIdx
+        .map((i, k) => ({ name: visibleCols[k], value: selRow.r[i] || '', k }))
+        .filter(({ value, k }) => value.length * (mono[k] ? 7.4 : 6.9) > widths[k] - 24)
+    : [];
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -194,19 +286,28 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape' && query) { e.preventDefault(); e.stopPropagation(); setQuery(''); } }}
             placeholder="Filter rows"
             aria-label="Filter rows"
-            className="h-7 w-full rounded-md bg-transparent pl-7 pr-2 text-[13px] text-foreground outline-none placeholder:text-muted-foreground hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60"
+            className="h-7 w-full rounded-lg bg-transparent pl-7 pr-2 text-[13px] text-foreground outline-none transition-colors duration-150 placeholder:text-muted-foreground hover:bg-muted focus-visible:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none"
           />
         </label>
         <Popover>
           <PopoverTrigger
             disabled={!header.length}
-            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[13px] text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50 max-md:h-11"
+            className={cn('inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[13px] text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:opacity-50 aria-expanded:bg-muted aria-expanded:text-foreground motion-reduce:transition-none', FOCUS)}
           >
             <Columns3 aria-hidden className="size-3.5" /> Columns
+            {header.length ? <span className="tabular-nums text-muted-foreground">{visibleCols.length}/{header.length}</span> : null}
           </PopoverTrigger>
           <PopoverContent align="end" sideOffset={6} className="max-h-72 w-60 gap-0.5 overflow-y-auto p-1.5">
+            <button
+              type="button"
+              onClick={resetCols}
+              className={cn('mb-0.5 h-7 rounded px-1.5 text-left text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground', FOCUS)}
+            >
+              Reset to default columns
+            </button>
             {header.map((h) => (
               <label key={h} className="flex h-7 cursor-pointer items-center gap-2 rounded px-1.5 text-[13px] hover:bg-muted">
                 <Checkbox checked={visibleCols.includes(h)} onCheckedChange={() => toggleCol(h)} />
@@ -220,28 +321,37 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
           onClick={copyTsv}
           disabled={!view.length}
           aria-label="Copy visible rows as TSV"
-          title="Copy visible rows as TSV"
-          className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50 max-md:size-11"
+          title={copied ? 'Copied' : 'Copy visible rows as TSV'}
+          className={cn('inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:opacity-50 motion-reduce:transition-none', FOCUS)}
         >
           {copied ? <Check aria-hidden className="size-3.5 text-[var(--success)]" /> : <Copy aria-hidden className="size-3.5" />}
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto" aria-busy={loading || undefined}>
+      <div
+        ref={scrollerRef}
+        role="region"
+        aria-label="Variant results table. Use arrow keys to select a row."
+        tabIndex={0}
+        onScroll={onScroll}
+        onKeyDown={onTableKey}
+        aria-busy={loading || undefined}
+        className={cn('min-h-0 flex-1 scroll-pl-11 scroll-pt-7 overflow-auto', FOCUS, 'focus-visible:-outline-offset-2')}
+      >
         {loading ? (
-          <div aria-label="Loading variants" className="divide-y divide-border">
-            {Array.from({ length: 14 }, (_, i) => (
-              <div key={i} className="flex h-[28px] items-center gap-3 px-3">
-                <span className="h-2.5 w-6 rounded bg-muted" />
-                <span className="h-2.5 rounded bg-muted animate-pulse motion-reduce:animate-none" style={{ width: `${40 + ((i * 37) % 45)}%` }} />
-              </div>
-            ))}
-          </div>
+          <TableSkeleton />
         ) : (
-          <table className="w-max min-w-full border-separate border-spacing-0 font-[family-name:var(--font-mono)] text-[13px]">
+          <table
+            style={{ width: tableWidth, minWidth: '100%', tableLayout: 'fixed' }}
+            className="border-separate border-spacing-0 text-[13px]"
+          >
+            <colgroup>
+              <col style={{ width: GUTTER_W }} />
+              {widths.map((w, k) => <col key={visibleCols[k]} style={{ width: w }} />)}
+            </colgroup>
             <thead>
               <tr>
-                <th className={cn(th, gutter, 'z-20 font-normal')} aria-label="Row">#</th>
+                <th scope="col" className={cn(th, gutter, 'z-20 font-normal')}><span aria-hidden>#</span><span className="sr-only">Row number</span></th>
                 {visibleCols.map((c, k) => (
                   <th
                     key={c}
@@ -253,10 +363,10 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
                       type="button"
                       onClick={() => cycleSort(c)}
                       title={`Sort by ${c}`}
-                      className={cn('flex h-[28px] w-full items-center gap-1 px-3 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60', numeric[k] && 'flex-row-reverse')}
+                      className={cn('flex h-[28px] w-full items-center gap-1 px-3 font-[family-name:var(--font-mono)] hover:text-foreground focus-visible:outline-offset-0', FOCUS, 'focus-visible:-outline-offset-2', numeric[k] && 'flex-row-reverse')}
                     >
                       <span className="truncate">{c}</span>
-                      {sort?.col === c && (sort.dir === 'asc' ? <ArrowUp aria-hidden className="size-3 shrink-0" /> : <ArrowDown aria-hidden className="size-3 shrink-0" />)}
+                      {sort?.col === c && (sort.dir === 'asc' ? <ArrowUp aria-hidden className="size-3 shrink-0 text-foreground" /> : <ArrowDown aria-hidden className="size-3 shrink-0 text-foreground" />)}
                     </button>
                   </th>
                 ))}
@@ -267,13 +377,25 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
                 const on = selected === n;
                 const bg = on ? 'bg-accent' : 'bg-background group-hover:bg-muted';
                 return (
-                  <tr key={n} onClick={() => setSelected(on ? null : n)} className="group h-[28px] cursor-default">
-                    <td className={cn(gutter, 'h-[28px] border-b border-border', bg, on && 'text-foreground')}>{n}</td>
+                  <tr
+                    key={n}
+                    data-n={n}
+                    aria-current={on ? 'true' : undefined}
+                    onClick={() => setSelected(on ? null : n)}
+                    className="group h-[28px] cursor-default"
+                  >
+                    <td className={cn(gutter, 'h-[28px] border-b border-[var(--border-subtle)]', bg, on && 'font-medium text-foreground shadow-[inset_2px_0_0_hsl(var(--signal))]')}>{n}</td>
                     {colIdx.map((i, k) => (
                       <td
                         key={i}
                         title={r[i] || undefined}
-                        className={cn('h-[28px] max-w-[260px] truncate whitespace-nowrap border-b border-border px-3 text-foreground', bg, numeric[k] && 'text-right tabular-nums')}
+                        className={cn(
+                          'h-[28px] overflow-hidden text-ellipsis whitespace-nowrap border-b border-[var(--border-subtle)] px-3 text-foreground',
+                          bg,
+                          mono[k] && 'font-[family-name:var(--font-mono)] text-[12px]',
+                          numeric[k] && 'text-right tabular-nums',
+                          on && 'font-medium'
+                        )}
                       >
                         {r[i]}
                       </td>
@@ -284,14 +406,31 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
             </tbody>
           </table>
         )}
-        {!loading && !view.length && (
-          <p className="px-3 py-6 text-center text-xs text-muted-foreground">No rows match “{query}”.</p>
+        {!loading && !view.length && searching && (
+          <div className="flex flex-col items-center gap-2 px-3 py-8 text-center">
+            <p className="text-[13px] text-muted-foreground">No rows match “{query.trim()}”.</p>
+            <Button variant="outline" size="sm" onClick={() => setQuery('')}><X aria-hidden /> Clear search</Button>
+          </div>
         )}
       </div>
 
-      <div className="flex h-7 shrink-0 items-center justify-between gap-2 border-t border-border px-3 text-[12px] tabular-nums text-muted-foreground">
+      {cut.length > 0 && (
+        <div role="group" className="max-h-36 shrink-0 overflow-y-auto border-t border-border px-3 py-2 text-[12px]" aria-label={`Full values for row ${selRow.n}`}>
+          <p className="mb-1 font-medium tabular-nums text-muted-foreground">Row {selRow.n.toLocaleString()}, full values</p>
+          <dl className="space-y-1">
+            {cut.map(({ name, value, k }) => (
+              <div key={name} className="flex gap-2">
+                <dt className="w-24 shrink-0 truncate font-[family-name:var(--font-mono)] text-muted-foreground" title={name}>{name}</dt>
+                <dd className={cn('min-w-0 flex-1 text-foreground [overflow-wrap:anywhere]', mono[k] && 'font-[family-name:var(--font-mono)]')}>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
+      <div role="status" className="flex h-7 shrink-0 items-center justify-between gap-2 border-t border-border px-3 text-[12px] tabular-nums text-muted-foreground">
         <span className="truncate">{footer}</span>
-        {query.trim() && !loading && <span>{view.length.toLocaleString()} match</span>}
+        {searching && !loading && <span>{view.length.toLocaleString()} {view.length === 1 ? 'match' : 'matches'}</span>}
       </div>
     </div>
   );

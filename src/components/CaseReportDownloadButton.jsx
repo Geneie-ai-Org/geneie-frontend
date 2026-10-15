@@ -116,6 +116,8 @@ export default function CaseReportDownloadButton({
   gaTriageStatus = '',
   gaTriageUpdatedAt = null,
   onRequestOpen,
+  /** The host already shows the chat-eligibility sentence once; do not repeat it under the button. */
+  hideEligibilityReason = false,
 }) {
   const { blocked, label, title, gaInFlight, gaStalled } = getClinicalReportGate({
     downloadGate,
@@ -149,13 +151,13 @@ export default function CaseReportDownloadButton({
         <span className="min-w-0 truncate">{label}</span>
       </Button>
       {/* Why the button is locked is shown as text, not only in a tooltip. */}
-      {blocked && !gaInFlight && title && (
-        <p className="line-clamp-2 px-1 text-2xs leading-snug text-muted-foreground" title={title}>{title}</p>
+      {blocked && !gaInFlight && title && !(hideEligibilityReason && title === chatEligibility?.message) && (
+        <p className="line-clamp-3 px-1 text-[12px] leading-snug text-muted-foreground" title={title}>{title}</p>
       )}
       {/* Ranking status sits beside the button, not as a spinner inside it: the line says
         * what's running, for how long, and what waiting buys. */}
       {gaInFlight && (
-        <div className="px-1 text-2xs leading-snug text-muted-foreground" aria-live="polite">
+        <div className="px-1 text-[12px] leading-snug text-muted-foreground" aria-live="polite">
           <div className="flex items-center gap-1.5 text-foreground">
             <span aria-hidden className="inline-block size-1.5 shrink-0 animate-pulse rounded-full bg-[var(--info)] motion-reduce:animate-none" />
             <span>Ranking variants</span>
@@ -169,13 +171,13 @@ export default function CaseReportDownloadButton({
         </div>
       )}
       {!gaInFlight && ga === 'completed' && (
-        <p className="inline-flex items-center gap-1.5 px-1 text-2xs text-muted-foreground">
+        <p className="inline-flex items-center gap-1.5 px-1 text-[12px] text-muted-foreground">
           <CheckCircle2 className="size-3 shrink-0 text-[var(--success)]" aria-hidden />
           Ranked. Top picks are pre-checked.
         </p>
       )}
       {!gaInFlight && ga === 'failed' && (
-        <p role="status" className="inline-flex items-center gap-1.5 px-1 text-2xs text-[var(--error)]">
+        <p role="status" className="inline-flex items-center gap-1.5 px-1 text-[12px] text-[var(--error)]">
           <AlertCircle className="size-3 shrink-0" aria-hidden />
           Ranking failed. You can still pick variants manually.
         </p>

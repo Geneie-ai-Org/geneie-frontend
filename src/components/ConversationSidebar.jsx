@@ -1,4 +1,4 @@
-import { cloneElement, useEffect, useMemo, useRef, useState } from 'react';
+import { cloneElement, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     SquarePen,
@@ -27,6 +27,7 @@ import { meterFor } from '@/services/tierLimits';
 import NotificationBell from './NotificationBell';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
     AlertDialog,
@@ -65,12 +66,38 @@ function isRealTitle(title) {
     return t !== '' && t.toLowerCase() !== 'new conversation';
 }
 
-/** Title shown in the rail: real title, else the sample file name, else "Untitled chat". */
+function createdDate(conv) {
+    const v = conv.createdAt ?? conv.updatedAt;
+    const d = v?.toDate ? v.toDate() : new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** First sentence of the stored summary, capped for a 280px rail. */
+function summaryTitle(conv) {
+    const text = (conv.summary || '').replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+    const first = text.split(/(?<=[.!?])\s/)[0];
+    return first.length > 60 ? `${first.slice(0, 57).trimEnd()}...` : first;
+}
+
+/** "Chat, 15 Oct, 2:14 PM": distinguishes otherwise identical untitled rows. */
+function stampTitle(conv) {
+    const d = createdDate(conv);
+    if (!d) return '';
+    const day = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true });
+    return `Chat, ${day}, ${time}`;
+}
+
+/**
+ * Title shown in the rail: real title, else the sample file name, else the summary's first
+ * sentence, else "Chat, <date time>" (the list payload carries no first-message text).
+ */
 export function conversationLabel(conv) {
     if (isRealTitle(conv.title)) return conv.title.trim();
     const file = conv.documentName || conv.document?.file_name;
     if (file) return file;
-    return UNTITLED;
+    return summaryTitle(conv) || stampTitle(conv) || UNTITLED;
 }
 
 /** chat | variants | raw. Raw sequencing is FASTQ (or a BAM/CRAM); anything else with a file is a variants file. */
@@ -158,20 +185,25 @@ const NEW_CHAT_HINT = IS_MAC ? '\u2318N' : 'Ctrl N';
  * Small pieces
  * ------------------------------------------------------------------------- */
 
-const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55';
+/** Rows use an inset ring so the focus indicator is never clipped by the list container. */
+const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70';
+const FOCUS_RING_INSET = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70';
+
+/** One size and one stroke for every rail icon. */
+const ICON = { 'aria-hidden': true, strokeWidth: 1.75 };
 
 const ICON_BTN = cn(
-    'inline-flex shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)] transition-colors hover:bg-sidebar-accent/60 hover:text-[var(--text-primary)] aria-expanded:bg-sidebar-accent aria-expanded:text-[var(--text-primary)]',
+    'inline-flex shrink-0 items-center justify-center rounded-[var(--row-radius)] text-[var(--text-secondary)] transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-[var(--text-primary)] aria-expanded:bg-sidebar-accent aria-expanded:text-[var(--text-primary)]',
     FOCUS_RING
 );
 
 /** The shared 32px rail row: icon, label, optional right hint. Used by New chat, Search and More. */
 const ROW_BASE = cn(
-    'flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] leading-none text-[var(--text-primary)] transition-colors hover:bg-sidebar-accent/60 max-md:h-11',
-    FOCUS_RING
+    'flex h-8 w-full items-center gap-2 rounded-[var(--row-radius)] px-2 text-left text-[13px] leading-none text-[var(--text-primary)] transition-colors duration-150 hover:bg-sidebar-accent/60 max-md:h-11',
+    FOCUS_RING_INSET
 );
 
-/** Tooltip around a trigger element. Used on every icon-only control in the collapsed rail. */
+/** Tooltip around a trigger element. Used on every icon-only control in the rail. */
 function Tip({ label, side = 'right', render, children, enabled = true }) {
     if (!enabled) {
         return cloneElement(render, undefined, children);
@@ -188,7 +220,7 @@ function Avatar({ name, size = 24 }) {
     return (
         <span
             aria-hidden="true"
-            className="flex shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-2xs font-medium text-[var(--text-secondary)]"
+            className="flex shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[12px] font-medium text-[var(--text-secondary)]"
             style={{ width: size, height: size }}
         >
             {name.charAt(0).toUpperCase()}
@@ -198,14 +230,17 @@ function Avatar({ name, size = 24 }) {
 
 function StatusDot({ status }) {
     if (!status) return null;
+    const text = status === 'running' ? 'Running' : 'Failed';
     return (
-        <span className="inline-flex shrink-0 items-center" role="img" aria-label={status === 'running' ? 'Running' : 'Failed'}>
+        <span className="inline-flex shrink-0 items-center">
             <span
+                aria-hidden="true"
                 className={cn(
                     'size-1.5 rounded-full',
                     status === 'running' ? 'bg-[var(--info)] motion-safe:animate-pulse' : 'bg-[var(--error)]'
                 )}
             />
+            <span className="sr-only">{text}</span>
         </span>
     );
 }
@@ -222,6 +257,8 @@ const ConversationSidebar = ({
     onDeleteConversation,
     /** Optional. (id, title) => void | Promise. The Rename action only appears when this is passed. */
     onRenameConversation,
+    /** Optional. True while the first conversations fetch is in flight; shows row skeletons. */
+    isLoading = false,
     isOpen,
     onToggle,
     userTier,
@@ -230,15 +267,20 @@ const ConversationSidebar = ({
 }) => {
     const isMobile = useIsMobile();
     const navigate = useNavigate();
+    const navId = useId();
     const { theme, setTheme } = useTheme();
     const chatMeter = meterFor(useLimits(), 'chat');
     const [pendingDelete, setPendingDelete] = useState(null); // { id, label }
     const [query, setQuery] = useState('');
     const [renamingId, setRenamingId] = useState(null);
     const [renameValue, setRenameValue] = useState('');
+    const [rovingId, setRovingId] = useState(null); // the one row that is in the Tab order
+    const [truncId, setTruncId] = useState(null); // row whose title is currently cut off (tooltip only then)
     const searchRef = useRef(null);
+    const navRef = useRef(null);
     const focusSearchAfterOpen = useRef(false);
     const renameCancelled = useRef(false);
+    const renameByKey = useRef(false);
     const [openGroups, setOpenGroups] = useState(() => new Set()); // group labels showing every row
 
     // On a phone the rail is a drawer: whenever it is on screen it shows the full layout.
@@ -251,8 +293,30 @@ const ConversationSidebar = ({
         }
     }, [expanded]);
 
+    /** Put focus back on a row after the element that had it is gone (delete, rename). */
+    const restoreRowFocus = useCallback((id) => {
+        if (id == null) return;
+        const key = String(id);
+        setRovingId(key);
+        [60, 240, 460].forEach((ms) => {
+            setTimeout(() => {
+                const ae = document.activeElement;
+                if (ae && ae !== document.body && navRef.current?.contains(ae)) return;
+                const target = [...(navRef.current?.querySelectorAll('[data-conv-id]') || [])].find((el) => el.dataset.convId === key);
+                target?.focus();
+            }, ms);
+        });
+    }, []);
+
     const confirmDelete = () => {
-        if (pendingDelete) onDeleteConversation(pendingDelete.id);
+        if (pendingDelete) {
+            const ids = [...(navRef.current?.querySelectorAll('[data-conv-id]') || [])].map((el) => el.dataset.convId);
+            const at = ids.indexOf(String(pendingDelete.id));
+            const neighbour = at === -1 ? null : (ids[at + 1] ?? ids[at - 1] ?? null);
+            onDeleteConversation(pendingDelete.id);
+            if (neighbour) restoreRowFocus(neighbour);
+            else setTimeout(() => searchRef.current?.focus(), 120);
+        }
         setPendingDelete(null);
     };
 
@@ -284,6 +348,7 @@ const ConversationSidebar = ({
         return rows.filter((r) =>
             r.label.toLowerCase().includes(q)
             || (r.conv.title || '').toLowerCase().includes(q)
+            || (r.conv.summary || '').toLowerCase().includes(q)
             || r.file.toLowerCase().includes(q)
         );
     }, [rows, q]);
@@ -294,14 +359,27 @@ const ConversationSidebar = ({
         [visibleRows]
     );
 
+    // Which rows are on screen (a group shows 12 until "More"), so exactly one of them can be the Tab stop.
+    const groupViews = grouped.map((group) => {
+        const activeIdx = group.items.findIndex((c) => String(activeConversationId) === String(c.id));
+        const showAll = !!q || openGroups.has(group.label) || group.items.length <= GROUP_LIMIT || activeIdx >= GROUP_LIMIT;
+        return { ...group, showAll, shown: showAll ? group.items : group.items.slice(0, GROUP_LIMIT) };
+    });
+    const renderedIds = groupViews.flatMap((g) => g.shown.map((c) => String(c.id)));
+    const tabStopId = renderedIds.includes(String(rovingId))
+        ? String(rovingId)
+        : renderedIds.includes(String(activeConversationId)) ? String(activeConversationId) : renderedIds[0];
+
     const startRename = (row) => {
         renameCancelled.current = false;
+        renameByKey.current = false;
         setRenamingId(row.conv.id);
-        setRenameValue(isRealTitle(row.conv.title) ? row.conv.title : row.label === UNTITLED ? '' : row.label);
+        setRenameValue(isRealTitle(row.conv.title) ? row.conv.title.trim() : row.file || '');
     };
     const commitRename = async (row) => {
         const next = renameValue.trim();
         setRenamingId(null);
+        if (renameByKey.current) { renameByKey.current = false; restoreRowFocus(row.conv.id); }
         if (renameCancelled.current) { renameCancelled.current = false; return; }
         if (!next || next === row.label || !onRenameConversation) return;
         try {
@@ -312,15 +390,44 @@ const ConversationSidebar = ({
         }
     };
 
-    // Arrow keys walk the list; Tab still works as usual.
+    /**
+     * Keyboard model for the list. Rows are one Tab stop; Up/Down/Home/End move between rows,
+     * Right reaches a row's menu button, Left comes back, Enter opens (native button),
+     * Delete/Backspace asks to delete, F2 renames.
+     */
     const onListKeyDown = (e) => {
-        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        if (!e.currentTarget.contains(e.target)) return; // menus and dialogs are portalled; ignore their keys
+        const t = e.target;
+        if (!(t instanceof HTMLElement)) return;
+        const rowBtn = t.closest('li')?.querySelector('[data-row-button]') || (t.matches('[data-row-button]') ? t : null);
         const items = [...e.currentTarget.querySelectorAll('[data-row-button]')];
-        const i = items.indexOf(document.activeElement);
+        const i = rowBtn ? items.indexOf(rowBtn) : -1;
         if (i === -1) return;
-        e.preventDefault();
-        const next = items[i + (e.key === 'ArrowDown' ? 1 : -1)];
-        next?.focus();
+        const go = (el) => { if (el) { e.preventDefault(); el.focus(); } };
+        const onMore = t.hasAttribute('data-more-button');
+        switch (e.key) {
+            case 'ArrowDown': go(items[i + 1]); break;
+            case 'ArrowUp': go(items[i - 1]); break;
+            case 'Home': go(items[0]); break;
+            case 'End': go(items[items.length - 1]); break;
+            case 'ArrowRight': if (!onMore) go(t.closest('li')?.querySelector('[data-more-button]')); break;
+            case 'ArrowLeft': if (onMore) go(rowBtn); break;
+            case 'Delete':
+            case 'Backspace': {
+                const id = rowBtn?.dataset.convId;
+                if (id == null || t.matches('input,textarea')) break;
+                const row = visibleRows.find((r) => String(r.conv.id) === id);
+                if (row) { e.preventDefault(); setPendingDelete({ id: row.conv.id, label: row.label }); }
+                break;
+            }
+            case 'F2': {
+                const id = rowBtn?.dataset.convId;
+                const row = visibleRows.find((r) => String(r.conv.id) === id);
+                if (row && onRenameConversation) { e.preventDefault(); startRename(row); }
+                break;
+            }
+            default: break;
+        }
     };
 
     // Usage meter
@@ -380,17 +487,29 @@ const ConversationSidebar = ({
         return () => window.removeEventListener('keydown', onKey);
     }, [isMobile]);
 
+    /** Tooltip with the full title, only when the visible title is actually cut off. */
+    const measureTruncation = (id) => (e) => {
+        const el = e.currentTarget.querySelector('[data-label]');
+        setTruncId(el && el.scrollWidth > el.clientWidth + 1 ? id : null);
+    };
+
     const renderRow = (conv) => {
         const row = rowByConv.get(conv);
-        const active = String(activeConversationId) === String(conv.id);
+        const key = String(conv.id);
+        const active = String(activeConversationId) === key;
         const { Icon, label: kindLabel } = KIND_META[row.kind];
         const renaming = renamingId === conv.id;
         const ago = shortAgo(conv);
         return (
-            <li key={conv.id} className="group relative">
+            <li
+                key={conv.id}
+                className="group relative [contain-intrinsic-size:auto_32px] [content-visibility:auto]"
+                onPointerEnter={measureTruncation(key)}
+                onFocusCapture={measureTruncation(key)}
+            >
                 {renaming ? (
-                    <div className="flex h-8 items-center gap-2 rounded-lg bg-sidebar-accent px-2 max-md:h-11">
-                        <Icon aria-hidden="true" className="size-3.5 shrink-0 text-[var(--text-tertiary)]" />
+                    <div className="flex h-8 items-center gap-2 rounded-[var(--row-radius)] bg-sidebar-accent px-2 max-md:h-11">
+                        <Icon {...ICON} className="size-4 shrink-0 text-[var(--text-secondary)]" />
                         <input
                             autoFocus
                             value={renameValue}
@@ -398,8 +517,8 @@ const ConversationSidebar = ({
                             onFocus={(e) => e.target.select()}
                             onBlur={() => commitRename(row)}
                             onKeyDown={(e) => {
-                                if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
-                                if (e.key === 'Escape') { renameCancelled.current = true; e.currentTarget.blur(); }
+                                if (e.key === 'Enter') { e.preventDefault(); renameByKey.current = true; e.currentTarget.blur(); }
+                                if (e.key === 'Escape') { e.preventDefault(); renameCancelled.current = true; renameByKey.current = true; e.currentTarget.blur(); }
                             }}
                             aria-label="Chat title"
                             maxLength={120}
@@ -408,42 +527,60 @@ const ConversationSidebar = ({
                     </div>
                 ) : (
                     <>
-                        <button
-                            type="button"
-                            data-row-button
-                            onClick={() => onSelectConversation(conv.id)}
-                            aria-current={active ? 'page' : undefined}
-                            title={row.file && row.file !== row.label ? `${row.label} (${row.file})` : row.label}
-                            className={cn(
-                                ROW_BASE,
-                                'pr-11',
-                                active ? 'bg-sidebar-accent' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                        <Tooltip>
+                            <TooltipTrigger
+                                render={
+                                    <button
+                                        type="button"
+                                        data-row-button
+                                        data-conv-id={key}
+                                        tabIndex={key === tabStopId ? 0 : -1}
+                                        onFocus={() => setRovingId(key)}
+                                        onClick={() => onSelectConversation(conv.id)}
+                                        aria-current={active ? 'page' : undefined}
+                                        className={cn(
+                                            ROW_BASE,
+                                            'pr-11',
+                                            active ? 'bg-sidebar-accent font-medium' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                                        )}
+                                    />
+                                }
+                            >
+                                <Icon {...ICON} className={cn('size-4 shrink-0', active ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]')} />
+                                {row.kind !== 'chat' && <span className="sr-only">{kindLabel}: </span>}
+                                <span data-label className="min-w-0 flex-1 truncate">{row.label}</span>
+                                <StatusDot status={row.status} />
+                            </TooltipTrigger>
+                            {truncId === key && (
+                                <TooltipContent side="right" className="max-w-[18rem] break-words">
+                                    {row.label}
+                                </TooltipContent>
                             )}
-                        >
-                            <Icon aria-hidden="true" className="size-3.5 shrink-0 text-[var(--text-tertiary)]" />
-                            <span className="sr-only">{kindLabel}: </span>
-                            <span className={cn('min-w-0 flex-1 truncate', active && 'text-[var(--text-primary)]')}>{row.label}</span>
-                            <StatusDot status={row.status} />
-                        </button>
-                        {/* Right edge: time-ago, swapped for the more menu on hover / focus / open menu. */}
+                        </Tooltip>
+                        {/* Right edge: time-ago, swapped for the more menu on hover / focus / open menu. Same box, so nothing shifts. */}
                         {ago && (
                             <span
                                 aria-hidden="true"
-                                className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs tabular-nums text-[var(--text-tertiary)] group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0"
+                                className={cn(
+                                    'pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[12px] tabular-nums transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0',
+                                    active ? 'text-[var(--text-secondary)]' : 'text-muted-foreground'
+                                )}
                             >
                                 {ago}
                             </span>
                         )}
                         <DropdownMenu>
                             <DropdownMenuTrigger
+                                data-more-button
+                                tabIndex={-1}
                                 aria-label={`More actions for ${row.label}`}
                                 className={cn(
                                     ICON_BTN,
                                     'absolute right-1 top-1/2 size-6 -translate-y-1/2 max-md:size-9',
-                                    'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 data-[popup-open]:opacity-100 [@media(hover:none)]:opacity-100'
+                                    'opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 data-[popup-open]:opacity-100 [@media(hover:none)]:opacity-100'
                                 )}
                             >
-                                <MoreHorizontal className="size-4" />
+                                <MoreHorizontal {...ICON} className="size-4" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent side="bottom" align="end" sideOffset={4} className="w-44">
                                 {onRenameConversation && (
@@ -455,7 +592,7 @@ const ConversationSidebar = ({
                                     variant="destructive"
                                     onClick={() => setPendingDelete({ id: conv.id, label: row.label })}
                                 >
-                                    <Trash2 /> Delete
+                                    <Trash2 /> Delete chat
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -483,11 +620,12 @@ const ConversationSidebar = ({
                                 onClick={onToggle}
                                 aria-label={isMobile ? 'Close sidebar' : expanded ? 'Collapse sidebar' : 'Expand sidebar'}
                                 aria-expanded={expanded}
+                                aria-controls={navId}
                                 className={cn(ICON_BTN, 'size-8 max-md:size-11')}
                             />
                         }
                     >
-                        {isMobile ? <X className="size-4" /> : expanded ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
+                        {isMobile ? <X {...ICON} className="size-4" /> : expanded ? <PanelLeftClose {...ICON} className="size-4" /> : <PanelLeftOpen {...ICON} className="size-4" />}
                     </Tip>
                 </div>
 
@@ -496,32 +634,38 @@ const ConversationSidebar = ({
                     {expanded ? (
                         <>
                             <button type="button" onClick={onCreateConversation} className={ROW_BASE}>
-                                <SquarePen aria-hidden="true" className="size-4 shrink-0 text-[var(--text-secondary)]" />
+                                <SquarePen {...ICON} className="size-4 shrink-0 text-[var(--text-secondary)]" />
                                 <span className="flex-1 truncate">New chat</span>
-                                <span aria-hidden="true" className="text-xs text-[var(--text-tertiary)]">{NEW_CHAT_HINT}</span>
+                                <span aria-hidden="true" className="text-[12px] text-muted-foreground">{NEW_CHAT_HINT}</span>
                             </button>
-                            <label className={cn(ROW_BASE, 'cursor-text focus-within:bg-sidebar-accent/60')}>
-                                <Search aria-hidden="true" className="size-4 shrink-0 text-[var(--text-secondary)]" />
+                            <label className={cn(ROW_BASE, 'cursor-text focus-within:bg-sidebar-accent/60 focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring/70')}>
+                                <Search {...ICON} className="size-4 shrink-0 text-[var(--text-secondary)]" />
                                 <input
                                     ref={searchRef}
                                     type="search"
                                     value={query}
                                     onChange={(e) => setQuery(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === 'Escape') setQuery(''); }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Escape') setQuery('');
+                                        if (e.key === 'ArrowDown') {
+                                            const first = navRef.current?.querySelector('[data-row-button][tabindex="0"]') || navRef.current?.querySelector('[data-row-button]');
+                                            if (first) { e.preventDefault(); first.focus(); }
+                                        }
+                                    }}
                                     placeholder="Search"
                                     aria-label="Search chats"
                                     autoComplete="off"
                                     spellCheck={false}
-                                    className="min-w-0 flex-1 bg-transparent text-[13px] leading-none text-[var(--text-primary)] outline-none focus-visible:outline-none placeholder:text-[var(--text-primary)] focus:placeholder:text-[var(--text-tertiary)] max-md:text-base [&::-webkit-search-cancel-button]:hidden"
+                                    className="min-w-0 flex-1 bg-transparent text-[13px] leading-none text-[var(--text-primary)] outline-none focus-visible:outline-none placeholder:text-[var(--text-primary)] focus:placeholder:text-muted-foreground max-md:text-base [&::-webkit-search-cancel-button]:hidden"
                                 />
                                 {query && (
                                     <button
                                         type="button"
                                         onClick={(e) => { e.preventDefault(); setQuery(''); searchRef.current?.focus(); }}
                                         aria-label="Clear search"
-                                        className={cn(ICON_BTN, 'size-5 max-md:size-9')}
+                                        className={cn(ICON_BTN, 'size-6 max-md:size-9')}
                                     >
-                                        <X className="size-3.5" />
+                                        <X {...ICON} className="size-4" />
                                     </button>
                                 )}
                             </label>
@@ -530,94 +674,112 @@ const ConversationSidebar = ({
                         <>
                             <Tip
                                 label={`New chat (${NEW_CHAT_HINT})`}
-                                render={<button type="button" onClick={onCreateConversation} aria-label="New chat" className={cn(ICON_BTN, 'size-8')} />}
+                                render={<button type="button" onClick={onCreateConversation} className={cn(ICON_BTN, 'size-8')} />}
                             >
-                                <SquarePen className="size-4" />
+                                <SquarePen {...ICON} className="size-4" />
+                                <span className="sr-only">New chat</span>
                             </Tip>
                             <Tip
                                 label="Search chats"
-                                render={<button type="button" onClick={expandAndSearch} aria-label="Search chats" className={cn(ICON_BTN, 'size-8')} />}
+                                render={<button type="button" onClick={expandAndSearch} className={cn(ICON_BTN, 'size-8')} />}
                             >
-                                <Search className="size-4" />
+                                <Search {...ICON} className="size-4" />
+                                <span className="sr-only">Search chats</span>
                             </Tip>
                         </>
                     )}
                 </div>
 
-                {/* Sessions */}
+                {/* Sessions. Stays mounted when the rail is collapsed (keeps scroll position and search), but inert and hidden. */}
+                <div
+                    className={cn('flex min-h-0 flex-1 flex-col', !expanded && 'invisible')}
+                    inert={!expanded ? true : undefined}
+                >
                 <ScrollArea className="min-h-0 flex-1">
-                    {expanded && (
-                        <nav aria-label="Conversations" className="px-2 pb-3" onKeyDown={onListKeyDown}>
-                            {rows.length === 0 && (
-                                <div className="px-3 py-10 text-center">
-                                    <MessageSquare aria-hidden="true" className="mx-auto mb-2 size-5 text-[var(--text-disabled)]" />
-                                    <p className="text-[13px] font-medium text-[var(--text-primary)]">No chats yet</p>
-                                    <p className="mt-1 text-xs text-[var(--text-tertiary)]">Your conversations and samples show up here.</p>
-                                    <button
-                                        type="button"
-                                        onClick={onCreateConversation}
-                                        className={cn('mt-3 rounded text-xs font-medium text-[hsl(var(--signal))] underline-offset-4 hover:underline', FOCUS_RING)}
-                                    >
-                                        Start a chat
-                                    </button>
-                                </div>
-                            )}
+                    <nav id={navId} ref={navRef} aria-label="Conversations" className="px-2 pb-3" onKeyDown={onListKeyDown}>
+                        {/* Announces how many chats match the search. */}
+                        <p role="status" className="sr-only">
+                            {q ? `${visibleRows.length} ${visibleRows.length === 1 ? 'chat matches' : 'chats match'} your search.` : ''}
+                        </p>
 
-                            {rows.length > 0 && visibleRows.length === 0 && (
-                                <div className="px-3 py-10 text-center" role="status">
-                                    <p className="text-[13px] font-medium text-[var(--text-primary)]">No matches</p>
-                                    <p className="mt-1 text-xs text-[var(--text-tertiary)]">
-                                        Nothing in your chats matches &ldquo;{query.trim()}&rdquo;.
-                                    </p>
-                                    <button
-                                        type="button"
-                                        onClick={() => setQuery('')}
-                                        className={cn('mt-3 rounded text-xs font-medium text-[hsl(var(--signal))] underline-offset-4 hover:underline', FOCUS_RING)}
-                                    >
-                                        Clear search
-                                    </button>
-                                </div>
-                            )}
+                        {isLoading && rows.length === 0 && (
+                            <div aria-busy="true" className="flex flex-col gap-0.5 pt-3">
+                                {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                                    <div key={i} className="flex h-8 items-center gap-2 px-2">
+                                        <Skeleton className="size-4 shrink-0" />
+                                        <Skeleton className="h-3" style={{ width: `${88 - ((i * 13) % 40)}%` }} />
+                                    </div>
+                                ))}
+                                <span className="sr-only" role="status">Loading chats</span>
+                            </div>
+                        )}
 
-                            {grouped.map((group) => {
-                                const activeIdx = group.items.findIndex((c) => String(activeConversationId) === String(c.id));
-                                const showAll =
-                                    !!q || openGroups.has(group.label) || group.items.length <= GROUP_LIMIT || activeIdx >= GROUP_LIMIT;
-                                const shown = showAll ? group.items : group.items.slice(0, GROUP_LIMIT);
-                                return (
-                                    <section key={group.label} className="mb-1" aria-label={group.label}>
-                                        <h2 className="px-2 pb-1 pt-3 text-xs font-normal text-[var(--text-tertiary)]">
-                                            {group.label}
-                                        </h2>
-                                        <ul className="m-0 flex list-none flex-col p-0">
-                                            {shown.map(renderRow)}
-                                            {!showAll && (
-                                                <li>
-                                                    <button
-                                                        type="button"
-                                                        data-row-button
-                                                        onClick={() => setOpenGroups((prev) => new Set(prev).add(group.label))}
-                                                        className={cn(ROW_BASE, 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}
-                                                    >
-                                                        <MoreHorizontal aria-hidden="true" className="size-3.5 shrink-0" />
-                                                        <span>More</span>
-                                                    </button>
-                                                </li>
-                                            )}
-                                        </ul>
-                                    </section>
-                                );
-                            })}
-                        </nav>
-                    )}
+                        {!isLoading && rows.length === 0 && (
+                            <div className="px-3 py-10 text-center">
+                                <MessageSquare {...ICON} className="mx-auto mb-2 size-4 text-muted-foreground" />
+                                <p className="text-[13px] font-medium text-[var(--text-primary)]">No chats yet</p>
+                                <p className="mt-1 text-[12px] text-muted-foreground">Chats and uploaded files you work on appear here.</p>
+                                <button
+                                    type="button"
+                                    onClick={onCreateConversation}
+                                    className={cn('mt-3 rounded text-[13px] font-medium text-[hsl(var(--signal))] underline-offset-4 hover:underline', FOCUS_RING)}
+                                >
+                                    Start a chat
+                                </button>
+                            </div>
+                        )}
+
+                        {rows.length > 0 && visibleRows.length === 0 && (
+                            <div className="px-3 py-10 text-center">
+                                <p className="text-[13px] font-medium text-[var(--text-primary)]">No matches</p>
+                                <p className="mt-1 text-[12px] text-muted-foreground">
+                                    No chat title, file name or summary matches &ldquo;{query.trim()}&rdquo;.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => setQuery('')}
+                                    className={cn('mt-3 rounded text-[13px] font-medium text-[hsl(var(--signal))] underline-offset-4 hover:underline', FOCUS_RING)}
+                                >
+                                    Clear search
+                                </button>
+                            </div>
+                        )}
+
+                        {groupViews.map((group) => (
+                            <section key={group.label} className="mb-1" aria-label={group.label}>
+                                <h2 className="px-2 pb-1 pt-3 text-[12px] font-normal text-muted-foreground">
+                                    {group.label}
+                                </h2>
+                                <ul className="m-0 flex list-none flex-col p-0">
+                                    {group.shown.map(renderRow)}
+                                    {!group.showAll && (
+                                        <li>
+                                            <button
+                                                type="button"
+                                                data-row-button
+                                                tabIndex={-1}
+                                                onClick={() => setOpenGroups((prev) => new Set(prev).add(group.label))}
+                                                className={cn(ROW_BASE, 'text-muted-foreground hover:text-[var(--text-primary)]')}
+                                            >
+                                                <MoreHorizontal {...ICON} className="size-4 shrink-0" />
+                                                <span>More</span>
+                                                <span className="sr-only">, show {group.items.length - GROUP_LIMIT} more chats</span>
+                                            </button>
+                                        </li>
+                                    )}
+                                </ul>
+                            </section>
+                        ))}
+                    </nav>
                 </ScrollArea>
+                </div>
 
                 {/* Footer: usage, account */}
                 <div className="mt-auto shrink-0">
                     {showMeter && expanded && (
                         <div className="px-4 pb-1 pt-2" role="group" aria-label="Chat usage">
-                            <div className="mb-1.5 flex items-center justify-between text-xs">
-                                <span className="text-[var(--text-tertiary)]">Exchanges</span>
+                            <div className="mb-1.5 flex items-center justify-between text-[12px]">
+                                <span className="text-muted-foreground">Exchanges</span>
                                 <span className={cn('tabular-nums', meterTone === 'error' ? 'font-medium text-destructive' : 'text-[var(--text-secondary)]')}>
                                     {used}/{chatMeter.limit}
                                 </span>
@@ -639,16 +801,24 @@ const ConversationSidebar = ({
 
                             <NotificationBell
                                 onNavigateToConversation={(convId) => onSelectConversation(convId)}
+                                onOpenSettings={onOpenProfile}
+                                tooltip="Notifications"
                                 side={isMobile ? 'top' : 'right'}
                                 triggerClassName={cn(ICON_BTN, 'size-8 max-md:size-11')}
                             />
                             <DropdownMenu>
-                                <DropdownMenuTrigger
-                                    aria-label="Account menu"
-                                    className={cn(ICON_BTN, 'size-8 max-md:size-11')}
+                                <Tip
+                                    label="Account and settings"
+                                    side="top"
+                                    render={
+                                        <DropdownMenuTrigger
+                                            aria-label="Account menu"
+                                            className={cn(ICON_BTN, 'size-8 max-md:size-11')}
+                                        />
+                                    }
                                 >
-                                    <Settings aria-hidden="true" className="size-4" />
-                                </DropdownMenuTrigger>
+                                    <Settings {...ICON} className="size-4" />
+                                </Tip>
                                 {accountMenu('top', 'end')}
                             </DropdownMenu>
                         </div>
@@ -664,6 +834,7 @@ const ConversationSidebar = ({
                             )}
                             <NotificationBell
                                 onNavigateToConversation={(convId) => onSelectConversation(convId)}
+                                onOpenSettings={onOpenProfile}
                                 tooltip="Notifications"
                                 side="right"
                                 triggerClassName={cn(ICON_BTN, 'size-8')}
@@ -674,7 +845,7 @@ const ConversationSidebar = ({
                                     render={
                                         <DropdownMenuTrigger
                                             aria-label="Account menu"
-                                            className="flex size-8 items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 aria-expanded:bg-sidebar-accent"
+                                            className="flex size-8 items-center justify-center rounded-[var(--row-radius)] transition-colors duration-150 hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 aria-expanded:bg-sidebar-accent"
                                         />
                                     }
                                 >
@@ -693,15 +864,15 @@ const ConversationSidebar = ({
             >
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Delete this chat?</AlertDialogTitle>
+                        <AlertDialogTitle>Delete chat?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            &ldquo;{pendingDelete?.label}&rdquo; will be permanently deleted. This cannot be undone.
+                            &ldquo;{pendingDelete?.label}&rdquo; with its messages and uploaded files will be permanently deleted. This can&rsquo;t be undone.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogCancel>Keep chat</AlertDialogCancel>
                         <AlertDialogAction variant="destructive" onClick={confirmDelete}>
-                            Delete
+                            Delete chat
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

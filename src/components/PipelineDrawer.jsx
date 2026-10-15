@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Dna, FileText, Pencil, Trash2 } from 'lucide-react';
-import { PHENOTYPE_RUNNING_MESSAGE } from '@/lib/filterDisplayNames';
+import { PHENOTYPE_RUNNING_MESSAGE, sanitizePhenotypeStatusMessage } from '@/lib/filterDisplayNames';
 import RunTimer from '@/components/ui/RunTimer';
 import { useRunTimer } from '@/hooks/useRunTimer';
 import { formatDuration } from '@/lib/formatDuration';
@@ -284,6 +284,56 @@ const PipelineDrawer = ({
 
   const showAnnotatedBadge = hasAnnotatedFile || vcfAnnotated;
 
+  /* ── Failure: what happened, why, and the next step ───────────────────────────────
+   * Failure outranks the eligibility sentence: a card that says "Failed" must say what failed,
+   * not why chat is gated. `onStepAction` already knows how to restart annotation ('annovar') and
+   * to open the filters ('reduce'), so Retry reuses it instead of adding a new callback.
+   */
+  const failure = (() => {
+    // Backend job text can carry infrastructure detail (storage keys, stack traces). As with the
+    // Module 1 failure text, anything that reads like that is replaced by a plain line, and the
+    // curated `message` is read before the raw `error`.
+    const INFRA = /\b(s3|bucket|key|traceback|exception|errno|ecs|ec2|instance|subprocess|stack)\b/i;
+    const reason = (...candidates) =>
+      candidates
+        .map((c) => String(c || '').trim())
+        .find((c) => c && !/^failed$/i.test(c) && !INFRA.test(c)) || 'The service did not report a reason.';
+    if (enrichmentState?.failed) {
+      return {
+        what: 'Enrichment failed.',
+        why: reason(enrichmentState.message),
+        next: 'Reset your filters and apply them again to retry.',
+        action: { label: 'Open filters', run: () => onStepAction?.('reduce') },
+      };
+    }
+    if (indexingState?.failed) {
+      return {
+        what: 'Indexing failed.',
+        why: reason(indexingState.message),
+        next: 'Apply your filters again to retry.',
+        action: { label: 'Open filters', run: () => onStepAction?.('reduce') },
+      };
+    }
+    if (steps.annovar === 'failed') {
+      return {
+        what: 'Annotation failed.',
+        why: reason(annovarJob?.message, annovarJob?.error),
+        next: 'Retry to run it again.',
+        action: { label: 'Retry annotation', run: () => onStepAction?.('annovar') },
+      };
+    }
+    if (steps.reduce === 'failed') {
+      const job = exomiserStatus?.status === 'failed' ? exomiserStatus : filterJob;
+      return {
+        what: 'Prioritization failed.',
+        why: reason(sanitizePhenotypeStatusMessage(job?.message, ''), job?.message, job?.error),
+        next: 'Open the filters to try again.',
+        action: { label: 'Choose a filter', run: () => onStepAction?.('reduce') },
+      };
+    }
+    return null;
+  })();
+
   /* ── Reads → VCF (FASTQ route) ─────────────────────────────────────────────────── */
   const isFastqRoute = Boolean(module1Job);
   const module1Running = module1Job?.status === 'queued' || module1Job?.status === 'running';
@@ -326,6 +376,7 @@ const PipelineDrawer = ({
       const group = MODULE1_STAGE_GROUPS.find((g) => g.id === module1ActiveGroup);
       return `${group?.label || 'Processing'}…`;
     }
+    if (status === 'failed' && failure) return [failure.what, failure.why, failure.next].filter(Boolean).map((t) => (/[.!?]$/.test(t) ? t : `${t}.`)).join(' ');
     if (status === 'running' || status === 'failed') return detailText || stateText;
     // The sentence must agree with the button beside it ("Needs a filter" next to "Run annotation"
     // was the old contradiction), so it names the same step.
@@ -365,6 +416,11 @@ const PipelineDrawer = ({
         onClick: () => handleStepClick('upload'),
         title: 'View Upload',
       };
+  const analysisOrder = ANALYSIS_STEP_DEFS.map((def) => def.id);
+  const laterStepStarted = (id) =>
+    analysisOrder
+      .slice(analysisOrder.indexOf(id) + 1)
+      .some((laterId) => ['done', 'failed', 'running', 'skipped'].includes(steps[laterId]));
   const stepRows = [
     firstStep,
     ...ANALYSIS_STEP_DEFS.map((def) => {
@@ -373,11 +429,24 @@ const PipelineDrawer = ({
       return {
         id: def.id,
         label: def.label,
-        // With nothing in flight and a next step offered, a stale "running" would sit beside that
-        // button and contradict it; show it as the current stop instead.
-        status: frozen ? 'pending' : steps[def.id] === 'running' && nextAction ? 'waiting' : steps[def.id],
+        // One vocabulary (queued, running, done, failed): a step cannot still be running once a
+        // later step has started or failed, and with nothing in flight a stale "running" would sit
+        // beside the next-step button and contradict it, so it reads as the current stop instead.
+        status: frozen
+          ? 'pending'
+          : steps[def.id] === 'running' && laterStepStarted(def.id)
+            ? 'done'
+            : steps[def.id] === 'running' && !busy && !uploadInProgress
+              ? 'waiting'
+              : steps[def.id] === 'skipped'
+                ? 'done'
+                : steps[def.id],
+        detail: frozen
+          ? 'Sign in for full analysis'
+          : steps[def.id] === 'skipped'
+            ? 'Not needed for this file'
+            : undefined,
         time: frozen ? null : stepTime(stepTimers[def.id]),
-        detail: frozen ? 'Sign in for full analysis' : undefined,
         onClick: frozen || annovarDone ? undefined : () => handleStepClick(def.id),
         title: frozen ? 'Sign in for full analysis' : `View ${def.label}`,
       };
@@ -405,28 +474,32 @@ const PipelineDrawer = ({
   const title = (isFastqRoute ? module1Job.sampleName : null) || displayName;
 
   const iconButtons = hasUploadedFile && ((!isGuest && onEditSampleInfo) || onRemoveFile) ? (
-    <span className="flex items-center gap-0.5">
+    <span className="flex items-center gap-1">
       {!isGuest && onEditSampleInfo && (
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-xs"
           onClick={onEditSampleInfo}
-          className="chat-chrome-btn-sm"
           title="Edit sample info"
           aria-label="Edit sample info"
+          className="text-muted-foreground max-md:size-11"
         >
-          <Pencil />
-        </button>
+          <Pencil aria-hidden />
+        </Button>
       )}
       {onRemoveFile && (
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-xs"
           onClick={() => setRemoveFileDialogOpen(true)}
-          className="chat-chrome-btn-sm hover:!text-[var(--error)]"
           title="Remove variant file"
           aria-label="Remove variant file"
+          className="text-muted-foreground hover:text-[var(--error)] max-md:size-11"
         >
-          <Trash2 />
-        </button>
+          <Trash2 aria-hidden />
+        </Button>
       )}
     </span>
   ) : null;
@@ -454,6 +527,10 @@ const PipelineDrawer = ({
           nextAction ? (
             <Button type="button" variant="outline" size="sm" onClick={nextAction.onClick} className="max-sm:h-11">
               {nextAction.label}
+            </Button>
+          ) : status === 'failed' && failure?.action && onStepAction ? (
+            <Button type="button" variant="outline" size="sm" onClick={failure.action.run} className="max-sm:h-11">
+              {failure.action.label}
             </Button>
           ) : null
         }
@@ -512,7 +589,7 @@ const PipelineDrawer = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Keep file</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
@@ -520,7 +597,7 @@ const PipelineDrawer = ({
                 onRemoveFile?.();
               }}
             >
-              Remove
+              Remove file
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

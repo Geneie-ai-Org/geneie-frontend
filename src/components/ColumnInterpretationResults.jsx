@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { CheckCircle2, AlertCircle, FileText, Info, Trash2, Filter, Stethoscope, Tags, X } from 'lucide-react';
+import React, { useState, useEffect, useId } from 'react';
+import { CheckCircle2, AlertCircle, ChevronRight, FileText, Info, Minus, Trash2, Filter, Stethoscope, Tags, X } from 'lucide-react';
 import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
 import { formatAcmgPhenotypeMeterLabel } from '@/lib/filterDisplayNames';
 import { Button } from '@/components/ui/button';
@@ -12,12 +12,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
 
 /** Semantic tokens only (src/design/tokens.css). Status colours carry meaning, never decoration. */
 const C = {
@@ -61,7 +55,7 @@ function Chip({ tone = 'neutral', children }) {
   const [bg, fg] = CHIP_TONES[tone] || CHIP_TONES.neutral;
   return (
     <span
-      className="inline-flex h-5 max-w-full shrink-0 items-center gap-1.5 rounded-full px-2 text-2xs font-medium"
+      className="inline-flex h-5 max-w-full shrink-0 items-center gap-1.5 rounded-full px-2 text-[12px] font-medium"
       style={{ background: bg, color: fg }}
     >
       <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: fg }} />
@@ -70,18 +64,105 @@ function Chip({ tone = 'neutral', children }) {
   );
 }
 
-/** Inline notice: hairline border, soft status fill, readable foreground text. */
+/** Inline notice: flat soft status fill, readable foreground text. */
 function Notice({ tone = 'info', icon: Icon = Info, children }) {
   const [bg, fg] = CHIP_TONES[tone] || CHIP_TONES.info;
   return (
     <div
       role={tone === 'error' ? 'alert' : 'status'}
-      className="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs leading-relaxed"
-      style={{ background: bg, borderColor: tint(fg, 30), color: C.text }}
+      className="flex items-start gap-2 rounded-lg px-3 py-2 text-xs leading-relaxed"
+      style={{ background: bg, color: C.text }}
     >
       <Icon className="mt-0.5 size-3.5 shrink-0" style={{ color: fg }} aria-hidden />
       <div className="min-w-0">{children}</div>
     </div>
+  );
+}
+
+/** Found/missing counts for one step's column groups: only what the step needs counts as missing. */
+function summarizeStep(step) {
+  let found = 0;
+  let missing = 0;
+  if (!step || step.not_implemented) return { found, missing };
+  const count = (cols) => Object.values(cols || {}).filter((c) => c?.found).length;
+  const req = step.required_columns || {};
+  found += count(req);
+  missing += Object.keys(req).length - count(req);
+  const groups = [
+    [step.pathogenicity_predictor_group, 2],
+    [step.sample_genotype_group, 1],
+    [step.pathogenicity_score_group, 1],
+  ];
+  for (const [group, need] of groups) {
+    if (!group) continue;
+    const n = count(group);
+    found += n;
+    missing += Math.max(0, need - n);
+  }
+  for (const col of Object.values(step.conditional_columns || {})) {
+    if (col?.found) found += 1;
+    else if (col?.required) missing += 1;
+  }
+  return { found, missing };
+}
+
+/** One column, one 32px row: status icon, the role we need, the file's column, and a status word. */
+function ColumnRow({ role, matched, tone = 'success', word, note }) {
+  const Icon = tone === 'success' ? CheckCircle2 : tone === 'error' ? AlertCircle : Minus;
+  const color = tone === 'success' ? C.success : tone === 'error' ? C.error : C.textMuted;
+  return (
+    <li className="flex h-8 items-center gap-2 border-b border-[var(--border-subtle)] px-4 text-[13px] sm:px-6 max-md:min-h-11">
+      <Icon className="size-3.5 shrink-0" style={{ color }} aria-hidden />
+      <span className="min-w-0 flex-1 truncate" style={{ color: C.text }} title={note || role}>
+        {role}
+      </span>
+      {matched ? (
+        <span className="max-w-[40%] shrink-0 truncate font-mono text-[12px]" style={{ color: C.textMuted }} title={`Column in your file: ${matched}`}>
+          {matched}
+        </span>
+      ) : null}
+      <span className="w-16 shrink-0 text-right text-[12px]" style={{ color }}>
+        {word}
+      </span>
+    </li>
+  );
+}
+
+/** Disclosure group with a sticky 32px header carrying the found / missing counts. */
+function ColumnGroup({ label, found, missing, open, onToggle, children }) {
+  const panelId = useId();
+  return (
+    <section>
+      <h4 className="sticky top-0 z-10 m-0 border-b border-[var(--border-subtle)] bg-background">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={onToggle}
+          className="flex h-8 w-full items-center gap-2 px-4 text-left text-[12px] font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/55 sm:px-6 max-md:min-h-11"
+        >
+          <ChevronRight
+            className={`size-3.5 shrink-0 transition-transform duration-150 motion-reduce:transition-none ${open ? 'rotate-90' : ''}`}
+            style={{ color: C.textDim }}
+            aria-hidden
+          />
+          <span className="min-w-0 flex-1 truncate" style={{ color: C.text }}>{label}</span>
+          <span className="shrink-0 tabular-nums" style={{ color: C.textMuted }}>
+            <span style={{ color: C.success }}>{found} found</span>
+            {missing > 0 ? (
+              <>
+                {' '}&middot; <span style={{ color: C.error }}>{missing} missing</span>
+              </>
+            ) : null}
+          </span>
+        </button>
+      </h4>
+      {open ? (
+        <ul id={panelId} className="m-0 list-none p-0">
+          {children}
+        </ul>
+      ) : null}
+    </section>
   );
 }
 
@@ -121,6 +202,7 @@ const ColumnInterpretationResults = ({
   const [expandedStep, setExpandedStep] = useState(initialStep ?? (hasAnnotatedFile ? 2 : null)); // Track which step is expanded
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // Explicit remove-file confirmation only
   const [showAnnovarConfirm, setShowAnnovarConfirm] = useState(false); // Confirm Annotation when all columns present
+  const [openGroups, setOpenGroups] = useState({}); // sectionKey -> open (unset = open only when something is missing)
 
   // Close on ESC (modal mode only). A nested confirm takes precedence over closing the whole view.
   useEffect(() => {
@@ -144,7 +226,7 @@ const ColumnInterpretationResults = ({
   const annovarEnabled = Boolean(step1?.passed) && !genomeMismatch && !annovarQuotaBlocked;
   const annovarMeter = annovarGate?.meter;
   const annovarMeterLabel = annovarMeter?.tracked && !annovarMeter.unlimited && annovarMeter.remaining != null
-    ? `${annovarMeter.remaining} of ${annovarMeter.limit} Annotation runs left`
+    ? `${annovarMeter.remaining} of ${annovarMeter.limit} annotation runs left`
     : null;
   const acmgQuotaBlocked = acmgExomiserGate?.allowed === false;
   const acmgMeter = acmgExomiserGate?.meter;
@@ -258,7 +340,7 @@ const ColumnInterpretationResults = ({
     typeof r === 'string'
       ? r
           .replace(/\bANNOVAR annotation\b/gi, 'annotation')
-          .replace(/\bRun ANNOVAR\b/g, 'Run Annotation')
+          .replace(/\bRun ANNOVAR\b/g, 'Run annotation')
           .replace(/\bANNOVAR\b/g, 'Annotation')
       : r
   );
@@ -296,200 +378,88 @@ const ColumnInterpretationResults = ({
     return 'Needs columns';
   };
 
-  /** Render a column group with exception-only display:
-   *  - All found → single summary line + expandable detail
-   *  - Has issues → show only the problematic columns directly */
+  /** One group of columns as a list: a sticky header with the counts, then one 32px row per column.
+   *  Groups with nothing missing start collapsed; groups with a problem start open. */
   const renderColumnGroup = (sectionKey, label, columns, columnsNoValidValues = [], opts = {}) => {
     const entries = Object.entries(columns);
     if (!entries.length) return null;
 
     const found = entries.filter(([, c]) => c.found);
+    const issues = entries.filter(([, c]) => !c.found);
+    // For "any N of these" groups (`minFound`) a missing column only counts until enough are found.
+    const needed = opts.minFound != null ? opts.minFound : entries.length;
+    const groupSatisfied = found.length >= needed;
+    const missingCount = opts.optional ? 0 : Math.max(0, needed - found.length);
+    const missingTone = opts.optional || groupSatisfied ? 'neutral' : 'error';
+    const defaultOpen = issues.length > 0 && !groupSatisfied && !opts.optional;
+    const open = openGroups[sectionKey] ?? defaultOpen;
 
-    // Missing columns that block the step read as errors. For "any N of these" groups
-    // (`minFound`), they only do until enough are found; past that, the rest are extras.
-    const groupSatisfied = opts.minFound != null && found.length >= opts.minFound;
-    const missingColor = opts.missingColor || (groupSatisfied ? C.textDim : C.error);
-    const issues = entries.filter(([colName, c]) => !c.found);
-    const allFound = issues.length === 0;
-
-    if (allFound) {
-      /* Happy path: summary + expandable detail */
-      return (
-        <Accordion>
-          <AccordionItem value={sectionKey} className="border-0">
-            <AccordionTrigger className="py-0 text-xs font-normal hover:no-underline items-center">
-              <span className="text-xs" style={{ color: C.textMuted }}>
-                {label}: {found.length}/{entries.length} columns found
-              </span>
-            </AccordionTrigger>
-            <AccordionContent className="pb-0">
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {entries.map(([colName, colInfo]) => {
-                  const label = colInfo.matched_column || colName;
-                  const roleDiffers = colInfo.matched_column && colInfo.matched_column !== colName;
-                  return (
-                    <span
-                      key={colName}
-                      title={roleDiffers ? `Role: ${colName}` : label}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
-                      style={{
-                        backgroundColor: C.successSoft,
-                        borderColor: tint(C.success, 40),
-                        color: C.success,
-                      }}
-                    >
-                      <CheckCircle2 className="w-3 h-3 shrink-0" />
-                      {label}
-                    </span>
-                  );
-                })}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      );
-    }
-
-    /* Issues present: compact inline pills for missing, found behind expand */
     return (
-      <div>
-        <div className="flex items-center gap-1.5 mb-1.5">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" style={{ color: missingColor }} />
-          <span className="text-xs font-medium" style={{ color: C.text }}>
-            {label}: {found.length}/{entries.length} found
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {issues.map(([colName]) => (
-            <span
-              key={colName}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
-              style={{
-                backgroundColor: tint(missingColor, 8),
-                borderColor: tint(missingColor, 40),
-                color: missingColor,
-              }}
-            >
-              {columnsNoValidValues.includes(colName) ? 'No values' : (opts.missingLabel || 'Missing')} · {colName}
-            </span>
-          ))}
-          {found.map(([colName, colInfo]) => {
-            const pillLabel = colInfo.matched_column || colName;
-            return (
-              <span
-                key={colName}
-                title={colInfo.matched_column && colInfo.matched_column !== colName ? `Role: ${colName}` : pillLabel}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
-                style={{
-                  backgroundColor: C.successSoft,
-                  borderColor: tint(C.success, 40),
-                  color: C.success,
-                }}
-              >
-                <CheckCircle2 className="w-3 h-3 shrink-0" />
-                {pillLabel}
-              </span>
-            );
-          })}
-        </div>
-      </div>
+      <ColumnGroup
+        label={label}
+        found={found.length}
+        missing={missingCount}
+        open={open}
+        onToggle={() => setOpenGroups((prev) => ({ ...prev, [sectionKey]: !open }))}
+      >
+        {issues.map(([colName]) => (
+          <ColumnRow
+            key={colName}
+            role={colName}
+            tone={missingTone}
+            word={columnsNoValidValues.includes(colName) ? 'No values' : opts.missingLabel || 'Missing'}
+          />
+        ))}
+        {found.map(([colName, colInfo]) => (
+          <ColumnRow
+            key={colName}
+            role={colName}
+            matched={colInfo.matched_column && colInfo.matched_column !== colName ? colInfo.matched_column : colName}
+            tone="success"
+            word="Found"
+          />
+        ))}
+      </ColumnGroup>
     );
   };
 
-  /** Render conditional columns — found/missing with required/optional labels */
+  /** Conditional columns: required ones count as missing, optional ones are only noted. */
   const renderConditionalGroup = (sectionKey, label, columns) => {
     const entries = Object.entries(columns);
     if (!entries.length) return null;
 
     const found = entries.filter(([, c]) => c.found);
     const issues = entries.filter(([, c]) => !c.found);
-    const allFound = issues.length === 0;
-
-    if (allFound) {
-      return (
-        <Accordion>
-          <AccordionItem value={sectionKey} className="border-0">
-            <AccordionTrigger className="py-0 text-xs font-normal hover:no-underline items-center">
-              <span className="text-xs" style={{ color: C.textMuted }}>
-                {label}: {found.length}/{entries.length} columns found
-              </span>
-            </AccordionTrigger>
-            <AccordionContent className="pb-0">
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {entries.map(([colName, colInfo]) => {
-                  const pillLabel = colInfo.matched_column || colName;
-                  const roleDiffers = colInfo.matched_column && colInfo.matched_column !== colName;
-                  const tip = roleDiffers
-                    ? `Role: ${colName}${colInfo.required ? ' (Required)' : ''}`
-                    : colInfo.required
-                      ? `${pillLabel} (Required)`
-                      : pillLabel;
-                  return (
-                    <span
-                      key={colName}
-                      title={tip}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
-                      style={{
-                        backgroundColor: C.successSoft,
-                        borderColor: tint(C.success, 40),
-                        color: C.success,
-                      }}
-                    >
-                      <CheckCircle2 className="w-3 h-3 shrink-0" />
-                      {pillLabel}
-                      {colInfo.required && <span className="opacity-70">•</span>}
-                    </span>
-                  );
-                })}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      );
-    }
+    const missingCount = issues.filter(([, c]) => c.required).length;
+    const open = openGroups[sectionKey] ?? missingCount > 0;
 
     return (
-      <div>
-        <div className="flex items-center gap-1.5 mb-1.5">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" style={{ color: issues.some(([, c]) => c.required) ? C.error : C.textDim }} />
-          <span className="text-xs font-medium" style={{ color: C.text }}>
-            {label}: {found.length}/{entries.length} found
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-1.5 ml-5">
-          {issues.map(([colName, colInfo]) => (
-            <span
-              key={colName}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
-              style={{
-                backgroundColor: colInfo.required ? tint(C.error, 8) : 'transparent',
-                borderColor: colInfo.required ? tint(C.error, 40) : C.border,
-                color: colInfo.required ? C.error : C.textDim,
-              }}
-            >
-              {colInfo.required ? 'Missing' : 'Optional'} · {colName}
-            </span>
-          ))}
-          {found.map(([colName, colInfo]) => {
-            const pillLabel = colInfo.matched_column || colName;
-            return (
-              <span
-                key={colName}
-                title={colInfo.required ? `${pillLabel} (Required)` : pillLabel}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border"
-                style={{
-                  backgroundColor: C.successSoft,
-                  borderColor: tint(C.success, 40),
-                  color: C.success,
-                }}
-              >
-                <CheckCircle2 className="w-3 h-3 shrink-0" />
-                {pillLabel}
-              </span>
-            );
-          })}
-        </div>
-      </div>
+      <ColumnGroup
+        label={label}
+        found={found.length}
+        missing={missingCount}
+        open={open}
+        onToggle={() => setOpenGroups((prev) => ({ ...prev, [sectionKey]: !open }))}
+      >
+        {issues.map(([colName, colInfo]) => (
+          <ColumnRow
+            key={colName}
+            role={colName}
+            tone={colInfo.required ? 'error' : 'neutral'}
+            word={colInfo.required ? 'Missing' : 'Optional'}
+          />
+        ))}
+        {found.map(([colName, colInfo]) => (
+          <ColumnRow
+            key={colName}
+            role={colName}
+            matched={colInfo.matched_column && colInfo.matched_column !== colName ? colInfo.matched_column : colName}
+            tone="success"
+            word="Found"
+            note={colInfo.required ? `${colName} (Required)` : undefined}
+          />
+        ))}
+      </ColumnGroup>
     );
   };
 
@@ -498,7 +468,7 @@ const ColumnInterpretationResults = ({
       const required = stepData.required_columns || {};
       const columnsNoValidValues = stepData.columns_no_valid_values || [];
       return (
-        <div className="space-y-2 text-sm">
+        <div className="-mx-4 sm:-mx-6">
           {renderColumnGroup(`step1_required`, 'Required columns', required, columnsNoValidValues)}
         </div>
       );
@@ -518,8 +488,10 @@ const ColumnInterpretationResults = ({
 
       return (
         <div className="space-y-3 text-sm">
+          <div className="-mx-4 sm:-mx-6">
           {renderColumnGroup(`step2_required`, 'Required columns', required, columnsNoValidValues)}
           {renderColumnGroup(`step2_pathogenicity`, 'Pathogenicity predictors (at least 2 required)', pathogenicity_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 2 })}
+          </div>
 
           {missing_groups.length > 0 && (
             <Notice tone="error" icon={AlertCircle}>
@@ -548,11 +520,13 @@ const ColumnInterpretationResults = ({
 
       return (
         <div className="space-y-3 text-sm">
+          <div className="-mx-4 sm:-mx-6">
           {renderColumnGroup(`step3_required`, 'Required columns', required, columnsNoValidValues)}
           {renderColumnGroup(`step3_genotype`, 'Sample genotype (any one required)', sample_genotype_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 1 })}
           {renderColumnGroup(`step3_pathscore`, 'Pathogenicity scores (any one required)', pathogenicity_score_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 1 })}
           {renderConditionalGroup(`step3_conditional`, 'Conditional columns', conditional)}
-          {renderColumnGroup(`step3_optional`, 'Optional columns', optional, [], { missingLabel: 'Not found', missingColor: C.textDim })}
+          {renderColumnGroup(`step3_optional`, 'Optional columns', optional, [], { missingLabel: 'Not found', optional: true })}
+          </div>
 
           {missing_groups.length > 0 && (
             <Notice tone="warning" icon={AlertCircle}>
@@ -633,6 +607,25 @@ const ColumnInterpretationResults = ({
   const stepTone = (status) =>
     status === 'passed' ? 'success' : status === 'pending' ? 'info' : status === 'partial' ? 'warning' : 'error';
 
+  const columnTotals = [step1, step2, step3].map(summarizeStep).reduce(
+    (acc, t) => ({ found: acc.found + t.found, missing: acc.missing + t.missing }),
+    { found: 0, missing: 0 }
+  );
+
+  // Arrow keys, Home and End move between the step tabs (roving tabindex, automatic activation).
+  const onStepTabKeyDown = (e) => {
+    const last = stepperSteps.length;
+    let next = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = selectedStep >= last ? 1 : selectedStep + 1;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = selectedStep <= 1 ? last : selectedStep - 1;
+    else if (e.key === 'Home') next = 1;
+    else if (e.key === 'End') next = last;
+    if (next == null) return;
+    e.preventDefault();
+    setExpandedStep(next);
+    document.getElementById(`file-step-tab-${next}`)?.focus();
+  };
+
   const header = (
     <div className="flex-shrink-0 border-b border-border px-4 pb-3 pt-4 sm:px-6">
       <div className="flex items-start justify-between gap-3">
@@ -640,8 +633,16 @@ const ColumnInterpretationResults = ({
           <h2 id="file-analysis-title" className="text-sm font-semibold" style={{ color: C.text }}>
             File analysis
           </h2>
-          <p className="mt-0.5 text-xs" style={{ color: C.textMuted }}>
+          <p className="mt-0.5 text-[13px]" style={{ color: C.textMuted }}>
             {overall_status === 'passed' ? 'Your file is ready for analysis.' : 'Some features may be limited.'}
+          </p>
+          <p className="mt-1 text-[13px] tabular-nums" style={{ color: C.textMuted }}>
+            <span style={{ color: C.success }}>{columnTotals.found.toLocaleString()} found</span>
+            {' '}&middot;{' '}
+            <span style={{ color: columnTotals.missing > 0 ? C.error : C.textMuted }}>
+              {columnTotals.missing.toLocaleString()} missing
+            </span>
+            {' '}across {stepperSteps.length} steps
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -670,7 +671,7 @@ const ColumnInterpretationResults = ({
       {backgroundJobActive && (
         <Notice tone="info" icon={Info}>
           {isRunningAnnovar
-            ? 'Annotation is running in the background. You can leave this view and continue in chat. Progress shows in the pipeline bar.'
+            ? 'Annotation is running in the background. You can leave this view and continue in chat. Progress shows in the Pipeline tab.'
             : 'The ACMG filter is running in the background. You can leave this view and continue in chat.'}
         </Notice>
       )}
@@ -697,12 +698,12 @@ const ColumnInterpretationResults = ({
       )}
       {gbc?.status === 'inconclusive' && (
         <Notice tone="warning" icon={AlertCircle}>
-          {gbc.message || 'Could not verify the genome build. Double-check it before running Annotation.'}
+          {gbc.message || 'Could not verify the genome build. Double-check it before running annotation.'}
         </Notice>
       )}
 
       {/* Steps */}
-      <div role="tablist" aria-label="Analysis steps" className="grid grid-cols-3 gap-2">
+      <div role="tablist" aria-label="Analysis steps" aria-orientation="horizontal" onKeyDown={onStepTabKeyDown} className="grid grid-cols-3 gap-2">
         {stepperSteps.map((s) => {
           const isSel = s.n === selectedStep;
           const tone = stepTone(s.status);
@@ -714,6 +715,7 @@ const ColumnInterpretationResults = ({
               id={`file-step-tab-${s.n}`}
               aria-selected={isSel}
               aria-controls="file-step-panel"
+              tabIndex={isSel ? 0 : -1}
               onClick={() => setExpandedStep(s.n)}
               className="flex min-w-0 flex-col items-start gap-1.5 rounded-lg border px-2.5 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/55 max-md:min-h-11"
               style={{
@@ -721,7 +723,7 @@ const ColumnInterpretationResults = ({
                 background: isSel ? C.tealSoft : 'transparent',
               }}
             >
-              <span className="text-2xs tabular-nums" style={{ color: C.textDim }}>
+              <span className="text-[12px] tabular-nums" style={{ color: C.textMuted }}>
                 Step {s.n}
               </span>
               <span className="text-[13px] font-medium leading-tight" style={{ color: C.text }}>
@@ -752,7 +754,8 @@ const ColumnInterpretationResults = ({
           role="tabpanel"
           id="file-step-panel"
           aria-labelledby={`file-step-tab-${selectedStepData.n}`}
-          className="space-y-3 border-t border-border pt-4"
+          tabIndex={0}
+          className="space-y-3 border-t border-border pt-4 outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           <h3 className="text-[13px] font-semibold" style={{ color: C.text }}>
             {selectedStepData.name}
@@ -870,7 +873,7 @@ const ColumnInterpretationResults = ({
                       className="max-md:h-11"
                     >
                       <Tags aria-hidden />
-                      {annovarAlreadyRun ? 'Annotation complete' : 'Run Annotation'}
+                      {annovarAlreadyRun ? 'Annotation done' : 'Run annotation'}
                     </Button>
                     {reason && (
                       <p className="text-xs" style={{ color: genomeMismatch || annovarQuotaBlocked ? C.error : C.textMuted }}>
@@ -878,7 +881,7 @@ const ColumnInterpretationResults = ({
                       </p>
                     )}
                     {annovarMeterLabel && !annovarQuotaBlocked && (
-                      <p className="text-2xs tabular-nums" style={{ color: C.textDim }}>
+                      <p className="text-[12px] tabular-nums" style={{ color: C.textMuted }}>
                         {annovarMeterLabel}
                         {annovarMeterDetail && <span> · {annovarMeterDetail}</span>}
                       </p>
@@ -911,11 +914,11 @@ const ColumnInterpretationResults = ({
                 {/* Quota and readiness are different problems, so they get different copy. */}
                 {!acmgFilterCanApply && !acmgFilterActive && step1?.passed && !acmgQuotaBlocked && (
                   <p className="text-xs" style={{ color: C.textMuted }}>
-                    Run Annotation first. The ACMG filter needs ClinVar or InterVar annotations and gnomAD frequency.
+                    Run annotation first. The ACMG filter needs ClinVar or InterVar annotations and gnomAD frequency.
                   </p>
                 )}
                 {(acmgMeterLabel || acmgQuotaBlocked) && !acmgFilterActive && (
-                  <p className="text-2xs tabular-nums" style={{ color: acmgQuotaBlocked ? C.error : C.textDim }}>
+                  <p className="text-[12px] tabular-nums" style={{ color: acmgQuotaBlocked ? C.error : C.textMuted }}>
                     {acmgQuotaBlocked ? acmgExomiserGate.reason : acmgMeterLabel}
                     {!acmgQuotaBlocked && acmgMeterDetail && <span> · {acmgMeterDetail}</span>}
                   </p>
@@ -931,7 +934,7 @@ const ColumnInterpretationResults = ({
                   ? 'Annotation and phenotype prioritization need a matching genome build. Fix the mismatch first.'
                   : phenotypeMissing
                     ? 'Add a phenotype description in sample info to enable phenotype-driven prioritization. Everything else runs without one.'
-                    : 'Run Annotation first. Phenotype prioritization needs an annotated file.';
+                    : 'Run annotation first. Phenotype prioritization needs an annotated file.';
                 return (
                   <div className="max-w-xs space-y-1">
                     <Button
@@ -952,7 +955,7 @@ const ColumnInterpretationResults = ({
                 );
               })()}
 
-              <p className="w-full text-xs" style={{ color: C.textDim }}>
+              <p className="w-full text-xs" style={{ color: C.textMuted }}>
                 You can also skip filters and chat directly.
               </p>
             </>
@@ -1002,7 +1005,7 @@ const ColumnInterpretationResults = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Go back</AlertDialogCancel>
+            <AlertDialogCancel>Keep file</AlertDialogCancel>
             <Button type="button" variant="destructive" onClick={handleConfirmDelete}>
               <Trash2 aria-hidden /> Remove file
             </Button>
@@ -1014,14 +1017,14 @@ const ColumnInterpretationResults = ({
       <AlertDialog open={showAnnovarConfirm} onOpenChange={setShowAnnovarConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Run Annotation?</AlertDialogTitle>
+            <AlertDialogTitle>Run annotation on this file?</AlertDialogTitle>
             <AlertDialogDescription>
-              All required columns are already in your file. Running Annotation adds more information to some
+              All required columns are already in your file. Running annotation adds more information to some
               columns and makes the analysis more streamlined.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Not now</AlertDialogCancel>
             <Button
               type="button"
               onClick={() => {
@@ -1029,7 +1032,7 @@ const ColumnInterpretationResults = ({
                 onAnnovarClick?.();
               }}
             >
-              Run Annotation
+              Run annotation
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

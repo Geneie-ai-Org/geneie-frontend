@@ -5,7 +5,6 @@ import { Markdown } from './ChatMarkdown';
 import { Source, SourceTrigger, SourceContent } from './Source';
 import { WorkedLine } from './ThinkingIndicator';
 import ResultCard from './ResultCard';
-import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export const GlobalTypingStyles = () => (
@@ -187,7 +186,7 @@ const MarkdownWithReferences = React.memo(({ content, placeholders, scrollToSour
       <Markdown
         components={{
           p: createProcessedComponent('p', 'break-words overflow-wrap-anywhere'),
-          strong: createProcessedComponent('strong', 'font-bold'),
+          strong: createProcessedComponent('strong', 'font-semibold'),
           em: createProcessedComponent('em'),
           li: createProcessedComponent('li'),
           span: createProcessedComponent('span'),
@@ -202,6 +201,7 @@ const MarkdownWithReferences = React.memo(({ content, placeholders, scrollToSour
 const ChatMessage = React.memo(({ role, text, sources, durationMs = null, steps = null, result = null, showRegenerate, onRegenerate, regenerateDisabled }) => {
   const isUser = role === 'user';
   const messageRef = useRef(null);
+  const sourcesLabelId = React.useId();
   const [copied, setCopied] = useState(false);
 
   const scrollToSource = (index) => {
@@ -249,14 +249,14 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, steps 
 
   if (isUser) {
     return (
-      <div className="chat-msg flex w-full justify-end" ref={messageRef}>
+      <article className="chat-msg flex w-full justify-end" ref={messageRef} aria-label="You">
         <div className="chat-user-bubble">{text}</div>
-      </div>
+      </article>
     );
   }
 
   return (
-    <div className="chat-msg group flex w-full" ref={messageRef}>
+    <article className="chat-msg group flex w-full" ref={messageRef} aria-label="Geneie">
       <div className="flex-1 min-w-0">
         {thinkingTime && <WorkedLine elapsedMs={durationMs} steps={steps} rule />}
 
@@ -281,12 +281,13 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, steps 
         )}
 
         {sources && sources.length > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-1.5" role="list" aria-label="Sources">
-            <span className="mr-0.5 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <span id={sourcesLabelId} className="mr-0.5 text-xs text-muted-foreground">
               Sources
             </span>
+            <ul role="list" aria-labelledby={sourcesLabelId} className="m-0 flex list-none flex-wrap items-center gap-1.5 p-0">
             {sources.map((source, idx) => (
-              <span key={idx} role="listitem" className="inline-flex">
+              <li key={idx} className="inline-flex">
                 <Source href={source.url || '#'}>
                   <SourceTrigger
                     data-source-index={idx}
@@ -302,27 +303,26 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, steps 
                     description={source.url || ''}
                   />
                 </Source>
-              </span>
+              </li>
             ))}
+            </ul>
           </div>
         )}
 
         <TooltipProvider>
           <div className="mt-1.5 flex items-center gap-1">
-            <div className="chat-msg-actions flex items-center gap-0.5" data-pinned={copied ? 'true' : undefined}>
+            <div className="chat-msg-actions flex items-center gap-2" data-pinned={copied ? 'true' : undefined}>
               <Tooltip>
                 <TooltipTrigger
                   render={
-                    <Button
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="icon"
                       onClick={handleCopy}
-                      className="chat-chrome-btn-sm rounded-[0.375rem] [@media(pointer:coarse)]:!size-10"
-                      aria-label={copied ? 'Copied' : 'Copy answer'}
+                      className="chat-tool chat-focus"
+                      aria-label="Copy answer"
                     >
-                      {copied ? <CheckCircle2 style={{ color: 'var(--success)' }} /> : <Copy />}
-                    </Button>
+                      {copied ? <CheckCircle2 style={{ color: 'var(--success)' }} aria-hidden /> : <Copy aria-hidden />}
+                    </button>
                   }
                 />
                 <TooltipContent>{copied ? 'Copied' : 'Copy'}</TooltipContent>
@@ -331,27 +331,26 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, steps 
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <Button
+                      <button
                         type="button"
-                        variant="ghost"
-                        size="icon"
                         onClick={onRegenerate}
                         disabled={regenerateDisabled}
-                        className="chat-chrome-btn-sm rounded-[0.375rem] disabled:opacity-40 disabled:cursor-not-allowed [@media(pointer:coarse)]:!size-10"
+                        className="chat-tool chat-focus"
                         aria-label="Regenerate answer"
                       >
-                        <RotateCw />
-                      </Button>
+                        <RotateCw aria-hidden />
+                      </button>
                     }
                   />
                   <TooltipContent>Regenerate</TooltipContent>
                 </Tooltip>
               )}
+              <span role="status" className="sr-only">{copied ? 'Answer copied' : ''}</span>
             </div>
           </div>
         </TooltipProvider>
       </div>
-    </div>
+    </article>
   );
 });
 

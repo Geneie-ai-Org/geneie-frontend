@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -10,6 +10,7 @@ const cleanUrl = () => window.history.replaceState({}, document.title, window.lo
  */
 const SubscriptionSuccess = ({ onClose }) => {
   const [loading, setLoading] = useState(true);
+  const titleId = useId();
   // ChatPage passes a fresh inline onClose on every render; keep the countdown independent of it.
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -40,25 +41,40 @@ const SubscriptionSuccess = ({ onClose }) => {
     cleanUrl();
   };
 
+  // The parent supplies a plain overlay, so Escape is handled here.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        if (onCloseRef.current) onCloseRef.current();
+        cleanUrl();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   return (
     <div
-      role="status"
-      aria-live="polite"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
       className="mx-4 w-full max-w-md rounded-xl border border-border bg-card p-8 text-center shadow-lg"
     >
       {loading ? (
-        <>
+        <div role="status">
           <Loader2 aria-hidden="true" className="mx-auto mb-4 size-8 animate-spin text-muted-foreground motion-reduce:animate-none" />
-          <h2 className="text-base font-medium text-foreground">Confirming your payment</h2>
+          <h2 id={titleId} className="text-[18px] font-medium text-foreground">Confirming your payment</h2>
           <p className="mt-1.5 text-sm text-muted-foreground">This usually takes a few seconds.</p>
-        </>
+        </div>
       ) : (
         <>
           <CheckCircle2 aria-hidden="true" className="mx-auto mb-4 size-8 text-[var(--success)]" />
-          <h2 className="text-base font-medium text-foreground">Pro is active</h2>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            You now have unlimited chat exchanges and access to bioinformatics pipelines.
-          </p>
+          <div role="status">
+            <h2 id={titleId} className="text-[18px] font-medium text-foreground">Pro is active</h2>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              You now have unlimited chat exchanges and access to bioinformatics pipelines.
+            </p>
+          </div>
           <Button size="lg" className="mt-6 h-10 w-full" onClick={handleContinue} autoFocus>
             Continue to Geneie
           </Button>

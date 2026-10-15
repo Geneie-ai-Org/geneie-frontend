@@ -22,33 +22,39 @@ export default function ResultCard({ title, right = null, rows = [], onToggle, c
   };
 
   const hasCount = (n) => n !== null && n !== undefined;
+  const fmt = (n) => (typeof n === 'number' ? n.toLocaleString('en-US') : n);
 
   return (
     <div
-      className={cn('w-full overflow-hidden text-[13px] leading-5', className)}
+      className={cn('w-full overflow-hidden text-[13px] leading-5 tabular-nums', className)}
       style={{ borderRadius: 12, backgroundColor: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }}
     >
       <div className="flex h-10 items-center justify-between gap-3 px-3.5">
-        <span className="min-w-0 truncate">{title}</span>
+        <span className="min-w-0 truncate" title={typeof title === 'string' ? title : undefined}>{title}</span>
         {right ? <span className="flex shrink-0 items-center gap-1 text-[var(--text-secondary)]">{right}</span> : null}
       </div>
 
       {rows.map((row, i) => {
         const content = (
           <>
-            <span className="min-w-0 truncate">{row.label}</span>
-            {row.meta ? <span className="shrink-0 text-[var(--text-tertiary)]">{row.meta}</span> : null}
+            <span className="min-w-0 truncate" title={typeof row.label === 'string' ? row.label : undefined}>{row.label}</span>
+            {row.meta ? <span className="shrink-0 text-muted-foreground">{row.meta}</span> : null}
+            {/* Counts carry their sign, so colour is never the only signal. Mixed toward the text
+             * colour to hold 4.5:1 on the card's gray. */}
             {hasCount(row.add) && (
-              <span className="shrink-0 tabular-nums" style={{ color: 'var(--diff-add)' }}>+{row.add}</span>
+              <span className="shrink-0 tabular-nums" style={{ color: 'color-mix(in srgb, var(--diff-add) 75%, var(--text-primary))' }}>+{fmt(row.add)}</span>
             )}
             {hasCount(row.del) && (
-              <span className="shrink-0 tabular-nums" style={{ color: 'var(--diff-del)' }}>{'−'}{row.del}</span>
+              <span className="shrink-0 tabular-nums" style={{ color: 'color-mix(in srgb, var(--diff-del) 75%, var(--text-primary))' }}>{'−'}{fmt(row.del)}</span>
             )}
             <span className="flex-1" />
-            <ChevronDown
-              className={cn('size-4 shrink-0 text-[var(--text-tertiary)] transition-transform', open && 'rotate-180')}
-              aria-hidden
-            />
+            {/* The chevron is only drawn where a click does something. */}
+            {expandable ? (
+              <ChevronDown
+                className={cn('size-4 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none', open && 'rotate-180')}
+                aria-hidden
+              />
+            ) : null}
           </>
         );
         const rowClass = 'flex h-10 w-full items-center gap-2 border-t border-[var(--border-default)] px-3.5 text-left';
@@ -59,7 +65,7 @@ export default function ResultCard({ title, right = null, rows = [], onToggle, c
             onClick={toggle}
             aria-expanded={open}
             aria-controls={children ? bodyId : undefined}
-            className={cn(rowClass, 'transition-colors hover:bg-[var(--bg-surface-hover)]')}
+            className={cn(rowClass, 'chat-focus-inset transition-colors duration-150 hover:bg-[var(--bg-surface-hover)]')}
           >
             {content}
           </button>

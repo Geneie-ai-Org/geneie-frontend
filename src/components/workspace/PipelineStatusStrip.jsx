@@ -1,24 +1,32 @@
 import React from 'react';
-import { ArrowUpRight } from 'lucide-react';
+import { ChevronRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAnnounce } from '@/components/chat/useAnnounce';
 
 /**
- * One-line status for whatever is running or ready, shown above the composer. It replaces the
- * stack of banner + file card + stepper that used to sit between the thread and the input; the
- * full detail lives in the workspace "Pipeline" tab (`onOpen`).
+ * One quiet gray card above the composer for whatever is running or ready. It replaces the stack
+ * of banner + file card + stepper that used to sit between the thread and the input; the full
+ * detail lives in the workspace "Pipeline" tab (`onOpen`).
+ *
+ * `notice` ({ message, ctaLabel, onCta, onDismiss }) adds one muted second line inside the same
+ * card (a plan or usage note with a text-link action and a dismiss). With a notice and no status
+ * the card shows just that line.
  *
  * Status vocabulary (one word, never a spinner next to a contradicting label):
  *   queued | running | done | failed | idle
+ *
+ * Screen readers get one live region with a full phrase ("file.tsv. Running. Annotating
+ * variants"), without the percentage, so it speaks on a change of state, not on every tick.
  */
 const TONE = {
   queued: 'bg-[var(--info)]',
-  running: 'bg-[var(--info)] animate-pulse',
+  running: 'bg-[var(--info)] animate-pulse motion-reduce:animate-none',
   done: 'bg-[var(--success)]',
   failed: 'bg-[var(--error)]',
   idle: 'bg-[var(--text-disabled)]',
 };
 
-const WORD = { queued: 'Queued', running: 'Running', done: 'Ready', failed: 'Failed', idle: '' };
+const WORD = { queued: 'Queued', running: 'Running', done: 'Done', failed: 'Failed', idle: '' };
 
 function num(v) {
   const n = Number(v);
@@ -79,48 +87,116 @@ export function derivePipelineStrip({
   return null;
 }
 
-export default function PipelineStatusStrip({ status, onOpen, className }) {
-  if (!status) return null;
-  const { state, title, detail, progress, action } = status;
+const BTN =
+  'chat-focus inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md px-2.5 text-[13px] font-medium transition-[background-color,color,transform] duration-150 active:scale-[.98] motion-reduce:transition-none [@media(pointer:coarse)]:h-11';
+
+export default function PipelineStatusStrip({ status, onOpen, notice, className }) {
+  const phrase = status
+    ? [status.title, WORD[status.state], String(status.detail || '').replace(/\s*·\s*\d+(\.\d+)?%$/, '')]
+        .filter(Boolean)
+        .join('. ')
+    : '';
+  const spoken = useAnnounce(phrase);
+  if (!status && !notice) return null;
+
+  const { state, title, detail, progress, action } = status || {};
+  const pct = progress != null ? Math.max(2, Math.min(100, progress)) : null;
+
   return (
     <div
       className={cn(
-        'mx-auto mb-2 flex w-full max-w-[var(--chat-max-width)] items-center gap-3 rounded-xl bg-muted px-3.5 py-2.5 text-[13px]',
+        'relative mx-auto mb-2 w-full max-w-[var(--chat-max-width)] overflow-hidden rounded-xl bg-muted px-3.5 py-2.5 text-[13px] tabular-nums',
         className
       )}
-      role="status"
-      aria-live="polite"
     >
-      <span className={cn('size-2 shrink-0 rounded-full', TONE[state] || TONE.idle)} aria-hidden="true" />
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-baseline gap-2">
-          <span className="truncate font-medium text-foreground">{title}</span>
-          {WORD[state] ? <span className="shrink-0 text-xs text-muted-foreground">{WORD[state]}</span> : null}
-        </div>
-        <div className="truncate text-xs text-muted-foreground">{detail}</div>
-        {progress != null ? (
-          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-            <div className="h-full rounded-full bg-[hsl(var(--signal))] transition-[width] duration-300" style={{ width: `${Math.max(2, Math.min(100, progress))}%` }} />
+      <span role="status" className="sr-only">
+        {spoken}
+      </span>
+
+      {status ? (
+        <div className="flex items-center gap-3">
+          <span className={cn('size-2 shrink-0 rounded-full', TONE[state] || TONE.idle)} aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <span className="truncate font-medium text-foreground" title={title}>
+                {title}
+              </span>
+              {WORD[state] ? <span className="shrink-0 text-xs text-muted-foreground">{WORD[state]}</span> : null}
+            </div>
+            {/* Failures are never clamped; everything else truncates with the full text on hover. */}
+            <div
+              className={cn('text-xs text-muted-foreground', state === 'failed' ? 'break-words' : 'truncate')}
+              title={state === 'failed' ? undefined : detail}
+            >
+              {detail}
+            </div>
           </div>
-        ) : null}
-      </div>
-      {action?.onClick ? (
-        <button
-          type="button"
-          onClick={action.onClick}
-          className="inline-flex shrink-0 items-center rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-        >
-          {action.label}
-        </button>
+          {action?.onClick ? (
+            <button
+              type="button"
+              onClick={action.onClick}
+              className={cn(BTN, 'border border-border bg-background text-foreground hover:bg-accent')}
+            >
+              {action.label}
+            </button>
+          ) : null}
+          {onOpen ? (
+            <button
+              type="button"
+              onClick={onOpen}
+              className={cn(BTN, 'pr-1.5 text-muted-foreground hover:bg-accent hover:text-foreground')}
+            >
+              View details <ChevronRight className="size-3.5" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
       ) : null}
-      {onOpen ? (
-        <button
-          type="button"
-          onClick={onOpen}
-          className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+
+      {notice?.message ? (
+        <div
+          className={cn(
+            'flex items-start gap-2 text-[13px] leading-5 text-muted-foreground',
+            status && 'mt-2 border-t border-border pt-2 pl-5'
+          )}
         >
-          Details <ArrowUpRight className="size-3.5" aria-hidden="true" />
-        </button>
+          <span className="min-w-0 flex-1 py-0.5">{notice.message}</span>
+          {notice.ctaLabel && notice.onCta ? (
+            <button
+              type="button"
+              onClick={notice.onCta}
+              className="chat-focus min-h-6 shrink-0 rounded-sm font-medium text-[hsl(var(--signal))] underline decoration-1 underline-offset-[0.18em] hover:decoration-2 [@media(pointer:coarse)]:min-h-11"
+            >
+              {notice.ctaLabel}
+            </button>
+          ) : null}
+          {notice.onDismiss ? (
+            <button
+              type="button"
+              onClick={notice.onDismiss}
+              aria-label="Dismiss notice"
+              className="chat-focus inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,transform] duration-150 hover:bg-accent hover:text-foreground active:scale-[.98] motion-reduce:transition-none [@media(pointer:coarse)]:size-11"
+            >
+              <X className="size-3.5" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Progress sits on the card's bottom edge, so it adds no height and nothing moves when it appears. */}
+      {pct != null ? (
+        <div
+          className="absolute inset-x-0 bottom-0 h-[3px] bg-border"
+          role="progressbar"
+          aria-label={`${title || 'Run'} progress`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(pct)}
+        >
+          <div
+            className="h-full origin-left bg-[hsl(var(--signal))] transition-transform duration-300 motion-reduce:transition-none"
+            style={{ transform: `scaleX(${pct / 100})` }}
+          />
+        </div>
       ) : null}
     </div>
   );

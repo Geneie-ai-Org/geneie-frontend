@@ -45,7 +45,7 @@ function SourceTrigger({
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        "inline-flex h-6 max-w-56 items-center gap-1 overflow-hidden rounded-md py-0 text-xs no-underline transition-colors duration-150 hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] [@media(pointer:coarse)]:h-8",
+        "chat-focus inline-flex h-6 max-w-56 items-center gap-1 overflow-hidden rounded-md py-0 text-xs no-underline transition-[background-color,color,transform] duration-150 hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] active:scale-[.98] motion-reduce:transition-none [@media(pointer:coarse)]:h-11",
         showFavicon ? "pr-2 pl-1" : "px-2",
         className
       )}
@@ -91,7 +91,7 @@ function SourceContent({ title, description, className }) {
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex flex-col gap-2 p-3 no-underline"
+        className="chat-focus-inset flex flex-col gap-2 p-3 no-underline"
       >
         <div className="flex items-center gap-1.5">
           <img
@@ -110,7 +110,7 @@ function SourceContent({ title, description, className }) {
           {title}
         </div>
         {description && (
-          <div className="line-clamp-2 text-xs break-all" style={{ color: "var(--text-tertiary)" }}>
+          <div className="line-clamp-2 text-xs break-all" style={{ color: "hsl(var(--muted-foreground))" }}>
             {description}
           </div>
         )}

@@ -318,6 +318,23 @@
   padding-inline: var(--chat-gutter-x);
 }
 
+/* One focus treatment for every control in the thread and composer: a full-strength 2px
+ * outline, 2px off the edge (3:1 or better in both themes). It also cancels the ring and
+ * border a shared button primitive adds on focus, so the two never stack. */
+.chat-focus:focus-visible,
+.chat-cite:focus-visible,
+.chat-table-copy:focus-visible,
+button.chat-worked:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  box-shadow: none !important;
+}
+
+.chat-focus-inset:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+}
+
 /* Chat message typography (markdown + streaming). Flat prose on the page: 15px / 1.65. */
 .chat-prose {
   font-size: 0.9375rem;
@@ -376,7 +393,7 @@
   color: var(--accent-teal);
   text-decoration: underline;
   text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
+  text-underline-offset: 0.18em;
 }
 
 .chat-prose a:hover {
@@ -393,7 +410,7 @@
   color: var(--text-primary);
 }
 
-.chat-prose h1 { font-size: 1rem; }
+.chat-prose h1,
 .chat-prose h2,
 .chat-prose h3,
 .chat-prose h4 { font-size: 0.9375rem; }
@@ -431,7 +448,7 @@
   border-radius: 5px;
   background-color: color-mix(in srgb, hsl(var(--signal)) 7%, var(--bg-surface-raised));
   color: var(--code-inline);
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 /* Tables: compact, hairlines only. They scroll inside their own box (sticky header, tabular
@@ -488,6 +505,12 @@
   color: var(--text-primary);
 }
 
+/* Columns whose cells are all numbers (marked by ChatTable) align right, like a data table. */
+.chat-prose th[data-num],
+.chat-prose td[data-num] {
+  text-align: right;
+}
+
 .chat-prose tbody tr:last-child td {
   border-bottom: 0;
 }
@@ -507,7 +530,7 @@
   border-radius: 6px;
   background-color: var(--bg-app);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   transition: background-color var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast);
 }
@@ -604,15 +627,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.125rem;
-  height: 1.0625rem;
-  margin: 0 0.1rem;
+  position: relative;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  margin: 0 0.125rem;
   padding: 0 0.3rem;
   border: 0;
   border-radius: 9999px;
   background-color: var(--bg-surface-raised);
   color: var(--text-secondary);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 500;
   line-height: 1;
   text-decoration: none;
@@ -627,6 +651,143 @@
   color: var(--accent-teal);
 }
 
+/* The chip reads small; its hit area is 24px square (WCAG 2.2), 44px for coarse pointers. */
+.chat-cite::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+}
+
+@media (pointer: coarse) {
+  .chat-cite::before {
+    inset: -12px -8px;
+  }
+}
+
+/* Composer toolbar and message actions. Every control is the same 32px box with the same
+ * 150ms colour transition, the same press (scale .98, 120ms) and the same focus outline, so
+ * the row reads as one set. Coarse pointers get 44px. Names say what they are: `chat-tool`
+ * is the control, `chat-tool-send` the dark circle, `chat-tool-plus` the add-data button. */
+.chat-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  height: 2rem;
+  min-width: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 150ms var(--ease-out),
+    color 150ms var(--ease-out),
+    opacity 150ms var(--ease-out),
+    transform 120ms var(--ease-out);
+}
+
+.chat-tool svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.chat-tool:hover:not(:disabled),
+.chat-tool[data-popup-open],
+.chat-tool[aria-expanded='true'] {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.chat-tool:active:not(:disabled) {
+  transform: scale(0.98);
+  background-color: color-mix(in srgb, var(--bg-surface-hover) 70%, var(--border-strong));
+}
+
+.chat-tool[aria-pressed='true'] {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.chat-tool:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chat-tool--label {
+  padding: 0 0.5rem;
+}
+
+/* The elevated mode keeps the orange of the reference; it is mixed toward the text colour so it
+ * holds 4.5:1 on the hover fill as well as on the card, in both themes. */
+.chat-tool--explore,
+.chat-tool--explore:hover:not(:disabled),
+.chat-tool--explore[data-popup-open] {
+  color: color-mix(in srgb, var(--perm-warn) 88%, var(--text-primary));
+}
+
+.dark .chat-tool--explore,
+.dark .chat-tool--explore:hover:not(:disabled),
+.dark .chat-tool--explore[data-popup-open] {
+  color: color-mix(in srgb, var(--perm-warn) 72%, white);
+}
+
+.chat-tool-send {
+  width: 2rem;
+  border-radius: 9999px;
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+.chat-tool-send:hover:not(:disabled),
+.chat-tool-send:active:not(:disabled) {
+  background-color: hsl(var(--primary) / 0.85);
+  color: hsl(var(--primary-foreground));
+}
+
+.chat-tool-send:disabled {
+  opacity: 0.3;
+}
+
+.chat-tool-plus svg {
+  transition: transform 150ms var(--ease-out);
+}
+
+.chat-tool-plus[aria-expanded='true'] svg {
+  transform: rotate(45deg);
+}
+
+@media (pointer: coarse) {
+  .chat-tool {
+    height: 2.75rem;
+    min-width: 2.75rem;
+  }
+  .chat-tool-send {
+    width: 2.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-tool:active:not(:disabled) {
+    transform: none;
+  }
+  .chat-tool-plus svg {
+    transition: none;
+  }
+  .chat-tool-plus[aria-expanded='true'] svg {
+    transform: none;
+  }
+}
+
 /* User prompt: a soft blue bubble, right aligned. The token is a light tint, so the dark theme
  * mixes the signal blue into the page surface instead. */
 .chat-user-bubble {
@@ -636,7 +797,7 @@
   background-color: var(--bubble-user);
   color: var(--text-primary);
   font-size: 0.9375rem;
-  line-height: 1.55;
+  line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -679,7 +840,7 @@
   height: 1.5rem;
   max-width: 100%;
   font-size: 13px;
-  color: var(--text-tertiary);
+  color: hsl(var(--muted-foreground));
   font-variant-numeric: tabular-nums;
 }
 
@@ -694,7 +855,7 @@ button.chat-worked {
 }
 
 button.chat-worked:hover {
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .chat-worked-chev {
@@ -702,6 +863,10 @@ button.chat-worked:hover {
   width: 0.875rem;
   height: 0.875rem;
   transition: transform 150ms var(--ease-out);
+}
+
+button.chat-worked {
+  transition: color 150ms var(--ease-out);
 }
 
 .chat-worked[aria-expanded='true'] .chat-worked-chev {
@@ -1158,7 +1323,7 @@ body, html, #root {
 
 /* Variant Filter Sidebar — dark theme */
 .variant-filter-sidebar {
-  background-color: var(--bg-sidebar);
+  background-color: transparent;
   color: var(--text-primary);
   border-left-color: var(--border-default);
 }

@@ -75,7 +75,7 @@ const SubscriptionManager = ({ isInputGated, userId }) => {
             <main className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 py-10 sm:px-6 sm:py-14">
                 <div className="mb-8 flex items-start justify-between gap-4">
                     <div className="min-w-0">
-                        <h1 className="text-xl font-semibold tracking-tight text-foreground">{content.title}</h1>
+                        <h1 className="text-[18px] font-semibold text-foreground">{content.title}</h1>
                         <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">{content.description}</p>
                     </div>
                     {!isGuest && (

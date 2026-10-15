@@ -1,6 +1,10 @@
 import React from 'react';
 import { Check, ChevronRight, CircleAlert, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+
+// Full-alpha 2px ring (the global one is 45% alpha, under 3:1 on white).
+const FOCUS = 'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--ring))]';
 
 /**
  * Summary: the first tab of the workbench. One place to see where a file stands.
@@ -13,7 +17,7 @@ import { cn } from '@/lib/utils';
 
 const STAGE_ICON = {
   done: () => <Check className="size-3" strokeWidth={2.4} aria-hidden="true" />,
-  running: () => <Loader2 className="size-3 animate-spin" aria-hidden="true" />,
+  running: () => <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />,
   failed: () => <CircleAlert className="size-3" aria-hidden="true" />,
   pending: () => null,
 };
@@ -22,10 +26,11 @@ const STAGE_TONE = {
   done: 'bg-[var(--success-soft)] text-[var(--success)]',
   running: 'bg-[var(--info-soft)] text-[var(--info)]',
   failed: 'bg-[var(--error-soft)] text-[var(--error)]',
-  pending: 'border border-border text-transparent',
+  pending: 'border border-[var(--border-strong)] text-transparent',
 };
 
-const STATE_WORD = { done: 'Done', running: 'Running', failed: 'Failed', pending: '' };
+// One vocabulary for every stage: nothing is ever shown by colour or icon alone.
+export const STATE_WORD = { done: 'Done', running: 'Running', failed: 'Failed', pending: 'Not started' };
 
 function nf(n) {
   const v = Number(n);
@@ -60,7 +65,11 @@ export function deriveSummary({
       id: 'annotated',
       label: 'Annotated',
       state: isRunningAnnovar ? 'running' : annovarFailed ? 'failed' : annotated ? 'done' : 'pending',
-      detail: isRunningAnnovar ? 'Adding clinical and population data' : annotated ? null : 'Needed before ACMG and phenotype filters',
+      detail: isRunningAnnovar
+        ? 'Adding clinical and population data'
+        : annovarFailed
+          ? 'Annotation did not finish, so ACMG and phenotype filters stay locked. Run it again.'
+          : annotated ? null : 'Needed before ACMG and phenotype filters',
     },
     {
       id: 'filtered',
@@ -96,37 +105,44 @@ function Stage({ stage, last }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span className={cn('text-[13px] font-medium', stage.state === 'pending' ? 'text-muted-foreground' : 'text-foreground')}>{stage.label}</span>
-          {STATE_WORD[stage.state] ? <span className="text-xs text-muted-foreground">{STATE_WORD[stage.state]}</span> : null}
+          <span className={cn('text-xs', stage.state === 'failed' ? 'text-[var(--error)]' : 'text-muted-foreground')}>{STATE_WORD[stage.state]}</span>
         </div>
-        {stage.detail ? <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{stage.detail}</p> : null}
+        {stage.detail ? <p className="mt-0.5 text-xs leading-5 tabular-nums text-muted-foreground">{stage.detail}</p> : null}
       </div>
     </li>
   );
 }
 
-function JumpCard({ title, meta, onClick, disabled }) {
+function JumpRow({ title, meta, onClick, disabled }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex w-full items-center gap-3 rounded-xl bg-muted px-3.5 py-2.5 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50"
+      className={cn(
+        'flex min-h-10 w-full items-center gap-3 px-1 py-2 text-left transition-colors duration-150 hover:bg-muted/60 disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none',
+        FOCUS,
+        'focus-visible:-outline-offset-2'
+      )}
     >
       <span className="min-w-0 flex-1">
         <span className="block text-[13px] font-medium text-foreground">{title}</span>
-        {meta ? <span className="block truncate text-xs text-muted-foreground">{meta}</span> : null}
+        {meta ? <span className="block truncate text-xs tabular-nums text-muted-foreground">{meta}</span> : null}
       </span>
       <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
     </button>
   );
 }
 
-export default function SummaryTab({ summary, jumps = [], className }) {
+export default function SummaryTab({ summary, jumps = [], emptyAction, className }) {
   if (!summary) {
     return (
       <div className={cn('flex h-full flex-col items-center justify-center gap-1 px-8 text-center', className)}>
-        <p className="text-[13px] font-medium text-foreground">Nothing to summarise yet</p>
-        <p className="text-xs text-muted-foreground">Add a variants file or raw sequencing data from the composer to get started.</p>
+        <p className="text-[15px] font-medium text-foreground">No file yet</p>
+        <p className="max-w-xs text-[13px] text-muted-foreground">Add a variants file or raw sequencing data from the composer. This tab then tracks where it stands.</p>
+        {emptyAction ? (
+          <Button variant="outline" size="sm" onClick={emptyAction.onClick} className="mt-2">{emptyAction.label}</Button>
+        ) : null}
       </div>
     );
   }
@@ -142,11 +158,11 @@ export default function SummaryTab({ summary, jumps = [], className }) {
       {inScope != null ? (
         <div className="mt-4">
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-medium tabular-nums text-foreground">{nf(inScope)}</span>
+            <span className="text-lg font-medium tabular-nums text-foreground">{nf(inScope)}</span>
             <span className="text-[13px] text-muted-foreground">{total != null ? `of ${nf(total)} variants in scope` : 'variants in scope'}</span>
           </div>
-          {pct != null ? (
-            <div className="mt-2 h-0.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+          {pct != null && pct < 100 ? (
+            <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
               <div className="h-full rounded-full bg-[hsl(var(--signal))]" style={{ width: `${pct}%` }} />
             </div>
           ) : null}
@@ -160,21 +176,21 @@ export default function SummaryTab({ summary, jumps = [], className }) {
       </ol>
 
       {nextAction ? (
-        <button
-          type="button"
-          onClick={nextAction.onClick}
-          className="mt-4 inline-flex h-8 items-center rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring/40"
-        >
+        <Button type="button" size="sm" onClick={nextAction.onClick} className={cn('mt-4', 'focus-visible:border-transparent focus-visible:ring-[hsl(var(--ring))]')}>
           {nextAction.label}
-        </button>
+        </Button>
       ) : null}
 
       {jumps.length > 0 ? (
-        <div className="mt-6 space-y-2">
-          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Open</h3>
-          {jumps.map((j) => (
-            <JumpCard key={j.id} title={j.title} meta={j.meta} onClick={j.onClick} disabled={j.disabled} />
-          ))}
+        <div className="mt-6">
+          <h3 className="mb-1 text-xs font-medium text-muted-foreground">Jump to</h3>
+          <ul className="divide-y divide-[var(--border-subtle)] border-y border-[var(--border-subtle)]">
+            {jumps.map((j) => (
+              <li key={j.id}>
+                <JumpRow title={j.title} meta={j.meta} onClick={j.onClick} disabled={j.disabled} />
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
     </div>

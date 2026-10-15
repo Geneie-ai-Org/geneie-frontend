@@ -31,7 +31,7 @@ const TopUpSelector = ({ userId, db, currentQueries, onTopUpSuccess }) => {
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
 
       if (!token) {
-        setError('Please log in to purchase top-ups');
+        setError('Sign in again to buy top-ups.');
         setLoading(false);
         return;
       }
@@ -62,7 +62,7 @@ const TopUpSelector = ({ userId, db, currentQueries, onTopUpSuccess }) => {
       }
     } catch (error) {
       console.error('[TopUpSelector] Error creating checkout:', error);
-      setError(error.message || 'Failed to start checkout. Please try again.');
+      setError(`Could not start checkout. ${error.message || 'Try again in a moment.'}`);
       setLoading(false);
     }
   };
@@ -70,7 +70,7 @@ const TopUpSelector = ({ userId, db, currentQueries, onTopUpSuccess }) => {
   return (
     <div className="w-full">
       <div className="mb-4">
-        <h3 className="text-base font-medium text-foreground">Buy more queries</h3>
+        <h3 className="text-sm font-semibold text-foreground">Buy more queries</h3>
         <p className="mt-1 text-[13px] text-muted-foreground">
           You have <span className="font-medium tabular-nums text-foreground">{currentQueries || 0}</span> queries left.
           Top-ups are added to your balance and don&rsquo;t expire.
@@ -92,7 +92,7 @@ const TopUpSelector = ({ userId, db, currentQueries, onTopUpSuccess }) => {
             <label
               key={tier.queries}
               className={cn(
-                'flex min-h-11 cursor-pointer items-center gap-3 px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring/55',
+                'flex min-h-11 cursor-pointer items-center gap-3 px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring/70',
                 checked ? 'bg-primary/5' : 'bg-card hover:bg-accent/50'
               )}
             >
@@ -109,12 +109,12 @@ const TopUpSelector = ({ userId, db, currentQueries, onTopUpSuccess }) => {
                 <span className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium tabular-nums text-foreground">{tier.queries} queries</span>
                   {tag && (
-                    <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-xs font-medium text-muted-foreground">
+                    <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-[12px] font-medium text-muted-foreground">
                       {tag}
                     </span>
                   )}
                 </span>
-                <span className="mt-0.5 block text-xs tabular-nums text-muted-foreground">
+                <span className="mt-0.5 block text-[12px] tabular-nums text-muted-foreground">
                   ${tier.perQuery.toFixed(3)} per query{tier.discount > 0 ? `, save ${tier.discount}%` : ''}
                 </span>
               </span>
@@ -139,7 +139,7 @@ const TopUpSelector = ({ userId, db, currentQueries, onTopUpSuccess }) => {
           )}
         </Button>
       </div>
-      <p className="mt-3 text-xs text-muted-foreground">Pro subscribers also receive 50 queries per month.</p>
+      <p className="mt-3 text-[12px] text-muted-foreground">Pro subscribers also receive 50 queries per month.</p>
     </div>
   );
 };

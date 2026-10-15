@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
-  ChevronDown,
+  ArrowDown,
+  ArrowUp,
+  ChevronRight,
   Download,
   ListChecks,
   Loader2,
@@ -59,15 +61,21 @@ const TONES = {
   neutral: { bg: 'var(--segment-track)', fg: 'var(--text-secondary)' },
 };
 
-function StatusChip({ tone = 'neutral', children, title, dot = true }) {
+function StatusChip({ tone = 'neutral', children, title, dot = true, pulse = false }) {
   const t = TONES[tone] || TONES.neutral;
   return (
     <span
       title={title || undefined}
-      className="inline-flex h-5 max-w-full shrink-0 items-center gap-1.5 rounded-full px-2 text-2xs font-medium"
+      className="inline-flex h-5 max-w-full shrink-0 items-center gap-1.5 rounded-full px-2 text-[12px] font-medium"
       style={{ background: t.bg, color: t.fg }}
     >
-      {dot ? <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: t.fg }} /> : null}
+      {dot ? (
+        <span
+          aria-hidden
+          className={`size-1.5 shrink-0 rounded-full ${pulse ? 'motion-safe:animate-pulse' : ''}`}
+          style={{ background: t.fg }}
+        />
+      ) : null}
       <span className="truncate">{children}</span>
     </span>
   );
@@ -98,18 +106,15 @@ function numericScore(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-const SORTS = [
-  { id: 'rank', label: 'GA rank' },
-  { id: 'score', label: 'Score' },
-  { id: 'gene', label: 'Gene' },
-];
+/** Column headers are the sort controls. Rank and gene read low to high, score reads high to low. */
+const SORT_DIRECTION = { rank: 'ascending', gene: 'ascending', score: 'descending' };
 
 function DetailItem({ label, children, mono = false }) {
   if (children == null || children === '' || children === '—') return null;
   return (
     <div className="min-w-0">
-      <dt className="text-2xs font-medium text-muted-foreground">{label}</dt>
-      <dd className={`mt-0.5 break-words text-xs text-foreground ${mono ? 'font-mono' : ''}`}>
+      <dt className="text-[12px] font-medium text-muted-foreground">{label}</dt>
+      <dd className={`mt-0.5 break-words text-[13px] text-foreground ${mono ? 'font-mono' : ''}`}>
         {children}
       </dd>
     </div>
@@ -279,9 +284,9 @@ export default function GaTriagePanel({
   if (isGuest || !conversationId || !variantData) return null;
 
   const statusChip = running ? (
-    <StatusChip tone="info">Running</StatusChip>
+    <StatusChip tone="info" pulse>Running</StatusChip>
   ) : ready ? (
-    <StatusChip tone="success">Complete</StatusChip>
+    <StatusChip tone="success">Done</StatusChip>
   ) : failed ? (
     <StatusChip tone="error">Failed</StatusChip>
   ) : (
@@ -289,84 +294,104 @@ export default function GaTriagePanel({
   );
 
   const filtersActive = query.trim() !== '' || labelFilter !== 'all';
+  const hasRows = ready && candidates.length > 0;
+
+  const renderSortHeader = (id, label, className = '') => {
+    const active = sortBy === id;
+    const Arrow = SORT_DIRECTION[id] === 'descending' ? ArrowDown : ArrowUp;
+    return (
+      <th key={id} scope="col" aria-sort={active ? SORT_DIRECTION[id] : 'none'} className={`h-8 px-2 font-medium ${className}`}>
+        <button
+          type="button"
+          onClick={() => setSortBy(id)}
+          title={`Sort by ${label.toLowerCase()}`}
+          className={`inline-flex h-6 items-center gap-1 rounded px-1 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55 ${
+            active ? 'text-foreground' : ''
+          }`}
+        >
+          {label}
+          {active ? <Arrow className="size-3" aria-hidden /> : null}
+        </button>
+      </th>
+    );
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
-      {/* Summary header */}
-      <div className="shrink-0 space-y-2 border-b border-border px-4 pb-3 pt-3">
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      {/* Summary header: title and status, counts, one primary action top right. */}
+      <div className="shrink-0 space-y-1.5 border-b border-border px-4 pb-3 pt-3">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <ListChecks className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-            <h2 className="truncate text-sm font-semibold">Top review candidates</h2>
-            {statusChip}
+            <h2 className="truncate text-[13px] font-semibold">Top review candidates</h2>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1">
             <Button
               type="button"
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="icon-sm"
               onClick={() => load()}
               disabled={loading}
-              className="max-md:h-11"
+              aria-label="Refresh triage"
+              title="Refresh triage"
+              className="text-muted-foreground max-md:size-11"
             >
               {loading ? <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden /> : <RefreshCw aria-hidden />}
-              Refresh
             </Button>
             <Button
               type="button"
-              variant="outline"
               size="sm"
               onClick={handleDownload}
               disabled={!canDownload || downloading}
+              aria-describedby={!canDownload ? 'ga-download-reason' : undefined}
               className="max-md:h-11"
             >
               {downloading ? <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden /> : <Download aria-hidden />}
-              Download TSV
+              {downloading ? 'Preparing…' : 'Download TSV'}
             </Button>
           </div>
         </div>
-        <p className="text-xs tabular-nums text-muted-foreground">
-          {ready
-            ? countLine(data) || `${candidates.length} shown`
-            : 'Genome Analyst ranking. Decision support only.'}
-          {!canDownload ? (
-            <span className="block">Download is available once triage completes.</span>
-          ) : null}
-        </p>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          {statusChip}
+          <p className="min-w-0 text-[13px] tabular-nums text-muted-foreground">
+            {ready
+              ? countLine(data) || `${candidates.length} shown`
+              : 'Genome Analyst ranking. Decision support only.'}
+          </p>
+        </div>
+        {!canDownload ? (
+          <p id="ga-download-reason" className="text-[12px] text-muted-foreground">
+            {running ? 'Download unlocks when triage is done.' : 'Download is available once triage is done.'}
+          </p>
+        ) : null}
       </div>
 
-      {/* Filters */}
-      {ready && candidates.length > 0 ? (
+      {/* Search and call filter */}
+      {hasRows ? (
         <div className="shrink-0 space-y-2 border-b border-border px-4 py-2">
-          <div className="flex items-center gap-2">
-            <div className="relative min-w-0 flex-1">
-              <Search
-                className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                aria-hidden
-              />
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Filter by gene or variant"
-                aria-label="Filter candidates by gene or variant"
-                className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-2 text-base outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 md:text-[13px] max-md:h-11 [&::-webkit-search-cancel-button]:hidden"
-              />
-            </div>
-            <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-              <span className="max-sm:sr-only">Sort</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="h-8 rounded-md border border-input bg-background px-2 text-base text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 md:text-[13px] max-md:h-11"
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`Search ${candidates.length} candidates by gene or variant`}
+              aria-label="Search candidates by gene or variant"
+              className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-8 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 max-md:h-11 max-md:text-base"
+            />
+            {query ? (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                aria-label="Clear search"
+                className="absolute right-1 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55 max-md:size-10"
               >
-                {SORTS.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <X className="size-3.5" aria-hidden />
+              </button>
+            ) : null}
           </div>
           {labelCounts.length > 1 ? (
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by GA call">
@@ -378,12 +403,11 @@ export default function GaTriagePanel({
                     type="button"
                     aria-pressed={active}
                     onClick={() => setLabelFilter(id)}
-                    className="inline-flex h-7 items-center rounded-full border px-2.5 text-xs font-medium tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/55 max-md:min-h-11 max-md:px-3"
-                    style={{
-                      borderColor: active ? 'hsl(var(--primary))' : 'var(--border-strong)',
-                      background: active ? 'var(--accent-teal-soft)' : 'transparent',
-                      color: active ? 'hsl(var(--primary))' : 'var(--text-secondary)',
-                    }}
+                    className={`inline-flex h-6 items-center rounded-full border px-2.5 text-[12px] font-medium tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/55 max-md:min-h-11 max-md:px-3 ${
+                      active
+                        ? 'border-[hsl(var(--signal))] bg-[var(--accent-teal-soft)] text-foreground'
+                        : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
+                    }`}
                   >
                     {text}
                   </button>
@@ -394,12 +418,12 @@ export default function GaTriagePanel({
         </div>
       ) : null}
 
-      {/* Body */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* Body. scroll-pt keeps a focused row clear of the sticky column header. */}
+      <div className="min-h-0 flex-1 scroll-pt-9 overflow-y-auto">
         {error ? (
           <div
             role="alert"
-            className="m-4 flex items-start gap-2 rounded-md border px-3 py-2 text-xs"
+            className="m-4 flex items-start gap-2 rounded-md border px-3 py-2 text-[13px]"
             style={{
               background: 'var(--error-soft)',
               borderColor: 'color-mix(in srgb, var(--error) 30%, transparent)',
@@ -408,7 +432,7 @@ export default function GaTriagePanel({
             <AlertCircle className="mt-0.5 size-3.5 shrink-0" style={{ color: 'var(--error)' }} aria-hidden />
             <span className="min-w-0 flex-1 text-foreground">
               <span className="font-medium">{error}.</span>{' '}
-              <span className="text-muted-foreground">Check your connection and try again.</span>
+              <span className="text-muted-foreground">Check your connection, then retry.</span>
             </span>
             <Button type="button" variant="outline" size="xs" onClick={() => load()} className="shrink-0 max-md:h-9">
               Retry
@@ -417,43 +441,56 @@ export default function GaTriagePanel({
         ) : null}
 
         {loading && !data ? (
-          <div className="space-y-1 p-4" role="status" aria-label="Loading triage">
-            {[0, 1, 2, 3, 4].map((i) => (
+          <div className="space-y-1 p-4" role="status" aria-label="Loading triage" aria-busy="true">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
               <Skeleton key={i} className="h-9 w-full" />
             ))}
           </div>
         ) : !ready ? (
-          <div className="mx-auto flex max-w-sm flex-col items-center px-6 py-12 text-center">
-            {running ? (
-              <Loader2 className="mb-3 size-5 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden />
-            ) : failed ? (
-              <AlertCircle className="mb-3 size-5" style={{ color: 'var(--error)' }} aria-hidden />
-            ) : (
-              <ListChecks className="mb-3 size-5 text-muted-foreground" aria-hidden />
-            )}
-            <p className="text-sm font-medium">
-              {running ? 'Triage is running' : failed ? 'Triage failed' : 'Triage has not run yet'}
-            </p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              {data?.message ||
-                (running
-                  ? 'This list fills in by itself when it finishes.'
-                  : failed
-                    ? data?.error || 'Something went wrong. Refresh to check again.'
+          running ? (
+            // A multi-minute job is a state, not a spinner: rows that will be filled in, plus one status line.
+            <div role="status" aria-busy="true" className="px-4 py-4">
+              <p className="mb-3 text-[13px] text-muted-foreground">
+                {data?.message || 'Triage is running. This list fills in by itself when it is done.'}
+              </p>
+              <div className="space-y-1">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className="h-9 w-full" />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="mx-auto flex max-w-sm flex-col items-center px-6 py-12 text-center">
+              {failed ? (
+                <AlertCircle className="mb-3 size-5" style={{ color: 'var(--error)' }} aria-hidden />
+              ) : (
+                <ListChecks className="mb-3 size-5 text-muted-foreground" aria-hidden />
+              )}
+              <p className="text-[15px] font-medium">{failed ? 'Triage failed' : 'Triage has not run yet'}</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                {data?.message ||
+                  (failed
+                    ? data?.error || 'The ranking stopped before it finished. Refresh to check again.'
                     : 'It starts after enrichment, once the case has annotated variants.')}
-            </p>
-          </div>
+              </p>
+              {failed ? (
+                <Button type="button" variant="outline" size="sm" className="mt-3 max-md:h-11" onClick={() => load()} disabled={loading}>
+                  <RefreshCw aria-hidden /> Check again
+                </Button>
+              ) : null}
+            </div>
+          )
         ) : candidates.length === 0 ? (
           <div className="mx-auto max-w-sm px-6 py-12 text-center">
-            <p className="text-sm font-medium">No top candidates</p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="text-[15px] font-medium">No top candidates</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">
               {data?.message || 'Triage finished without any candidates to review.'}
             </p>
           </div>
         ) : visibleRows.length === 0 ? (
           <div className="mx-auto max-w-sm px-6 py-12 text-center">
-            <p className="text-sm font-medium">No candidates match</p>
-            <p className="mt-1 text-xs text-muted-foreground">Try a different gene, variant or GA call.</p>
+            <p className="text-[15px] font-medium">No candidates match</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">Try a different gene, variant or GA call.</p>
             {filtersActive ? (
               <Button
                 type="button"
@@ -470,81 +507,110 @@ export default function GaTriagePanel({
             ) : null}
           </div>
         ) : (
-          <ul className="divide-y divide-border">
-            {visibleRows.map((r) => {
-              const open = expandedKey === r.key;
-              const detailId = `ga-detail-${r.rank}`;
-              return (
-                <li key={r.key}>
-                  <button
-                    type="button"
-                    aria-expanded={open}
-                    aria-controls={detailId}
-                    onClick={() => setExpandedKey(open ? null : r.key)}
-                    className="grid h-9 w-full grid-cols-[1.5rem_minmax(3rem,auto)_minmax(0,1fr)_auto_2.25rem_1rem] items-center gap-x-2 px-4 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/55 max-md:h-11"
-                    style={{ background: open ? 'var(--bg-surface-sunken)' : undefined }}
-                  >
-                    <span
-                      className="text-2xs tabular-nums text-muted-foreground"
-                      aria-label={`GA rank ${r.rank}`}
+          <table className="w-full table-fixed border-collapse text-[13px]">
+            <caption className="sr-only">Top review candidates, {visibleRows.length} shown</caption>
+            <colgroup>
+              <col className="w-[3.25rem]" />
+              <col className="w-[5.75rem]" />
+              <col />
+              <col className="w-36" />
+              <col className="w-12" />
+            </colgroup>
+            <thead className="sticky top-0 z-20 bg-background text-[12px] text-muted-foreground shadow-[0_1px_0_hsl(var(--border))]">
+              <tr>
+                {renderSortHeader('rank', 'Rank', 'pl-3 text-right')}
+                {renderSortHeader('gene', 'Gene', 'text-left')}
+                <th scope="col" className="h-8 px-2 text-left font-medium">Change</th>
+                <th scope="col" className="h-8 px-2 text-left font-medium">GA call</th>
+                {renderSortHeader('score', 'Score', 'pr-2 text-right')}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRows.map((r) => {
+                const open = expandedKey === r.key;
+                const detailId = `ga-detail-${r.rank}`;
+                const toggle = () => setExpandedKey(open ? null : r.key);
+                return (
+                  <React.Fragment key={r.key}>
+                    <tr
+                      onClick={toggle}
+                      className={`h-9 cursor-pointer border-b border-[var(--border-subtle)] transition-colors hover:bg-muted max-md:h-11 ${
+                        open ? 'bg-[var(--bg-surface-sunken)]' : ''
+                      }`}
                     >
-                      {r.rank}
-                    </span>
-                    <span className="truncate text-[13px] font-semibold">{r.row.gene || 'Unknown gene'}</span>
-                    <span className="truncate font-mono text-xs text-muted-foreground" title={r.change.full || undefined}>
-                      {r.change.primary}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      {r.conflict ? <StatusChip tone="error" title={String(r.conflict)}>Flag</StatusChip> : null}
-                      <StatusChip tone={r.tone} title={r.row.label || undefined}>
-                        {r.label}
-                      </StatusChip>
-                    </span>
-                    <span className="text-right text-xs tabular-nums text-foreground">
-                      {r.score != null ? r.score : '—'}
-                    </span>
-                    <ChevronDown
-                      aria-hidden
-                      className={`size-3.5 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none ${open ? 'rotate-180' : ''}`}
-                    />
-                  </button>
-                  {open ? (
-                    <dl
-                      id={detailId}
-                      className="grid grid-cols-1 gap-x-4 gap-y-2.5 px-4 pb-3 pl-[3.5rem] pt-1 sm:grid-cols-2"
-                      style={{ background: 'var(--bg-surface-sunken)' }}
-                    >
-                      <div className="min-w-0 sm:col-span-2">
-                        <dt className="text-2xs font-medium text-muted-foreground">Variant</dt>
-                        <dd className="mt-0.5 break-all font-mono text-xs text-foreground">
-                          {r.change.full || r.row.variant || '—'}
-                        </dd>
-                      </div>
-                      <DetailItem label="GA call">{r.row.label || r.label}</DetailItem>
-                      <DetailItem label="Score">{r.score != null ? String(r.score) : null}</DetailItem>
-                      <DetailItem label="ACMG">{r.row.ga_acmg_2015 || r.row.ga_acmg_point || null}</DetailItem>
-                      <DetailItem label="Phenotype match">{r.row.phenotype_match || null}</DetailItem>
-                      {r.conflict ? (
-                        <div className="min-w-0 sm:col-span-2">
-                          <dt className="text-2xs font-medium" style={{ color: 'var(--error)' }}>Flag</dt>
-                          <dd className="mt-0.5 break-words text-xs text-foreground">{String(r.conflict)}</dd>
-                        </div>
-                      ) : null}
-                    </dl>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
+                      <td className="pl-3 pr-2 text-right text-[12px] tabular-nums text-muted-foreground">{r.rank}</td>
+                      <td className="px-2">
+                        <button
+                          type="button"
+                          aria-expanded={open}
+                          aria-controls={detailId}
+                          className="flex h-8 w-full min-w-0 items-center gap-1 rounded text-left font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/55"
+                        >
+                          <ChevronRight
+                            aria-hidden
+                            className={`size-3.5 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none ${open ? 'rotate-90' : ''}`}
+                          />
+                          <span className="truncate">{r.row.gene || 'Unknown gene'}</span>
+                          {r.conflict ? (
+                            <AlertCircle
+                              className="size-3.5 shrink-0"
+                              style={{ color: 'var(--error)' }}
+                              role="img"
+                              aria-label={`Flag: ${String(r.conflict)}`}
+                            />
+                          ) : null}
+                        </button>
+                      </td>
+                      <td className="truncate px-2 font-mono text-[12px] text-muted-foreground" title={r.change.full || undefined}>
+                        {r.change.primary}
+                      </td>
+                      <td className="px-2">
+                        <StatusChip tone={r.tone} title={r.row.label || undefined}>
+                          {r.label}
+                        </StatusChip>
+                      </td>
+                      <td className="pl-1 pr-3 text-right tabular-nums text-foreground">
+                        {r.score != null ? r.score : '—'}
+                      </td>
+                    </tr>
+                    {open ? (
+                      <tr id={detailId} className="border-b border-[var(--border-subtle)]" style={{ background: 'var(--bg-surface-sunken)' }}>
+                        <td colSpan={5} className="px-4 pb-3 pl-[3.25rem] pt-1">
+                          <dl className="grid grid-cols-1 gap-x-4 gap-y-2.5 sm:grid-cols-2">
+                            <div className="min-w-0 sm:col-span-2">
+                              <dt className="text-[12px] font-medium text-muted-foreground">Variant</dt>
+                              <dd className="mt-0.5 break-all font-mono text-[12px] text-foreground">
+                                {r.change.full || r.row.variant || '—'}
+                              </dd>
+                            </div>
+                            <DetailItem label="GA call">{r.row.label || r.label}</DetailItem>
+                            <DetailItem label="Score">{r.score != null ? String(r.score) : null}</DetailItem>
+                            <DetailItem label="ACMG">{r.row.ga_acmg_2015 || r.row.ga_acmg_point || null}</DetailItem>
+                            <DetailItem label="Phenotype match">{r.row.phenotype_match || null}</DetailItem>
+                            {r.conflict ? (
+                              <div className="min-w-0 sm:col-span-2">
+                                <dt className="text-[12px] font-medium" style={{ color: 'var(--error)' }}>Flag</dt>
+                                <dd className="mt-0.5 break-words text-[13px] text-foreground">{String(r.conflict)}</dd>
+                              </div>
+                            ) : null}
+                          </dl>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
         )}
 
         {ready && data?.clinical_use_note ? (
-          <p className="px-4 py-3 text-2xs leading-relaxed text-muted-foreground">{data.clinical_use_note}</p>
+          <p className="px-4 py-3 text-[12px] leading-relaxed text-muted-foreground">{data.clinical_use_note}</p>
         ) : null}
       </div>
 
-      {ready && candidates.length > 0 ? (
-        <div className="shrink-0 border-t border-border px-4 py-2 text-2xs tabular-nums text-muted-foreground">
+      {hasRows ? (
+        <div className="shrink-0 border-t border-border px-4 py-2 text-[12px] tabular-nums text-muted-foreground">
           Showing {visibleRows.length} of {candidates.length}. Primary and strong calls pre-check Include;
           you still confirm before the PDF.
         </div>

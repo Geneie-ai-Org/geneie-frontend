@@ -2,6 +2,7 @@ import React, { useId, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { formatDuration } from '@/lib/formatDuration';
 import { useElapsed } from '@/hooks/useRunTimer';
+import { useAnnounce } from './useAnnounce';
 
 /** Kept for importers; the running line now shows the real step instead of a rotating phrase. */
 export const THINKING_PHRASES = [
@@ -56,10 +57,11 @@ export function WorkedLine({ running = false, elapsedMs = null, step = null, ste
       {step ? <span className="min-w-0 truncate">· {step}</span> : null}
     </>
   ) : (
-    <span>Worked for {time}</span>
+    <span>{time ? `Worked for ${time}` : 'Worked for under 1s'}</span>
   );
 
-  const chevron = <ChevronRight className="chat-worked-chev" aria-hidden />;
+  // The chevron only shows when there is a step log to open: no dead affordance.
+  const chevron = expandable ? <ChevronRight className="chat-worked-chev" aria-hidden /> : null;
 
   return (
     <div className={className}>
@@ -75,9 +77,8 @@ export function WorkedLine({ running = false, elapsedMs = null, step = null, ste
           {chevron}
         </button>
       ) : (
-        <div className="chat-worked" title={running ? 'Time spent on this answer so far' : 'Time taken to produce this answer'}>
+        <div className="chat-worked">
           {label}
-          {chevron}
         </div>
       )}
       {expandable && open && (
@@ -94,14 +95,15 @@ export function WorkedLine({ running = false, elapsedMs = null, step = null, ste
 
 /**
  * Running state of a turn: "Working… 12s" (and the current step if given). The row has a fixed
- * height so a changing step never moves anything below it. The live region announces a stable
- * label, not every tick.
+ * height so a changing step never moves anything below it. One live region speaks a full phrase
+ * ("Geneie is working: Querying ClinVar") when the step changes, never on a timer tick.
  */
 export default function ThinkingIndicator({ startedAt = null, step = null, steps = null, intervalMs: _unused = 2600 }) {
   const elapsedMs = useElapsed(startedAt);
+  const spoken = useAnnounce(step ? `Geneie is working: ${step}` : 'Geneie is working');
   return (
     <div>
-      <span className="sr-only" role="status">{step ? `Geneie is working: ${step}` : 'Geneie is working'}</span>
+      <span className="sr-only" role="status">{spoken}</span>
       <WorkedLine running elapsedMs={elapsedMs} step={step} steps={steps} />
     </div>
   );

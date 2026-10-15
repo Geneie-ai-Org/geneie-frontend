@@ -54,8 +54,76 @@
   box-shadow: 0 1px 2px hsl(0 0% 0% / 0.3), 0 8px 28px -6px hsl(0 0% 0% / 0.5) !important;
 }
 .pipeline-composer:focus-within {
-  border-color: hsl(var(--border-strong, var(--border))) !important;
+  border-color: var(--border-strong) !important;
 }
 
 /* Rail: light neutral panel. */
 .chat-shell-left { background-color: hsl(var(--sidebar)); }
+
+/*
+ * Enter/exit motion for overlays. The UI primitives were authored with Tailwind 4 utilities
+ * (animate-in, fade-in-0, zoom-in-95, data-open:) that Tailwind 3 does not generate, so the
+ * overlays snapped open. Base UI exposes data-starting-style / data-ending-style; this is the
+ * single place those states are animated (opacity + transform only, 150ms in, ~100ms out,
+ * reduced-motion respected).
+ */
+[data-slot='dialog-overlay'],
+[data-slot='alert-dialog-overlay'],
+[data-slot='sheet-overlay'] {
+  transition: opacity 150ms var(--ease-out);
+}
+[data-slot='dialog-overlay'][data-starting-style],
+[data-slot='dialog-overlay'][data-ending-style],
+[data-slot='alert-dialog-overlay'][data-starting-style],
+[data-slot='alert-dialog-overlay'][data-ending-style],
+[data-slot='sheet-overlay'][data-starting-style],
+[data-slot='sheet-overlay'][data-ending-style] {
+  opacity: 0;
+}
+
+[data-slot='dialog-content'],
+[data-slot='alert-dialog-content'] {
+  transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out);
+}
+[data-slot='dialog-content'][data-starting-style],
+[data-slot='dialog-content'][data-ending-style],
+[data-slot='alert-dialog-content'][data-starting-style],
+[data-slot='alert-dialog-content'][data-ending-style] {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.96);
+}
+[data-slot='dialog-content'][data-ending-style],
+[data-slot='alert-dialog-content'][data-ending-style] {
+  transition-duration: 100ms;
+}
+
+[data-slot='dropdown-menu-content'],
+[data-slot='popover-content'],
+[data-slot='select-content'],
+[data-slot='hover-card-content'],
+[data-slot='tooltip-content'] {
+  transform-origin: var(--transform-origin, center);
+  transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out);
+}
+[data-slot='dropdown-menu-content'][data-starting-style],
+[data-slot='dropdown-menu-content'][data-ending-style],
+[data-slot='popover-content'][data-starting-style],
+[data-slot='popover-content'][data-ending-style],
+[data-slot='select-content'][data-starting-style],
+[data-slot='select-content'][data-ending-style],
+[data-slot='hover-card-content'][data-starting-style],
+[data-slot='hover-card-content'][data-ending-style],
+[data-slot='tooltip-content'][data-starting-style],
+[data-slot='tooltip-content'][data-ending-style] {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='dialog-overlay'], [data-slot='alert-dialog-overlay'], [data-slot='sheet-overlay'],
+  [data-slot='dialog-content'], [data-slot='alert-dialog-content'],
+  [data-slot='dropdown-menu-content'], [data-slot='popover-content'], [data-slot='select-content'],
+  [data-slot='hover-card-content'], [data-slot='tooltip-content'] {
+    transition: none;
+  }
+}

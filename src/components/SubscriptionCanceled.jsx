@@ -12,7 +12,7 @@ const SubscriptionCanceled = ({ onClose }) => {
   return (
     <Dialog open onOpenChange={(open) => { if (!open) handleClose(); }}>
       <DialogContent showCloseButton={false} className="gap-0 p-6 text-center sm:max-w-sm">
-        <DialogTitle className="text-base">Checkout canceled</DialogTitle>
+        <DialogTitle className="text-[18px] font-medium">Checkout canceled</DialogTitle>
         <DialogDescription className="mt-1.5">
           No charges were made. You can upgrade any time from Settings.
         </DialogDescription>

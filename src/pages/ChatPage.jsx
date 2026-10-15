@@ -20,7 +20,6 @@ import AuthForm from '../components/AuthForm';
 import ChatMessage, { GlobalTypingStyles } from '../components/chat/ChatMessage';
 import AuthPageLayout from '../components/chat/AuthPageLayout';
 import AnnovarMessageModal from '../components/chat/AnnovarMessageModal';
-import UsageNudge from '../components/UsageNudge';
 import DeviceFrozenOverlay from '../components/DeviceFrozenOverlay';
 import ChatComposer from '../components/chat/ChatComposer';
 import SubscriptionManager from '../components/SubscriptionManager';
@@ -755,6 +754,15 @@ const ChatPage = () => {
     summary: conv.summary || '',
     turnsSinceSummary: conv.turns_since_summary || 0,
     messageCount: 0,
+    // Extra fields the rail can show (status dot, kind, fallback title); absent in older payloads.
+    experimentType: conv.experiment_type || null,
+    lastSummarizedAt: conv.last_summarized_at || null,
+    status:
+      conv.annovar_job?.status === 'running' || conv.annovar_job?.status === 'queued'
+        ? 'running'
+        : conv.annovar_job?.status === 'failed'
+          ? 'failed'
+          : null,
   }), []);
 
   const createConversation = useCallback(async () => {
@@ -1614,10 +1622,21 @@ const ChatPage = () => {
     filteredVariantCount: conversationFilterState.filteredVariantCount ?? pipelineVariantsUnderConsideration,
   });
 
-  const pipelineStrip = pipelineStripStatus ? (
+  // The usage / plan note lives inside the same gray card as the status (one row above the composer, not two).
+  const usageNotice = usageNudgeMessage
+    ? {
+        message: usageNudgeMessage,
+        ctaLabel: limits.redirect === 'topup' ? 'Get more' : 'Upgrade to Pro',
+        onCta: () => onRequestUpgrade(limits.redirect === 'topup' ? 'topup' : 'upgrade'),
+        onDismiss: () => setNudgeDismissed(true),
+      }
+    : null;
+
+  const pipelineStrip = pipelineStripStatus || usageNotice ? (
     <PipelineStatusStrip
-      status={{ ...pipelineStripStatus, action: pipelineStripStatus.state === 'running' ? null : primaryAction }}
-      onOpen={pipelineStack ? () => openWorkspaceTab('pipeline') : () => openWorkspaceTab('variants')}
+      status={pipelineStripStatus ? { ...pipelineStripStatus, action: pipelineStripStatus.state === 'running' ? null : primaryAction } : null}
+      notice={usageNotice}
+      onOpen={pipelineStripStatus ? (pipelineStack ? () => openWorkspaceTab('pipeline') : () => openWorkspaceTab('variants')) : undefined}
     />
   ) : null;
 
@@ -1876,14 +1895,6 @@ const ChatPage = () => {
                 </div>
               )}
 
-              <UsageNudge
-                message={usageNudgeMessage}
-                layout="card"
-                ctaLabel={limits.redirect === 'topup' ? 'Get more' : 'Upgrade to Pro'}
-                onCta={() => onRequestUpgrade(limits.redirect === 'topup' ? 'topup' : 'upgrade')}
-                onDismiss={() => setNudgeDismissed(true)}
-              />
-
               <div className={`w-full ${isMobile ? 'shrink-0' : ''}`}>
                 <ChatComposer {...composerProps} layout="stacked" dropdownSource="new-chat" />
               </div>
@@ -1891,13 +1902,6 @@ const ChatPage = () => {
           ) : (
             /* ===== ACTIVE CONVERSATION — messages + bottom input ===== */
             <>
-              <UsageNudge
-                message={usageNudgeMessage}
-                layout="strip"
-                ctaLabel={limits.redirect === 'topup' ? 'Get more' : 'Upgrade to Pro'}
-                onCta={() => onRequestUpgrade(limits.redirect === 'topup' ? 'topup' : 'upgrade')}
-                onDismiss={() => setNudgeDismissed(true)}
-              />
               {!isMobile && <header className="chat-conversation-header">
                 <div className="flex h-11 items-center gap-2 px-4">
                   <h1
@@ -2153,6 +2157,11 @@ const ChatPage = () => {
           onOpenTab={openWorkspaceTab}
           onCloseTab={closeWorkspaceTab}
           onClose={() => setIsVariantSidebarOpen(false)}
+          persistKey={activeConversationId || undefined}
+          onRestore={({ openIds, activeId }) => {
+            if (Array.isArray(openIds) && openIds.length) setOpenTabs(openIds);
+            if (activeId) setWorkspaceTab(activeId);
+          }}
           tabs={[
             {
               id: 'summary',

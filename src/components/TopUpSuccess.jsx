@@ -42,24 +42,22 @@ const TopUpSuccess = ({ onClose }) => {
 
   return (
     <div className="flex min-h-[60dvh] items-center justify-center p-4">
-      <div
-        role="status"
-        aria-live="polite"
-        className="w-full max-w-md rounded-xl border border-border bg-card p-8 text-center shadow-lg"
-      >
+      <div className="w-full max-w-md rounded-xl border border-border bg-card p-8 text-center">
         {loading ? (
-          <>
+          <div role="status">
             <Loader2 aria-hidden="true" className="mx-auto mb-4 size-8 animate-spin text-muted-foreground motion-reduce:animate-none" />
-            <h2 className="text-base font-medium text-foreground">Confirming your purchase</h2>
+            <h2 className="text-[18px] font-medium text-foreground">Confirming your purchase</h2>
             <p className="mt-1.5 text-sm text-muted-foreground">This usually takes a few seconds.</p>
-          </>
+          </div>
         ) : (
           <>
             <CheckCircle2 aria-hidden="true" className="mx-auto mb-4 size-8 text-[var(--success)]" />
-            <h2 className="text-base font-medium text-foreground">Top-up added</h2>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              Your queries are on your account now and don&rsquo;t expire. Your updated balance is in Settings, under Plan and usage.
-            </p>
+            <div role="status">
+              <h2 className="text-[18px] font-medium text-foreground">Top-up added</h2>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                Your queries are on your account now and don&rsquo;t expire. Your updated balance is in Settings, under Plan and usage.
+              </p>
+            </div>
             <Button size="lg" className="mt-6 h-10 w-full" onClick={handleContinue} autoFocus>
               Continue to Geneie
             </Button>

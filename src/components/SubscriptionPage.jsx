@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Check, Loader2, AlertCircle, Receipt } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '../hooks/useAuth';
 import { getAuth } from 'firebase/auth';
 import { apiUrl } from '@/config/api';
@@ -7,8 +8,10 @@ import { fetchSubscriptionStatus } from '@/services/backendApi';
 import { meterFor } from '@/services/tierLimits';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { X } from 'lucide-react';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -38,16 +41,16 @@ export const PlanCard = ({ name, price, priceNote, blurb, features, current, hig
     )}
   >
     <div className="flex items-center justify-between gap-2">
-      <h3 className="text-base font-medium text-foreground">{name}</h3>
+      <h3 className="text-sm font-semibold text-foreground">{name}</h3>
       {current && (
-        <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-xs font-medium text-muted-foreground">
+        <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-[12px] font-medium text-muted-foreground">
           Current plan
         </span>
       )}
     </div>
     {price && (
       <p className="mt-3 flex items-baseline gap-1">
-        <span className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{price}</span>
+        <span className="text-[28px] font-semibold leading-none tabular-nums text-foreground">{price}</span>
         {priceNote && <span className="text-sm text-muted-foreground">{priceNote}</span>}
       </p>
     )}
@@ -72,6 +75,7 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
   const [busy, setBusy] = useState(null); // 'upgrade' | 'billing' | null
   const [actionError, setActionError] = useState('');
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     if (isOpen && userId) {
@@ -84,12 +88,14 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
   const loadSubscriptionData = async () => {
     try {
       setLoading(true);
+      setLoadError(false);
       let apiStatus = null;
       try {
         apiStatus = await fetchSubscriptionStatus();
       } catch (apiError) {
         console.warn('[SubscriptionPage] subscription-status API unavailable:', apiError);
       }
+      if (!apiStatus) setLoadError(true);
 
       if (apiStatus) {
         setSubscriptionDetails({
@@ -112,6 +118,7 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
        * state and log. */
     } catch (error) {
       console.error('[SubscriptionPage] Error loading subscription data:', error);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -246,19 +253,21 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
     ? `${chatMeter.limit} chat exchanges`
     : 'Limited chat exchanges';
 
-  const startDate = subscriptionDetails?.subscriptionStartDate
-    ? new Date(subscriptionDetails.subscriptionStartDate).toLocaleDateString()
-    : null;
-  const endDate = subscriptionDetails?.subscriptionEndDate
-    ? new Date(subscriptionDetails.subscriptionEndDate).toLocaleDateString()
-    : null;
+  const fmt = (v) => new Date(v).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  const startDate = subscriptionDetails?.subscriptionStartDate ? fmt(subscriptionDetails.subscriptionStartDate) : null;
+  const endDate = subscriptionDetails?.subscriptionEndDate ? fmt(subscriptionDetails.subscriptionEndDate) : null;
 
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-1.5rem)] overflow-y-auto sm:max-w-3xl">
+        <DialogContent showCloseButton={false} className="max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-1.5rem)] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle className="text-base">Plan and billing</DialogTitle>
+            <div className="flex items-center justify-between gap-3">
+              <DialogTitle className="text-[18px] font-medium">Plan and billing</DialogTitle>
+              <DialogClose render={<Button variant="ghost" size="icon-sm" className="-mr-1" aria-label="Close plan and billing" />}>
+                <X aria-hidden="true" />
+              </DialogClose>
+            </div>
             <DialogDescription>
               {isPro
                 ? [startDate && `Pro since ${startDate}`, endDate && `renews ${endDate}`].filter(Boolean).join(', ') || 'You are on Pro.'
@@ -273,10 +282,31 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
             </div>
           )}
 
+          {!loading && loadError && (
+            <div role="alert" className="flex items-center justify-between gap-3 rounded-md border border-border bg-[var(--error-soft)] px-3 py-2 text-[13px] text-destructive">
+              <span className="flex items-start gap-2">
+                <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                <span>Could not load your plan details, so the plan shown may be out of date. Check your connection, then retry.</span>
+              </span>
+              <Button variant="outline" size="lg" className="shrink-0 max-md:h-11" onClick={loadSubscriptionData}>Retry</Button>
+            </div>
+          )}
+
           {loading ? (
-            <div className="flex items-center justify-center py-16" role="status">
-              <Loader2 aria-hidden="true" className="size-5 animate-spin text-muted-foreground motion-reduce:animate-none" />
-              <span className="sr-only">Loading plan details</span>
+            <div aria-busy="true">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {[0, 1].map((i) => (
+                  <div key={i} className="flex h-[19.5rem] flex-col rounded-lg border border-border p-5">
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="mt-4 h-7 w-24" />
+                    <Skeleton className="mt-3 h-3.5 w-40" />
+                    <Skeleton className="mt-6 h-3.5 w-full" />
+                    <Skeleton className="mt-3 h-3.5 w-5/6" />
+                    <Skeleton className="mt-3 h-3.5 w-2/3" />
+                  </div>
+                ))}
+              </div>
+              <span role="status" className="sr-only">Loading plan details</span>
             </div>
           ) : (
             <>
@@ -302,7 +332,7 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
                       <Button size="lg" className="h-10 w-full max-md:h-11" onClick={handleUpgrade} disabled={busy !== null}>
                         {busy === 'upgrade' ? (<><Loader2 className="animate-spin motion-reduce:animate-none" /> Opening checkout</>) : 'Upgrade to Pro'}
                       </Button>
-                      <p className="mt-2 text-center text-xs text-muted-foreground">
+                      <p className="mt-2 text-center text-[12px] text-muted-foreground">
                         Cards, UPI, QR code, net banking and wallets.
                       </p>
                     </>
@@ -322,11 +352,11 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
                       <li key={idx} className="flex items-center justify-between gap-3 py-2.5">
                         <div className="min-w-0">
                           <p className="truncate text-sm text-foreground">{invoice.description || 'Pro plan subscription'}</p>
-                          <p className="text-xs text-muted-foreground">{new Date(invoice.date).toLocaleDateString()}</p>
+                          <p className="text-[12px] text-muted-foreground">{fmt(invoice.date)}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-sm tabular-nums text-foreground">${invoice.amount}</p>
-                          <p className={cn('text-xs', invoice.status === 'paid' || !invoice.status ? 'text-muted-foreground' : 'text-destructive')}>
+                          <p className={cn('text-[12px]', invoice.status === 'paid' || !invoice.status ? 'text-muted-foreground' : 'text-destructive')}>
                             {invoice.status || 'paid'}
                           </p>
                         </div>
@@ -344,7 +374,7 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
               {isPro && (
                 <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
                   <p className="text-[13px] text-muted-foreground">
-                    Cancelling keeps Pro until the end of your billing period.
+                    Canceling keeps Pro until the end of your billing period.
                   </p>
                   <Button
                     variant="outline"

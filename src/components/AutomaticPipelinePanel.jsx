@@ -49,11 +49,11 @@ export default function AutomaticPipelinePanel({
 
   const timeline = stepsOpen && events.length > 0 ? (
     <div>
-      <h4 className="mb-1 text-2xs font-semibold text-muted-foreground">Timeline</h4>
-      <ul className="m-0 max-h-32 list-none space-y-1 overflow-y-auto p-0">
+      <h4 className="mb-1 text-[12px] font-medium text-muted-foreground">Timeline</h4>
+      <ul className="m-0 list-none space-y-1 p-0">
         {[...events].reverse().map((ev) => (
-          <li key={ev.id} className="flex gap-2 text-2xs">
-            <span className="shrink-0 tabular-nums text-muted-foreground">{formatEventTime(ev.at)}</span>
+          <li key={ev.id} className="flex gap-2 text-[12px]">
+            <span className="w-[5.5rem] shrink-0 text-right tabular-nums text-muted-foreground">{formatEventTime(ev.at)}</span>
             <span className="text-[var(--text-secondary)]">{ev.message}</span>
           </li>
         ))}
@@ -61,11 +61,13 @@ export default function AutomaticPipelinePanel({
     </div>
   ) : null;
 
+  // One vocabulary (queued, running, done, failed): a skipped step is finished as far as the user is
+  // concerned, and the detail line says why.
   const stepRows = steps.map((step) => ({
     id: step.id,
     label: step.label,
-    status: step.status,
-    detail: step.detail,
+    status: step.status === 'skipped' ? 'done' : step.status,
+    detail: step.status === 'skipped' ? step.detail || 'Not needed for this case' : step.detail,
   }));
 
   return (
@@ -86,14 +88,14 @@ export default function AutomaticPipelinePanel({
       {timeline}
       {phase === 'failed' ? (
         <p className="m-0 text-xs text-[var(--error)]" role="alert">
-          Automatic paused. Fix the step above or switch the case to Manual.
+          Automatic paused at the step marked Failed. Fix that step, or switch the case to Manual to continue yourself.
         </p>
       ) : null}
       {showReportCta ? (
         <div className="flex items-center justify-end border-t border-border pt-3">
           <Button
             type="button"
-            variant="outline"
+            variant={reportBlocked || status !== 'done' ? 'outline' : 'default'}
             size="sm"
             disabled={reportBlocked}
             title={reportGate?.title}

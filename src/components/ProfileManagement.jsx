@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Mail, Bell, User, CreditCard, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { LogOut, Mail, Bell, User, CreditCard, ShieldCheck, TriangleAlert, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAuth } from 'firebase/auth';
 import { useLimits } from '@/hooks/useLimits';
@@ -10,7 +10,17 @@ import { getNotificationPrefs, setNotificationPrefs } from '@/services/backendAp
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import SubscriptionPage from './SubscriptionPage';
 
 const SECTIONS = [
@@ -34,8 +44,8 @@ const Switch = ({ id, checked, disabled, onChange, labelledBy, describedBy }) =>
     disabled={disabled}
     onClick={() => onChange(!checked)}
     className={cn(
-      'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors before:absolute before:-inset-x-1 before:-inset-y-3 before:content-[\'\'] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50',
-      checked ? 'border-primary bg-primary' : 'border-border bg-muted'
+      'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors before:absolute before:-inset-x-1 before:-inset-y-3 before:content-[\'\'] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50',
+      checked ? 'border-primary bg-primary' : 'border-[var(--text-tertiary)] bg-muted'
     )}
   >
     <span
@@ -64,8 +74,17 @@ const SettingRow = ({ icon: Icon, title, helper, control, titleId, helperId }) =
 
 const SectionTitle = ({ children, description }) => (
   <div className="mb-3">
-    <h3 className="text-base font-medium text-foreground">{children}</h3>
+    <h3 className="text-sm font-semibold text-foreground">{children}</h3>
     {description && <p className="mt-1 text-[13px] text-muted-foreground">{description}</p>}
+  </div>
+);
+
+/** Read-only value: label above, value below in full-strength text (read-only is not disabled). */
+const ReadOnlyField = ({ label, value, helper, className }) => (
+  <div className="py-3">
+    <dt className="text-[13px] text-muted-foreground">{label}</dt>
+    <dd className={cn('mt-0.5 min-w-0 break-words text-sm text-foreground', className)}>{value}</dd>
+    {helper && <p className="mt-0.5 text-[13px] text-muted-foreground">{helper}</p>}
   </div>
 );
 
@@ -96,6 +115,8 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations })
   const [prefsLoadFailed, setPrefsLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const limits = useLimits();
   const meters = visibleMeters(limits);
@@ -122,15 +143,27 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations })
       .then((p) => { if (!cancelled) { setPrefs(p); setDraft(normPrefs(p)); } })
       .catch(() => { if (!cancelled) setPrefsLoadFailed(true); });
     return () => { cancelled = true; };
-  }, [isOpen]);
+  }, [isOpen, reloadKey]);
 
   const saved = useMemo(() => (prefs ? normPrefs(prefs) : null), [prefs]);
   const dirty = Boolean(saved && draft && (saved.email !== draft.email || saved.in_app !== draft.in_app));
 
+  /* After the save bar disappears the focused button is gone; keep keyboard users in the form. */
+  const focusFirstSwitch = useCallback(() => {
+    setTimeout(() => document.getElementById(`${uid}-email-sw`)?.focus(), 0);
+  }, [uid]);
+
   const discard = useCallback(() => {
     if (saved) setDraft(saved);
     setSaveError('');
-  }, [saved]);
+    focusFirstSwitch();
+  }, [saved, focusFirstSwitch]);
+
+  /* Every way out of the dialog (Esc, X, backdrop) asks first when there is unsaved input. */
+  const requestClose = useCallback(() => {
+    if (dirty) setConfirmDiscard(true);
+    else onClose();
+  }, [dirty, onClose]);
 
   /* Same endpoint as before; it is now called once, on Save, with only the fields that changed. */
   const save = useCallback(async () => {
@@ -145,12 +178,13 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations })
       setPrefs(next);
       setDraft(normPrefs(next));
       toast.success('Settings saved');
+      focusFirstSwitch();
     } catch (err) {
       setSaveError(err?.message || 'Could not save your changes. Try again.');
     } finally {
       setSaving(false);
     }
-  }, [dirty, saving, draft, saved]);
+  }, [dirty, saving, draft, saved, focusFirstSwitch]);
 
   if (!isOpen) return null;
 
@@ -164,26 +198,27 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations })
     <>
       <SectionTitle>Profile</SectionTitle>
       <div className="flex items-center gap-3 pb-4">
-        <span aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-base font-semibold text-primary">
+        <span aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[18px] font-medium text-primary">
           {initial}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-foreground">{userEmail || 'Not signed in'}</p>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">{planName} plan</p>
+          <p className="truncate text-sm font-medium text-foreground">{planName} plan</p>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">Signed in with {provider || 'your account'}</p>
         </div>
       </div>
 
-      <div className="divide-y divide-border border-y border-border">
-        <SettingRow title="Email" helper="Your sign-in address. It can&rsquo;t be changed here." control={<span className="max-w-[16rem] truncate text-sm text-foreground">{userEmail || 'Unknown'}</span>} />
-        <SettingRow title="Member since" control={<span className="text-sm text-foreground">{fmtDate(accountCreatedAt)}</span>} />
-      </div>
+      <dl className="divide-y divide-border border-y border-border">
+        <ReadOnlyField label="Email" value={userEmail || 'Unknown'} helper="Your sign-in address. It can&rsquo;t be changed here." />
+        <ReadOnlyField label="Member since" value={fmtDate(accountCreatedAt)} />
+      </dl>
 
       <div className="mt-8">
         <SectionTitle description="Choose how Geneie tells you when a run finishes.">Notifications</SectionTitle>
         {prefsLoadFailed ? (
-          <p role="alert" className="rounded-md border border-border bg-[var(--error-soft)] px-3 py-2 text-[13px] text-destructive">
-            Could not load your notification settings. Close and reopen Settings to try again.
-          </p>
+          <div role="alert" className="flex items-center justify-between gap-3 rounded-md border border-border bg-[var(--error-soft)] px-3 py-2 text-[13px] text-destructive">
+            <span>Could not load your notification settings. Check your connection, then retry.</span>
+            <Button variant="outline" size="lg" className="shrink-0 max-md:h-11" onClick={() => setReloadKey((k) => k + 1)}>Retry</Button>
+          </div>
         ) : (
           <div className="divide-y divide-border border-y border-border">
             <SettingRow
@@ -194,6 +229,7 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations })
               helper="One email when annotation, ACMG or raw-data runs complete."
               control={
                 <Switch
+                  id={`${uid}-email-sw`}
                   checked={draft ? draft.email : true}
                   disabled={!draft || saving}
                   onChange={(v) => setDraft((d) => ({ ...d, email: v }))}
@@ -286,8 +322,10 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations })
     <>
       <SectionTitle>Security</SectionTitle>
       <div className="divide-y divide-border border-y border-border">
-        <SettingRow title="Sign-in method" control={<span className="text-sm text-foreground">{provider || 'Unknown'}</span>} />
-        <SettingRow title="Last sign-in" control={<span className="text-sm text-foreground">{fmtDate(lastSignIn)}</span>} />
+        <dl className="divide-y divide-border">
+          <ReadOnlyField label="Sign-in method" value={provider || 'Unknown'} />
+          <ReadOnlyField label="Last sign-in" value={fmtDate(lastSignIn)} />
+        </dl>
         <SettingRow
           title="Sign out"
           helper="End your session on this device."
@@ -315,7 +353,7 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations })
           Deleting your account removes your chats, files and results, and can&rsquo;t be undone.
           To delete it, email{' '}
           <a
-            className="font-medium text-foreground underline underline-offset-2 hover:text-destructive focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55"
+            className="font-medium text-foreground underline underline-offset-2 hover:text-destructive focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
             href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Delete my Geneie account')}`}
           >
             {SUPPORT_EMAIL}
@@ -327,13 +365,17 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations })
   );
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) requestClose(); }}>
       <DialogContent
+        showCloseButton={false}
         className="flex h-[min(40rem,calc(100dvh-2rem))] w-full max-w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl max-md:h-[calc(100dvh-1.5rem)] data-[nested-dialog-open]:invisible"
       >
-        <div className="flex h-14 shrink-0 items-center border-b border-border px-5">
-          <DialogTitle className="text-base">Settings</DialogTitle>
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border pl-5 pr-3">
+          <DialogTitle className="text-[18px] font-medium">Settings</DialogTitle>
           <DialogDescription className="sr-only">Profile, plan and usage, security and account deletion.</DialogDescription>
+          <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label="Close settings" />}>
+            <X aria-hidden="true" />
+          </DialogClose>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
@@ -348,9 +390,9 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations })
                   key={id}
                   type="button"
                   onClick={() => setSection(id)}
-                  aria-current={active ? 'page' : undefined}
+                  aria-current={active ? 'true' : undefined}
                   className={cn(
-                    'flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 max-md:h-11',
+                    'flex h-8 shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 text-[13px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 max-md:h-11',
                     active ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                     id === 'danger' && !active && 'hover:text-destructive'
                   )}
@@ -386,6 +428,26 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations })
             </div>
           </div>
         )}
+
+        <AlertDialog open={confirmDiscard} onOpenChange={setConfirmDiscard}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Discard changes?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Your notification changes haven&rsquo;t been saved. Closing Settings now loses them.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep editing</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={() => { setConfirmDiscard(false); if (saved) setDraft(saved); setSaveError(''); onClose(); }}
+              >
+                Discard changes
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
 
       <SubscriptionPage

@@ -90,9 +90,11 @@ const Module1PipelineStepper = ({
 }) => {
   // Stage list: collapsed until the user opens it. Reset per job.
   const [stepsOpen, setStepsOpen] = useState(false);
+  // A failed run opens its stage list so the stage that broke is visible without a click.
+  const jobFailed = job?.status === 'failed';
   useEffect(() => {
-    setStepsOpen(false);
-  }, [job?.jobId]);
+    setStepsOpen(Boolean(jobFailed));
+  }, [job?.jobId, jobFailed]);
   // Inline confirm for Leave queue / Stop run ('leave' | 'stop' | null), and which request is in flight.
   const [confirm, setConfirm] = useState(null);
   const [busy, setBusy] = useState(null); // 'cancel' | 'switch' | null
@@ -160,7 +162,13 @@ const Module1PipelineStepper = ({
   let statusText;
   if (cancelled) statusText = 'You can start again from the upload button.';
   else if (cancelling) statusText = 'Stopping your run…';
-  else if (failed) statusText = getModule1FailureMessage(job);
+  else if (failed) {
+    // What happened (stage), why (curated message), next step (Start over below).
+    const stage = MODULE1_STAGE_GROUPS.find((g) => g.id === activeGroupId);
+    const STAGE_NOUN = { staging: 'staging', aligning: 'alignment', calling: 'variant calling' };
+    const lead = stage && STAGE_NOUN[stage.id] ? `Failed during ${STAGE_NOUN[stage.id]}. ` : '';
+    statusText = `${lead}${getModule1FailureMessage(job)}`;
+  }
   else if (finishedOk) {
     statusText = (job.message || 'Module 1 complete — VCF is in this conversation.').replace(
       /PASS\s+VCF\s+ready\.?/i,
@@ -266,9 +274,10 @@ const Module1PipelineStepper = ({
             <Button
               type="button"
               size="sm"
+              variant="destructive"
               onClick={runCancel}
               disabled={busy === 'cancel'}
-              className="bg-[var(--error)] text-white hover:bg-[var(--error)] hover:brightness-110 max-sm:h-11"
+              className="max-sm:h-11"
             >
               {busy === 'cancel' && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
               {confirmCopy.confirm}
@@ -278,14 +287,14 @@ const Module1PipelineStepper = ({
       ) : (
         <>
           {showQueuePanel && (
-            <p className="text-2xs text-muted-foreground">
+            <p className="text-[12px] text-muted-foreground">
               Your place is kept if you close this tab. We&apos;ll notify you when it starts and when it finishes.
             </p>
           )}
           {(canSwitch || canCancel || showFailureAction) && (
             <div className="flex flex-wrap items-center justify-end gap-2">
               {canSwitch && lane !== 'cpu' && (
-                <span className="mr-auto text-2xs text-muted-foreground">
+                <span className="mr-auto text-[12px] text-muted-foreground">
                   CPU starts now and takes about {cpuText}.
                 </span>
               )}

@@ -22,6 +22,8 @@ export default function ExportVariantsButton({
   downloadGate = null,
   uiCount = null,
   onReconcileUiCount = null,
+  /** The chat-eligibility sentence the host already shows once; this control never repeats it. */
+  eligibilityMessage = null,
 }) {
   const [eligibility, setEligibility] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -147,8 +149,8 @@ export default function ExportVariantsButton({
     : gateBlocked && downloadGate?.kind === 'enriching'
       ? downloadGate.message || 'Download unlocks when enrichment finishes.'
       : annotatedOnly
-        ? 'Full annotated file. Apply a filter to enable chat.'
-        : !canExport && !isLoading && message
+        ? null
+        : !canExport && !isLoading && message && message !== eligibilityMessage
           ? message
           : null;
 
@@ -174,7 +176,7 @@ export default function ExportVariantsButton({
         disabled={!interactive}
         title={title}
         aria-busy={isExporting || undefined}
-        className={`h-8 max-md:h-11 w-full justify-start gap-1.5 px-1 text-[13px] tabular-nums ${
+        className={`h-8 max-md:h-11 w-full min-w-0 justify-start gap-1.5 px-1 text-[13px] tabular-nums ${
           countMismatch ? 'text-[var(--error)]' : interactive ? 'text-primary' : 'text-muted-foreground'
         } disabled:opacity-100`}
       >
@@ -189,13 +191,14 @@ export default function ExportVariantsButton({
       </Button>
       {subLine && (
         <p
-          className={`px-1 text-2xs leading-snug ${countMismatch ? 'text-[var(--error)]' : 'text-muted-foreground'}`}
+          role="status"
+          className={`px-1 text-[12px] leading-snug ${countMismatch ? 'text-[var(--error)]' : 'text-muted-foreground'}`}
         >
           {subLine}
         </p>
       )}
       {error && (
-        <p role="alert" className="flex flex-wrap items-center gap-x-2 px-1 text-2xs leading-snug text-[var(--error)]">
+        <p role="alert" className="flex flex-wrap items-center gap-x-2 px-1 text-[12px] leading-snug text-[var(--error)]">
           <span>{error}</span>
           <button
             type="button"

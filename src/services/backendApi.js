@@ -36,6 +36,28 @@ export async function releaseDevice({ unregister = true } = {}) {
   });
 }
 
+/** Per-user notification settings: { email, in_app } booleans (both default to true). */
+export async function getNotificationPrefs() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl('/api/user/notification-preferences'), { headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(parseApiErrorDetail(data.detail) || 'Could not load notification settings');
+  return data;
+}
+
+/** Send only the fields that changed, e.g. { email: false }. Returns the saved { email, in_app }. */
+export async function setNotificationPrefs(patch) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(apiUrl('/api/user/notification-preferences'), {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(patch),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(parseApiErrorDetail(data.detail) || 'Could not save notification settings');
+  return data;
+}
+
 export function parseApiErrorDetail(detail) {
   if (!detail) return null;
   if (typeof detail === 'string') return detail;

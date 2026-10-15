@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown, Dna, Workflow, ListChecks, PanelRight, LayoutList, FileCheck2 } from 'lucide-react';
+import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown, Dna, Workflow, ListChecks, PanelRight, LayoutList, FileCheck2, Table2 } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
 import { toast } from 'sonner';
@@ -57,6 +57,7 @@ import ClinicalReportAssignModal from '@/components/ClinicalReportAssignModal';
 import WorkspacePanel, { useWorkspaceWidth } from '@/components/workspace/WorkspacePanel';
 import PipelineStatusStrip, { derivePipelineStrip } from '@/components/workspace/PipelineStatusStrip';
 import SummaryTab, { deriveSummary } from '@/components/workspace/SummaryTab';
+import VariantResultsViewer from '@/components/workspace/VariantResultsViewer';
 import AutomaticPipelinePanel from '@/components/AutomaticPipelinePanel';
 import {
   normalizePipelineRunMode,
@@ -1595,6 +1596,7 @@ const ChatPage = () => {
     : null;
   const summaryJumps = [
     { id: 'variants', title: 'Variants and filters', meta: summary?.inScope != null ? `${summary.inScope.toLocaleString()} in scope` : 'Narrow the set', onClick: () => openWorkspaceTab('variants') },
+    { id: 'results', title: 'Results table', meta: 'First 500 variants in scope', onClick: () => openWorkspaceTab('results'), disabled: !activeConversationId || !currentDocument },
     { id: 'pipeline', title: 'Pipeline', meta: 'Run status and steps', onClick: () => openWorkspaceTab('pipeline'), disabled: !pipelineStack },
   ].filter((j) => !j.disabled);
 
@@ -2256,6 +2258,22 @@ const ChatPage = () => {
             onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
             onGuestRefreshMetadata={handleGuestRefreshMetadata}
           />
+              ),
+            },
+            {
+              id: 'results',
+              label: 'Results',
+              icon: Table2,
+              closable: true,
+              hidden: !activeConversationId || !currentDocument,
+              subtitle: 'Variants in scope',
+              content: (
+                <VariantResultsViewer
+                  conversationId={activeConversationId}
+                  filteredCount={conversationFilterState.filteredVariantCount ?? null}
+                  refreshKey={`${conversationFilterState.filteredVariantCount ?? ''}|${conversationFilterState.activeProprietaryFilter ?? ''}`}
+                  onOpenFilters={() => openWorkspaceTab('variants')}
+                />
               ),
             },
             {

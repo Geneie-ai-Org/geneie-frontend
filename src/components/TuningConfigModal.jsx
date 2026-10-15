@@ -101,15 +101,15 @@ export default function TuningConfigModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-2 md:p-4"
+      className="fixed inset-0 z-[10000] flex items-center justify-center bg-foreground/40 p-2 md:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Tuning config editor"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-app)] shadow-[var(--shadow-xl)]">
+      <div className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-[var(--bg-app)] shadow-[var(--shadow-xl)]">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-semibold text-[var(--text-primary)]">Tuning config</h2>
             <span className="rounded-full bg-[var(--bg-surface-raised)] px-2 py-0.5 text-xs tabular-nums text-[var(--text-secondary)]">
@@ -134,7 +134,7 @@ export default function TuningConfigModal({
             <button
               type="button"
               onClick={reloadConfig}
-              className="mt-1 inline-flex h-9 items-center rounded-md bg-[var(--accent-teal)] px-4 text-sm font-medium text-[var(--accent-teal-contrast)] transition-colors hover:bg-[var(--accent-teal-hover)]"
+              className="mt-1 inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/85"
             >
               Retry
             </button>
@@ -146,8 +146,8 @@ export default function TuningConfigModal({
         ) : (
           <div className="flex min-h-0 flex-1 flex-col md:flex-row">
             {/* Left: searchable grouped key list */}
-            <div className="flex max-h-[34%] shrink-0 flex-col border-b border-[var(--border-subtle)] md:max-h-none md:w-72 md:border-b-0 md:border-r">
-              <div className="border-b border-[var(--border-subtle)] p-2">
+            <div className="flex max-h-[34%] shrink-0 flex-col border-b border-border md:max-h-none md:w-72 md:border-b-0 md:border-r">
+              <div className="border-b border-border p-2">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-tertiary)]" />
                   <input
@@ -155,7 +155,7 @@ export default function TuningConfigModal({
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Search keys…"
-                    className="h-8 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-input)] pl-8 pr-2 text-base md:text-xs text-[var(--text-primary)] outline-none focus-visible:outline-none placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent-teal)]"
+                    className="h-8 w-full rounded-md border border-border bg-[var(--bg-input)] pl-8 pr-2 text-base md:text-xs text-[var(--text-primary)] outline-none focus-visible:outline-none placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent-teal)]"
                   />
                 </div>
                 <div className="mt-1 px-1 text-[11px] tabular-nums text-[var(--text-tertiary)]">
@@ -179,12 +179,12 @@ export default function TuningConfigModal({
                             onClick={() => setSelected(k)}
                             className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left font-mono text-[11px] transition-colors [@media(pointer:coarse)]:py-2.5 ${
                               active
-                                ? 'bg-[var(--accent-teal-soft)] text-[var(--text-primary)]'
+                                ? 'bg-[var(--bg-surface-hover)] text-[var(--text-primary)]'
                                 : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]'
                             }`}
                           >
                             <span className="truncate">{k.includes('.') ? k.slice(k.indexOf('.') + 1) : k}</span>
-                            {mod ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent-teal)]" aria-label="modified" /> : null}
+                            {mod ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-label="modified" /> : null}
                           </button>
                         );
                       })}
@@ -201,11 +201,11 @@ export default function TuningConfigModal({
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               {selected && b ? (
                 <>
-                  <div className="border-b border-[var(--border-subtle)] px-4 py-3">
+                  <div className="border-b border-border px-4 py-3">
                     <div className="flex items-center gap-2">
                       <code className="break-all font-mono text-sm font-semibold text-[var(--text-primary)]">{selected}</code>
                       {isModified ? (
-                        <span className="rounded-full bg-[var(--accent-teal-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent-teal)]">
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground">
                           Overridden
                         </span>
                       ) : null}
@@ -217,7 +217,7 @@ export default function TuningConfigModal({
 
                   <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 md:grid-cols-2">
                     {/* baseline (read-only) */}
-                    <div className="flex min-h-0 flex-col border-b border-[var(--border-subtle)] md:border-b-0 md:border-r">
+                    <div className="flex min-h-0 flex-col border-b border-border md:border-b-0 md:border-r">
                       <div className="flex items-center justify-between px-4 py-2">
                         <span className="text-xs font-medium text-[var(--text-secondary)]">
                           Baseline (global)
@@ -225,7 +225,7 @@ export default function TuningConfigModal({
                         <button
                           type="button"
                           onClick={resetToBaseline}
-                          className="text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--accent-teal)] hover:underline"
+                          className="text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] hover:underline"
                           title="Copy the baseline text into your editor to tweak from it"
                         >
                           Edit from this
@@ -259,7 +259,7 @@ export default function TuningConfigModal({
                   </div>
 
                   {/* Footer actions */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-subtle)] px-4 py-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2.5">
                     <div className="text-xs text-[var(--text-tertiary)]">
                       Leave blank to use the baseline. Changes apply to the candidate column when you run a comparison.
                     </div>
@@ -271,7 +271,7 @@ export default function TuningConfigModal({
                         type="button"
                         onClick={revert}
                         disabled={!isModified && draft === ''}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--border-default)] px-3 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 [@media(pointer:coarse)]:h-11"
+                        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 [@media(pointer:coarse)]:h-11"
                       >
                         <RotateCcw className="h-3.5 w-3.5" /> Revert
                       </button>
@@ -279,7 +279,7 @@ export default function TuningConfigModal({
                         type="button"
                         onClick={commit}
                         disabled={!dirtyDraft}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--accent-teal)] px-4 text-xs font-medium text-[var(--accent-teal-contrast)] transition-colors hover:bg-[var(--accent-teal-hover)] disabled:opacity-40 [@media(pointer:coarse)]:h-11"
+                        className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-4 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/85 disabled:opacity-40 [@media(pointer:coarse)]:h-11"
                       >
                         <Check className="h-3.5 w-3.5" /> Apply
                       </button>

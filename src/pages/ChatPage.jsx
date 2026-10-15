@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown, Dna, Workflow, ListChecks } from 'lucide-react';
+import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown, Dna, Workflow, ListChecks, PanelRight } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
 import { toast } from 'sonner';
@@ -1844,14 +1844,41 @@ const ChatPage = () => {
                 onDismiss={() => setNudgeDismissed(true)}
               />
               {!isMobile && <header className="chat-conversation-header">
-                <div className="chat-column-inner flex items-center justify-between gap-3 h-12">
+                <div className="flex h-11 items-center gap-2 px-4">
                   <h1
-                    className="text-sm font-medium truncate flex-1 min-w-0"
+                    className="min-w-0 truncate text-[13px] font-medium"
                     style={{ color: 'var(--text-primary)' }}
                     title={conversationHeaderTitle}
                   >
                     {conversationHeaderTitle}
                   </h1>
+                  {(currentDocument?.name ?? currentDocument?.file_name) &&
+                  (currentDocument?.name ?? currentDocument?.file_name) !== conversationHeaderTitle ? (
+                    <span className="min-w-0 truncate text-[13px] text-muted-foreground">
+                      {currentDocument?.name ?? currentDocument?.file_name}
+                    </span>
+                  ) : null}
+                  <div className="flex-1" />
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setIsVariantSidebarOpen(!isVariantSidebarOpen)}
+                            aria-label={isVariantSidebarOpen ? 'Close workspace' : 'Open workspace'}
+                            aria-pressed={isVariantSidebarOpen}
+                            className="text-muted-foreground"
+                          >
+                            <PanelRight className="size-4" />
+                          </Button>
+                        }
+                      />
+                      <TooltipContent>{isVariantSidebarOpen ? 'Close workspace' : 'Open workspace'}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               </header>}
 
@@ -2071,6 +2098,7 @@ const ChatPage = () => {
               id: 'variants',
               label: 'Variants',
               icon: Dna,
+              subtitle: currentDocument?.name ?? currentDocument?.file_name ?? null,
               content: (
           <VariantFilterSidebar
             conversationId={activeConversationId || 'guest-session'}
@@ -2166,6 +2194,7 @@ const ChatPage = () => {
               id: 'pipeline',
               label: 'Pipeline',
               icon: Workflow,
+              subtitle: 'Run status and steps',
               hidden: !pipelineStack,
               content: pipelineStack,
             },

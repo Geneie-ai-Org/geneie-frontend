@@ -215,6 +215,11 @@
   --accent-teal-soft: hsl(var(--signal) / 0.12);
   --accent-teal-hover: hsl(211 90% 76%);
   --accent-teal-contrast: hsl(0 0% 8%);
+  --perm-warn: #f2a15f;
+  --bubble-user: hsl(211 38% 19%);
+  --diff-add: #5fbf8a;
+  --diff-del: #ee7d73;
+  --shadow-composer: 0 1px 2px hsl(0 0% 0% / 0.3), 0 8px 28px -6px hsl(0 0% 0% / 0.5);
   --early-access-to: hsl(217 85% 68%);
   --code-inline: hsl(217 85% 78%);
   --code-inline-bg: hsl(0 0% 12.5%);

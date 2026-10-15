@@ -16,8 +16,8 @@ function Column({ col, data, running }) {
   return (
     <section
       aria-label={COLUMN_LABELS[col]}
-      className={`flex min-h-[7rem] min-w-0 flex-col rounded-lg border bg-[var(--bg-surface)] p-3.5 ${
-        isCandidate ? 'border-[var(--accent-teal)]/45' : 'border-[var(--border-default)]'
+      className={`flex min-h-[7rem] min-w-0 flex-col rounded-xl border bg-[var(--bg-app)] p-3.5 ${
+        isCandidate ? 'border-[var(--border-strong)]' : 'border-[var(--border-default)]'
       }`}
     >
       <div className="mb-2.5 flex items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2">

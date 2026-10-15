@@ -1,7 +1,7 @@
 import { cloneElement, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-    Plus,
+    SquarePen,
     Search,
     X,
     MoreHorizontal,
@@ -13,7 +13,6 @@ import {
     LogOut,
     Sun,
     Moon,
-    ChevronsUpDown,
     MessageSquare,
     FileSpreadsheet,
     Dna,
@@ -57,6 +56,8 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/comp
  * ------------------------------------------------------------------------- */
 
 const UNTITLED = 'Untitled chat';
+/** Rows shown per group before the "More" row. */
+const GROUP_LIMIT = 12;
 
 /** A conversation is "named" once it has a real title; the server default does not count. */
 function isRealTitle(title) {
@@ -135,12 +136,40 @@ function groupConversations(convs) {
     ].filter((g) => g.items.length > 0);
 }
 
+/** Compact relative time for the right edge of a row: now, 5m, 3h, 9d, 5w, 3mo. */
+function shortAgo(conv) {
+    const d = toDate(conv);
+    if (!d) return '';
+    const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+    if (mins < 1) return 'now';
+    if (mins < 60) return `${mins}m`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days}d`;
+    if (days < 365) return `${Math.floor(days / 30)}mo`;
+    return `${Math.floor(days / 365)}y`;
+}
+
+const IS_MAC = typeof navigator !== 'undefined' && /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent || '');
+const NEW_CHAT_HINT = IS_MAC ? '\u2318N' : 'Ctrl N';
+
 /* ---------------------------------------------------------------------------
  * Small pieces
  * ------------------------------------------------------------------------- */
 
-const ICON_BTN =
-    'inline-flex shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 aria-expanded:bg-accent aria-expanded:text-foreground';
+const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55';
+
+const ICON_BTN = cn(
+    'inline-flex shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)] transition-colors hover:bg-sidebar-accent/60 hover:text-[var(--text-primary)] aria-expanded:bg-sidebar-accent aria-expanded:text-[var(--text-primary)]',
+    FOCUS_RING
+);
+
+/** The shared 32px rail row: icon, label, optional right hint. Used by New chat, Search and More. */
+const ROW_BASE = cn(
+    'flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] leading-none text-[var(--text-primary)] transition-colors hover:bg-sidebar-accent/60 max-md:h-11',
+    FOCUS_RING
+);
 
 /** Tooltip around a trigger element. Used on every icon-only control in the collapsed rail. */
 function Tip({ label, side = 'right', render, children, enabled = true }) {
@@ -159,7 +188,7 @@ function Avatar({ name, size = 24 }) {
     return (
         <span
             aria-hidden="true"
-            className="flex shrink-0 items-center justify-center rounded-full bg-primary/10 text-2xs font-semibold text-primary"
+            className="flex shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-2xs font-medium text-[var(--text-secondary)]"
             style={{ width: size, height: size }}
         >
             {name.charAt(0).toUpperCase()}
@@ -201,7 +230,7 @@ const ConversationSidebar = ({
 }) => {
     const isMobile = useIsMobile();
     const navigate = useNavigate();
-    const { theme, isDark, setTheme } = useTheme();
+    const { theme, setTheme } = useTheme();
     const chatMeter = meterFor(useLimits(), 'chat');
     const [pendingDelete, setPendingDelete] = useState(null); // { id, label }
     const [query, setQuery] = useState('');
@@ -210,6 +239,7 @@ const ConversationSidebar = ({
     const searchRef = useRef(null);
     const focusSearchAfterOpen = useRef(false);
     const renameCancelled = useRef(false);
+    const [openGroups, setOpenGroups] = useState(() => new Set()); // group labels showing every row
 
     // On a phone the rail is a drawer: whenever it is on screen it shows the full layout.
     const expanded = isMobile || isOpen;
@@ -334,23 +364,117 @@ const ConversationSidebar = ({
         </DropdownMenuContent>
     );
 
+    // New chat shortcut. Some browsers reserve Cmd/Ctrl+N; where the page never sees it the row still works by click.
+    const createRef = useRef(onCreateConversation);
+    createRef.current = onCreateConversation;
+    useEffect(() => {
+        if (isMobile) return undefined;
+        const onKey = (e) => {
+            if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'n') return;
+            const t = e.target;
+            if (t instanceof HTMLElement && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName))) return;
+            e.preventDefault();
+            createRef.current?.();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [isMobile]);
+
+    const renderRow = (conv) => {
+        const row = rowByConv.get(conv);
+        const active = String(activeConversationId) === String(conv.id);
+        const { Icon, label: kindLabel } = KIND_META[row.kind];
+        const renaming = renamingId === conv.id;
+        const ago = shortAgo(conv);
+        return (
+            <li key={conv.id} className="group relative">
+                {renaming ? (
+                    <div className="flex h-8 items-center gap-2 rounded-lg bg-sidebar-accent px-2 max-md:h-11">
+                        <Icon aria-hidden="true" className="size-3.5 shrink-0 text-[var(--text-tertiary)]" />
+                        <input
+                            autoFocus
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            onBlur={() => commitRename(row)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+                                if (e.key === 'Escape') { renameCancelled.current = true; e.currentTarget.blur(); }
+                            }}
+                            aria-label="Chat title"
+                            maxLength={120}
+                            className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--text-primary)] outline-none focus-visible:outline-none"
+                        />
+                    </div>
+                ) : (
+                    <>
+                        <button
+                            type="button"
+                            data-row-button
+                            onClick={() => onSelectConversation(conv.id)}
+                            aria-current={active ? 'page' : undefined}
+                            title={row.file && row.file !== row.label ? `${row.label} (${row.file})` : row.label}
+                            className={cn(
+                                ROW_BASE,
+                                'pr-11',
+                                active ? 'bg-sidebar-accent' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                            )}
+                        >
+                            <Icon aria-hidden="true" className="size-3.5 shrink-0 text-[var(--text-tertiary)]" />
+                            <span className="sr-only">{kindLabel}: </span>
+                            <span className={cn('min-w-0 flex-1 truncate', active && 'text-[var(--text-primary)]')}>{row.label}</span>
+                            <StatusDot status={row.status} />
+                        </button>
+                        {/* Right edge: time-ago, swapped for the more menu on hover / focus / open menu. */}
+                        {ago && (
+                            <span
+                                aria-hidden="true"
+                                className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs tabular-nums text-[var(--text-tertiary)] group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0"
+                            >
+                                {ago}
+                            </span>
+                        )}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger
+                                aria-label={`More actions for ${row.label}`}
+                                className={cn(
+                                    ICON_BTN,
+                                    'absolute right-1 top-1/2 size-6 -translate-y-1/2 max-md:size-9',
+                                    'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 data-[popup-open]:opacity-100 [@media(hover:none)]:opacity-100'
+                                )}
+                            >
+                                <MoreHorizontal className="size-4" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent side="bottom" align="end" sideOffset={4} className="w-44">
+                                {onRenameConversation && (
+                                    <DropdownMenuItem onClick={() => startRename(row)}>
+                                        <Pencil /> Rename
+                                    </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                    variant="destructive"
+                                    onClick={() => setPendingDelete({ id: conv.id, label: row.label })}
+                                >
+                                    <Trash2 /> Delete
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </>
+                )}
+            </li>
+        );
+    };
+
     return (
         <TooltipProvider>
             <div
-                className="relative z-40 flex h-full w-full flex-col overflow-hidden text-foreground"
+                className="relative z-40 flex h-full w-full flex-col overflow-hidden text-[var(--text-primary)]"
                 // The phone drawer slides off-screen when closed; keep it out of the tab order and AT tree.
                 inert={isMobile && !isOpen ? true : undefined}
             >
 
-                {/* Header: logo + collapse toggle */}
-                <div className={cn('flex h-12 shrink-0 items-center', expanded ? 'justify-between pl-4 pr-2' : 'justify-center')}>
-                    {expanded && (
-                        <img
-                            src={isDark ? '/logo/Final gene dark.svg' : '/logo/Final gene light.svg'}
-                            alt="Geneie"
-                            className="h-7 w-auto shrink-0"
-                        />
-                    )}
+                {/* Chrome strip (same height as the thread header): collapse toggle only, no logo block */}
+                <div className={cn('flex h-11 shrink-0 items-center', expanded ? 'px-2' : 'justify-center')}>
                     <Tip
                         label={isMobile ? 'Close' : expanded ? 'Collapse sidebar' : 'Expand sidebar'}
                         render={
@@ -367,69 +491,56 @@ const ConversationSidebar = ({
                     </Tip>
                 </div>
 
-                {/* New chat */}
-                <div className={cn('shrink-0 pb-2', expanded ? 'px-3' : 'flex justify-center')}>
+                {/* New chat + Search: plain rows */}
+                <div className={cn('flex shrink-0 flex-col gap-0.5 pb-1', expanded ? 'px-2' : 'items-center')}>
                     {expanded ? (
-                        <button
-                            type="button"
-                            onClick={onCreateConversation}
-                            className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 focus-visible:ring-offset-2 focus-visible:ring-offset-background max-md:h-11"
-                        >
-                            <Plus className="size-4" />
-                            New chat
-                        </button>
-                    ) : (
-                        <Tip
-                            label="New chat"
-                            render={
-                                <button
-                                    type="button"
-                                    onClick={onCreateConversation}
-                                    aria-label="New chat"
-                                    className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55"
+                        <>
+                            <button type="button" onClick={onCreateConversation} className={ROW_BASE}>
+                                <SquarePen aria-hidden="true" className="size-4 shrink-0 text-[var(--text-secondary)]" />
+                                <span className="flex-1 truncate">New chat</span>
+                                <span aria-hidden="true" className="text-xs text-[var(--text-tertiary)]">{NEW_CHAT_HINT}</span>
+                            </button>
+                            <label className={cn(ROW_BASE, 'cursor-text focus-within:bg-sidebar-accent/60')}>
+                                <Search aria-hidden="true" className="size-4 shrink-0 text-[var(--text-secondary)]" />
+                                <input
+                                    ref={searchRef}
+                                    type="search"
+                                    value={query}
+                                    onChange={(e) => setQuery(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Escape') setQuery(''); }}
+                                    placeholder="Search"
+                                    aria-label="Search chats"
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                    className="min-w-0 flex-1 bg-transparent text-[13px] leading-none text-[var(--text-primary)] outline-none focus-visible:outline-none placeholder:text-[var(--text-primary)] focus:placeholder:text-[var(--text-tertiary)] max-md:text-base [&::-webkit-search-cancel-button]:hidden"
                                 />
-                            }
-                        >
-                            <Plus className="size-4" />
-                        </Tip>
-                    )}
-                </div>
-
-                {/* Search */}
-                <div className={cn('shrink-0 pb-1', expanded ? 'px-3' : 'flex justify-center')}>
-                    {expanded ? (
-                        <div className="relative">
-                            <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                            <input
-                                ref={searchRef}
-                                type="search"
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Escape') setQuery(''); }}
-                                placeholder="Search chats"
-                                aria-label="Search chats"
-                                autoComplete="off"
-                                spellCheck={false}
-                                className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-8 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground hover:border-[var(--border-strong)] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/55 max-md:h-11 max-md:text-base [&::-webkit-search-cancel-button]:hidden"
-                            />
-                            {query && (
-                                <button
-                                    type="button"
-                                    onClick={() => { setQuery(''); searchRef.current?.focus(); }}
-                                    aria-label="Clear search"
-                                    className={cn(ICON_BTN, 'absolute right-1 top-1/2 size-6 -translate-y-1/2 max-md:size-9')}
-                                >
-                                    <X className="size-3.5" />
-                                </button>
-                            )}
-                        </div>
+                                {query && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.preventDefault(); setQuery(''); searchRef.current?.focus(); }}
+                                        aria-label="Clear search"
+                                        className={cn(ICON_BTN, 'size-5 max-md:size-9')}
+                                    >
+                                        <X className="size-3.5" />
+                                    </button>
+                                )}
+                            </label>
+                        </>
                     ) : (
-                        <Tip
-                            label="Search chats"
-                            render={<button type="button" onClick={expandAndSearch} aria-label="Search chats" className={cn(ICON_BTN, 'size-8')} />}
-                        >
-                            <Search className="size-4" />
-                        </Tip>
+                        <>
+                            <Tip
+                                label={`New chat (${NEW_CHAT_HINT})`}
+                                render={<button type="button" onClick={onCreateConversation} aria-label="New chat" className={cn(ICON_BTN, 'size-8')} />}
+                            >
+                                <SquarePen className="size-4" />
+                            </Tip>
+                            <Tip
+                                label="Search chats"
+                                render={<button type="button" onClick={expandAndSearch} aria-label="Search chats" className={cn(ICON_BTN, 'size-8')} />}
+                            >
+                                <Search className="size-4" />
+                            </Tip>
+                        </>
                     )}
                 </div>
 
@@ -440,12 +551,12 @@ const ConversationSidebar = ({
                             {rows.length === 0 && (
                                 <div className="px-3 py-10 text-center">
                                     <MessageSquare aria-hidden="true" className="mx-auto mb-2 size-5 text-[var(--text-disabled)]" />
-                                    <p className="text-[13px] font-medium text-foreground">No chats yet</p>
-                                    <p className="mt-1 text-xs text-muted-foreground">Your conversations and samples show up here.</p>
+                                    <p className="text-[13px] font-medium text-[var(--text-primary)]">No chats yet</p>
+                                    <p className="mt-1 text-xs text-[var(--text-tertiary)]">Your conversations and samples show up here.</p>
                                     <button
                                         type="button"
                                         onClick={onCreateConversation}
-                                        className="mt-3 text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 rounded"
+                                        className={cn('mt-3 rounded text-xs font-medium text-[hsl(var(--signal))] underline-offset-4 hover:underline', FOCUS_RING)}
                                     >
                                         Start a chat
                                     </button>
@@ -454,122 +565,60 @@ const ConversationSidebar = ({
 
                             {rows.length > 0 && visibleRows.length === 0 && (
                                 <div className="px-3 py-10 text-center" role="status">
-                                    <p className="text-[13px] font-medium text-foreground">No matches</p>
-                                    <p className="mt-1 text-xs text-muted-foreground">
+                                    <p className="text-[13px] font-medium text-[var(--text-primary)]">No matches</p>
+                                    <p className="mt-1 text-xs text-[var(--text-tertiary)]">
                                         Nothing in your chats matches &ldquo;{query.trim()}&rdquo;.
                                     </p>
                                     <button
                                         type="button"
                                         onClick={() => setQuery('')}
-                                        className="mt-3 text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 rounded"
+                                        className={cn('mt-3 rounded text-xs font-medium text-[hsl(var(--signal))] underline-offset-4 hover:underline', FOCUS_RING)}
                                     >
                                         Clear search
                                     </button>
                                 </div>
                             )}
 
-                            {grouped.map((group) => (
-                                <section key={group.label} className="mb-2" aria-label={group.label}>
-                                    <h2 className="px-2.5 pb-1 pt-3 text-2xs font-medium tracking-wide text-muted-foreground">
-                                        {group.label}
-                                    </h2>
-                                    <ul className="m-0 list-none p-0">
-                                        {group.items.map((conv) => {
-                                            const row = rowByConv.get(conv);
-                                            const active = String(activeConversationId) === String(conv.id);
-                                            const { Icon, label: kindLabel } = KIND_META[row.kind];
-                                            const renaming = renamingId === conv.id;
-                                            return (
-                                                <li key={conv.id} className="group relative">
-                                                    {renaming ? (
-                                                        <div className="flex h-9 items-center gap-2 rounded-md bg-accent px-2.5 max-md:h-11">
-                                                            <Icon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-                                                            <input
-                                                                autoFocus
-                                                                value={renameValue}
-                                                                onChange={(e) => setRenameValue(e.target.value)}
-                                                                onFocus={(e) => e.target.select()}
-                                                                onBlur={() => commitRename(row)}
-                                                                onKeyDown={(e) => {
-                                                                    if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
-                                                                    if (e.key === 'Escape') { renameCancelled.current = true; e.currentTarget.blur(); }
-                                                                }}
-                                                                aria-label="Chat title"
-                                                                maxLength={120}
-                                                                className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none"
-                                                            />
-                                                        </div>
-                                                    ) : (
-                                                        <>
-                                                            <button
-                                                                type="button"
-                                                                data-row-button
-                                                                onClick={() => onSelectConversation(conv.id)}
-                                                                aria-current={active ? 'page' : undefined}
-                                                                title={row.file && row.file !== row.label ? `${row.label} (${row.file})` : row.label}
-                                                                className={cn(
-                                                                    'relative flex h-9 w-full items-center gap-2 rounded-md px-2.5 pr-8 text-left text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 max-md:h-11',
-                                                                    active
-                                                                        ? 'bg-accent font-medium text-foreground'
-                                                                        : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
-                                                                )}
-                                                            >
-                                                                {active && (
-                                                                    <span aria-hidden="true" className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-primary" />
-                                                                )}
-                                                                <Icon
-                                                                    aria-hidden="true"
-                                                                    className={cn('size-3.5 shrink-0', active ? 'text-primary' : 'text-[var(--text-tertiary)]')}
-                                                                />
-                                                                <span className="sr-only">{kindLabel}: </span>
-                                                                <span className="min-w-0 flex-1 truncate">{row.label}</span>
-                                                                <StatusDot status={row.status} />
-                                                            </button>
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger
-                                                                    aria-label={`More actions for ${row.label}`}
-                                                                    className={cn(
-                                                                        ICON_BTN,
-                                                                        'absolute right-1 top-1/2 size-7 -translate-y-1/2 max-md:size-9',
-                                                                        'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 data-[popup-open]:opacity-100 [@media(hover:none)]:opacity-100',
-                                                                        active && 'opacity-100'
-                                                                    )}
-                                                                >
-                                                                    <MoreHorizontal className="size-4" />
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent side="bottom" align="end" sideOffset={4} className="w-44">
-                                                                    {onRenameConversation && (
-                                                                        <DropdownMenuItem onClick={() => startRename(row)}>
-                                                                            <Pencil /> Rename
-                                                                        </DropdownMenuItem>
-                                                                    )}
-                                                                    <DropdownMenuItem
-                                                                        variant="destructive"
-                                                                        onClick={() => setPendingDelete({ id: conv.id, label: row.label })}
-                                                                    >
-                                                                        <Trash2 /> Delete
-                                                                    </DropdownMenuItem>
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
-                                                        </>
-                                                    )}
+                            {grouped.map((group) => {
+                                const activeIdx = group.items.findIndex((c) => String(activeConversationId) === String(c.id));
+                                const showAll =
+                                    !!q || openGroups.has(group.label) || group.items.length <= GROUP_LIMIT || activeIdx >= GROUP_LIMIT;
+                                const shown = showAll ? group.items : group.items.slice(0, GROUP_LIMIT);
+                                return (
+                                    <section key={group.label} className="mb-1" aria-label={group.label}>
+                                        <h2 className="px-2 pb-1 pt-3 text-xs font-normal text-[var(--text-tertiary)]">
+                                            {group.label}
+                                        </h2>
+                                        <ul className="m-0 flex list-none flex-col p-0">
+                                            {shown.map(renderRow)}
+                                            {!showAll && (
+                                                <li>
+                                                    <button
+                                                        type="button"
+                                                        data-row-button
+                                                        onClick={() => setOpenGroups((prev) => new Set(prev).add(group.label))}
+                                                        className={cn(ROW_BASE, 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}
+                                                    >
+                                                        <MoreHorizontal aria-hidden="true" className="size-3.5 shrink-0" />
+                                                        <span>More</span>
+                                                    </button>
                                                 </li>
-                                            );
-                                        })}
-                                    </ul>
-                                </section>
-                            ))}
+                                            )}
+                                        </ul>
+                                    </section>
+                                );
+                            })}
                         </nav>
                     )}
                 </ScrollArea>
 
-                {/* Footer: usage, account, notifications */}
-                <div className="mt-auto shrink-0 border-t border-border">
+                {/* Footer: usage, account */}
+                <div className="mt-auto shrink-0">
                     {showMeter && expanded && (
-                        <div className="px-4 pb-1 pt-3" role="group" aria-label="Chat usage">
+                        <div className="px-4 pb-1 pt-2" role="group" aria-label="Chat usage">
                             <div className="mb-1.5 flex items-center justify-between text-xs">
-                                <span className="text-muted-foreground">Exchanges</span>
-                                <span className={cn('tabular-nums', meterTone === 'error' ? 'font-medium text-destructive' : 'text-foreground')}>
+                                <span className="text-[var(--text-tertiary)]">Exchanges</span>
+                                <span className={cn('tabular-nums', meterTone === 'error' ? 'font-medium text-destructive' : 'text-[var(--text-secondary)]')}>
                                     {used}/{chatMeter.limit}
                                 </span>
                             </div>
@@ -582,27 +631,29 @@ const ConversationSidebar = ({
                     )}
 
                     {expanded ? (
-                        <div className="flex items-center gap-1 p-2">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger
-                                    className="flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 aria-expanded:bg-accent max-md:h-11"
-                                    aria-label="Account menu"
-                                >
-                                    <Avatar name={displayName} />
-                                    <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{displayName}</span>
-                                    <ChevronsUpDown aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-                                </DropdownMenuTrigger>
-                                {accountMenu('top', 'start')}
-                            </DropdownMenu>
+                        <div className="flex h-12 items-center gap-1 px-3 max-md:h-14">
+                            <Avatar name={displayName} />
+                            <span className="ml-1.5 min-w-0 flex-1 truncate text-[13px] text-[var(--text-primary)]" title={email || displayName}>
+                                {displayName}
+                            </span>
 
                             <NotificationBell
                                 onNavigateToConversation={(convId) => onSelectConversation(convId)}
                                 side={isMobile ? 'top' : 'right'}
-                                triggerClassName={cn(ICON_BTN, 'size-9 max-md:size-11')}
+                                triggerClassName={cn(ICON_BTN, 'size-8 max-md:size-11')}
                             />
+                            <DropdownMenu>
+                                <DropdownMenuTrigger
+                                    aria-label="Account menu"
+                                    className={cn(ICON_BTN, 'size-8 max-md:size-11')}
+                                >
+                                    <Settings aria-hidden="true" className="size-4" />
+                                </DropdownMenuTrigger>
+                                {accountMenu('top', 'end')}
+                            </DropdownMenu>
                         </div>
                     ) : (
-                        <div className="flex flex-col items-center gap-1 py-2">
+                        <div className="flex flex-col items-center gap-0.5 py-2">
                             {showMeter && (
                                 <Tip
                                     label={`Exchanges ${used}/${chatMeter.limit}`}
@@ -619,11 +670,11 @@ const ConversationSidebar = ({
                             />
                             <DropdownMenu>
                                 <Tip
-                                    label="Account"
+                                    label={displayName}
                                     render={
                                         <DropdownMenuTrigger
                                             aria-label="Account menu"
-                                            className="flex size-8 items-center justify-center rounded-md transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 aria-expanded:bg-accent"
+                                            className="flex size-8 items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 aria-expanded:bg-sidebar-accent"
                                         />
                                     }
                                 >

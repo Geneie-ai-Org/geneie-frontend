@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useId, useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 import { formatDuration } from '@/lib/formatDuration';
 import { useElapsed } from '@/hooks/useRunTimer';
 
-
+/** Kept for importers; the running line now shows the real step instead of a rotating phrase. */
 export const THINKING_PHRASES = [
   'Reading between the base pairs',
   'Following the evidence',
@@ -31,60 +32,77 @@ export const THINKING_PHRASES = [
   'Almost there',
 ];
 
-function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
+function stepText(step) {
+  if (step == null) return '';
+  if (typeof step === 'string') return step;
+  return step.text || step.label || '';
 }
 
-
 /**
- * One quiet line: a small pulsing dot, the current step (when the caller knows it) or a rotating
- * phrase, and the elapsed time. The row has a fixed height so a changing phrase never moves
- * anything below it. The live region announces a stable label once, not every phrase.
+ * The quiet gray status line of a turn. Finished: "Worked for 1m 24s ›". Running: "Working… 12s"
+ * plus the current step when the caller knows it. When a step log exists (`steps`, strings or
+ * `{ text }`) the whole line is a toggle that opens it; without data it is static.
  */
-export default function ThinkingIndicator({ intervalMs = 2600, startedAt = null, step = null }) {
+export function WorkedLine({ running = false, elapsedMs = null, step = null, steps = null, className = '', rule = false }) {
+  const [open, setOpen] = useState(false);
+  const logId = useId();
+  const time = elapsedMs != null && elapsedMs >= 1000 ? formatDuration(elapsedMs) : null;
+  const log = (steps || []).map(stepText).filter(Boolean);
+  const expandable = log.length > 0;
 
-  const order = useMemo(() => shuffle(THINKING_PHRASES), []);
-  const [idx, setIdx] = useState(0);
-  const elapsedMs = useElapsed(startedAt);
-  // Nothing for the first second: a counter that flickers "0s" the instant you hit send
-  // reads as a glitch rather than a measurement.
-  const elapsed = elapsedMs != null && elapsedMs >= 1000 ? formatDuration(elapsedMs) : null;
+  const label = running ? (
+    <>
+      <span>{time ? `Working… ${time}` : 'Working…'}</span>
+      {step ? <span className="min-w-0 truncate">· {step}</span> : null}
+    </>
+  ) : (
+    <span>Worked for {time}</span>
+  );
 
-  useEffect(() => {
-    if (step) return undefined;
-    const timer = setInterval(() => {
-      setIdx((i) => (i + 1) % order.length);
-    }, intervalMs);
-    return () => clearInterval(timer);
-  }, [order.length, intervalMs, step]);
+  const chevron = <ChevronRight className="chat-worked-chev" aria-hidden />;
 
   return (
-    <div
-      className="flex h-6 items-center gap-2 text-[13px]"
-      role="status"
-      aria-live="polite"
-      aria-label={step ? `Geneie is working: ${step}` : 'Geneie is thinking'}
-      style={{ color: 'var(--text-secondary)' }}
-    >
-      <span className="chat-thinking-dot shrink-0" aria-hidden />
-      {/* key={idx} remounts the span so the fade-in re-triggers on each phrase change. */}
-      <span key={step || idx} className="animate-fade-in truncate" aria-hidden>
-        {step || `${order[idx]}…`}
-      </span>
-      {elapsed && (
-        <span
-          className="shrink-0 text-xs tabular-nums"
-          style={{ color: 'var(--text-tertiary)' }}
-          title="Time spent on this answer so far"
+    <div className={className}>
+      {expandable ? (
+        <button
+          type="button"
+          className="chat-worked"
+          aria-expanded={open}
+          aria-controls={logId}
+          onClick={() => setOpen((v) => !v)}
         >
-          {elapsed}
-        </span>
+          {label}
+          {chevron}
+        </button>
+      ) : (
+        <div className="chat-worked" title={running ? 'Time spent on this answer so far' : 'Time taken to produce this answer'}>
+          {label}
+          {chevron}
+        </div>
       )}
+      {expandable && open && (
+        <ol id={logId} className="chat-worked-log">
+          {log.map((line, i) => (
+            <li key={i}>{line}</li>
+          ))}
+        </ol>
+      )}
+      {rule && <div className="chat-worked-rule" aria-hidden />}
+    </div>
+  );
+}
+
+/**
+ * Running state of a turn: "Working… 12s" (and the current step if given). The row has a fixed
+ * height so a changing step never moves anything below it. The live region announces a stable
+ * label, not every tick.
+ */
+export default function ThinkingIndicator({ startedAt = null, step = null, steps = null, intervalMs: _unused = 2600 }) {
+  const elapsedMs = useElapsed(startedAt);
+  return (
+    <div>
+      <span className="sr-only" role="status">{step ? `Geneie is working: ${step}` : 'Geneie is working'}</span>
+      <WorkedLine running elapsedMs={elapsedMs} step={step} steps={steps} />
     </div>
   );
 }

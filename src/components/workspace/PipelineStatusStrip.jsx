@@ -85,7 +85,7 @@ export default function PipelineStatusStrip({ status, onOpen, className }) {
   return (
     <div
       className={cn(
-        'mx-auto mb-2 flex w-full max-w-[var(--chat-max-width)] items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-[13px]',
+        'mx-auto mb-2 flex w-full max-w-[var(--chat-max-width)] items-center gap-3 rounded-xl bg-muted px-3.5 py-2.5 text-[13px]',
         className
       )}
       role="status"
@@ -108,7 +108,7 @@ export default function PipelineStatusStrip({ status, onOpen, className }) {
         <button
           type="button"
           onClick={action.onClick}
-          className="inline-flex shrink-0 items-center rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="inline-flex shrink-0 items-center rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
         >
           {action.label}
         </button>
@@ -117,7 +117,7 @@ export default function PipelineStatusStrip({ status, onOpen, className }) {
         <button
           type="button"
           onClick={onOpen}
-          className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
         >
           Details <ArrowUpRight className="size-3.5" aria-hidden="true" />
         </button>

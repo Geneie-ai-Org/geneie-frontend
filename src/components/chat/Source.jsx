@@ -45,12 +45,11 @@ function SourceTrigger({
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        "inline-flex h-6 max-w-56 items-center gap-1 overflow-hidden rounded-full py-0 text-xs no-underline transition-colors duration-150 border hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] [@media(pointer:coarse)]:h-8",
+        "inline-flex h-6 max-w-56 items-center gap-1 overflow-hidden rounded-md py-0 text-xs no-underline transition-colors duration-150 hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] [@media(pointer:coarse)]:h-8",
         showFavicon ? "pr-2 pl-1" : "px-2",
         className
       )}
       style={{
-        borderColor: "var(--border-default)",
         color: "var(--text-secondary)",
         backgroundColor: "var(--bg-surface-raised)",
       }}

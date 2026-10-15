@@ -18,7 +18,7 @@ function TabsList({ className, ...props }) {
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
-        "relative flex h-10 shrink-0 items-stretch gap-1 overflow-x-auto border-b border-border px-2",
+        "relative flex h-10 shrink-0 items-center gap-1 overflow-x-auto px-2",
         "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         className
       )}
@@ -31,12 +31,10 @@ function TabsTrigger({ className, ...props }) {
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
       className={cn(
-        "relative inline-flex shrink-0 items-center gap-1.5 px-2.5 text-[13px] font-medium text-muted-foreground",
-        "outline-none transition-colors hover:text-foreground focus-visible:text-foreground",
-        "focus-visible:ring-2 focus-visible:ring-ring/40 rounded-md",
-        "data-[selected]:text-foreground data-[active]:text-foreground",
-        "after:pointer-events-none after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-transparent",
-        "data-[selected]:after:bg-[hsl(var(--signal))] data-[active]:after:bg-[hsl(var(--signal))]",
+        "relative inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[13px] font-medium text-muted-foreground",
+        "outline-none transition-colors hover:bg-muted/70 hover:text-foreground",
+        "focus-visible:ring-2 focus-visible:ring-ring/30",
+        "data-[selected]:bg-muted data-[selected]:text-foreground data-[active]:bg-muted data-[active]:text-foreground",
         "disabled:pointer-events-none disabled:opacity-50",
         className
       )}

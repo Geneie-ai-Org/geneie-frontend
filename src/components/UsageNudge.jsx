@@ -1,26 +1,14 @@
-import { AlertTriangle, Info, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 /**
- * Slim, dismissible inline notice for usage and plan limits.
- *
- * Status colour carries the meaning (warning / info) on the icon, the hairline and a soft
- * fill; the sentence itself stays in primary text so it reads in both themes. One CTA at most,
- * plus a quiet dismiss. The two `layout` values only differ in spacing: `card` for the new-chat
- * layout (sits above the composer, capped to its width), `strip` for an active conversation.
+ * Slim, muted inline line for usage and plan limits: a small status dot, one sentence, one
+ * text-link CTA and a quiet dismiss. No fill and no border; the dot carries the status colour
+ * (warning / info). `card` is the new-chat layout (sits above the composer, capped to its
+ * width), `strip` is for an active conversation.
  */
 const TONES = {
-  warning: {
-    Icon: AlertTriangle,
-    fill: 'hsl(var(--card))',
-    line: 'var(--border-default)',
-    accent: 'var(--warning)',
-  },
-  info: {
-    Icon: Info,
-    fill: 'hsl(var(--card))',
-    line: 'var(--border-default)',
-    accent: 'var(--info)',
-  },
+  warning: 'var(--warning)',
+  info: 'var(--info)',
 };
 
 const UsageNudge = ({
@@ -32,44 +20,40 @@ const UsageNudge = ({
   onDismiss,
 }) => {
   if (!message) return null;
-  const palette = TONES[tone] || TONES.warning;
-  const { Icon } = palette;
+  const dot = TONES[tone] || TONES.warning;
 
   const className =
     layout === 'card'
-      ? 'mb-3 w-full max-w-2xl'
-      : 'mx-4 mt-2 shrink-0';
+      ? 'mb-2 w-full max-w-3xl px-2'
+      : 'mx-auto mt-1 w-full max-w-3xl shrink-0 px-4';
 
   return (
     <div className={className}>
       <div
         role="status"
-        className="flex items-center gap-2.5 rounded-lg border py-1.5 pl-3 pr-1.5 text-[13px] leading-snug"
-        style={{ backgroundColor: palette.fill, borderColor: palette.line }}
+        className="flex min-h-7 items-center gap-2 text-[13px] leading-snug text-[var(--text-secondary)]"
       >
-        <Icon className="size-4 shrink-0" style={{ color: palette.accent }} aria-hidden />
-        <span className="min-w-0 flex-1 text-[var(--text-primary)]">{message}</span>
-        <div className="flex shrink-0 items-center gap-1">
-          {ctaLabel && onCta && (
-            <button
-              type="button"
-              onClick={onCta}
-              className="inline-flex h-7 items-center rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-surface-hover)] [@media(pointer:coarse)]:h-9"
-            >
-              {ctaLabel}
-            </button>
-          )}
-          {onDismiss && (
-            <button
-              type="button"
-              onClick={onDismiss}
-              aria-label="Dismiss"
-              className="inline-flex size-7 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] [@media(pointer:coarse)]:size-9"
-            >
-              <X className="size-3.5" aria-hidden />
-            </button>
-          )}
-        </div>
+        <span className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: dot }} aria-hidden />
+        <span className="min-w-0 flex-1">{message}</span>
+        {ctaLabel && onCta && (
+          <button
+            type="button"
+            onClick={onCta}
+            className="shrink-0 rounded-sm text-[13px] font-medium text-[var(--accent-teal)] underline underline-offset-2 hover:decoration-2 [@media(pointer:coarse)]:min-h-9"
+          >
+            {ctaLabel}
+          </button>
+        )}
+        {onDismiss && (
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label="Dismiss"
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] [@media(pointer:coarse)]:size-9"
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        )}
       </div>
     </div>
   );

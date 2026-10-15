@@ -113,8 +113,8 @@ export default function WorkspacePanel({
       />
 
       <Tabs value={current} onValueChange={onActiveChange} className="h-full">
-        <div className="flex shrink-0 items-center border-b border-border bg-background pr-1.5">
-          <TabsList className="min-w-0 flex-1 border-b-0">
+        <div className="flex shrink-0 items-center bg-background pr-1.5">
+          <TabsList className="min-w-0 flex-1">
             {visibleTabs.map((t) => (
               <TabsTrigger key={t.id} value={t.id}>
                 {t.icon ? <t.icon className="size-3.5" aria-hidden="true" /> : null}
@@ -147,6 +147,15 @@ export default function WorkspacePanel({
             </Tooltip>
           </TooltipProvider>
         </div>
+
+        {/* Context row: a quiet, centred title for whatever the active tab is showing. */}
+        {visibleTabs.find((t) => t.id === current)?.subtitle ? (
+          <div className="flex h-9 shrink-0 items-center justify-center border-y border-border px-3 text-[13px] text-muted-foreground">
+            <span className="truncate">{visibleTabs.find((t) => t.id === current).subtitle}</span>
+          </div>
+        ) : (
+          <div className="h-px shrink-0 bg-border" />
+        )}
 
         {visibleTabs.map((t) => (
           <TabsContent key={t.id} value={t.id} className="overflow-hidden">

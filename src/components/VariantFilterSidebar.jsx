@@ -2416,7 +2416,7 @@ const VariantFilterSidebar = ({
               )}
             </div>
             <div
-              className="mt-2 h-1 w-full overflow-hidden rounded-full bg-muted"
+              className="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-muted"
               role="progressbar"
               aria-label="Variants remaining after filters"
               aria-valuemin={0}

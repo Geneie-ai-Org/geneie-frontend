@@ -61,7 +61,7 @@ function groupByRecency(items) {
 }
 
 const DEFAULT_TRIGGER_CLASS =
-  'inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 aria-expanded:bg-accent';
+  'inline-flex size-8 items-center justify-center rounded-lg text-[var(--text-secondary)] transition-colors hover:bg-sidebar-accent/60 hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 aria-expanded:bg-sidebar-accent';
 
 /**
  * Notification bell with a recency-grouped popover.
@@ -116,9 +116,12 @@ export default function NotificationBell({
       {unreadCount > 0 && (
         <span
           aria-hidden="true"
-          className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none tabular-nums text-primary-foreground ring-2 ring-[var(--bg-sidebar)]"
+          className={cn(
+            'absolute inline-flex items-center justify-center rounded-full bg-primary font-semibold leading-none tabular-nums text-primary-foreground ring-2 ring-[var(--bg-sidebar)]',
+            unreadCount > 9 ? 'right-0 top-0 h-3.5 min-w-3.5 px-1 text-[9px]' : unreadCount > 1 ? 'right-0.5 top-0.5 size-3.5 text-[9px]' : 'right-1.5 top-1.5 size-2'
+          )}
         >
-          {badgeText}
+          {unreadCount > 1 ? badgeText : null}
         </span>
       )}
     </DropdownMenuTrigger>

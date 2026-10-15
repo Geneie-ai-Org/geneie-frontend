@@ -23,11 +23,11 @@ import TuningConfigModal from '@/components/TuningConfigModal';
 function PillButton({ children, active, disabled, title, onClick, icon: Icon, tone = 'default' }) {
   const tones = {
     default:
-      'border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]',
+      'border-border bg-transparent text-foreground hover:bg-[var(--bg-surface-hover)]',
     primary:
-      'border-transparent bg-[var(--accent-teal)] text-[var(--accent-teal-contrast)] hover:bg-[var(--accent-teal-hover)]',
+      'border-transparent bg-primary text-primary-foreground hover:bg-primary/85',
     ghost:
-      'border-transparent bg-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]',
+      'border-transparent bg-transparent text-muted-foreground hover:text-foreground hover:bg-[var(--bg-surface-hover)]',
   };
   return (
     <button
@@ -35,7 +35,7 @@ function PillButton({ children, active, disabled, title, onClick, icon: Icon, to
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 [@media(pointer:coarse)]:h-9 ${
+      className={`inline-flex h-7 items-center gap-1.5 rounded-[8px] border px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 [@media(pointer:coarse)]:h-9 ${
         active ? tones.primary : tones[tone]
       }`}
     >
@@ -114,7 +114,7 @@ export default function TuningMode({ tuning, onClose }) {
       <div
         className={
           active
-            ? 'rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface-raised)] p-2 shadow-[var(--shadow-md)]'
+            ? 'rounded-xl border border-border bg-popover p-2 text-popover-foreground shadow-[var(--shadow-md)]'
             : ''
         }
       >
@@ -122,7 +122,7 @@ export default function TuningMode({ tuning, onClose }) {
           className={
             active
               ? 'flex flex-wrap items-center gap-1.5'
-              : 'inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)] px-2.5 py-1 shadow-[var(--shadow-sm)]'
+              : 'inline-flex items-center gap-2 rounded-[8px] border border-border bg-card px-1.5 py-0.5 text-muted-foreground'
           }
           style={{ pointerEvents: 'auto' }}
         >
@@ -132,33 +132,33 @@ export default function TuningMode({ tuning, onClose }) {
             aria-checked={active}
             onClick={() => setActive((v) => !v)}
             title={active ? undefined : 'Off: chat behaves exactly as it does normally (no header, no second column).'}
-            className="inline-flex h-7 items-center gap-2 rounded-md px-1 text-xs font-medium text-[var(--text-primary)] [@media(pointer:coarse)]:h-9"
+            className="inline-flex h-7 items-center gap-2 rounded-md px-1 text-xs font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [@media(pointer:coarse)]:h-9"
           >
             <span
               className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
-                active ? 'bg-[var(--accent-teal)]' : 'bg-[var(--border-strong)]'
+                active ? 'bg-primary' : 'bg-[var(--border-strong)]'
               }`}
               aria-hidden
             >
               <span
-                className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${
+                className={`inline-block h-3 w-3 transform rounded-full bg-background shadow-[var(--shadow-sm)] transition-transform ${
                   active ? 'translate-x-[14px]' : 'translate-x-[2px]'
                 }`}
               />
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <Sliders className="h-3.5 w-3.5 text-[var(--text-secondary)]" aria-hidden />
+              <Sliders className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
               Tuning
             </span>
           </button>
 
           {active ? (
             <>
-              <span className="mx-0.5 h-4 w-px bg-[var(--border-default)]" aria-hidden />
+              <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
               <PillButton onClick={() => setEditorOpen(true)} icon={SlidersHorizontal}>
                 Edit config
                 {dirtyKeys.length ? (
-                  <span className="ml-0.5 rounded-full bg-[var(--accent-teal-soft)] px-1.5 text-[10px] leading-4 text-[var(--accent-teal)]">
+                  <span className="ml-0.5 rounded-full bg-muted px-1.5 text-[10px] leading-4 text-foreground">
                     {dirtyKeys.length}
                   </span>
                 ) : null}

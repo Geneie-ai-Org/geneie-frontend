@@ -77,8 +77,7 @@ const AnnovarMessageModal = ({ modal, onClose }) => {
                 <button
                   type="button"
                   onClick={() => modal.onCta?.()}
-                  className="inline-flex h-8 items-center rounded-md px-3 text-sm font-medium transition-colors hover:bg-[var(--accent-teal-hover)] [@media(pointer:coarse)]:h-11"
-                  style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
+                  className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 [@media(pointer:coarse)]:h-11"
                 >
                   {modal.ctaLabel}
                 </button>

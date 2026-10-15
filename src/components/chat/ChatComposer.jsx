@@ -156,8 +156,9 @@ const ChatComposer = ({
       : null);
 
   const uploadButton = showUpload && (
+    /* Not `relative`: the menu anchors to the composer card, so it opens above the card instead of covering the field. */
     <div
-      className="relative shrink-0"
+      className="shrink-0"
       ref={showFileTypeDropdown === dropdownSource ? fileTypeDropdownRef : undefined}
     >
       <Tooltip>
@@ -197,8 +198,8 @@ const ChatComposer = ({
       rows={1}
       placeholder={placeholder}
       aria-label="Message Geneie"
-      className={`${TEXTAREA_BASE} text-sm py-1.5 ${
-        !canType ? 'min-h-[28px] max-h-[56px]' : isStacked ? 'min-h-[48px] max-h-[200px]' : 'min-h-[32px] max-h-[160px]'
+      className={`${TEXTAREA_BASE} text-[15px] leading-6 py-1 ${
+        !canType ? 'min-h-[28px] max-h-[56px]' : isStacked ? 'min-h-[52px] max-h-[200px]' : 'min-h-[32px] max-h-[160px]'
       }`}
       style={{ color: 'var(--text-primary)' }}
     />
@@ -220,10 +221,10 @@ const ChatComposer = ({
             variant="ghost"
             size="icon"
             onClick={onStop}
-            className="chat-send-btn !size-8 [@media(pointer:coarse)]:!size-11 [&_svg]:!size-3.5 rounded-full flex items-center justify-center border border-border bg-muted text-foreground hover:bg-accent"
+            className="chat-send-btn !size-8 [@media(pointer:coarse)]:!size-11 [&_svg]:!size-3 rounded-full flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/85 hover:text-primary-foreground"
             aria-label="Stop generation"
           >
-            <Square className="size-3.5 fill-current" />
+            <Square className="size-3 fill-current" />
           </Button>
         }
       />
@@ -250,8 +251,8 @@ const ChatComposer = ({
         <div
           onClick={handleContainerClick}
           onKeyDown={handleSurfaceKeyDown}
-          className={`pipeline-composer flex flex-col transition-[border-color,box-shadow] focus-within:!border-[hsl(var(--ring)/0.55)] focus-within:shadow-[0_0_0_3px_hsl(var(--ring)/0.14)] ${
-            isStacked ? 'px-4 pt-3 pb-2' : 'px-3 pt-2 pb-1.5'
+          className={`pipeline-composer flex flex-col ${
+            isStacked ? 'px-4 pt-4 pb-2.5' : 'px-4 pt-3 pb-2.5'
           }`}
         >
           {textarea}
@@ -268,10 +269,14 @@ const ChatComposer = ({
               </button>
             </div>
           )}
-          <div className="flex items-center justify-between gap-2 pt-1">
-            <div className="flex items-center gap-1 min-w-0">{uploadButton}</div>
-            <div className="flex items-center gap-1 shrink-0">
+          {/* Toolbar, inside the card. Left: attach and answer mode. Right: workspace toggle and send. */}
+          <div className="chat-composer-toolbar flex items-center gap-1 pt-2">
+            <div className="flex items-center gap-1 min-w-0">
+              {uploadButton}
               {showModeToggle && <ExploratoryModeToggle variant="inline" />}
+            </div>
+            <div className="flex-1" aria-hidden />
+            <div className="flex items-center gap-1.5 shrink-0">
               {sidebarToggle}
               {sendOrStop}
             </div>
@@ -280,7 +285,7 @@ const ChatComposer = ({
         {isStacked && (
           <p
             /* Positioned so the dock's blur layers paint behind it, not over it. */
-            className="relative z-10 text-center text-2xs leading-tight mt-2"
+            className="relative z-10 text-center text-xs leading-tight mt-2.5"
             style={{ color: 'var(--text-tertiary)' }}
           >
             Geneie can make mistakes. Verify important information.
@@ -324,8 +329,8 @@ const SendButton = ({ onClick, disabled }) => (
           disabled={disabled}
           className={`chat-send-btn !size-8 [@media(pointer:coarse)]:!size-11 [&_svg]:!size-4 rounded-full flex items-center justify-center transition-colors ${
             disabled
-              ? 'cursor-not-allowed bg-muted text-[var(--text-disabled)] disabled:opacity-100'
-              : 'bg-primary text-primary-foreground hover:bg-[var(--accent-teal-hover)] hover:text-primary-foreground'
+              ? 'cursor-not-allowed bg-primary text-primary-foreground opacity-30 disabled:opacity-30'
+              : 'bg-primary text-primary-foreground hover:bg-primary/85 hover:text-primary-foreground'
           }`}
           aria-label="Send message"
         >

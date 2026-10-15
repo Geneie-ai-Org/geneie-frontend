@@ -2424,7 +2424,7 @@ const VariantFilterSidebar = ({
               aria-valuenow={underConsiderationCount}
             >
               <div
-                className="h-full rounded-full bg-primary transition-[width] duration-300 motion-reduce:transition-none"
+                className="h-full rounded-full bg-[hsl(var(--signal))] transition-[width] duration-300 motion-reduce:transition-none"
                 style={{
                   width: displayTotalVariants > 0
                     ? `${Math.max(0, Math.min(100, (underConsiderationCount / displayTotalVariants) * 100))}%`

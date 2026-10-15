@@ -1792,9 +1792,9 @@ const ChatPage = () => {
           {!isConversationStarted && !isCurrentlyActive ? (
             <div className={`flex-1 flex flex-col items-center w-full min-w-0 chat-column-inner ${isMobile ? 'justify-end pb-4' : 'justify-center'}`}>
               {/* Branding */}
-              <div className={`flex items-center gap-2.5 w-full justify-center ${isMobile ? 'mb-auto mt-auto' : 'mb-8'}`}>
-                <h2 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold tracking-tight text-center`} style={{ color: 'var(--text-primary)' }}>
-                  What do you want to ask <span className="font-brand italic">geneie</span> ?
+              <div className={`flex items-center gap-2.5 w-full justify-center ${isMobile ? 'mb-auto mt-auto' : 'mb-9'}`}>
+                <h2 className={`font-display text-center ${isMobile ? 'text-[28px]' : 'text-[40px]'}`} style={{ color: 'var(--text-primary)' }}>
+                  What would you like to ask <em className="italic">Geneie</em>?
                 </h2>
               </div>
 

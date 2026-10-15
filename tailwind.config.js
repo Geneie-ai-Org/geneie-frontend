@@ -79,6 +79,7 @@ export default {
         sans: ['"Geist Variable"', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
         heading: ['Outfit', 'Inter', 'sans-serif'],
         brand: ['"DM Sans"', 'Inter', 'sans-serif'],
+        serif: ['Newsreader', '"Iowan Old Style"', 'Georgia', 'serif'],
         mono: ['ui-monospace', '"SF Mono"', 'Menlo', 'Consolas', 'monospace'],
       },
       fontSize: {

@@ -100,7 +100,7 @@ export default function PipelineStatusStrip({ status, onOpen, className }) {
         <div className="truncate text-xs text-muted-foreground">{detail}</div>
         {progress != null ? (
           <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-            <div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${Math.max(2, Math.min(100, progress))}%` }} />
+            <div className="h-full rounded-full bg-[hsl(var(--signal))] transition-[width] duration-300" style={{ width: `${Math.max(2, Math.min(100, progress))}%` }} />
           </div>
         ) : null}
       </div>

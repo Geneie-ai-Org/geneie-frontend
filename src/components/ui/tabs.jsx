@@ -36,7 +36,7 @@ function TabsTrigger({ className, ...props }) {
         "focus-visible:ring-2 focus-visible:ring-ring/40 rounded-md",
         "data-[selected]:text-foreground data-[active]:text-foreground",
         "after:pointer-events-none after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-transparent",
-        "data-[selected]:after:bg-primary data-[active]:after:bg-primary",
+        "data-[selected]:after:bg-[hsl(var(--signal))] data-[active]:after:bg-[hsl(var(--signal))]",
         "disabled:pointer-events-none disabled:opacity-50",
         className
       )}

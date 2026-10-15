@@ -11,14 +11,14 @@ import { AlertTriangle, Info, X } from 'lucide-react';
 const TONES = {
   warning: {
     Icon: AlertTriangle,
-    fill: 'var(--warning-soft)',
-    line: 'color-mix(in srgb, var(--warning) 35%, transparent)',
+    fill: 'hsl(var(--card))',
+    line: 'var(--border-default)',
     accent: 'var(--warning)',
   },
   info: {
     Icon: Info,
-    fill: 'var(--info-soft)',
-    line: 'color-mix(in srgb, var(--info) 35%, transparent)',
+    fill: 'hsl(var(--card))',
+    line: 'var(--border-default)',
     accent: 'var(--info)',
   },
 };

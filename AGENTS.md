@@ -22,7 +22,8 @@ Repo shorthand used below (paths are relative to that repo's root):
    BEFORE BUILDING)**, wait for the human's answers, and copy the answers into the PR description.
 3. Pick an existing pattern from section 3. New infrastructure needs a written reason in the PR.
 4. Keep changes small: one topic per PR. Tests and docs go in the same PR as the code.
-5. End with the PR checklist (section 9), pasted into the PR description and filled in.
+5. Keep the architecture docs current (section 8): update them in the same PR, or state why there is no impact.
+6. End with the PR checklist (section 10), pasted into the PR description and filled in.
 
 ## 1. Environments and branches
 
@@ -96,6 +97,10 @@ know", propose the simplest option, say it is an assumption, and get a yes.
 - Admin-only fields: raw errors, S3 keys, hostnames, stack traces. Non-admins must never receive them.
 - Input validation: size, type, allow-lists, S3 key and path traversal, SQL identifiers.
 - Blast radius: if this is wrong or compromised, what else breaks or leaks? Can it be switched off alone?
+
+**2.6 Documentation**
+- Which `BE:docs/newprod-architecture/` files does this change affect (diagram, `FACTS.md`, `README.md`, report
+  topology, timings or costs)? See section 8.
 
 ## 3. Reuse before you build (no over-engineering)
 
@@ -270,6 +275,9 @@ Never combine the role change and the resources it unlocks in one PR.
 - Change keys with `python3 deploy/secrets/set_secret_keys.py <secret> --file <file|-> [--apply]`: dry run by default,
   prints key names only, refuses non-JSON and Terraform-owned secrets, aborts if the secret changed meanwhile.
   Delete the input file afterwards.
+- A secret whose shell Terraform creates is tagged `managed_by=terraform`, so the script refuses it (for example
+  `geneie-newprod-pgx-runtime`). Write its complete JSON from a file with
+  `aws secretsmanager put-secret-value --secret-id <name> --secret-string file://keys.json`, then delete the file.
 - A task reads secrets only at start: force a new deployment (or wait for the next CI deploy) after a change.
 - A config-store key overrides its env fallback; changing the env value then changes only the fallback.
 
@@ -403,14 +411,41 @@ Verify with read-only commands:
 | A Terraform `aws_ssm_parameter` failed the CI apply (role cannot write SSM) | SSM parameters are created by hand; Terraform grants read only |
 | The Module 1 head box was scaled to 0 by hand and Module 1 stopped for days | The head runs in an ASG pinned at 1; never scale it to 0 |
 
-## 8. Working with GitHub and AWS from an agent
+## 8. Keep the architecture docs current
+
+The newprod architecture docs live in the backend repo under `BE:docs/newprod-architecture/`:
+- a master diagram plus focused SVG diagrams in `diagrams/`;
+- `diagrams/FACTS.md`: every fact drawn in a diagram, with the source file it comes from;
+- `README.md`: a "what changed -> which doc to update" table;
+- `report/`: a dated snapshot with topology, timings and costs.
+
+Rule: **before merging or deploying any change**, check whether it touches something the docs describe:
+
+| Touches | Examples |
+|---|---|
+| Compute | a service, worker, Lambda, scaling min/max, region |
+| Messaging | a queue, DLQ, job type that crosses services |
+| Access | an IAM role, secret, security-group edge |
+| Data | a datastore, bucket prefix, retention rule |
+| Control | a config flag, kill switch, deploy step |
+| Numbers | a timing or cost fact quoted in the docs |
+
+- If yes: update the docs **in the same PR** (diagram, `FACTS.md` row with its source file, `README.md` table,
+  topology numbers in `report/`).
+- If no: write `no doc impact: <reason>` in the PR description.
+- Sidecar and frontend PRs: the doc update is a companion PR to the backend repo, linked from both PRs.
+- A diagram or fact must name its source file; never draw something you cannot point to in code or Terraform.
+- If `docs/newprod-architecture/` is missing from your base branch, update the branch first; if it is still
+  missing, ask the owner where the docs are before writing the PR.
+
+## 9. Working with GitHub and AWS from an agent
 
 - Use the newprod branch of the repo as the PR base. Never `main`.
 - Pin the GitHub account per command when the machine has several; never switch accounts globally.
 - AWS: read-only commands are fine for verification. Anything that writes (put-parameter, update-service,
   run-task, secret writes, targeted applies) is done by, or explicitly approved by, the owner, and recorded.
 
-## 9. PR checklist (paste into every PR description and fill in)
+## 10. PR checklist (paste into every PR description and fill in)
 
 ```markdown
 ### Newprod checklist
@@ -424,6 +459,7 @@ Verify with read-only commands:
 - [ ] Secrets: none in code, logs, PR, argv
 - [ ] Logs/errors: counts and ids only; no genetic data; raw error admin-only
 - [ ] Docs updated (secrets README / flags / runbook): ___
+- [ ] Docs impact: updated `docs/newprod-architecture/` files ___ (companion BE PR: ___) / no doc impact because ___
 - [ ] Rollback: ___ (flag flip / revert PR / previous task def)
 - [ ] Verification after deploy: ___ (logs query, smoke suite, read-only checks)
 - [ ] Base moved since last green CI? `gh pr update-branch` and re-ran CI

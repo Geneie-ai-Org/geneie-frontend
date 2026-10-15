@@ -435,8 +435,11 @@ Rule: **before merging or deploying any change**, check whether it touches somet
 - If no: write `no doc impact: <reason>` in the PR description.
 - Sidecar and frontend PRs: the doc update is a companion PR to the backend repo, linked from both PRs.
 - A diagram or fact must name its source file; never draw something you cannot point to in code or Terraform.
-- If `docs/newprod-architecture/` is missing from your base branch, update the branch first; if it is still
-  missing, ask the owner where the docs are before writing the PR.
+- How: `BE:docs/newprod-architecture/README.md` has the table of what to update, the rebuild commands (`build.py`,
+  `check.py`, `validate_master.py` in `diagrams/_build/`) and the snapshot-refresh recipe. Open `report/<date>/report.html`
+  in a browser for the whole picture.
+- The backend repo's `.github/pull_request_template.md` carries the docs-impact line: copy it into sidecar and frontend
+  PRs, which have no template of their own.
 
 ## 9. Working with GitHub and AWS from an agent
 

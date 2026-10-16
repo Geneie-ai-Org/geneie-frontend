@@ -18,7 +18,21 @@ Spec: `docs/DESIGN_V1.md`. Agent brief used for the build: `docs/AGENT_BRIEF.md`
 ## Checked
 - `npx vite build` passes. No JS exceptions walking: conversation, workspace tabs, ACMG/Phenotype modes, filter
   group, rail, settings, FASTQ wizard, dark theme (local stack, desktop 1440x900, light and dark).
-- Mobile was explicitly deferred.
+- Mobile (390x844, 360, 430, 768, 820) was done in a later pass with headless touch emulation. Safe-area insets and the
+  real on-screen keyboard are only proven in code, not on a device.
+
+## Later passes (16 Oct 2026, local)
+- **Design v1.2:** muted pastel teal, pills + hairline cards, brand texture (`src/design/texture.css`: ticks, helix,
+  lattice), chat home, Summary dashboard, Pipeline timeline + job console, Variants filter bar, Results table
+  with row detail, ACMG/Phenotype modes, Triage cards, File check verdict, Report tab.
+- **Menus:** one focus ring, sliding highlight pill, calm overlays and dialogs (`src/components/ui/*`, `workbench.css`).
+- **Landing cues:** when work arrives for a tab (`useWorkspaceLanding`): closed workbench opens on it with a short note;
+  open elsewhere is flag-only (dot on the tab, note with View, pill in the thread). Triggers: annotation, filter,
+  Triage, File check, automatic report, Module 1 (job complete + VCF import done).
+- **Backend (additive, `redesign/be`):** `variant_metadata.contig_counts` + `GET /api/conversations/{id}/contig-counts`,
+  `failure.user_message`/`failure.reason` on annotation/filter/exomiser jobs, Module 1 `stage_timings`. The FE uses all three.
+- **Mobile:** rail drawer with swipe, workspace bottom sheet, dialogs as bottom sheets, bottom sheets for Add filter,
+  row detail and the column picker, touch targets, 16px inputs. `viewport-fit=cover` is set in `index.html`.
 
 ## Open items (not done)
 1. ~~Rename sessions~~ Done: rail rename (double-click, F2 or menu) saves through `PUT /api/conversations/{id}` with

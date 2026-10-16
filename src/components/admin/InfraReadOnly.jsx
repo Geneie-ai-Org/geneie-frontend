@@ -1,8 +1,9 @@
-import { Lock } from 'lucide-react';
+import { Lock, TriangleAlert } from 'lucide-react';
 import { INTAKE_KINDS } from '@/services/infraApi';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
-import { Banner, HelpBody, HelpPopover, Panel, StatusChip, tdCls, thCls } from './adminUi';
+import { Button } from '@/components/ui/button';
+import { StageMark } from '@/components/motion';
+import { Banner, Bar, CopyIcon, HelpBody, HelpPopover, Panel, ScrollBox, StateBlock, StatusChip, tdCls, thCls, useRowNav } from './adminUi';
 import { fmtRelative, fmtTime, fmtValue, isFutureIso } from './infraShared';
 import { explainAlarm } from './infraAlarmHelp';
 import { SECTION_HELP } from './infraHelp';
@@ -20,10 +21,10 @@ const num = (v) => {
 
 export function ReadOnlyBadge() {
   return (
-    <Badge variant="muted" className="h-5 gap-1 rounded-full px-2 text-2xs">
+    <span className="wb-chip h-[22px] gap-1 pl-2">
       <Lock className="size-3" aria-hidden="true" />
       Read-only
-    </Badge>
+    </span>
   );
 }
 
@@ -118,13 +119,26 @@ function buildChips(status, fetchError) {
  * Top-of-page overview: one headline word, then a chip per subsystem (dot + text, never colour
  * alone), then the alarms that are firing. Derived entirely from the status snapshot.
  */
-export function HealthOverview({ status, fetchError }) {
+export function HealthOverview({ status, fetchError, onRetry, retrying }) {
   if (!status) {
     return (
-      <Panel title="System health" badge={<StatusChip tone={fetchError ? 'error' : 'muted'}>{fetchError ? 'Status unavailable' : 'Loading status…'}</StatusChip>}>
-        <p className="text-xs text-muted-foreground">
-          {fetchError ? `Could not load status: ${fetchError}` : 'Reading the latest snapshot.'}
-        </p>
+      <Panel
+        title="System health"
+        badge={fetchError
+          ? <StatusChip tone="error">Status unavailable</StatusChip>
+          : <span className="wb-status" data-state="running">Reading status</span>}
+        aria-busy={!fetchError}
+      >
+        {fetchError ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="min-w-0 break-words text-[13px] leading-5 text-muted-foreground">Could not load status: {fetchError}</p>
+            {onRetry && <Button variant="outline" size="sm" onClick={onRetry} disabled={retrying}>Retry</Button>}
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-1.5" aria-hidden="true">
+            {[88, 132, 120, 148, 96, 128, 140].map((w, i) => <Bar key={i} className="h-6" style={{ width: w }} />)}
+          </div>
+        )}
       </Panel>
     );
   }
@@ -140,28 +154,41 @@ export function HealthOverview({ status, fetchError }) {
   return (
     <Panel
       title="System health"
-      badge={<StatusChip tone={overall.tone} className="h-6 px-2.5 text-xs">{overall.text}</StatusChip>}
+      badge={(
+        <span className="inline-flex items-center gap-1.5">
+          {overall.tone === 'warning'
+            ? <TriangleAlert className="size-[18px] text-[var(--warning)]" aria-hidden="true" />
+            : <StageMark state={overall.tone === 'error' ? 'failed' : 'done'} size={18} />}
+          <StatusChip tone={overall.tone} className="h-6 px-2.5">{overall.text}</StatusChip>
+        </span>
+      )}
       help={helpFor('alarms', 'Alarms')}
       bodyClassName="flex flex-col gap-3"
     >
       <ul className="flex flex-wrap gap-1.5" aria-label="Subsystem status">
-        {chips.map((c) => (
-          <li key={c.key}>
-            <StatusChip tone={c.tone} title={c.title} className="h-6 px-2.5 text-xs">{c.text}</StatusChip>
+        {chips.map((c, i) => (
+          <li key={c.key} className="wb-pop" style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}>
+            <StatusChip tone={c.tone} title={c.title} className="h-6 px-2.5">{c.text}</StatusChip>
           </li>
         ))}
       </ul>
 
       {alarms.length > 0 && (
-        <ul className="divide-y divide-border rounded-md border border-[var(--error)]">
+        <ul className="divide-y divide-[hsl(var(--wb-line))] overflow-hidden rounded-2xl bg-[var(--error-soft)]" aria-label="Alarms firing">
           {alarms.map((a) => {
             const help = explainAlarm(a.name, a.description);
             return (
-              <li key={a.name} className="px-3 py-2 text-xs">
-                <div className="font-medium text-foreground">{help.text || a.name}</div>
-                <div className="mt-0.5 text-2xs text-muted-foreground">
-                  {help.look && <span>Look at: <span className="text-foreground">{help.look}</span> · </span>}
-                  since {fmtTime(a.since)} ({fmtRelative(a.since)}) · <code className="font-mono">{a.name}</code>
+              <li key={a.name} className="px-4 py-2.5 text-[13px]">
+                <div className="flex items-start gap-2">
+                  <StatusChip tone="error" className="mt-px shrink-0">Alarm</StatusChip>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-foreground">{help.text || a.name}</div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground">
+                      {help.look && <span>Look at: <span className="text-foreground">{help.look}</span> ·</span>}
+                      <span>since {fmtTime(a.since)} ({fmtRelative(a.since)}) ·</span>
+                      <span className="inline-flex items-center"><code className="font-mono">{a.name}</code><CopyIcon value={a.name} label="alarm name" className="size-5" /></span>
+                    </div>
+                  </div>
                 </div>
               </li>
             );
@@ -180,31 +207,31 @@ function Th({ children, className }) {
 
 function Td({ children, strong, mono, className }) {
   return (
-    <td className={cn(tdCls, mono && 'break-all font-mono text-2xs', strong ? 'text-foreground' : 'text-muted-foreground', className)}>
+    <td className={cn(tdCls, mono && 'break-all font-mono text-xs', strong ? 'text-foreground' : 'text-muted-foreground', className)}>
       {children}
     </td>
   );
 }
 
 function Empty({ colSpan, text }) {
-  return <tr><td colSpan={colSpan} className="h-16 px-3 text-center text-xs text-muted-foreground">{text}</td></tr>;
+  return <tr><td colSpan={colSpan} className="h-16 px-3 text-center text-[13px] text-muted-foreground">{text}</td></tr>;
 }
 
-function Scroll({ children, minWidth, maxHeight = 360 }) {
+function Scroll({ children, minWidth, maxHeight = 360, label }) {
   return (
-    <div className="overflow-auto" style={{ maxHeight }}>
+    <ScrollBox label={label} style={{ maxHeight }}>
       <table className="w-full border-separate border-spacing-0 text-left" style={{ minWidth }}>{children}</table>
-    </div>
+    </ScrollBox>
   );
 }
 
 export function EcsTable({ ecs, error }) {
   return (
-    <Panel title="ECS services" badge={<ReadOnlyBadge />} help={helpFor('ecs', 'ECS services')} muted bodyClassName="p-0">
+    <Panel title="ECS services" badge={<ReadOnlyBadge />} help={helpFor('ecs', 'ECS services')} bodyClassName="p-0">
       {error || !Array.isArray(ecs) ? (
         <div className="p-4"><Banner tone="warning">Status unavailable: {error || 'ECS not loaded'}.</Banner></div>
       ) : (
-        <Scroll minWidth={560}>
+        <Scroll minWidth={560} label="ECS services table">
           <thead>
             <tr><Th>Service</Th><Th>Running / desired</Th><Th>Pending</Th><Th>Rollout</Th><Th>Min / max</Th></tr>
           </thead>
@@ -215,13 +242,13 @@ export function EcsTable({ ecs, error }) {
               const rolling = s.rollout && s.rollout !== 'COMPLETED';
               return (
                 <tr key={s.service}>
-                  <Td strong mono>{s.service}</Td>
+                  <Td strong mono><span className="inline-flex items-center">{s.service}<CopyIcon value={s.service} label="service name" className="size-5" /></span></Td>
                   <Td className="tabular-nums">
                     <span className={below ? 'text-[var(--warning)]' : undefined}>{s.running} / {s.desired}</span>
-                    {below && <span className="ml-1.5 text-2xs text-[var(--warning)]">below desired</span>}
+                    {below && <StatusChip tone="warning" className="ml-2">Below desired</StatusChip>}
                   </Td>
                   <Td className="tabular-nums">{s.pending ?? '–'}</Td>
-                  <Td><span className={rolling ? 'text-[var(--warning)]' : undefined}>{s.rollout || '–'}</span></Td>
+                  <Td>{rolling ? <StatusChip tone="warning">{s.rollout}</StatusChip> : (s.rollout || '–')}</Td>
                   <Td className="tabular-nums">{s.min ?? '–'} / {s.max ?? '–'}</Td>
                 </tr>
               );
@@ -246,7 +273,6 @@ export function PgxCard({ ecs, intake, error }) {
     <Panel
       title="PGx"
       badge={<ReadOnlyBadge />}
-      muted
       bodyClassName="flex flex-col gap-3"
     >
       {error || !Array.isArray(ecs) ? (
@@ -259,7 +285,7 @@ export function PgxCard({ ecs, intake, error }) {
             const below = num(s.running) < num(s.desired);
             return (
               <li key={s.service} className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                <code className="font-mono text-2xs text-foreground">{s.service}</code>
+                <code className="font-mono text-xs text-foreground">{s.service}</code>
                 <span className="flex items-center gap-2 tabular-nums">
                   <StatusChip tone={below ? 'warning' : 'success'}>
                     {s.running} / {s.desired} running
@@ -279,7 +305,7 @@ export function PgxCard({ ecs, intake, error }) {
           </StatusChip>
         ) : <span>unavailable</span>}
       </div>
-      <p className="text-2xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         PGx runs as an ECS service that autoscales on its own, so there are no worker levers here. Pause its intake from the intake cards above.
       </p>
     </Panel>
@@ -288,7 +314,7 @@ export function PgxCard({ ecs, intake, error }) {
 
 export function DlqSection({ dlqs, deadLetters, dlqError, deadLettersError }) {
   return (
-    <Panel title="Dead-letter queues (failed jobs)" badge={<ReadOnlyBadge />} help={helpFor('dlqs', 'Dead-letter queues')} muted bodyClassName="flex flex-col gap-4 p-4">
+    <Panel title="Dead-letter queues (failed jobs)" badge={<ReadOnlyBadge />} help={helpFor('dlqs', 'Dead-letter queues')} bodyClassName="flex flex-col gap-4 p-4">
       {dlqError || !Array.isArray(dlqs) ? (
         <Banner tone="warning">Status unavailable: {dlqError || 'DLQs not loaded'}.</Banner>
       ) : (
@@ -297,11 +323,12 @@ export function DlqSection({ dlqs, deadLetters, dlqError, deadLettersError }) {
           {dlqs.map((d) => {
             const depth = num(d.visible) + num(d.in_flight);
             return (
-              <div key={d.name} className={cn('rounded-md border bg-card px-3 py-2 tabular-nums', depth ? 'border-[var(--error)]' : 'border-border')}>
-                <div className="font-mono text-2xs text-muted-foreground">{d.name}</div>
-                <div className={cn('text-sm font-semibold', depth ? 'text-[var(--error)]' : 'text-foreground')}>
-                  {d.visible} <span className="text-2xs font-normal text-muted-foreground">visible · {d.in_flight} in flight</span>
-                </div>
+              <div key={d.name} className={cn('flex items-center gap-2.5 rounded-full border py-1 pl-3.5 pr-2 tabular-nums', depth ? 'border-[var(--error)] bg-[var(--error-soft)]' : 'border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill))]')}>
+                <code className="font-mono text-xs text-muted-foreground">{d.name}</code>
+                <span className={cn('text-[13px] font-semibold', depth ? 'text-[var(--error)]' : 'text-foreground')}>
+                  {d.visible} <span className="text-xs font-normal text-muted-foreground">visible · {d.in_flight} in flight</span>
+                </span>
+                <StatusChip tone={depth ? 'error' : 'success'}>{depth ? 'Failed jobs' : 'Empty'}</StatusChip>
               </div>
             );
           })}
@@ -311,8 +338,8 @@ export function DlqSection({ dlqs, deadLetters, dlqError, deadLettersError }) {
       {deadLettersError || !Array.isArray(deadLetters) ? (
         <Banner tone="warning">Status unavailable: {deadLettersError || 'dead letters not loaded'}.</Banner>
       ) : (
-        <div className="overflow-hidden rounded-md border border-border bg-card">
-          <Scroll minWidth={640} maxHeight={280}>
+        <div className="overflow-hidden rounded-2xl border border-[hsl(var(--wb-line))]">
+          <Scroll minWidth={640} maxHeight={280} label="Dead letters table">
             <thead>
               <tr><Th>At</Th><Th>Kind</Th><Th>Conversation</Th><Th>Outcome</Th><Th>Reason</Th></tr>
             </thead>
@@ -322,7 +349,7 @@ export function DlqSection({ dlqs, deadLetters, dlqError, deadLettersError }) {
                 <tr key={`${d.at}-${d.conversation_id}-${i}`}>
                   <Td className="whitespace-nowrap tabular-nums">{fmtTime(d.at)}</Td>
                   <Td>{d.kind}</Td>
-                  <Td mono>{d.conversation_id || '–'}</Td>
+                  <Td mono>{d.conversation_id ? <span className="inline-flex items-center">{d.conversation_id}<CopyIcon value={d.conversation_id} label="conversation id" className="size-5" /></span> : '–'}</Td>
                   <Td>{d.outcome || '–'}</Td>
                   <Td>{d.reason || '–'}</Td>
                 </tr>
@@ -336,38 +363,44 @@ export function DlqSection({ dlqs, deadLetters, dlqError, deadLettersError }) {
 }
 
 export function AuditTable({ audit, error, limit, onReload }) {
+  const rows = audit || [];
+  const keyOf = (a, i) => `${a.at}-${a.action}-${i}`;
+  const nav = useRowNav(rows.map(keyOf), 'audit-row');
   return (
     <Panel
       title={`Audit (last ${limit})`}
       badge={<ReadOnlyBadge />}
       help={helpFor('audit', 'Audit')}
-      muted
       bodyClassName="p-0"
-      actions={onReload ? (
-        <button
-          type="button"
-          onClick={onReload}
-          className="inline-flex h-7 items-center rounded-md px-2 text-xs text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55 max-md:h-10"
-        >
-          Reload
-        </button>
-      ) : null}
+      actions={onReload ? <Button variant="ghost" size="sm" onClick={onReload}>Reload</Button> : null}
     >
       {error ? (
-        <div className="p-4"><Banner tone="warning">Status unavailable: {error}.</Banner></div>
+        <StateBlock
+          tone="error"
+          title="Could not load the audit log"
+          action={onReload ? <Button variant="outline" size="sm" onClick={onReload}>Retry</Button> : null}
+        >
+          {error}
+        </StateBlock>
       ) : (
-        <Scroll minWidth={820} maxHeight={420}>
+        <Scroll minWidth={820} maxHeight={420} label="Audit table">
           <thead>
             <tr>
               <Th>At</Th><Th>Actor</Th><Th>Action</Th><Th>Target</Th><Th>Before → after</Th><Th>Reason</Th><Th>Expires</Th>
             </tr>
           </thead>
-          <tbody>
-            {audit === null && <Empty colSpan={7} text="Loading…" />}
-            {audit !== null && audit.length === 0 && <Empty colSpan={7} text="No admin actions recorded." />}
-            {(audit || []).map((a, i) => (
-              <tr key={`${a.at}-${a.action}-${i}`}>
-                <Td className="whitespace-nowrap tabular-nums">{fmtTime(a.at)}</Td>
+          <tbody onKeyDown={nav.onKeyDown}>
+            {audit === null && Array.from({ length: 4 }, (_, i) => (
+              <tr key={i} aria-hidden="true">
+                {[28, 32, 36, 40, 32, 20, 24].map((w, j) => <td key={j} className={tdCls}><Bar style={{ width: `${w * 3}px` }} /></td>)}
+              </tr>
+            ))}
+            {audit !== null && audit.length === 0 && (
+              <tr><td colSpan={7}><StateBlock title="No admin actions recorded">Changes made from this page are listed here with who made them and why.</StateBlock></td></tr>
+            )}
+            {rows.map((a, i) => (
+              <tr key={keyOf(a, i)} {...nav.rowProps(keyOf(a, i))}>
+                <Td className="whitespace-nowrap tabular-nums">{nav.marker(keyOf(a, i))}{fmtTime(a.at)}</Td>
                 <Td>{a.actor || '–'}</Td>
                 <Td strong>{a.action}</Td>
                 <Td mono>{fmtValue(a.target)}</Td>

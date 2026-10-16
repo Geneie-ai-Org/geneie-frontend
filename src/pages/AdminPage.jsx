@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -17,7 +17,8 @@ import {
   adminSetWaitlistStatus,
   adminWhoAmI,
 } from '@/services/backendApi';
-import { AdminFrame, AdminHeader, Banner, HelpBody, HelpPopover } from '@/components/admin/adminUi';
+import { CountUp, Dismissible, undoToast as fuseToast } from '@/components/motion';
+import { AdminFrame, AdminHeader, Banner, Disclosure, HelpBody, HelpPopover } from '@/components/admin/adminUi';
 import UsersTable from '@/components/admin/UsersTable';
 import { SeatCards, WaitlistTable } from '@/components/admin/BetaWaitlist';
 import {
@@ -86,8 +87,6 @@ const QUOTA_FIELDS = [
 
 const UNDO_TOAST_MS = 10000;
 
-const undoToast = (onClick) => ({ label: 'Undo', onClick });
-
 const AdminPage = () => {
   useSeo({ title: 'Admin · Geneie', description: 'Internal tool', path: '/admin-haha', noindex: true });
 
@@ -121,6 +120,9 @@ const AdminPage = () => {
   const [seats, setSeats] = useState(null); // { seats, betaUserCount, waitlistCount }
   const [seatDraft, setSeatDraft] = useState('');
   const [waitlist, setWaitlist] = useState(null);
+  const lastErrorText = useRef(''); // keeps the banner text while it collapses out
+  const [usersError, setUsersError] = useState(null); // set when the users list could not load; shown with Retry in the table
+  const [waitlistError, setWaitlistError] = useState(null);
   /* The one open confirm dialog: { type: 'devices' | 'plan' | 'quotas' | 'seats' | 'waitlist-delete', ... }.
    * Held here, not in the row menu, because a dialog inside the menu would unmount with it. */
   const [pending, setPending] = useState(null);
@@ -128,6 +130,7 @@ const AdminPage = () => {
   const loadUsers = useCallback(async () => {
     setBusy(true);
     setStatus(null);
+    setUsersError(null);
     try {
       const data = await adminListUsers({ limit: MAX_USERS });
       const rows = data.users || [];
@@ -144,7 +147,7 @@ const AdminPage = () => {
       });
     } catch (error) {
       setUsers([]);
-      setStatus({ type: 'error', text: error.message || 'Could not load users.' });
+      setUsersError(error.message || 'Could not load users.');
     } finally {
       setBusy(false);
     }
@@ -161,12 +164,13 @@ const AdminPage = () => {
   }, []);
 
   const loadWaitlist = useCallback(async () => {
+    setWaitlistError(null);
     try {
       const data = await adminListWaitlist({ limit: MAX_WAITLIST });
       setWaitlist(data.entries || []);
     } catch (error) {
       setWaitlist([]);
-      setStatus({ type: 'error', text: error.message || 'Could not load the waitlist.' });
+      setWaitlistError(error.message || 'Could not load the waitlist.');
     }
   }, []);
 
@@ -305,17 +309,17 @@ const AdminPage = () => {
     const prev = user.planStatus || 'free';
     const result = await changePlan(user, next);
     if (!result.ok) { setStatus(null); return result; }
-    toast.success(`${label} set to ${next}`, {
-      description: next === 'beta' ? 'Full beta quotas seeded. Recorded in the audit log.' : 'Recorded in the audit log.',
-      duration: undoable ? UNDO_TOAST_MS : undefined,
-      action: undoable
-        ? undoToast(async () => {
-          const back = await changePlan({ ...user, planStatus: next }, prev);
-          if (back.ok) toast.success(`${label} restored to ${prev}`);
-          else toast.error(`Could not undo: ${back.error}`);
-        })
-        : undefined,
-    });
+    if (undoable) {
+      fuseToast(`${label} set to ${next}. Recorded in the audit log.`, async () => {
+        const back = await changePlan({ ...user, planStatus: next }, prev);
+        if (back.ok) toast.success(`${label} restored to ${prev}`);
+        else toast.error(`Could not undo: ${back.error}`);
+      }, UNDO_TOAST_MS);
+    } else {
+      toast.success(`${label} set to ${next}`, {
+        description: next === 'beta' ? 'Full beta quotas seeded. Recorded in the audit log.' : 'Recorded in the audit log.',
+      });
+    }
     return result;
   }, [changePlan]);
 
@@ -325,33 +329,32 @@ const AdminPage = () => {
     const result = await saveQuotas(user.uid, fields);
     if (!result.ok) { setStatus(null); return result; }
     const previous = Object.fromEntries(changes.map((c) => [c.key, c.before]));
-    toast.success(`Quotas updated for ${label}`, {
-      description: 'Takes effect on their next API request. Recorded in the audit log.',
-      duration: undoable ? UNDO_TOAST_MS : undefined,
-      action: undoable
-        ? undoToast(async () => {
-          const back = await saveQuotas(user.uid, previous);
-          if (back.ok) toast.success(`Quotas restored for ${label}`);
-          else toast.error(`Could not undo: ${back.error}`);
-        })
-        : undefined,
-    });
+    if (undoable) {
+      fuseToast(`Quotas updated for ${label}. Recorded in the audit log.`, async () => {
+        const back = await saveQuotas(user.uid, previous);
+        if (back.ok) toast.success(`Quotas restored for ${label}`);
+        else toast.error(`Could not undo: ${back.error}`);
+      }, UNDO_TOAST_MS);
+    } else {
+      toast.success(`Quotas updated for ${label}`, {
+        description: 'Takes effect on their next API request. Recorded in the audit log.',
+      });
+    }
     return result;
   }, [saveQuotas]);
 
   const confirmSeats = useCallback(async (total, previousTotal) => {
     const result = await saveSeatTotal(total);
     if (!result.ok) { setStatus(null); return result; }
-    toast.success(result.text, {
-      duration: UNDO_TOAST_MS,
-      action: typeof previousTotal === 'number'
-        ? undoToast(async () => {
-          const back = await saveSeatTotal(previousTotal);
-          if (back.ok) toast.success(`Beta seats restored to ${previousTotal}`);
-          else toast.error(`Could not undo: ${back.error}`);
-        })
-        : undefined,
-    });
+    if (typeof previousTotal === 'number') {
+      fuseToast(result.text, async () => {
+        const back = await saveSeatTotal(previousTotal);
+        if (back.ok) toast.success(`Beta seats restored to ${previousTotal}`);
+        else toast.error(`Could not undo: ${back.error}`);
+      }, UNDO_TOAST_MS);
+    } else {
+      toast.success(result.text);
+    }
     return result;
   }, [saveSeatTotal]);
 
@@ -360,13 +363,10 @@ const AdminPage = () => {
     if (next === previous) return;
     const result = await updateWaitlistEntry(entry.id, next);
     if (!result.ok) { toast.error(result.error); return; }
-    toast.success(result.text, {
-      duration: UNDO_TOAST_MS,
-      action: undoToast(async () => {
-        const back = await updateWaitlistEntry(entry.id, previous);
-        if (!back.ok) toast.error(`Could not undo: ${back.error}`);
-      }),
-    });
+    fuseToast(result.text, async () => {
+      const back = await updateWaitlistEntry(entry.id, previous);
+      if (!back.ok) toast.error(`Could not undo: ${back.error}`);
+    }, UNDO_TOAST_MS);
   }, [updateWaitlistEntry]);
 
   const confirmDeleteWaitlist = useCallback(async (entry) => {
@@ -407,6 +407,7 @@ const AdminPage = () => {
   if (!isAllowed) return <Navigate to="/app" replace />;
 
   const loadedCount = (users || []).length;
+  if (status?.type === 'error') lastErrorText.current = status.text;
 
   return (
     <AdminFrame>
@@ -415,9 +416,11 @@ const AdminPage = () => {
         title="Users"
         subtitle={users === null
           ? 'Loading…'
-          : listMeta.truncated
-            ? `${loadedCount} of ${listMeta.total} users loaded`
-            : `${loadedCount} user${loadedCount === 1 ? '' : 's'}`}
+          : usersError
+            ? 'Could not load users'
+            : listMeta.truncated
+            ? <><CountUp value={loadedCount} startAt={0} /> of {listMeta.total.toLocaleString()} users loaded</>
+            : <><CountUp value={loadedCount} startAt={0} /> user{loadedCount === 1 ? '' : 's'}</>}
         help={(
           <HelpPopover title="Users and tiers" align="start">
             <HelpBody
@@ -425,32 +428,32 @@ const AdminPage = () => {
               items={[
                 ['Getting a seat', 'People apply from the landing page. You grant a seat by changing their plan to beta, which claims one and seeds the full quota block.'],
                 ['When it applies', 'Plan, quota and device changes take effect on the tester’s next API request.'],
-                ['Confirmations', 'Every change asks you to confirm first and says whether it can be undone. Plan, quota, seat and status changes that can be reversed show an Undo in the toast.'],
+                ['Confirmations', 'Every change asks you to confirm first and says whether it can be undone. Destructive or irreversible changes are confirmed by pressing and holding the button. Plan, quota, seat and status changes that can be reversed show an Undo in the toast.'],
                 ['Admin plan', 'The admin plan cannot be assigned from this page.'],
               ]}
             />
           </HelpPopover>
         )}
         actions={(
-          <Button variant="outline" size="sm" onClick={loadUsers} disabled={busy}>
+          <Button variant="outline" size="sm" onClick={loadUsers} disabled={busy} aria-busy={busy}>
             <RefreshCw className={busy ? 'size-3.5 animate-spin motion-reduce:animate-none' : 'size-3.5'} aria-hidden="true" />
             {busy ? 'Working…' : 'Reload'}
           </Button>
         )}
       />
 
-      {status?.type === 'error' && (
+      <Dismissible show={status?.type === 'error'}>
         <div className="mb-4">
           <Banner
             tone="error"
             action={<Button variant="ghost" size="xs" onClick={() => setStatus(null)}>Dismiss</Button>}
           >
-            {status.text}
+            {status?.text || lastErrorText.current}
           </Banner>
         </div>
-      )}
+      </Dismissible>
 
-      <div className="space-y-5">
+      <div className="space-y-4">
         <SeatCards
           seats={seats}
           busy={busy}
@@ -470,24 +473,26 @@ const AdminPage = () => {
           onPlanFilter={setPlanFilter}
           busy={busy}
           onAction={openAction}
+          error={usersError}
+          onRetry={loadUsers}
         />
 
         <WaitlistTable
           waitlist={waitlist}
           busy={busy}
+          error={waitlistError}
           onReload={loadWaitlist}
           onStatus={changeWaitlistStatus}
           onDelete={(entry) => setPending({ type: 'waitlist-delete', entry })}
         />
 
-        <details className="group rounded-lg border border-border bg-card px-4 py-2.5">
-          <summary className="cursor-pointer text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55">
-            Beta seed fields (written server-side when you set a user to beta)
-          </summary>
-          <pre className="mt-2 overflow-x-auto rounded-md bg-muted p-3 font-mono text-2xs text-muted-foreground">
-            {JSON.stringify(BETA_SEED_REFERENCE, null, 2)}
-          </pre>
-        </details>
+        <div className="wb-card px-3 py-2">
+          <Disclosure label="Beta seed fields (written server-side when you set a user to beta)">
+            <pre className="overflow-x-auto rounded-2xl bg-[hsl(var(--wb-pill))] p-3 font-mono text-xs leading-5 text-muted-foreground">
+              {JSON.stringify(BETA_SEED_REFERENCE, null, 2)}
+            </pre>
+          </Disclosure>
+        </div>
       </div>
 
       {pending?.type === 'devices' && (

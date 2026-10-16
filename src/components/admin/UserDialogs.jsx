@@ -12,9 +12,9 @@ const labelOf = (user) => user.email || user.uid;
 
 function Who({ user }) {
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-md bg-muted/60 px-2.5 py-2 text-xs">
+    <div className="flex min-w-0 items-center gap-2 rounded-2xl bg-[hsl(var(--wb-pill))] px-3 py-2 text-[13px]">
       <span className="min-w-0 flex-1 truncate font-medium text-foreground">{user.email || '(no email)'}</span>
-      <code className="hidden max-w-[40%] truncate font-mono text-2xs text-muted-foreground sm:block">{user.uid}</code>
+      <code className="hidden max-w-[45%] shrink-0 truncate font-mono text-xs text-muted-foreground sm:block" title={user.uid}>{user.uid}</code>
       <PlanChip plan={user.planStatus || 'free'} />
     </div>
   );
@@ -35,7 +35,7 @@ export function ResetDevicesDialog({ user, onClose, onConfirm }) {
       onConfirm={onConfirm}
     >
       <Who user={user} />
-      <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+      <ul className="list-disc space-y-1 pl-4 text-[13px] leading-5 text-muted-foreground">
         <li>
           Empties the registered and active device lists for every tier on this account
           {devices ? ` (now ${devices.active} active, ${devices.registered} registered)` : ''}.
@@ -82,6 +82,7 @@ export function ChangePlanDialog({ user, plans, seats, betaSeedReference, onClos
       onOpenChange={(open) => { if (!open) onClose(); }}
       title={`Change plan for ${labelOf(user)}`}
       confirmLabel="Change plan"
+      hold={changed && !undoable}
       canConfirm={changed}
       undoable={undoable}
       undoText={changed ? undoText : undefined}
@@ -95,8 +96,8 @@ export function ChangePlanDialog({ user, plans, seats, betaSeedReference, onClos
             <label
               key={p}
               className={cn(
-                'flex cursor-pointer items-start gap-2.5 rounded-md border px-2.5 py-2 text-xs transition-colors focus-within:ring-2 focus-within:ring-ring/55',
-                active ? 'border-primary bg-[var(--accent-teal-soft)]' : 'border-border hover:bg-muted/50',
+                'flex cursor-pointer items-start gap-2.5 rounded-2xl border px-3 py-2 text-[13px] transition-colors duration-150 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[hsl(var(--ring))]',
+                active ? 'border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-100))]' : 'border-[hsl(var(--wb-line))] hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))]',
               )}
             >
               <input
@@ -105,7 +106,7 @@ export function ChangePlanDialog({ user, plans, seats, betaSeedReference, onClos
                 value={p}
                 checked={active}
                 onChange={() => setNext(p)}
-                className="mt-0.5 accent-[hsl(var(--primary))]"
+                className="mt-0.5 accent-[hsl(var(--brand-solid))]"
               />
               <span className="min-w-0">
                 <span className="font-medium text-foreground">
@@ -119,12 +120,12 @@ export function ChangePlanDialog({ user, plans, seats, betaSeedReference, onClos
         })}
       </div>
       {!assignable && (
-        <p className="text-xs text-[var(--warning)]">
+        <p className="text-[13px] leading-5 text-[var(--warning)]">
           This account is on &quot;{current}&quot;, which this page cannot assign. Changing it cannot be reversed from here.
         </p>
       )}
       {changed && (
-        <div className="space-y-1 rounded-md bg-muted/60 px-2.5 py-2 text-xs">
+        <div className="space-y-1 rounded-2xl bg-[hsl(var(--wb-pill))] px-3 py-2.5 text-[13px]">
           <div className="font-medium text-foreground">What will happen</div>
           <ul className="list-disc space-y-1 pl-4 text-muted-foreground">
             <li>
@@ -187,6 +188,7 @@ export function QuotasDialog({ user, fields, onClose, onConfirm }) {
       title={`Quotas for ${labelOf(user)}`}
       description="Blank leaves a field unchanged. Raise a “left” field to top a tester up; lower “Chat used” to give chat back."
       confirmLabel="Update quotas"
+      hold={changes.length > 0 && !undoable}
       canConfirm={changes.length > 0 && !invalid}
       undoable={undoable}
       undoText={changes.length > 0
@@ -200,7 +202,7 @@ export function QuotasDialog({ user, fields, onClose, onConfirm }) {
       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
         {fields.map((f) => (
           <label key={f.key} className="flex flex-col gap-1">
-            <span className="text-2xs font-medium text-muted-foreground">{f.label}</span>
+            <span className="text-xs font-medium text-muted-foreground">{f.label}</span>
             <input
               type="number"
               inputMode="numeric"
@@ -214,7 +216,7 @@ export function QuotasDialog({ user, fields, onClose, onConfirm }) {
       </div>
       {invalid && <p role="alert" className="text-xs text-[var(--error)]">{invalid}</p>}
       {changes.length > 0 && !invalid && (
-        <div className="space-y-1 rounded-md bg-muted/60 px-2.5 py-2 text-xs">
+        <div className="space-y-1 rounded-2xl bg-[hsl(var(--wb-pill))] px-3 py-2.5 text-[13px]">
           <div className="font-medium text-foreground">What will happen</div>
           <ul className="space-y-0.5 tabular-nums">
             {changes.map((c) => (
@@ -254,7 +256,7 @@ export function SeatsDialog({ seats, draft, onDraft, onClose, onConfirm }) {
       onConfirm={() => onConfirm(total, current)}
     >
       <label className="flex flex-col gap-1">
-        <span className="text-2xs font-medium text-muted-foreground">Total seats</span>
+        <span className="text-xs font-medium text-muted-foreground">Total seats</span>
         <input
           type="number"
           min={0}
@@ -267,7 +269,7 @@ export function SeatsDialog({ seats, draft, onDraft, onClose, onConfirm }) {
       </label>
       {draft !== '' && !valid && <p role="alert" className="text-xs text-[var(--error)]">Seats must be a number, 0 or more.</p>}
       {changed && (
-        <p className="rounded-md bg-muted/60 px-2.5 py-2 text-xs tabular-nums text-muted-foreground">
+        <p className="rounded-2xl bg-[hsl(var(--wb-pill))] px-3 py-2.5 text-[13px] tabular-nums text-muted-foreground">
           Total <span className="text-foreground">{current ?? '–'} &rarr; {total}</span>
           {typeof claimed === 'number' && (
             <> · seats left <span className="text-foreground">{Math.max(0, total - claimed)}</span> ({claimed} claimed)</>

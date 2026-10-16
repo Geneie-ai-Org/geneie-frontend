@@ -1,6 +1,5 @@
 import { Ellipsis, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -9,28 +8,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { CopyId, tdCls, thCls } from './adminUi';
+import { Bar, CopyIcon, FOCUS, ScrollBox, Segmented, StateBlock, StatusChip, tdCls, thCls, useRowNav } from './adminUi';
 
 /** Plan tabs, in the order an admin scans them. `guest` only appears when someone has it. */
 export const PLAN_TABS = ['free', 'beta', 'pro', 'super_pro', 'admin'];
 
 /* Plans are labels, not statuses, so they stay off the status colours: beta carries the one
  * accent, admin is inverted, the rest are neutral. */
-const PLAN_CLASS = {
-  free: 'bg-muted text-muted-foreground',
-  beta: 'bg-[var(--accent-teal-soft)] text-primary',
-  pro: 'border-border text-foreground',
-  super_pro: 'border-border text-foreground',
-  admin: 'bg-foreground text-background',
-  guest: 'bg-muted text-muted-foreground',
-};
-
 export function PlanChip({ plan }) {
-  return (
-    <Badge variant="outline" className={cn('h-5 rounded-full px-2 text-2xs font-medium', PLAN_CLASS[plan] || 'bg-muted text-muted-foreground')}>
-      {plan}
-    </Badge>
-  );
+  if (plan === 'admin') {
+    return <span className="wb-chip border-transparent bg-foreground text-background">{plan}</span>;
+  }
+  return <span className="wb-chip" data-tone={plan === 'beta' ? 'brand' : undefined}>{plan}</span>;
 }
 
 /* Device arrays live under a per-plan prefix; pro and super_pro share one. The caps are
@@ -61,17 +50,32 @@ function Num({ value }) {
   );
 }
 
-/** Chat is the only counter with a ceiling, so it is the only one that gets a bar. */
+/**
+ * Chat is the only counter with a ceiling, so it is the only one that gets a bar. When the
+ * counter has passed its limit the cell says so in words ("49 used, limit 10") with an error pill,
+ * instead of a "49 / 10" that reads like a typo.
+ */
 function ChatCell({ used, limit }) {
   const hasLimit = Number.isFinite(Number(limit)) && Number(limit) > 0 && limit !== null;
   const hasUsed = used !== null && used !== undefined && used !== '';
   if (!hasUsed && !hasLimit) return <span className="text-muted-foreground">–</span>;
-  const pct = hasLimit ? Math.min(100, Math.round((Number(used || 0) / Number(limit)) * 100)) : 0;
-  const tone = pct >= 100 ? 'bg-[var(--error)]' : pct >= 80 ? 'bg-[var(--warning)]' : 'bg-primary';
+  const u = Number(used || 0);
+  const over = hasLimit && u > Number(limit);
+  const full = hasLimit && u === Number(limit);
+  const pct = hasLimit ? Math.min(100, Math.round((u / Number(limit)) * 100)) : 0;
+  const color = over ? 'var(--error)' : pct >= 80 ? 'var(--warning)' : undefined;
+  if (over) {
+    return (
+      <div className="flex items-center gap-2 whitespace-nowrap tabular-nums" title={`${u} used, limit ${Number(limit)}, over limit`}>
+        <span className="text-foreground">{u.toLocaleString()} used<span className="text-muted-foreground">, limit {Number(limit).toLocaleString()}</span></span>
+        <StatusChip tone="error">Over limit</StatusChip>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center gap-2 tabular-nums">
       <span className="whitespace-nowrap">
-        {hasUsed ? Number(used).toLocaleString() : '–'}
+        {hasUsed ? u.toLocaleString() : '–'}
         {hasLimit && <span className="text-muted-foreground"> / {Number(limit).toLocaleString()}</span>}
       </span>
       {hasLimit && (
@@ -80,12 +84,14 @@ function ChatCell({ used, limit }) {
           aria-label="Chat used"
           aria-valuemin={0}
           aria-valuemax={Number(limit)}
-          aria-valuenow={Number(used || 0)}
-          className="h-1 w-10 shrink-0 overflow-hidden rounded-full bg-muted"
+          aria-valuenow={u}
+          aria-valuetext={`${u} used, limit ${Number(limit)}${full ? ', at the limit' : ''}`}
+          className="wb-track w-12 shrink-0"
         >
-          <span className={cn('block h-full rounded-full', tone)} style={{ width: `${pct}%` }} />
+          <span className="wb-fill block" style={{ width: `${pct}%`, ...(color ? { backgroundColor: color } : null) }} />
         </span>
       )}
+      {full && <StatusChip tone="warning">At limit</StatusChip>}
     </div>
   );
 }
@@ -97,20 +103,45 @@ function RowMenu({ user, disabled, onAction }) {
       <DropdownMenuTrigger
         disabled={disabled}
         aria-label={`Actions for ${label}`}
-        className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55 disabled:opacity-50 data-[popup-open]:bg-muted max-md:size-10"
+        className={cn('inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] disabled:opacity-50 data-[popup-open]:bg-[hsl(var(--brand-100))] data-[popup-open]:text-[hsl(var(--brand-700))]', FOCUS)}
       >
         <Ellipsis className="size-4" aria-hidden="true" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48 text-xs">
-        <DropdownMenuItem className="text-xs" onClick={() => onAction('quotas', user)}>View quotas</DropdownMenuItem>
-        <DropdownMenuItem className="text-xs" onClick={() => onAction('plan', user)}>Change plan…</DropdownMenuItem>
+      <DropdownMenuContent align="end" className="w-48 text-[13px]">
+        <DropdownMenuItem className="text-[13px]" onClick={() => onAction('quotas', user)}>View quotas</DropdownMenuItem>
+        <DropdownMenuItem className="text-[13px]" onClick={() => onAction('plan', user)}>Change plan…</DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-xs" variant="destructive" onClick={() => onAction('devices', user)}>
+        <DropdownMenuItem className="text-[13px]" variant="destructive" onClick={() => onAction('devices', user)}>
           Reset devices…
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+const HEADS = [
+  ['User', ''],
+  ['Plan', ''],
+  ['M1 left', 'text-right'],
+  ['M2 left', 'text-right'],
+  ['Chat used', ''],
+  ['Filters left', 'text-right'],
+  ['Devices', ''],
+];
+
+function SkeletonRows({ n = 8 }) {
+  return Array.from({ length: n }, (_, i) => (
+    <tr key={i} aria-hidden="true">
+      <td className={tdCls}><Bar className="w-56" /></td>
+      <td className={tdCls}><Bar className="w-14" /></td>
+      <td className={tdCls}><Bar className="ml-auto w-6" /></td>
+      <td className={tdCls}><Bar className="ml-auto w-6" /></td>
+      <td className={tdCls}><Bar className="w-24" /></td>
+      <td className={tdCls}><Bar className="ml-auto w-6" /></td>
+      <td className={tdCls}><Bar className="w-24" /></td>
+      <td className={tdCls}><Bar className="ml-auto size-5" /></td>
+    </tr>
+  ));
 }
 
 /**
@@ -130,112 +161,114 @@ export default function UsersTable({
   onPlanFilter,
   busy,
   onAction,
+  error,
+  onRetry,
 }) {
   const loaded = (users || []).length;
-  const tabs = ['all', ...PLAN_TABS, ...(counts.guest ? ['guest'] : [])];
-  const unknownPlans = Object.keys(counts).filter((p) => !PLAN_TABS.includes(p) && p !== 'guest');
-  for (const p of unknownPlans) tabs.push(p);
+  const planKeys = ['all', ...PLAN_TABS, ...(counts.guest ? ['guest'] : [])];
+  for (const p of Object.keys(counts).filter((x) => !PLAN_TABS.includes(x) && x !== 'guest')) planKeys.push(p);
+  const items = planKeys.map((p) => ({ key: p, label: p === 'all' ? 'All' : p, count: users === null ? undefined : p === 'all' ? loaded : counts[p] || 0 }));
+  const nav = useRowNav(visible.map((u) => u.uid), 'users-row');
+  const filtered = filter || planFilter !== 'all';
 
   return (
-    <div className="rounded-lg border border-border bg-card">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-3 py-2">
-        <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+    <div className="wb-card overflow-hidden">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[hsl(var(--wb-line))] px-3 py-2.5">
+        <div className="relative min-w-[240px] flex-1 sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <input
             type="search"
             value={filter}
             onChange={(e) => onFilter(e.target.value)}
             placeholder="Search email, uid or cohort"
             aria-label="Search users by email, uid or cohort"
-            className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-8 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground hover:border-[var(--border-strong)] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 [&::-webkit-search-cancel-button]:hidden"
+            className="h-8 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-8 pr-8 text-[13px] text-foreground outline-none transition-colors duration-150 placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--ring))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring)/0.35)] [&::-webkit-search-cancel-button]:hidden"
           />
           {filter && (
             <button
               type="button"
               onClick={() => onFilter('')}
               aria-label="Clear search"
-              className="absolute right-1 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55"
+              className={cn('absolute right-1 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-[hsl(var(--wb-pill))] hover:text-foreground', FOCUS)}
             >
               <X className="size-3.5" aria-hidden="true" />
             </button>
           )}
         </div>
-
-        <div role="tablist" aria-label="Filter by plan" className="flex flex-wrap items-center gap-1">
-          {tabs.map((p) => {
-            const active = planFilter === p;
-            const n = p === 'all' ? loaded : counts[p] || 0;
-            return (
-              <button
-                key={p}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => onPlanFilter(p)}
-                className={cn(
-                  'inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/55 max-md:h-9',
-                  active ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-                )}
-              >
-                {p === 'all' ? 'All' : p}
-                <span className={cn('tabular-nums', active ? 'text-foreground' : 'text-muted-foreground')}>{n}</span>
-              </button>
-            );
-          })}
-        </div>
+        <Segmented items={items} value={planFilter} onChange={onPlanFilter} label="Filter by plan" group="users-plan" />
+        {users !== null && !error && (
+          <span className="ml-auto text-xs tabular-nums text-muted-foreground" aria-live="polite">
+            {filtered ? `${visible.length} of ${loaded} shown` : `${loaded} shown`}
+          </span>
+        )}
       </div>
 
       {truncated && (
-        <p className="border-b border-border bg-[var(--warning-soft)] px-3 py-1.5 text-xs text-foreground">
+        <p className="border-b border-[hsl(var(--wb-line))] bg-[var(--warning-soft)] px-4 py-2 text-[13px] text-foreground">
           Showing the first {loaded} of {total} users. Tab counts cover these {loaded} only; search to narrow.
         </p>
       )}
 
-      <div className="max-h-[min(70vh,720px)] overflow-auto">
-        <table className="w-full min-w-[860px] border-separate border-spacing-0 text-left">
+      <ScrollBox label="Users table" className="max-h-[min(70vh,720px)]">
+        <table className="w-full min-w-[1020px] border-separate border-spacing-0 text-left">
           <thead>
             <tr>
-              <th className={thCls}>User</th>
-              <th className={thCls}>Plan</th>
-              <th className={cn(thCls, 'text-right')}>M1 left</th>
-              <th className={cn(thCls, 'text-right')}>M2 left</th>
-              <th className={thCls}>Chat used</th>
-              <th className={cn(thCls, 'text-right')}>Filters left</th>
-              <th className={thCls}>Devices</th>
-              <th className={cn(thCls, 'w-12')}><span className="sr-only">Actions</span></th>
+              {HEADS.map(([h, cls]) => <th key={h} scope="col" className={cn(thCls, cls)}>{h}</th>)}
+              <th scope="col" className={cn(thCls, 'w-12')}><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
-          <tbody>
-            {users === null && (
-              <tr><td colSpan={8} className="h-24 px-3 text-center text-xs text-muted-foreground">Loading users…</td></tr>
-            )}
-            {users !== null && visible.length === 0 && (
+          <tbody onKeyDown={nav.onKeyDown}>
+            {users === null && <SkeletonRows />}
+            {users !== null && error && (
               <tr>
-                <td colSpan={8} className="h-24 px-3 text-center text-xs text-muted-foreground">
-                  {loaded === 0 ? 'No users yet.' : 'No users match this search and plan.'}
-                  {loaded > 0 && (filter || planFilter !== 'all') && (
-                    <Button variant="link" size="sm" className="ml-1 h-auto p-0 text-xs" onClick={() => { onFilter(''); onPlanFilter('all'); }}>
-                      Clear filters
-                    </Button>
+                <td colSpan={8}>
+                  <StateBlock
+                    tone="error"
+                    title="Could not load users"
+                    action={onRetry ? <Button variant="outline" size="sm" onClick={onRetry} disabled={busy}>Retry</Button> : null}
+                  >
+                    {error}
+                  </StateBlock>
+                </td>
+              </tr>
+            )}
+            {users !== null && !error && visible.length === 0 && (
+              <tr>
+                <td colSpan={8}>
+                  {loaded === 0 ? (
+                    <StateBlock title="No users yet">Accounts appear here as people sign up. New signups start on the free plan.</StateBlock>
+                  ) : (
+                    <StateBlock
+                      title="No users match"
+                      action={filtered ? <Button variant="outline" size="sm" onClick={() => { onFilter(''); onPlanFilter('all'); }}>Clear filters</Button> : null}
+                    >
+                      Nothing in these {loaded} users matches this search and plan.
+                    </StateBlock>
                   )}
                 </td>
               </tr>
             )}
-            {visible.map((u) => {
+            {!error && visible.map((u) => {
               const plan = u.planStatus || 'free';
               const devices = deviceInfo(u);
+              const rp = nav.rowProps(u.uid);
               return (
-                <tr key={u.uid} className="group transition-colors hover:bg-muted/40">
-                  <td className={cn(tdCls, 'max-w-[340px]')}>
-                    <div className="flex min-w-0 flex-col justify-center leading-[16px]">
-                      <span className={cn('truncate text-foreground', !u.email && 'text-muted-foreground')}>{u.email || '(no email)'}</span>
-                      <CopyId value={u.uid} label="uid" />
+                <tr key={u.uid} {...rp}>
+                  <td className={cn(tdCls, 'w-full')}>
+                    {nav.marker(u.uid)}
+                    <div className="flex min-w-0 items-center gap-1">
+                      <span className={cn('min-w-0 max-w-[300px] truncate text-foreground', !u.email && 'text-muted-foreground')} title={u.email || undefined}>{u.email || '(no email)'}</span>
+                      {u.email && <CopyIcon value={u.email} label="email" />}
+                      <span className="ml-auto flex shrink-0 items-center gap-0.5 pl-2">
+                        <code className="font-mono text-xs text-muted-foreground" title={u.uid}>{u.uid.length > 12 ? `${u.uid.slice(0, 11)}…` : u.uid}</code>
+                        <CopyIcon value={u.uid} label="uid" />
+                      </span>
                     </div>
                   </td>
                   <td className={tdCls}>
                     <div className="flex items-center gap-2">
                       <PlanChip plan={plan} />
-                      {u.betaCohort && <span className="text-2xs text-muted-foreground">{u.betaCohort}</span>}
+                      {u.betaCohort && <span className="whitespace-nowrap text-xs text-muted-foreground">{u.betaCohort}</span>}
                     </div>
                   </td>
                   <td className={cn(tdCls, 'text-right')}><Num value={u.module1RunsRemaining} /></td>
@@ -260,7 +293,7 @@ export default function UsersTable({
             })}
           </tbody>
         </table>
-      </div>
+      </ScrollBox>
     </div>
   );
 }

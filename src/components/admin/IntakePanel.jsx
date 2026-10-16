@@ -8,7 +8,7 @@ import {
 } from '@/services/infraApi';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Banner, StatusChip, inputCls, selectCls } from './adminUi';
+import { Banner, StatusChip, inputCls, selectCls, DANGER_BTN } from './adminUi';
 import {
   ChangeLine,
   Field,
@@ -73,15 +73,15 @@ function IntakeCard({ kind, entry, hoursMax, blocked, onRequest }) {
   };
 
   return (
-    <div className={cn('flex flex-col gap-2 rounded-lg border bg-card p-3', paused ? 'border-[var(--warning)]' : 'border-border')}>
+    <div className={cn('wb-card flex flex-col gap-2 p-3.5', paused && '!border-[var(--warning)]')}>
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-foreground">{label}</h3>
+        <h3 className="text-[14px] font-semibold text-foreground">{label}</h3>
         <StatusChip tone={paused ? 'warning' : 'success'}>{paused ? 'Paused' : 'Open'}</StatusChip>
       </div>
 
       {paused ? (
         <>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[13px] text-muted-foreground">
             Until <span className="tabular-nums text-foreground">{fmtTime(entry.paused_until)}</span> ({fmtRelative(entry.paused_until)})
           </p>
           <ChangeLine by={entry.by} reason={entry.reason} />
@@ -91,7 +91,7 @@ function IntakeCard({ kind, entry, hoursMax, blocked, onRequest }) {
         </>
       ) : (
         <>
-          <p className="text-xs text-muted-foreground">Accepting new submissions.</p>
+          <p className="text-[13px] text-muted-foreground">Accepting new submissions.</p>
           {formOpen ? (
             <div className="flex flex-col gap-2">
               <Field label="Pause for">
@@ -114,14 +114,14 @@ function IntakeCard({ kind, entry, hoursMax, blocked, onRequest }) {
                   className={cn(inputCls, 'w-full max-md:h-10')}
                 />
               </Field>
-              {error && <p role="alert" className="text-2xs text-[var(--error)]">{error}</p>}
+              {error && <p role="alert" className="text-xs text-[var(--error)]">{error}</p>}
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   disabled={disabled}
                   onClick={pause}
-                  className="border-[var(--error)] text-[var(--error)] hover:bg-[var(--error-soft)] hover:text-[var(--error)] max-md:h-10"
+                  className={cn(DANGER_BTN, 'max-md:h-10')}
                 >
                   Pause…
                 </Button>

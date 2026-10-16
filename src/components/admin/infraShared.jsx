@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Banner, ConfirmDialog, HelpBody, HelpPopover, inputCls } from './adminUi';
+import { CountUp } from '@/components/motion';
+import { Banner, ConfirmDialog, HelpBody, HelpPopover, StatusChip, inputCls } from './adminUi';
 
 /* Shared bits for the admin Infra page: formatters, small layout pieces, and the one confirm
  * dialog every write goes through. Styling is token-only (see adminUi.jsx). */
@@ -106,7 +107,7 @@ export const targetText = (row) => fmtValue(row?.target).toLowerCase();
 export function ChangeLine({ by, at, reason, className }) {
   if (!by && !at) return null;
   return (
-    <p className={cn('text-2xs text-muted-foreground', className)}>
+    <p className={cn('text-xs text-muted-foreground', className)}>
       Last changed{by ? <> by <span className="text-foreground">{by}</span></> : null}
       {at ? <span title={fmtTime(at)}> · {fmtRelative(at)}</span> : null}
       {reason ? <> · {reason}</> : null}
@@ -127,9 +128,9 @@ export function LeverHelp({ help, title }) {
 /** A control group inside a card: title, "?" help, then the control. */
 export function Lever({ title, help, children, className }) {
   return (
-    <div className={cn('border-t border-border pt-3', className)}>
+    <div className={cn('border-t border-[hsl(var(--wb-line))] pt-3.5', className)}>
       <div className="mb-2 flex items-center gap-0.5">
-        <h3 className="text-xs font-medium text-foreground">{title}</h3>
+        <h3 className="text-[13px] font-medium text-foreground">{title}</h3>
         <LeverHelp help={help} title={title} />
       </div>
       {children}
@@ -141,7 +142,7 @@ export function Lever({ title, help, children, className }) {
 export function Field({ label, hint, className, children }) {
   return (
     <label className={cn('flex flex-col gap-1', className)}>
-      <span className="text-2xs font-medium text-muted-foreground">
+      <span className="text-xs font-medium text-muted-foreground">
         {label}
         {hint ? <span className="ml-1 font-normal tabular-nums">{hint}</span> : null}
       </span>
@@ -150,12 +151,28 @@ export function Field({ label, hint, className, children }) {
   );
 }
 
-export function Stat({ label, value, tone, sub }) {
+/** "3", "12 / 40" or "2 / 4 / 8": every part numeric -> each part counts up; anything else is text. */
+function Value({ value }) {
+  if (typeof value === 'number' && Number.isFinite(value)) return <CountUp value={value} startAt={0} />;
+  if (typeof value === 'string' && /^-?\d+( \/ -?\d+)*$/.test(value)) {
+    const parts = value.split(' / ');
+    return parts.map((p, i) => (
+      <span key={i}>{i > 0 ? ' / ' : ''}<CountUp value={Number(p)} startAt={0} /></span>
+    ));
+  }
+  return value;
+}
+
+/** One number with a quiet label. `over` shows an error pill (e.g. running above its cap). */
+export function Stat({ label, value, tone, sub, over }) {
   return (
     <div className="min-w-0 tabular-nums">
-      <div className="truncate text-2xs text-muted-foreground">{label}</div>
-      <div className={cn('truncate text-sm font-semibold text-foreground', tone)}>{value}</div>
-      {sub ? <div className="truncate text-2xs text-muted-foreground">{sub}</div> : null}
+      <div className="truncate text-xs text-muted-foreground">{label}</div>
+      <div className={cn('truncate text-[15px] font-semibold leading-6 text-foreground', tone)}>
+        <Value value={value} />
+      </div>
+      {over ? <StatusChip tone="error" className="mt-0.5">{over}</StatusChip> : null}
+      {sub ? <div className="truncate text-xs text-muted-foreground">{sub}</div> : null}
     </div>
   );
 }
@@ -168,24 +185,32 @@ export function Unavailable({ reason }) {
   );
 }
 
-/** − [n] + within [min, max]. Holds a string draft so the field can be cleared while typing. */
-export function Stepper({ value, onChange, min, max, step = 1, disabled, width = 'w-16', label }) {
+/** − [n] + within [min, max], as one pill. Holds a string draft so the field can be cleared while typing. */
+export function Stepper({ value, onChange, min, max, step = 1, disabled, width = 'w-12', label }) {
   const n = Number(value);
   const clamp = (x) => Math.min(max, Math.max(min, x));
   const bump = (d) => {
     const base = Number.isFinite(n) ? n : min;
     onChange(String(clamp(Math.round((base + d) / step) * step)));
   };
+  const btn = 'size-7 rounded-full text-muted-foreground';
   return (
-    <div className="inline-flex items-center gap-1" role="group" aria-label={label}>
+    <div
+      className={cn(
+        'inline-flex h-8 items-center rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-0.5 transition-colors duration-150 hover:border-[hsl(var(--brand-300))] focus-within:border-[hsl(var(--ring))] focus-within:ring-2 focus-within:ring-[hsl(var(--ring)/0.35)]',
+        disabled && 'opacity-50',
+      )}
+      role="group"
+      aria-label={label}
+    >
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
         size="icon"
         disabled={disabled || !Number.isFinite(n) || n <= min}
         onClick={() => bump(-step)}
         aria-label={label ? `Decrease ${label}` : 'Decrease'}
-        className="max-md:size-10"
+        className={btn}
       >
         <span aria-hidden="true">−</span>
       </Button>
@@ -198,16 +223,16 @@ export function Stepper({ value, onChange, min, max, step = 1, disabled, width =
         disabled={disabled}
         aria-label={label}
         onChange={(e) => onChange(e.target.value)}
-        className={cn(inputCls, width, 'text-center max-md:h-10')}
+        className={cn('h-7 bg-transparent text-center text-[13px] tabular-nums text-foreground outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none', width)}
       />
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
         size="icon"
         disabled={disabled || (Number.isFinite(n) && n >= max)}
         onClick={() => bump(step)}
         aria-label={label ? `Increase ${label}` : 'Increase'}
-        className="max-md:size-10"
+        className={btn}
       >
         <span aria-hidden="true">+</span>
       </Button>
@@ -216,7 +241,7 @@ export function Stepper({ value, onChange, min, max, step = 1, disabled, width =
 }
 
 /**
- * Confirm-before-write. `request` = {
+ * Confirm-before-write (press and hold: every write here changes live infrastructure or config). `request` = {
  *   title, rows: [{ label, before, after }], note?, danger?,
  *   confirmLabel?: string        // the verb on the button ("Set floor"); defaults to "Apply"
  *   undo?: { undoable: boolean, text: string }   // whether and how this can be reverted
@@ -250,27 +275,28 @@ export function ConfirmModal({ request, onClose, onDone }) {
       title={request.title}
       confirmLabel={request.confirmLabel || 'Apply'}
       destructive={Boolean(request.danger)}
+      hold
       canConfirm={canSubmit}
       undoable={Boolean(request.undo?.undoable)}
       undoText={request.undo?.text}
       onConfirm={submit}
     >
       {rows.length > 0 && (
-        <div className="overflow-hidden rounded-md border border-border">
-          <table className="w-full border-collapse text-left text-xs">
+        <div className="overflow-hidden rounded-2xl border border-[hsl(var(--wb-line))]">
+          <table className="w-full border-collapse text-left text-[13px]">
             <thead>
-              <tr className="bg-muted/60 text-2xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-2.5 py-1.5 font-medium"><span className="sr-only">Setting</span></th>
-                <th className="px-2.5 py-1.5 font-medium">Now</th>
-                <th className="px-2.5 py-1.5 font-medium">After</th>
+              <tr className="bg-[hsl(var(--wb-pill))] text-xs text-muted-foreground">
+                <th className="px-3 py-1.5 font-medium"><span className="sr-only">Setting</span></th>
+                <th className="px-3 py-1.5 font-medium">Now</th>
+                <th className="px-3 py-1.5 font-medium">After</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.label} className="border-t border-border align-top">
-                  <td className="px-2.5 py-1.5 text-muted-foreground">{row.label}</td>
-                  <td className="break-all px-2.5 py-1.5 tabular-nums text-muted-foreground">{row.before === '' ? '–' : fmtValue(row.before)}</td>
-                  <td className="break-all px-2.5 py-1.5 font-medium tabular-nums text-foreground">{fmtValue(row.after)}</td>
+                <tr key={row.label} className="border-t border-[hsl(var(--wb-line))] align-top">
+                  <td className="px-3 py-1.5 text-muted-foreground">{row.label}</td>
+                  <td className="break-all px-3 py-1.5 tabular-nums text-muted-foreground">{row.before === '' ? '–' : fmtValue(row.before)}</td>
+                  <td className="break-all px-3 py-1.5 font-medium tabular-nums text-foreground">{fmtValue(row.after)}</td>
                 </tr>
               ))}
             </tbody>
@@ -278,8 +304,8 @@ export function ConfirmModal({ request, onClose, onDone }) {
         </div>
       )}
 
-      {request.note && <p className="text-xs text-muted-foreground">{request.note}</p>}
-      <p className="text-xs text-muted-foreground">Takes effect within ~1-2 min and is recorded in the audit log.</p>
+      {request.note && <p className="text-[13px] leading-5 text-muted-foreground">{request.note}</p>}
+      <p className="text-[13px] leading-5 text-muted-foreground">Takes effect within ~1-2 min and is recorded in the audit log.</p>
 
       {needsReason && (
         <Field label="Reason (required)">

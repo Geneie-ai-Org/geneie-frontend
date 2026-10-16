@@ -68,7 +68,7 @@ function PathRow({ exomiser, blocked, onRequest }) {
   };
   return (
     <div>
-      <h3 className="mb-1 text-xs font-medium text-foreground">Who serves new Exomiser jobs</h3>
+      <h3 className="mb-1 text-[13px] font-medium text-foreground">Who serves new Exomiser jobs</h3>
       <div className="flex flex-wrap items-center gap-2">
         <StatusChip tone={backend === 'classic' ? 'muted' : 'info'}>{backend}</StatusChip>
         <select
@@ -82,7 +82,7 @@ function PathRow({ exomiser, blocked, onRequest }) {
         </select>
         <Button variant="outline" size="sm" disabled={Boolean(blocked) || chosen === backend} onClick={save} className="max-md:h-10">Apply…</Button>
       </div>
-      <p className="mt-1 text-2xs text-muted-foreground">{BACKEND_TEXT[backend] || backend}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{BACKEND_TEXT[backend] || backend}</p>
     </div>
   );
 }
@@ -101,13 +101,13 @@ function ValueRow({ label, help, configKey, exomiser, fallback, blocked, onReque
     writeRequest(configKey, label, format(current), format(parsed.value), onRequest, { value: parsed.value });
   };
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 border-t border-border py-2.5">
+    <div className="flex flex-wrap items-start justify-between gap-3 border-t border-[hsl(var(--wb-line))] py-2.5">
       <div className="min-w-0 max-w-md">
-        <div className="text-xs font-medium text-foreground">
+        <div className="text-[13px] font-medium text-foreground">
           {label}: <span className="tabular-nums">{format(current)}</span>
         </div>
-        <p className="mt-0.5 text-2xs text-muted-foreground">{help}</p>
-        {error && <p role="alert" className="mt-1 text-2xs text-[var(--error)]">{error}</p>}
+        <p className="mt-0.5 text-xs text-muted-foreground">{help}</p>
+        {error && <p role="alert" className="mt-1 text-xs text-[var(--error)]">{error}</p>}
       </div>
       <div className="flex items-center gap-2">
         {input({ text, setText: setDraft, disabled: Boolean(blocked), label })}
@@ -126,7 +126,7 @@ function GateChips({ gate }) {
   );
   return (
     <div>
-      <h3 className="mb-1.5 flex items-center gap-2 text-xs font-medium text-foreground">
+      <h3 className="mb-1.5 flex items-center gap-2 text-[13px] font-medium text-foreground">
         Worker gate <StatusChip tone="muted" className="font-normal">Read-only</StatusChip>
       </h3>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -136,7 +136,7 @@ function GateChips({ gate }) {
         {chip('Shadow polling', gate.shadow)}
         {gate.jar_sha ? chip('Engine build', true, gate.jar_sha) : null}
       </div>
-      <p className="mt-1 text-2xs text-muted-foreground">
+      <p className="mt-1 text-xs text-muted-foreground">
         {gate.legacy
           ? 'Legacy (today\'s behaviour). It is changed on the machines with an admin command, not from this page.'
           : `${gate.changed_at ? `Changed ${fmtRelative(gate.changed_at)}. ` : ''}It is changed with an admin command, not from this page.`}
@@ -221,7 +221,7 @@ export default function ExomiserFastCard({ exomiser, errors, blockedReason, onRe
         <Stat label="Last compare" value={parity?.last_at ? fmtRelative(parity.last_at) : '–'} />
       </div>
       {parity && (
-        <p className="text-2xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Last {parity.shown} shadow comparisons: {parity.match} identical, {parity.noise} within normal Exomiser noise, {parity.mismatch} different
           {parity.mismatch ? ' (do not serve from the fast engine until this is 0: see the alarm)' : ''}.
           {parity.p_value_crossings || parity.acmg_tie_flips || parity.tier_changes
@@ -258,7 +258,7 @@ export default function ExomiserFastCard({ exomiser, errors, blockedReason, onRe
         })}
       />
 
-      <div className="border-t border-border pt-1">
+      <div className="border-t border-[hsl(var(--wb-line))] pt-1">
         {row('Kill switch', EXOMISER_KEYS.kill, false, {
           danger: true,
           help: 'Force every new Exomiser job back to the normal path, everywhere, within ~45 s, and stop shadow runs. Jobs already running finish where they started.',

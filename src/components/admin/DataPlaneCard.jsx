@@ -7,7 +7,7 @@ import {
 } from '@/services/infraApi';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Banner, HelpBody, HelpPopover, Panel, StatusChip, inputCls, selectCls, toneText } from './adminUi';
+import { Banner, HelpBody, HelpPopover, Panel, StatusChip, inputCls, selectCls, toneText, DANGER_BTN } from './adminUi';
 import { ChangeLine, Field, fmtRelative, fmtTime, Stat, Unavailable } from './infraShared';
 import { CanaryEditor, depth, ToggleRow } from './routingShared';
 import { SECTION_HELP } from './infraHelp';
@@ -90,7 +90,7 @@ function BackendRow({ build, backendKey, releaseKey, dataplane, blocked, onReque
   };
 
   return (
-    <div className="grid gap-3 border-t border-border py-3 first:border-t-0 first:pt-0 sm:grid-cols-[72px_minmax(0,1fr)_minmax(0,1fr)]">
+    <div className="grid gap-3 border-t border-[hsl(var(--wb-line))] py-3 first:border-t-0 first:pt-0 sm:grid-cols-[72px_minmax(0,1fr)_minmax(0,1fr)]">
       <div className="pt-0.5">
         <div className="font-mono text-xs font-medium text-foreground">{build}</div>
         <StatusChip tone={backend === 'annovar' ? 'muted' : 'info'} className="mt-1">{backend}</StatusChip>
@@ -106,13 +106,13 @@ function BackendRow({ build, backendKey, releaseKey, dataplane, blocked, onReque
               size="sm"
               disabled={disabled || chosen === backend}
               onClick={saveBackend}
-              className={cn('max-md:h-10', chosen === 'v2' && 'border-[var(--error)] text-[var(--error)] hover:bg-[var(--error-soft)] hover:text-[var(--error)]')}
+              className={cn('max-md:h-10', chosen === 'v2' && DANGER_BTN)}
             >
               Apply…
             </Button>
           </span>
         </Field>
-        <p className="mt-1 text-2xs text-muted-foreground">{BACKEND_TEXT[backend] || backend}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{BACKEND_TEXT[backend] || backend}</p>
       </div>
       <div className="min-w-0">
         <Field label="Data release">
@@ -128,7 +128,7 @@ function BackendRow({ build, backendKey, releaseKey, dataplane, blocked, onReque
             <Button variant="outline" size="sm" disabled={disabled || relDraft.trim() === release} onClick={saveRelease} className="max-md:h-10">Save…</Button>
           </span>
         </Field>
-        {error && <p role="alert" className="mt-1 text-2xs text-[var(--error)]">{error}</p>}
+        {error && <p role="alert" className="mt-1 text-xs text-[var(--error)]">{error}</p>}
       </div>
     </div>
   );
@@ -186,14 +186,14 @@ export default function DataPlaneCard({ dataplane, errors, blockedReason, onRequ
         <Stat label="Last compare" value={parity?.last_at ? fmtRelative(parity.last_at) : '–'} />
       </div>
       {parity && (
-        <p className="text-2xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Last {parity.shown} shadow comparisons: {parity.identical} identical, {parity.mismatch} different
           {parity.mismatch ? ' (do not switch to v2 until this is 0: see the alarm)' : ''}.
           {parity.last_at ? ` Latest ${fmtTime(parity.last_at)}.` : ''}
         </p>
       )}
       {tables.length > 0 && (
-        <p className="text-2xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Data releases:{' '}
           {tables.filter(Boolean).map((t) => `${t.release_id} (${(t.item_count ?? 0).toLocaleString()} variants, ${t.table_class === 'STANDARD_INFREQUENT_ACCESS' ? 'low-cost storage' : 'standard storage'}, ${String(t.status).toLowerCase()})`).join('; ')}
         </p>
@@ -202,7 +202,7 @@ export default function DataPlaneCard({ dataplane, errors, blockedReason, onRequ
       <ChangeLine by={lastChange?.actor} at={lastChange?.at} reason={lastChange?.reason} />
 
       <div>
-        <h3 className="mb-2 text-xs font-medium text-foreground">Routing by build</h3>
+        <h3 className="mb-2 text-[13px] font-medium text-foreground">Routing by build</h3>
         <BackendRow build="hg38" backendKey={DATAPLANE_KEYS.backendHg38} releaseKey={DATAPLANE_KEYS.releaseHg38}
           dataplane={dataplane} blocked={blocked} onRequest={onRequest} />
         <BackendRow build="hg19" backendKey={DATAPLANE_KEYS.backendHg19} releaseKey={DATAPLANE_KEYS.releaseHg19}
@@ -220,7 +220,7 @@ export default function DataPlaneCard({ dataplane, errors, blockedReason, onRequ
         onSavePath={(backend, chosen) => writeRequest(DATAPLANE_KEYS.canaryBackend, 'Canary path', backend, chosen, onRequest, { danger: chosen === 'v2', confirmLabel: `Serve canaries from ${chosen}` })}
       />
 
-      <div className="border-t border-border pt-1">
+      <div className="border-t border-[hsl(var(--wb-line))] pt-1">
         <ToggleSet dataplane={dataplane} blocked={blocked} onRequest={onRequest} />
       </div>
 

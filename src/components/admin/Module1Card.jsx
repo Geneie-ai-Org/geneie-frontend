@@ -11,7 +11,7 @@ import {
 } from '@/services/infraApi';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { HelpBody, HelpPopover, Panel, StatusChip, inputCls, selectCls, toneText } from './adminUi';
+import { HelpBody, HelpPopover, Panel, StatusChip, inputCls, selectCls } from './adminUi';
 import {
   ChangeLine,
   Field,
@@ -116,7 +116,7 @@ function CapLever({ lane, label, lanePanel, currentCap, defaultCap, range, block
 
   return (
     <Lever title={`${label} cap`} help={capHelp(lane)}>
-      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted-foreground tabular-nums">
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground tabular-nums">
         <span>Now <span className="text-sm font-semibold text-foreground">{currentCap ?? '–'}</span></span>
         {defaultCap !== null && <span>Default {defaultCap}</span>}
         {range && <span>Allowed {range[0]}–{range[1]}</span>}
@@ -136,7 +136,7 @@ function CapLever({ lane, label, lanePanel, currentCap, defaultCap, range, block
             checked={withExpiry}
             disabled={disabled}
             onChange={(e) => setExpiryDraft(e.target.checked)}
-            className="size-3.5 accent-[hsl(var(--primary))]"
+            className="size-3.5 accent-[hsl(var(--brand-solid))]"
           />
           Revert after
         </label>
@@ -164,7 +164,7 @@ function CapLever({ lane, label, lanePanel, currentCap, defaultCap, range, block
         <Button variant="outline" disabled={disabled} onClick={submit} className="max-md:h-10">Set cap…</Button>
         <Button variant="ghost" disabled={Boolean(blocked)} onClick={reset} className="max-md:h-10">Reset to default…</Button>
       </div>
-      {error && <p role="alert" className="mt-1 text-2xs text-[var(--error)]">{error}</p>}
+      {error && <p role="alert" className="mt-1 text-xs text-[var(--error)]">{error}</p>}
     </Lever>
   );
 }
@@ -217,14 +217,14 @@ function InstanceTypesLever({ current, allowlist, blocked, onRequest }) {
     });
   };
 
-  const iconBtn = 'size-8 max-md:size-10';
+  const iconBtn = 'size-7';
 
   return (
     <Lever title="GPU instance types, in order of preference" help={INSTANCE_TYPES_HELP}>
       <ol className="mb-2 space-y-1">
         {list.length === 0 && <li className="text-xs text-muted-foreground">None selected.</li>}
         {list.map((t, i) => (
-          <li key={t} className="flex min-h-8 items-center gap-2 rounded-md bg-muted/50 px-2 text-xs">
+          <li key={t} className="flex min-h-9 items-center gap-2 rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill))] pl-3 pr-1.5 text-[13px]">
             <span className="w-4 tabular-nums text-muted-foreground">{i + 1}</span>
             <code className="font-mono text-foreground">{t}</code>
             {allowlist && !allowlist.includes(t) && (
@@ -255,7 +255,7 @@ function InstanceTypesLever({ current, allowlist, blocked, onRequest }) {
         )}
         <Button variant="ghost" disabled={Boolean(blocked)} onClick={reset} className="max-md:h-10">Reset to default…</Button>
       </div>
-      {error && <p role="alert" className="mt-1 text-2xs text-[var(--error)]">{error}</p>}
+      {error && <p role="alert" className="mt-1 text-xs text-[var(--error)]">{error}</p>}
     </Lever>
   );
 }
@@ -296,19 +296,25 @@ export default function Module1Card({ module1, bounds, defaults, blockedReason, 
 
       {module1 && (
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
-          <Stat label="GPU running / cap" value={`${module1.gpu?.running ?? '–'} / ${module1.gpu?.cap ?? '–'}`} />
-          <Stat label="CPU running / cap" value={`${module1.cpu?.running ?? '–'} / ${module1.cpu?.cap ?? '–'}`} />
+          <Stat
+            label="GPU running / cap"
+            value={`${module1.gpu?.running ?? '–'} / ${module1.gpu?.cap ?? '–'}`}
+            over={num(module1.gpu?.running) !== null && num(module1.gpu?.cap) !== null && num(module1.gpu.running) > num(module1.gpu.cap) ? 'Over cap' : undefined}
+          />
+          <Stat
+            label="CPU running / cap"
+            value={`${module1.cpu?.running ?? '–'} / ${module1.cpu?.cap ?? '–'}`}
+            over={num(module1.cpu?.running) !== null && num(module1.cpu?.cap) !== null && num(module1.cpu.running) > num(module1.cpu.cap) ? 'Over cap' : undefined}
+          />
           <Stat label="Queued GPU / CPU" value={`${module1.queued_gpu ?? '–'} / ${module1.queued_cpu ?? '–'}`} />
           <Stat label="Oldest queued" value={fmtAge(module1.oldest_queued_age_sec)} />
           <Stat
             label="GPU capacity"
-            value={module1.gpu_capacity_unavailable ? 'Unavailable' : 'OK'}
-            tone={toneText(module1.gpu_capacity_unavailable ? 'error' : 'success')}
+            value={<StatusChip tone={module1.gpu_capacity_unavailable ? 'error' : 'success'}>{module1.gpu_capacity_unavailable ? 'Unavailable' : 'OK'}</StatusChip>}
           />
           <Stat
             label="Head box"
-            value={module1.head_in_service ? 'In service' : 'Not in service'}
-            tone={toneText(module1.head_in_service ? 'success' : 'error')}
+            value={<StatusChip tone={module1.head_in_service ? 'success' : 'error'}>{module1.head_in_service ? 'In service' : 'Not in service'}</StatusChip>}
           />
         </div>
       )}
@@ -337,7 +343,7 @@ export default function Module1Card({ module1, bounds, defaults, blockedReason, 
       />
       <InstanceTypesLever current={types} allowlist={allowlist} blocked={blocked} onRequest={onRequest} />
 
-      <div className="border-t border-border pt-3 text-2xs text-muted-foreground">
+      <div className="border-t border-[hsl(var(--wb-line))] pt-3 text-xs text-muted-foreground">
         <span className="font-medium text-foreground">GPU subnets</span>
         <StatusChip tone="muted" className="ml-2">Read-only</StatusChip>
         <code className="mt-1 block break-all font-mono">{config[MODULE1_KEYS.gpuSubnets] || '–'}</code>

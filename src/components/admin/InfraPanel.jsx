@@ -9,7 +9,8 @@ import {
   MODULE1_KEYS,
   WORKER_KINDS,
 } from '@/services/infraApi';
-import { AdminHeader, Banner, HelpBody, HelpPopover } from './adminUi';
+import { Dismissible } from '@/components/motion';
+import { AdminHeader, Banner, Bar, HelpBody, HelpPopover, Panel, StateBlock } from './adminUi';
 import {
   ConfirmModal,
   describeApiError,
@@ -101,8 +102,8 @@ function applyMerge(prev, m) {
 function Group({ title, help, badge, children }) {
   return (
     <section className="mt-8" aria-label={title}>
-      <div className="mb-2 flex items-center gap-1.5">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h2>
+      <div className="mb-2.5 flex items-center gap-1.5 px-1">
+        <h2 className="text-[14px] font-semibold text-foreground">{title}</h2>
         {badge}
         {help && (
           <HelpPopover title={title} align="start">
@@ -134,6 +135,7 @@ export default function InfraPanel() {
   const [capDefaults, setCapDefaults] = useState({ gpu: null, cpu: null });
   const [confirm, setConfirm] = useState(null);
 
+  const lastFetchError = useRef(''); // keeps the banner text while it collapses out
   const inFlight = useRef(false);
   const refetchTimer = useRef(null);
   const mounted = useRef(true);
@@ -234,6 +236,7 @@ export default function InfraPanel() {
     exomiserFast: latestAudit(audit, (r) => targetText(r).includes('dataplane.exomiser')),
   }), [audit]);
 
+  if (fetchError) lastFetchError.current = fetchError;
   const asOf = status?.as_of ? `As of ${fmtTime(status.as_of)} (${fmtRelative(status.as_of)})` : 'Not loaded yet';
 
   return (
@@ -262,20 +265,42 @@ export default function InfraPanel() {
         )}
       />
 
-      {fetchError && (
+      <Dismissible show={Boolean(fetchError && status)}>
         <div className="mb-4">
           <Banner
             tone="error"
             action={<Button variant="ghost" size="xs" onClick={load} disabled={loading}>Retry</Button>}
           >
-            Could not refresh status: {fetchError}
-            {status ? ' Showing the last good snapshot; controls are disabled until a refresh succeeds.' : ''}
+            Could not refresh status: {fetchError || lastFetchError.current}. Showing the last good snapshot; controls are disabled until a refresh succeeds.
           </Banner>
+        </div>
+      </Dismissible>
+
+      <HealthOverview status={status} fetchError={fetchError} onRetry={load} retrying={loading} />
+
+      {!status && (
+        <div className="mt-8" aria-hidden={!fetchError}>
+          {fetchError ? (
+            <Panel>
+              <StateBlock tone="error" title="Controls are hidden">
+                Workers, Module-1, routing and intake controls stay hidden until a status snapshot loads, so nothing can be written blind. Use Retry above.
+              </StateBlock>
+            </Panel>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {[0, 1].map((i) => (
+                <div key={i} className="wb-card space-y-3 p-4">
+                  <Bar className="h-4 w-40" />
+                  <div className="grid grid-cols-3 gap-4">{[0, 1, 2, 3, 4, 5].map((j) => <div key={j} className="space-y-1.5"><Bar className="w-20" /><Bar className="h-4 w-12" /></div>)}</div>
+                  <Bar className="h-24 w-full rounded-2xl" />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      <HealthOverview status={status} fetchError={fetchError} />
-
+      {status && (<>
       <Group title="Workers">
         <div className="grid items-start gap-4 lg:grid-cols-2">
           {WORKER_KINDS.map((kind) => (
@@ -331,14 +356,20 @@ export default function InfraPanel() {
         />
       </Group>
 
+      </>)}
+
       <Group title="Read-only status" badge={<ReadOnlyBadge />}>
-        <EcsTable ecs={status?.ecs} error={findPanelError(errors, ['ecs'])} />
-        <DlqSection
-          dlqs={status?.dlqs}
-          deadLetters={status?.dead_letters}
-          dlqError={findPanelError(errors, ['dlqs'])}
-          deadLettersError={findPanelError(errors, ['dead_letters'])}
-        />
+        {status && (
+          <>
+            <EcsTable ecs={status.ecs} error={findPanelError(errors, ['ecs'])} />
+            <DlqSection
+              dlqs={status.dlqs}
+              deadLetters={status.dead_letters}
+              dlqError={findPanelError(errors, ['dlqs'])}
+              deadLettersError={findPanelError(errors, ['dead_letters'])}
+            />
+          </>
+        )}
         <AuditTable audit={audit} error={auditError} limit={AUDIT_LIMIT} onReload={loadAudit} />
       </Group>
 

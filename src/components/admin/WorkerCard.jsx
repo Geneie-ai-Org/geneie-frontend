@@ -12,7 +12,7 @@ import {
 } from '@/services/infraApi';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { HelpBody, HelpPopover, Panel, StatusChip, inputCls } from './adminUi';
+import { Disclosure, HelpBody, HelpPopover, Panel, StatusChip, inputCls, DANGER_BTN } from './adminUi';
 import {
   ChangeLine,
   Field,
@@ -46,8 +46,8 @@ function num(v) {
 /** Current state of an active floor / raise, with the one-click way out. */
 function ActiveState({ tone, title, detail, action }) {
   return (
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/60 px-2.5 py-2">
-      <div className="min-w-0 text-xs">
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[hsl(var(--wb-pill))] px-3 py-2">
+      <div className="min-w-0 text-[13px]">
         <StatusChip tone={tone}>{title}</StatusChip>
         <span className="ml-2 text-muted-foreground">{detail}</span>
       </div>
@@ -239,7 +239,12 @@ export default function WorkerCard({ kind, worker, bounds, blockedReason, onRequ
       {worker && (
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
           <Stat label="Queue waiting" value={queue?.visible ?? '–'} sub={`${queue?.in_flight ?? '–'} in flight`} />
-          <Stat label="In service" value={asg ? asg.in_service : '–'} sub={asg ? `${asg.pending} pending` : undefined} />
+          <Stat
+            label="In service"
+            value={asg ? asg.in_service : '–'}
+            sub={asg ? `${asg.pending} pending` : undefined}
+            over={asg && num(asg.in_service) !== null && num(asg.max) !== null && num(asg.in_service) > num(asg.max) ? `Over max (${asg.max})` : undefined}
+          />
           <Stat label="ASG min / desired / max" value={asg ? `${asg.min} / ${asg.desired} / ${asg.max}` : '–'} />
           <Stat label="Warm pool ready" value={warm ? warm.warmed : '–'} sub={warm ? `${warm.warming} warming` : undefined} />
           <Stat label="Ledger outstanding" value={worker.ledger_outstanding ?? '–'} />
@@ -258,7 +263,7 @@ export default function WorkerCard({ kind, worker, bounds, blockedReason, onRequ
             action={<Button variant="outline" size="sm" disabled={Boolean(blocked)} onClick={clearFloor}>Clear floor…</Button>}
           />
         ) : (
-          <p className="mb-2 text-2xs text-muted-foreground">
+          <p className="mb-2 text-xs text-muted-foreground">
             No floor{floor?.until ? ` (last one expired ${fmtRelative(floor.until)})` : ''}.
           </p>
         ))}
@@ -274,7 +279,7 @@ export default function WorkerCard({ kind, worker, bounds, blockedReason, onRequ
           </Field>
           <Button variant="outline" disabled={Boolean(floorBlocked)} onClick={submitFloor} className="max-md:h-10">Set floor…</Button>
         </div>
-        {floorError && <p role="alert" className="mt-1 text-2xs text-[var(--error)]">{floorError}</p>}
+        {floorError && <p role="alert" className="mt-1 text-xs text-[var(--error)]">{floorError}</p>}
       </Lever>
 
       {/* Lever 2: temporary max raise */}
@@ -289,7 +294,7 @@ export default function WorkerCard({ kind, worker, bounds, blockedReason, onRequ
             )}
           />
         ) : (
-          <p className="mb-2 text-2xs text-muted-foreground">
+          <p className="mb-2 text-xs text-muted-foreground">
             Max at default{maxDefault !== null ? ` (${maxDefault}` : ''}
             {maxCeiling !== null ? `, ceiling ${maxCeiling})` : maxDefault !== null ? ')' : ''}.
           </p>
@@ -306,7 +311,7 @@ export default function WorkerCard({ kind, worker, bounds, blockedReason, onRequ
           </Field>
           <Button variant="outline" disabled={Boolean(maxBlocked)} onClick={submitMax} className="max-md:h-10">Raise max…</Button>
         </div>
-        {maxError && <p role="alert" className="mt-1 text-2xs text-[var(--error)]">{maxError}</p>}
+        {maxError && <p role="alert" className="mt-1 text-xs text-[var(--error)]">{maxError}</p>}
       </Lever>
 
       {/* Lever 3: scale in now */}
@@ -316,11 +321,11 @@ export default function WorkerCard({ kind, worker, bounds, blockedReason, onRequ
             variant="outline"
             disabled={!scaleInEnabled}
             onClick={scaleIn}
-            className="border-[var(--error)] text-[var(--error)] hover:bg-[var(--error-soft)] hover:text-[var(--error)] max-md:h-10"
+            className={cn(DANGER_BTN, 'max-md:h-10')}
           >
             Scale in now…
           </Button>
-          <span className="text-2xs text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {scaleInEnabled
               ? 'Queue is empty: sets desired to min and clears any floor.'
               : 'Available only when the queue (waiting + in flight) is 0.'}
@@ -329,15 +334,12 @@ export default function WorkerCard({ kind, worker, bounds, blockedReason, onRequ
       </Lever>
 
       {worker && (
-        <details className="border-t border-border pt-3">
-          <summary className="cursor-pointer text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55">
-            Recent scaling activity
-          </summary>
-          <div className="mt-2 space-y-3">
+        <Disclosure label="Recent scaling activity" className="border-t border-[hsl(var(--wb-line))] pt-3">
+          <div className="space-y-3">
             {activities.length === 0 ? (
-              <p className="text-2xs text-muted-foreground">None.</p>
+              <p className="text-xs text-muted-foreground">None.</p>
             ) : (
-              <ul className="space-y-1 text-2xs">
+              <ul className="space-y-1 text-xs">
                 {activities.map((a, i) => (
                   <li key={`${a.time}-${i}`} className="text-muted-foreground">
                     <span className="tabular-nums">{fmtTime(a.time)}</span>{' '}
@@ -348,18 +350,18 @@ export default function WorkerCard({ kind, worker, bounds, blockedReason, onRequ
               </ul>
             )}
             <div>
-              <div className="mb-1 text-2xs font-medium text-foreground">Scale-in Lambda, last decision</div>
+              <div className="mb-1 text-xs font-medium text-foreground">Scale-in Lambda, last decision</div>
               {worker.lambda_last ? (
-                <div className="text-2xs text-muted-foreground">
+                <div className="text-xs text-muted-foreground">
                   <span className="tabular-nums">{fmtTime(worker.lambda_last.time)} </span>
                   <code className="break-all font-mono">{worker.lambda_last.line}</code>
                 </div>
               ) : (
-                <p className="text-2xs text-muted-foreground">Nothing recorded yet.</p>
+                <p className="text-xs text-muted-foreground">Nothing recorded yet.</p>
               )}
             </div>
           </div>
-        </details>
+        </Disclosure>
       )}
     </Panel>
   );

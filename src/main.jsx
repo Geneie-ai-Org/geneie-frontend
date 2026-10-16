@@ -14,6 +14,7 @@ import './index.css';
 import './App.css';
 import './design/tokens.css';
 import './design/shell.css';
+import './design/workbench.css';
 
 initAnalytics();
 

@@ -84,6 +84,21 @@
 
   /* Signal colour (links, progress, the selected marker). Primary buttons are ink, not teal. */
   --signal: 211 80% 42%;
+  /* ---- brand: muted pastel teal (the greenish blue), used for selection, progress and the primary action ---- */
+  --brand-50: 177 30% 96%;
+  --brand-100: 177 28% 91%;
+  --brand-200: 176 24% 82%;
+  --brand-300: 175 24% 68%;
+  --brand-500: 174 30% 44%;
+  --brand-700: 178 44% 24%;              /* ink on a brand tint, 8:1 on --brand-100 */
+  --brand-solid: 177 38% 29%;            /* primary action fill, white text */
+  --brand-solid-hover: 177 38% 24%;
+  --wb-bg: 180 12% 96%;                /* workbench canvas: a breath of teal-gray so white cards separate */
+  --wb-card: 0 0% 100%;
+  --wb-line: 180 8% 88%;                 /* card + pill hairline */
+  --wb-line-strong: 180 8% 78%;
+  --wb-pill: 180 10% 94%;                /* neutral pill fill */
+
   --accent-teal: hsl(var(--signal));
   --accent-teal-soft: hsl(var(--signal) / 0.09);
   --accent-teal-hover: hsl(211 80% 34%);
@@ -211,6 +226,20 @@
   --text-disabled: hsl(0 0% 38%);
 
   --signal: 211 90% 68%;
+  --brand-50: 177 16% 12%;
+  --brand-100: 177 18% 17%;
+  --brand-200: 176 16% 25%;
+  --brand-300: 175 16% 38%;
+  --brand-500: 174 34% 58%;
+  --brand-700: 174 42% 80%;
+  --brand-solid: 174 36% 64%;
+  --brand-solid-hover: 174 36% 72%;
+  --wb-bg: 180 5% 9.5%;
+  --wb-card: 180 4% 12.5%;
+  --wb-line: 180 4% 20%;
+  --wb-line-strong: 180 4% 30%;
+  --wb-pill: 180 4% 15.5%;
+
   --accent-teal: hsl(var(--signal));
   --accent-teal-soft: hsl(var(--signal) / 0.12);
   --accent-teal-hover: hsl(211 90% 76%);

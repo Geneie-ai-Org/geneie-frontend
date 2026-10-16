@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, ChevronRight, CircleAlert, Loader2 } from 'lucide-react';
+import { ChevronRight, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -14,20 +14,6 @@ const FOCUS = 'outline-none focus-visible:outline focus-visible:outline-2 focus-
  * State words are fixed so nothing contradicts itself: done | running | pending | failed.
  * Pure presentation; `deriveSummary` turns the page's existing state into props.
  */
-
-const STAGE_ICON = {
-  done: () => <Check className="size-3" strokeWidth={2.4} aria-hidden="true" />,
-  running: () => <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />,
-  failed: () => <CircleAlert className="size-3" aria-hidden="true" />,
-  pending: () => null,
-};
-
-const STAGE_TONE = {
-  done: 'bg-[var(--success-soft)] text-[var(--success)]',
-  running: 'bg-[var(--info-soft)] text-[var(--info)]',
-  failed: 'bg-[var(--error-soft)] text-[var(--error)]',
-  pending: 'border border-[var(--border-strong)] text-transparent',
-};
 
 // One vocabulary for every stage: nothing is ever shown by colour or icon alone.
 export const STATE_WORD = { done: 'Done', running: 'Running', failed: 'Failed', pending: 'Not started' };
@@ -94,20 +80,27 @@ export function deriveSummary({
   };
 }
 
-function Stage({ stage, last }) {
-  const Icon = STAGE_ICON[stage.state] || STAGE_ICON.pending;
+function Stage({ stage, index }) {
   return (
-    <li className="relative flex gap-3 pb-4 last:pb-0">
-      {!last ? <span className="absolute left-[9px] top-5 h-[calc(100%-12px)] w-px bg-border" aria-hidden="true" /> : null}
-      <span className={cn('mt-0.5 flex size-[19px] shrink-0 items-center justify-center rounded-full', STAGE_TONE[stage.state])}>
-        <Icon />
+    <li className="flex items-start gap-3 py-2.5">
+      <span
+        aria-hidden="true"
+        className={cn(
+          'mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border text-[12px] font-medium tabular-nums',
+          stage.state === 'done' && 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]',
+          stage.state === 'running' && 'border-transparent bg-[var(--info-soft)] text-[var(--info)]',
+          stage.state === 'failed' && 'border-transparent bg-[var(--error-soft)] text-[var(--error)]',
+          stage.state === 'pending' && 'border-[hsl(var(--wb-line-strong))] text-muted-foreground'
+        )}
+      >
+        {index + 1}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-center justify-between gap-2">
           <span className={cn('text-[13px] font-medium', stage.state === 'pending' ? 'text-muted-foreground' : 'text-foreground')}>{stage.label}</span>
-          <span className={cn('text-xs', stage.state === 'failed' ? 'text-[var(--error)]' : 'text-muted-foreground')}>{STATE_WORD[stage.state]}</span>
+          <span className="wb-status" data-state={stage.state}>{STATE_WORD[stage.state]}</span>
         </div>
-        {stage.detail ? <p className="mt-0.5 text-xs leading-5 tabular-nums text-muted-foreground">{stage.detail}</p> : null}
+        {stage.detail ? <p className="mt-1 text-xs leading-5 tabular-nums text-muted-foreground">{stage.detail}</p> : null}
       </div>
     </li>
   );
@@ -115,21 +108,14 @@ function Stage({ stage, last }) {
 
 function JumpRow({ title, meta, onClick, disabled }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        'flex min-h-10 w-full items-center gap-3 px-1 py-2 text-left transition-colors duration-150 hover:bg-muted/60 disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none',
-        FOCUS,
-        'focus-visible:-outline-offset-2'
-      )}
-    >
+    <button type="button" onClick={onClick} disabled={disabled} className={cn('wb-row disabled:pointer-events-none disabled:opacity-50', FOCUS)}>
       <span className="min-w-0 flex-1">
         <span className="block text-[13px] font-medium text-foreground">{title}</span>
         {meta ? <span className="block truncate text-xs tabular-nums text-muted-foreground">{meta}</span> : null}
       </span>
-      <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--wb-pill))] text-muted-foreground" aria-hidden="true">
+        <ChevronRight className="size-3.5" />
+      </span>
     </button>
   );
 }
@@ -137,9 +123,12 @@ function JumpRow({ title, meta, onClick, disabled }) {
 export default function SummaryTab({ summary, jumps = [], emptyAction, className }) {
   if (!summary) {
     return (
-      <div className={cn('flex h-full flex-col items-center justify-center gap-1 px-8 text-center', className)}>
+      <div className={cn('flex h-full flex-col items-center justify-center gap-1.5 px-8 text-center', className)}>
+        <span className="mb-1 flex size-10 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-500))]" aria-hidden="true">
+          <FileText className="size-5" />
+        </span>
         <p className="text-[15px] font-medium text-foreground">No file yet</p>
-        <p className="max-w-xs text-[13px] text-muted-foreground">Add a variants file or raw sequencing data from the composer. This tab then tracks where it stands.</p>
+        <p className="max-w-xs text-[13px] leading-5 text-muted-foreground">Add a variants file or raw sequencing data from the composer. This tab then tracks where it stands.</p>
         {emptyAction ? (
           <Button variant="outline" size="sm" onClick={emptyAction.onClick} className="mt-2">{emptyAction.label}</Button>
         ) : null}
@@ -147,51 +136,66 @@ export default function SummaryTab({ summary, jumps = [], emptyAction, className
     );
   }
   const { fileName, meta, inScope, total, stages, nextAction } = summary;
-  const pct = inScope != null && total ? Math.max(1, Math.min(100, (inScope / total) * 100)) : null;
+  const pct = inScope != null && total ? Math.max(2, Math.min(100, (inScope / total) * 100)) : null;
+  const chips = meta ? meta.split(' · ') : [];
   return (
-    <div className={cn('h-full min-h-0 overflow-y-auto px-4 py-4', className)}>
-      <div>
-        <h2 className="truncate text-[15px] font-medium text-foreground" title={fileName}>{fileName || 'Untitled file'}</h2>
-        {meta ? <p className="mt-0.5 text-xs text-muted-foreground">{meta}</p> : null}
-      </div>
-
-      {inScope != null ? (
-        <div className="mt-4">
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-lg font-medium tabular-nums text-foreground">{nf(inScope)}</span>
-            <span className="text-[13px] text-muted-foreground">{total != null ? `of ${nf(total)} variants in scope` : 'variants in scope'}</span>
+    <div className={cn('h-full min-h-0 space-y-3 overflow-y-auto px-4 pb-6 pt-1', className)}>
+      <section className="wb-card p-4" aria-label="File">
+        <div className="flex items-start gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-500))]" aria-hidden="true">
+            <FileText className="size-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-[15px] font-medium text-foreground" title={fileName}>{fileName || 'Untitled file'}</h2>
+            {chips.length ? (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {chips.map((c) => <span key={c} className="wb-chip">{c}</span>)}
+              </div>
+            ) : null}
           </div>
-          {pct != null && pct < 100 ? (
-            <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-              <div className="h-full rounded-full bg-[hsl(var(--signal))]" style={{ width: `${pct}%` }} />
-            </div>
-          ) : null}
         </div>
-      ) : null}
 
-      <ol className="mt-6" aria-label="Progress">
-        {stages.map((s, i) => (
-          <Stage key={s.id} stage={s} last={i === stages.length - 1} />
-        ))}
-      </ol>
+        {inScope != null ? (
+          <div className="mt-4 rounded-xl bg-[hsl(var(--brand-50))] px-3.5 py-3">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[28px] font-medium leading-none tabular-nums tracking-tight text-[hsl(var(--brand-700))]">{nf(inScope)}</span>
+              <span className="text-[13px] text-muted-foreground">{total != null ? `of ${nf(total)} variants in scope` : 'variants in scope'}</span>
+            </div>
+            {pct != null && pct < 100 ? (
+              <div className="wb-track mt-3" role="progressbar" aria-label="Variants in scope" aria-valuemin={0} aria-valuemax={total} aria-valuenow={inScope}>
+                <div className="wb-fill" style={{ width: `${pct}%` }} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
-      {nextAction ? (
-        <Button type="button" size="sm" onClick={nextAction.onClick} className={cn('mt-4', 'focus-visible:border-transparent focus-visible:ring-[hsl(var(--ring))]')}>
-          {nextAction.label}
-        </Button>
-      ) : null}
+        {nextAction ? (
+          <Button type="button" onClick={nextAction.onClick} className="mt-4 w-full" size="lg">
+            {nextAction.label}
+          </Button>
+        ) : null}
+      </section>
+
+      <section className="wb-card px-4 py-3" aria-label="Progress">
+        <h3 className="wb-card-title mb-1">Progress</h3>
+        <ol className="divide-y divide-[hsl(var(--wb-line))]">
+          {stages.map((s, i) => (
+            <Stage key={s.id} stage={s} index={i} />
+          ))}
+        </ol>
+      </section>
 
       {jumps.length > 0 ? (
-        <div className="mt-6">
-          <h3 className="mb-1 text-xs font-medium text-muted-foreground">Jump to</h3>
-          <ul className="divide-y divide-[var(--border-subtle)] border-y border-[var(--border-subtle)]">
+        <section aria-label="Open">
+          <h3 className="wb-card-title mb-2 px-1">Open</h3>
+          <ul className="space-y-2">
             {jumps.map((j) => (
               <li key={j.id}>
                 <JumpRow title={j.title} meta={j.meta} onClick={j.onClick} disabled={j.disabled} />
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       ) : null}
     </div>
   );

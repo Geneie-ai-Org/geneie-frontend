@@ -26,10 +26,10 @@ import { cn } from '@/lib/utils';
  * Delete closes a closable tab. "+" is a menu: focus moves in, Up/Down/Home/End move, Enter picks,
  * Escape returns focus to the button.
  */
-export const WORKSPACE_WIDTH_KEY = 'geneie-workspace-width';
-const MIN_W = 420;
-const MAX_W = 720;
-const DEFAULT_W = 520;
+export const WORKSPACE_WIDTH_KEY = 'geneie-workspace-width-v2';
+const MIN_W = 440;
+const MAX_W = 760;
+const DEFAULT_W = 560;
 const TABS_KEY = 'geneie-workspace-tabs:';
 
 // Full-alpha 2px ring (the global one is 45% alpha, under 3:1 on white).
@@ -95,7 +95,7 @@ function IconButton({ label, onClick, children }) {
               size="icon-sm"
               onClick={onClick}
               aria-label={label}
-              className="text-muted-foreground focus-visible:border-transparent focus-visible:ring-[hsl(var(--ring))]"
+              className="wb-iconbtn focus-visible:ring-[hsl(var(--ring))]"
             >
               {children}
             </Button>
@@ -362,7 +362,7 @@ export default function WorkspacePanel({
       : undefined;
 
   return (
-    <div ref={rootRef} className={cn('relative flex h-full min-h-0 flex-col bg-background', className)}>
+    <div ref={rootRef} className={cn('relative flex h-full min-h-0 flex-col', className)}>
       <style>{MOTION_CSS}</style>
       {!expanded && (
         <div
@@ -391,14 +391,14 @@ export default function WorkspacePanel({
       )}
 
       {/* Tab strip */}
-      <div className="flex h-10 shrink-0 items-center gap-0.5 pl-1.5 pr-1.5">
+      <div className="flex h-12 shrink-0 items-center gap-1.5 pl-3 pr-2.5">
         <div
           ref={listRef}
           role="tablist"
           aria-label="Workspace tabs"
           onScroll={measureEdges}
           style={edgeMask ? { maskImage: edgeMask, WebkitMaskImage: edgeMask } : undefined}
-          className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {shown.map((t, idx) => {
             const selected = t.id === current;
@@ -406,10 +406,8 @@ export default function WorkspacePanel({
               <div
                 key={t.id}
                 role="presentation"
-                className={cn(
-                  'group/tab relative flex h-7 shrink-0 items-center rounded-lg text-[13px] font-medium leading-tight transition-colors duration-150 motion-reduce:transition-none',
-                  selected ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-                )}
+                data-selected={selected}
+                className="wb-tab group/tab relative shrink-0 text-[13px] font-medium leading-tight"
               >
                 <button
                   ref={(el) => { if (el) tabRefs.current[t.id] = el; else delete tabRefs.current[t.id]; }}
@@ -425,15 +423,15 @@ export default function WorkspacePanel({
                   onMouseEnter={titleIfTruncated}
                   onFocus={titleIfTruncated}
                   className={cn(
-                    'flex h-7 max-w-[160px] items-center gap-1.5 rounded-lg pl-2.5',
-                    t.closable ? 'pr-7' : 'pr-2.5',
+                    'flex h-7 max-w-[168px] items-center gap-1.5 rounded-full pl-3',
+                    t.closable ? 'pr-8' : 'pr-3',
                     FOCUS
                   )}
                 >
-                  {t.icon ? <t.icon className="size-3.5 shrink-0" aria-hidden="true" /> : null}
+                  {t.icon ? <t.icon data-tab-icon className="size-3.5 shrink-0" aria-hidden="true" /> : null}
                   <span data-tab-label className="truncate">{t.label}</span>
                   {t.badge ? (
-                    <span className="rounded-full bg-background px-1.5 text-[12px] leading-4 tabular-nums text-muted-foreground">{t.badge}</span>
+                    <span className="wb-tab-badge">{t.badge}</span>
                   ) : null}
                 </button>
                 {t.closable ? (
@@ -443,11 +441,11 @@ export default function WorkspacePanel({
                     onClick={() => { armFocus(); onCloseTab(t.id); }}
                     aria-label={`Close ${t.label}`}
                     className={cn(
-                      'absolute right-0.5 top-0.5 inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-opacity duration-150 hover:bg-background hover:text-foreground motion-reduce:transition-none',
+                      'wb-tab-close absolute right-1 top-[3px]',
                       FOCUS,
                       selected
-                        ? 'opacity-100'
-                        : 'opacity-0 group-hover/tab:opacity-100 group-focus-within/tab:opacity-100 focus-visible:opacity-100 [@media(pointer:coarse)]:opacity-100'
+                        ? ''
+                        : '!opacity-0 group-hover/tab:!opacity-70 group-focus-within/tab:!opacity-70 focus-visible:!opacity-100 [@media(pointer:coarse)]:!opacity-70'
                     )}
                   >
                     <X className="size-3" aria-hidden="true" />
@@ -469,7 +467,7 @@ export default function WorkspacePanel({
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               className={cn(
-                'inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:bg-muted/60 hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground motion-reduce:transition-none',
+                'wb-iconbtn',
                 FOCUS
               )}
             >
@@ -481,7 +479,7 @@ export default function WorkspacePanel({
                 role="menu"
                 aria-label="Open a tab"
                 onKeyDown={onMenuKey}
-                className="absolute right-0 top-full z-30 mt-1 w-56 origin-top-right overflow-hidden rounded-xl border border-border bg-popover p-1 shadow-[var(--shadow-md)] ws-menu-in"
+                className="absolute right-0 top-full z-30 mt-1 w-56 origin-top-right overflow-hidden rounded-2xl border border-[hsl(var(--wb-line))] bg-popover p-1.5 shadow-[var(--shadow-md)] ws-menu-in"
               >
                 {openable.map((t) => (
                   <button
@@ -490,7 +488,7 @@ export default function WorkspacePanel({
                     role="menuitem"
                     tabIndex={-1}
                     onClick={() => pickTab(t.id)}
-                    className="flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-[13px] text-foreground outline-none transition-colors duration-150 hover:bg-muted focus-visible:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none"
+                    className="flex h-9 w-full items-center gap-2.5 rounded-full px-3 text-left text-[13px] text-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:bg-[hsl(var(--brand-50))] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none"
                   >
                     {t.icon ? <t.icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <span className="size-4 shrink-0" />}
                     <span className="flex-1 truncate">{t.label}</span>
@@ -515,9 +513,9 @@ export default function WorkspacePanel({
       {/* Per-tab toolbar: quiet centred title, optional actions on the right. */}
       <div
         data-scrolled={scrolled || undefined}
-        className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--border-subtle)] px-3 text-[13px] transition-colors duration-150 data-[scrolled]:border-border motion-reduce:transition-none"
+        className="flex h-9 shrink-0 items-center gap-2 border-b border-transparent px-4 text-[13px] transition-colors duration-150 data-[scrolled]:border-[hsl(var(--wb-line))] motion-reduce:transition-none"
       >
-        <span className="min-w-0 flex-1 truncate text-center text-muted-foreground" title={currentTab?.subtitle || undefined}>{currentTab?.subtitle || ''}</span>
+        <span className="min-w-0 flex-1 truncate text-muted-foreground" title={currentTab?.subtitle || undefined}>{currentTab?.subtitle || ''}</span>
         {currentTab?.actions ? <div className="flex shrink-0 items-center gap-1">{currentTab.actions}</div> : null}
       </div>
 

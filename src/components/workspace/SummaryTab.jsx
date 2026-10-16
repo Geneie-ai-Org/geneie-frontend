@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, ChevronRight, FileText, RotateCcw } from 'lucide-react';
+import { ArrowRight, ChevronRight, FileText, ListChecks, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { usePanelWidth } from '@/hooks/useWorkbenchWidth';
 import { CountUp, StageMark, StateButton } from '@/components/motion';
 import { PIPELINE_STEP_DEFS, computePipelineSteps, getPipelineBackgroundActive, resolveDisplayStatuses } from '@/lib/variantPipelineSteps';
 import { formatIstWhen, formatJobDuration, jobDurationMs } from '@/lib/istTime';
-import { fetchContigCounts } from '@/services/backendApi';
+import { fetchContigCounts, fetchModule1QcSummary } from '@/services/backendApi';
+import { QcStatusPill } from '@/components/Module1QcPanel';
+import { OVERALL_LABEL, fmtPct, gradeDup, gradeKept, gradeQ30, overallGrade } from '@/lib/qcSummary';
 
 // Full-alpha 2px ring (the global one is 45% alpha, under 3:1 on white).
 const FOCUS = 'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--ring))]';
@@ -14,10 +16,11 @@ const FOCUS = 'outline-none focus-visible:outline focus-visible:outline-2 focus-
 /**
  * Summary: the first tab of the workbench, laid out as a small case dashboard.
  *
- *   case header (file, one status sentence, in-scope count, the next action)
+ *   case header (file, one status sentence, THE next action, then the in-scope count)
+ *   -> jump cards (Variants, Results, Pipeline, Report, Triage): where to go next, right under the header
  *   -> stage rail (Upload, Interpret, Annotate, Reduce, Chat ready; the same five steps as the Pipeline tab)
+ *   -> read quality at a glance (FASTQ runs only; the full charts live in the Pipeline tab)
  *   -> chromosomes with variants (only when the file's metadata carries a chromosome column)
- *   -> jump cards (Variants, Results, Pipeline), each with a tiny mini-visual
  *
  * State words are fixed so nothing contradicts itself: done | running | pending | failed, and the rail is
  * built from `computePipelineSteps`, the same function the Pipeline tab uses, so the two cannot disagree.
@@ -435,7 +438,7 @@ function GlyphStages({ stages }) {
 function JumpCard({ title, meta, onClick, glyph }) {
   return (
     <button type="button" onClick={onClick} className={cn('group wb-card flex h-full w-full min-w-0 flex-col overflow-hidden text-left group-data-[w=narrow]/tab:flex-row transition-[border-color,background-color,transform] duration-150 hover:border-[hsl(var(--brand-300))] active:scale-[0.995] motion-reduce:transition-none', FOCUS)}>
-      <span aria-hidden="true" className="flex h-[54px] items-center group-data-[w=narrow]/tab:h-auto group-data-[w=narrow]/tab:w-24 group-data-[w=narrow]/tab:shrink-0 group-data-[w=narrow]/tab:border-b-0 group-data-[w=narrow]/tab:border-r border-b border-[hsl(var(--wb-line))] bg-[hsl(var(--brand-50))] px-3.5 transition-colors duration-150 group-hover:bg-[hsl(var(--brand-100))]">{glyph}</span>
+      <span aria-hidden="true" className="flex h-[54px] items-center group-data-[w=narrow]/tab:hidden border-b border-[hsl(var(--wb-line))] bg-[hsl(var(--brand-50))] px-3.5 transition-colors duration-150 group-hover:bg-[hsl(var(--brand-100))]">{glyph}</span>
       <span className="flex flex-1 items-center gap-2 px-3.5 py-2.5">
         <span className="min-w-0 flex-1">
           <span className="block text-[13px] font-medium leading-[18px] text-foreground">{title}</span>
@@ -463,6 +466,50 @@ function Shell({ children, className }) {
   return <div ref={ref} className={cn('group/tab h-full min-h-0 space-y-3 overflow-y-auto overscroll-contain px-4 pb-6 pt-1 group-data-[w=narrow]/tab:px-3 group-data-[w=narrow]/tab:pb-[max(1.5rem,var(--mtabs-safe-b,env(safe-area-inset-bottom)))]', className)}>{children}</div>;
 }
 
+/** Read quality at a glance for a FASTQ run: three graded numbers and a way into the full charts. */
+function ReadQualityGlance({ conversationId, onOpen }) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    if (!conversationId) return undefined;
+    let cancelled = false;
+    fetchModule1QcSummary(conversationId)
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch(() => { if (!cancelled) setData(null); });
+    return () => { cancelled = true; };
+  }, [conversationId]);
+  const s = data?.has_summary ? data.summary : null;
+  if (!s) return null;
+  const q30 = s.after?.q30_rate ?? s.before?.q30_rate;
+  const tiles = [
+    { key: 'kept', label: 'Reads kept', value: fmtPct(s.pass_rate), grade: gradeKept(s.pass_rate) },
+    { key: 'q30', label: 'Q30 bases', value: fmtPct(q30), grade: gradeQ30(q30) },
+    { key: 'dup', label: 'Duplication', value: fmtPct(s.duplication_rate), grade: gradeDup(s.duplication_rate) },
+  ];
+  const overall = overallGrade(tiles.map((t) => t.grade));
+  return (
+    <section className="wb-card wb-rise px-4 pb-3.5 pt-3.5" style={{ animationDelay: '90ms' }} aria-label="Read quality">
+      <SectionTitle trailing={overall ? <QcStatusPill status={overall} label={OVERALL_LABEL[overall]} /> : null}>Read quality</SectionTitle>
+      <dl className="m-0 grid grid-cols-3 gap-2 group-data-[w=narrow]/tab:grid-cols-1">
+        {tiles.map((t) => (
+          <div key={t.key} className="min-w-0 rounded-2xl border border-[hsl(var(--wb-line))] bg-[hsl(var(--brand-50)/0.55)] px-3 py-2.5">
+            <dt className="text-[11.5px] font-medium text-muted-foreground">{t.label}</dt>
+            <dd className="m-0 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="text-[19px] font-semibold leading-none tracking-tight tabular-nums text-foreground">{t.value}</span>
+              {t.grade ? <QcStatusPill status={t.grade} /> : null}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {onOpen ? (
+        <button type="button" onClick={onOpen} className={cn('mt-2.5 inline-flex h-7 [@media(pointer:coarse)]:h-10 items-center gap-1 rounded-full px-2.5 text-xs font-medium text-[hsl(var(--brand-700))] transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] motion-reduce:transition-none', FOCUS)}>
+          Charts and reports
+          <ArrowRight className="size-3" aria-hidden="true" />
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
 /** Chromosome ruler: real per-chromosome counts when the server has them, presence-only otherwise. */
 function ContigsSection({ conversationId, summary }) {
   const server = useContigCounts(conversationId, summary.contigCounts);
@@ -486,7 +533,7 @@ function ContigsSection({ conversationId, summary }) {
   );
 }
 
-export default function SummaryTab({ summary, jumps = [], emptyAction, loading = false, error = null, conversationId, className }) {
+export default function SummaryTab({ summary, jumps = [], emptyAction, loading = false, error = null, conversationId, hasReads = false, onOpenQc, className }) {
   if (loading) {
     return (
       <Shell className={className}>
@@ -555,7 +602,7 @@ export default function SummaryTab({ summary, jumps = [], emptyAction, loading =
       : null;
   const pipelineMeta = `${doneCount} of ${stages.length} stages done${annotationFailed ? ' · annotation failed' : ''}`;
 
-  const glyphFor = (id) => (id === 'variants' ? <GlyphScope inScope={inScope} total={total} /> : id === 'results' ? <GlyphTable /> : id === 'pipeline' ? <GlyphStages stages={stages} /> : null);
+  const glyphFor = (id) => (id === 'variants' ? <GlyphScope inScope={inScope} total={total} /> : id === 'results' ? <GlyphTable /> : id === 'pipeline' ? <GlyphStages stages={stages} /> : id === 'report' ? <FileText className="size-5 text-[hsl(var(--brand-500))]" aria-hidden="true" /> : id === 'triage' ? <ListChecks className="size-5 text-[hsl(var(--brand-500))]" aria-hidden="true" /> : null);
 
   return (
     <Shell className={className}>
@@ -584,6 +631,18 @@ export default function SummaryTab({ summary, jumps = [], emptyAction, loading =
           </p>
         </div>
 
+        {action ? (
+          <div className="px-4 pb-4 pt-3.5">
+            <StateButton
+              state={anyRunning ? 'running' : 'idle'}
+              labels={{ idle: action.label, running: action.label }}
+              icon={action.icon}
+              onClick={action.onClick}
+              className="w-full"
+              size="lg"
+            />
+          </div>
+        ) : null}
         {inScope != null ? (
           <div className="border-t border-[hsl(var(--wb-line))] px-4 py-3.5">
             <div className="flex items-end justify-between gap-3">
@@ -604,31 +663,12 @@ export default function SummaryTab({ summary, jumps = [], emptyAction, loading =
           </div>
         ) : null}
 
-        {action ? (
-          <div className="px-4 pb-4 pt-0.5">
-            <StateButton
-              state={anyRunning ? 'running' : 'idle'}
-              labels={{ idle: action.label, running: action.label }}
-              icon={action.icon}
-              onClick={action.onClick}
-              className="w-full"
-              size="lg"
-            />
-          </div>
-        ) : null}
       </section>
-
-      <section className="wb-card wb-rise px-3 pb-4 pt-3.5" style={{ animationDelay: '60ms' }} aria-label="Stages">
-        <SectionTitle trailing={<span className="wb-chip tabular-nums">{doneCount} of {stages.length} done</span>}>Stages</SectionTitle>
-        <StageRail stages={stages} />
-      </section>
-
-      <ContigsSection conversationId={conversationId} summary={summary} />
 
       {jumps.length > 0 ? (
-        <section className="wb-rise" style={{ animationDelay: '140ms' }} aria-label="Open">
-          <h3 className="wb-card-title mb-2 px-1">Open</h3>
-          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(168px,1fr))] gap-2 p-0 group-data-[w=narrow]/tab:grid-cols-1">
+        <section className="wb-rise" style={{ animationDelay: '40ms' }} aria-label="Open">
+          <h3 className="wb-card-title mb-2 px-1">Go to</h3>
+          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(168px,1fr))] gap-2 p-0 group-data-[w=narrow]/tab:grid-cols-2">
             {jumps.map((j) => (
               <li key={j.id} className="flex min-w-0">
                 <JumpCard title={j.title} meta={j.id === 'pipeline' ? pipelineMeta : j.meta} onClick={j.onClick} glyph={glyphFor(j.id)} />
@@ -637,6 +677,16 @@ export default function SummaryTab({ summary, jumps = [], emptyAction, loading =
           </ul>
         </section>
       ) : null}
+
+      <section className="wb-card wb-rise px-3 pb-4 pt-3.5" style={{ animationDelay: '60ms' }} aria-label="Stages">
+        <SectionTitle trailing={<span className="wb-chip tabular-nums">{doneCount} of {stages.length} done</span>}>Stages</SectionTitle>
+        <StageRail stages={stages} />
+      </section>
+
+      {hasReads ? <ReadQualityGlance conversationId={conversationId} onOpen={onOpenQc} /> : null}
+
+      <ContigsSection conversationId={conversationId} summary={summary} />
+
     </Shell>
   );
 }

@@ -1740,6 +1740,20 @@ const ChatPage = () => {
     { id: 'variants', title: 'Variants and filters', meta: summary?.inScope != null ? `${summary.inScope.toLocaleString()} in scope` : 'Narrow the set', onClick: () => openWorkspaceTab('variants') },
     { id: 'results', title: 'Results table', meta: 'First 500 variants in scope', onClick: () => openWorkspaceTab('results'), disabled: !activeConversationId || !currentDocument },
     { id: 'pipeline', title: 'Pipeline', meta: 'Run status and steps', onClick: () => openWorkspaceTab('pipeline'), disabled: !pipelineStack },
+    {
+      id: 'report',
+      title: 'Report',
+      meta: summary?.annotationFailed ? 'Locked until annotation finishes' : 'Clinical report',
+      onClick: () => openWorkspaceTab('report'),
+      disabled: userTier === 'guest' || !activeConversationId || !currentDocument,
+    },
+    {
+      id: 'triage',
+      title: 'Triage',
+      meta: gaTriageStatus === 'completed' ? 'Ranked candidates' : gaTriageStatus === 'running' ? 'Ranking now' : 'Review candidates',
+      onClick: () => openWorkspaceTab('triage'),
+      disabled: userTier === 'guest' || !activeConversationId || !gaTriageStatus,
+    },
   ].filter((j) => !j.disabled);
 
   const pipelineStripStatus = derivePipelineStrip({
@@ -2341,7 +2355,7 @@ const ChatPage = () => {
               icon: LayoutList,
               closable: false,
               subtitle: currentDocument?.name ?? currentDocument?.file_name ?? 'No file yet',
-              content: <SummaryTab summary={summary} jumps={summaryJumps} conversationId={activeConversationId} />,
+              content: <SummaryTab summary={summary} jumps={summaryJumps} conversationId={activeConversationId} hasReads={Boolean(m1Job)} onOpenQc={() => openWorkspaceTab('pipeline')} />,
             },
             {
               id: 'variants',

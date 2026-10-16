@@ -459,22 +459,9 @@ function TimelineRow({ step, index, last, progress, reserve, expanded, onToggle 
       {hasBody ? (
         <Collapse open={expanded} id={detailId}>
           <div className="ml-[46px] mr-2 space-y-2.5 pb-2.5 pt-0.5">
-            {step.reason ? (
-              <p className={cn('m-0 text-[13px] leading-5', failed ? 'text-foreground' : 'text-[var(--text-secondary)]')}>{step.reason}</p>
-            ) : null}
-            {step.note ? <p className="m-0 text-xs leading-5 text-muted-foreground">{step.note}</p> : null}
-            {facts.length ? (
-              <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs leading-5">
-                {facts.map(([k, v]) => (
-                  <React.Fragment key={k}>
-                    <dt className="text-muted-foreground">{k}</dt>
-                    <dd className="m-0 min-w-0 break-words tabular-nums text-foreground">{v}</dd>
-                  </React.Fragment>
-                ))}
-              </dl>
-            ) : null}
+            {/* Actions first: the thing to do is the first thing under the step, not buried under the facts. */}
             {step.retry || step.onClick ? (
-              <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              <div className="flex flex-wrap items-center gap-2">
                 {step.retry ? (
                   <ActionButton labels={{ idle: step.retry.label }} icon={RotateCcw} onClick={step.retry.run} variant="outline" size="sm" className="max-sm:h-11" />
                 ) : null}
@@ -490,6 +477,20 @@ function TimelineRow({ step, index, last, progress, reserve, expanded, onToggle 
                   </button>
                 ) : null}
               </div>
+            ) : null}
+            {step.reason ? (
+              <p className={cn('m-0 text-[13px] leading-5', failed ? 'text-foreground' : 'text-[var(--text-secondary)]')}>{step.reason}</p>
+            ) : null}
+            {step.note ? <p className="m-0 text-xs leading-5 text-muted-foreground">{step.note}</p> : null}
+            {facts.length ? (
+              <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs leading-5">
+                {facts.map(([k, v]) => (
+                  <React.Fragment key={k}>
+                    <dt className="text-muted-foreground">{k}</dt>
+                    <dd className="m-0 min-w-0 break-words tabular-nums text-foreground">{v}</dd>
+                  </React.Fragment>
+                ))}
+              </dl>
             ) : null}
           </div>
         </Collapse>
@@ -543,13 +544,17 @@ function PanelBody({
   const hasVisibleKids = kids.some((k) => !String(k?.props?.className || '').includes('sr-only'));
   const engineTone = engine?.tone || (engine?.warn ? 'warn' : null);
 
-  // Which step details are open. A failed step opens by itself (and again if a new one fails); the rest stay folded.
+  // Step details are open by default (the actions and times are what people come here for); the person
+  // folds the ones they don't want. A step that fails opens again by itself, even if it was folded.
   const failedId = hasSteps ? steps.find((s) => s.status === 'failed')?.id ?? null : null;
-  const [open, setOpen] = useState(() => (failedId ? [failedId] : []));
+  const [folded, setFolded] = useState([]);
   useEffect(() => {
-    if (failedId) setOpen((o) => (o.includes(failedId) ? o : [...o, failedId]));
+    if (failedId) setFolded((f) => (f.includes(failedId) ? f.filter((x) => x !== failedId) : f));
   }, [failedId]);
-  const toggle = (id) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]));
+  const open = hasSteps ? steps.map((s) => s.id).filter((id) => !folded.includes(id)) : [];
+  const toggle = (id) => setFolded((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]));
+  const bodyIds = hasSteps ? steps.filter((s) => s.reason || s.note || s.retry || s.onClick || (s.facts && s.facts.length)).map((s) => s.id) : [];
+  const allOpen = bodyIds.length > 0 && bodyIds.every((id) => !folded.includes(id));
 
   return (
     <div>
@@ -650,8 +655,19 @@ function PanelBody({
             <h4 ref={stepsToggleRef} tabIndex={-1} className="wb-card-title m-0 outline-none">
               {stepsLabel}
             </h4>
-            <span className="wb-chip tabular-nums">
-              {doneCount} of {steps.length} done
+            <span className="ml-auto flex shrink-0 items-center gap-1.5">
+              {bodyIds.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setFolded(allOpen ? bodyIds : [])}
+                  className={cn('inline-flex h-6 [@media(pointer:coarse)]:h-9 items-center rounded-full px-2.5 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none', FOCUS)}
+                >
+                  {allOpen ? 'Collapse all' : 'Expand all'}
+                </button>
+              ) : null}
+              <span className="wb-chip tabular-nums">
+                {doneCount} of {steps.length} done
+              </span>
             </span>
           </div>
           <ol className="m-0 list-none p-0">

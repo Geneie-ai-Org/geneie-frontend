@@ -31,7 +31,9 @@ import useSwipeDismiss from '@/hooks/useSwipeDismiss';
  */
 export const WORKSPACE_WIDTH_KEY = 'geneie-workspace-width-v2';
 const MIN_W = 440;
-const MAX_W = 760;
+const MAX_W = 1400;
+// The chat column keeps at least this much room, so the panel can grow without squeezing the thread out.
+const CHAT_MIN_W = 420;
 const DEFAULT_W = 560;
 const TABS_KEY = 'geneie-workspace-tabs:';
 
@@ -47,8 +49,19 @@ const MOTION_CSS = `
 `;
 const FOCUS = 'focus-visible:outline-[hsl(var(--ring))] focus-visible:outline-offset-2';
 
+/** Width of the left rail column right now (open, collapsed or hidden), read from the shell. */
+function leftColWidth() {
+  try {
+    const shell = document.querySelector('.chat-app-shell');
+    const v = shell ? parseFloat(getComputedStyle(shell).getPropertyValue('--shell-left-col')) : NaN;
+    return Number.isFinite(v) ? v : 56;
+  } catch {
+    return 56;
+  }
+}
+
 function clampWidth(w) {
-  const max = Math.min(MAX_W, Math.max(MIN_W, Math.round(window.innerWidth * 0.55)));
+  const max = Math.min(MAX_W, Math.max(MIN_W, window.innerWidth - CHAT_MIN_W - leftColWidth()));
   return Math.min(max, Math.max(MIN_W, Math.round(w)));
 }
 
@@ -68,7 +81,7 @@ export function useWorkspaceWidth(expanded = false) {
   useEffect(() => {
     document.documentElement.style.setProperty(
       '--sidebar-right-width',
-      expanded ? 'min(980px, 64vw)' : `${width}px`
+      expanded ? 'min(1280px, 78vw)' : `${width}px`
     );
     try {
       localStorage.setItem(WORKSPACE_WIDTH_KEY, String(width));
@@ -400,8 +413,9 @@ export default function WorkspacePanel({
   );
 
   const onHandleKey = (e) => {
-    if (e.key === 'ArrowLeft') { e.preventDefault(); onWidthChange(width + 24); }
-    else if (e.key === 'ArrowRight') { e.preventDefault(); onWidthChange(width - 24); }
+    const step = e.shiftKey ? 96 : 24;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); onWidthChange(width + step); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); onWidthChange(width - step); }
     else if (e.key === 'Home') { e.preventDefault(); onWidthChange(MAX_W); }
     else if (e.key === 'End') { e.preventDefault(); onWidthChange(MIN_W); }
   };

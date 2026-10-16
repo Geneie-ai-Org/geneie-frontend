@@ -5,11 +5,11 @@ import {
     confirmPasswordReset,
     verifyPasswordResetCode,
 } from 'firebase/auth';
-import { Loader2 } from 'lucide-react';
 import { auth } from '../services/firebase';
 import { authErrorMessage } from '@/lib/authErrors';
 import AuthPageLayout from '@/components/chat/AuthPageLayout';
-import { PasswordField, Notice, SubmitButton, PasswordRules } from '@/components/public/AuthFields';
+import { PasswordField, Notice, NoticeSlot, SubmitButton, PasswordRules } from '@/components/public/AuthFields';
+import { StageMark } from '@/components/motion';
 import { useSeo } from '@/hooks/useSeo';
 
 /**
@@ -115,48 +115,55 @@ const AuthActionPage = () => {
         mode === 'verifyEmail' ? 'Verifying your email' : 'Choose a new password';
     const title = status === 'done' && mode === 'verifyEmail' ? 'Email verified' : status === 'invalid' ? 'This link cannot be used' : heading;
 
-    const linkClass = 'inline-flex h-11 items-center justify-center rounded-lg text-sm font-medium text-primary hover:underline';
+    const linkClass = 'inline-flex h-10 items-center justify-center rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-5 text-sm font-medium text-foreground outline-none transition-colors duration-150 hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]';
+    const primaryLinkClass = 'inline-flex h-10 items-center justify-center rounded-full bg-[hsl(var(--brand-solid))] px-5 text-sm font-medium text-[hsl(var(--on-brand))] outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-solid-hover))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] focus-visible:ring-offset-2';
+
+    const markState = status === 'checking' ? 'running' : status === 'invalid' ? 'failed' : status === 'done' ? 'done' : null;
 
     return (
         <AuthPageLayout>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
+            {markState && (
+                <div className="wb-fade mb-4 inline-flex size-11 items-center justify-center rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill))]">
+                    <StageMark state={markState} size={24} />
+                </div>
+            )}
+            <h1 key={title} className="wb-fade text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
 
             {status === 'checking' && (
-                <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground" role="status">
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    <span>{mode === 'verifyEmail' ? 'Verifying your email…' : 'Checking your link…'}</span>
-                </div>
+                <p className="wb-fade mt-3 text-sm text-muted-foreground" role="status">
+                    {mode === 'verifyEmail' ? 'Verifying your email…' : 'Checking your link…'}
+                </p>
             )}
 
             {status === 'invalid' && (
-                <>
+                <div className="wb-rise">
                     <Notice type="error" className="mt-5">{errorText}</Notice>
                     <p className="mt-6">
                         <Link to="/auth" className={linkClass}>Back to log in to request a new link</Link>
                     </p>
-                </>
+                </div>
             )}
 
             {status === 'done' && (
-                <>
+                <div className="wb-rise">
                     <Notice type="success" className="mt-5">
                         {mode === 'verifyEmail'
                             ? 'Your email is verified. You can log in now.'
                             : 'Password updated. Taking you to the login page…'}
                     </Notice>
                     <p className="mt-6">
-                        <Link to="/auth" className={linkClass}>Go to log in</Link>
+                        <Link to="/auth" className={primaryLinkClass}>Go to log in</Link>
                     </p>
-                </>
+                </div>
             )}
 
             {(status === 'ready' || status === 'saving') && (
                 <>
                     <p className="mt-2 text-sm text-muted-foreground">
-                        For <span className="font-medium text-foreground">{accountEmail}</span>
+                        For <span className="wb-chip ml-0.5 align-middle font-medium">{accountEmail}</span>
                     </p>
 
-                    <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
+                    <form onSubmit={handleSubmit} className="wb-rise mt-6 space-y-4" noValidate>
                         <div className="space-y-3">
                             <PasswordField
                                 id="new-password"
@@ -166,7 +173,7 @@ const AuthActionPage = () => {
                                 autoComplete="new-password"
                                 autoFocus
                             />
-                            <PasswordRules password={password} minLength={MIN_PASSWORD_LENGTH} />
+                            <div className="px-1"><PasswordRules password={password} minLength={MIN_PASSWORD_LENGTH} /></div>
                         </div>
 
                         <PasswordField
@@ -178,7 +185,7 @@ const AuthActionPage = () => {
                             error={confirm && password !== confirm ? 'The two passwords do not match.' : undefined}
                         />
 
-                        {errorText && <Notice type="error">{errorText}</Notice>}
+                        <NoticeSlot notice={errorText ? { type: 'error', text: errorText } : null} />
 
                         <SubmitButton
                             loading={status === 'saving'}

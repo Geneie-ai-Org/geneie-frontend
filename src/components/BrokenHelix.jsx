@@ -78,7 +78,7 @@ export default function BrokenHelix({ className }) {
               x2={r.x}
               y1={r.y1}
               y2={r.y2}
-              stroke={r.front ? 'var(--accent-teal)' : 'var(--text-tertiary)'}
+              stroke={r.front ? 'hsl(var(--brand-500))' : 'var(--text-tertiary)'}
               strokeOpacity={r.front ? 0.7 : 0.3}
               strokeWidth={2}
             />
@@ -108,7 +108,7 @@ export default function BrokenHelix({ className }) {
       {LOOSE.map((p) => (
         <g key={p.x}>
           <g transform={`translate(${p.x} ${p.y}) rotate(${p.rot})`}>
-            <line x1={0} x2={0} y1={-p.len / 2} y2={p.len / 2} stroke="var(--accent-teal)" strokeWidth={2} />
+            <line x1={0} x2={0} y1={-p.len / 2} y2={p.len / 2} stroke="hsl(var(--brand-500))" strokeWidth={2} />
             <circle cy={-p.len / 2} r={2.5} fill="var(--text-primary)" fillOpacity={0.85} />
             <circle cy={p.len / 2} r={2.5} fill="var(--text-secondary)" fillOpacity={0.7} />
           </g>

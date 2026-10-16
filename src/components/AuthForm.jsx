@@ -13,13 +13,14 @@ import {
     linkWithCredential,
     EmailAuthProvider,
 } from 'firebase/auth';
-import { Loader2 } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { authErrorMessage } from '@/lib/authErrors';
 import { Button } from '@/components/ui/button';
+import { Collapse } from '@/components/motion';
 import {
     TextField,
     PasswordField,
-    Notice,
+    NoticeSlot,
     SubmitButton,
     PasswordRules,
 } from '@/components/public/AuthFields';
@@ -71,6 +72,36 @@ const MicrosoftMark = () => (
     </svg>
 );
 
+/** Provider pill: the brand mark swaps for a small ring while its request is in flight. */
+const ProviderButton = ({ busy, mark, children, ...props }) => {
+    const reduce = useReducedMotion();
+    return (
+        <Button
+            type="button"
+            variant="outline"
+            aria-busy={busy || undefined}
+            className="h-11 w-full gap-2.5 text-sm font-medium"
+            {...props}
+        >
+            <span className="relative inline-flex size-[18px] items-center justify-center" aria-hidden="true">
+                <AnimatePresence mode="popLayout" initial={false}>
+                    <motion.span
+                        key={busy ? 'busy' : 'mark'}
+                        className="inline-flex"
+                        initial={reduce ? false : { opacity: 0, scale: 0.7 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.7 }}
+                        transition={{ duration: reduce ? 0 : 0.14 }}
+                    >
+                        {busy ? <span className="wb-spin-inline" /> : mark}
+                    </motion.span>
+                </AnimatePresence>
+            </span>
+            {children}
+        </Button>
+    );
+};
+
 const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificationPending }) => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -90,6 +121,15 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
     /* Separate from isLogin, which already drives headings, autoComplete and the submit
      * label — overloading it with a third value would touch all of those. */
     const [resetMode, setResetMode] = useState(false);
+    /* Brief "done" state on the submit button after a request that ends in a success notice. */
+    const [doneFlash, setDoneFlash] = useState(false);
+    const doneTimer = useRef(null);
+    const flashDone = () => {
+        setDoneFlash(true);
+        clearTimeout(doneTimer.current);
+        doneTimer.current = setTimeout(() => setDoneFlash(false), 1800);
+    };
+    useEffect(() => () => clearTimeout(doneTimer.current), []);
 
     // Inline validation: a field shows its error once it has been left or a submit was tried.
     const [touched, setTouched] = useState({ email: false, password: false });
@@ -306,6 +346,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                     text: `If an account exists for ${email}, we've sent a reset link. Check your inbox, including spam.`,
                 });
                 setTouched({ email: false, password: false });
+                flashDone();
                 return;
             }
 
@@ -359,6 +400,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                 setIsLogin(true); // Automatically toggle to login flow
                 setPassword('');
                 setTouched({ email: false, password: false });
+                flashDone();
             }
         } catch (err) {
             /* A reset request answers the same way whether or not the address has an
@@ -372,6 +414,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         type: 'success',
                         text: `If an account exists for ${email}, we've sent a reset link. Check your inbox, including spam.`,
                     });
+                    flashDone();
                 }
                 return;
             }
@@ -413,11 +456,15 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
 
     const submitLabel = resetMode ? 'Send reset link' : isLogin ? 'Log in' : 'Create account';
     const submitBusyLabel = resetMode ? 'Sending link…' : isLogin ? 'Logging in…' : 'Creating account…';
+    const submitDoneLabel = resetMode ? 'Link sent' : 'Account created';
+
+    const headerKey = showLinkingPrompt ? 'link' : resetMode ? 'reset' : isLogin ? 'login' : 'signup';
+    const showSocial = !showLinkingPrompt && !resetMode;
 
     return (
         <div className="w-full">
-            {/* === Header === */}
-            <div className="mb-6">
+            {/* === Header: swaps with a quick fade when the mode changes === */}
+            <div key={headerKey} className="wb-fade mb-6">
                 <h2 className="text-2xl font-semibold tracking-tight text-foreground">
                     {showLinkingPrompt ? 'Link your account' : mainHeading}
                 </h2>
@@ -434,19 +481,13 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                 </p>
             </div>
 
-            {verifyingEmail && (
-                <Notice type="info" className="mb-5">
-                    <span className="inline-flex items-center gap-2">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Verifying your email…
-                    </span>
-                </Notice>
-            )}
+            <NoticeSlot notice={verifyingEmail ? { type: 'info', text: (
+                <span className="inline-flex items-center gap-2">
+                    <span className="wb-spin-inline" aria-hidden="true" /> Verifying your email…
+                </span>
+            ) } : null} className="pb-5" />
 
-            {inlineMessage && (
-                <Notice type={inlineMessage.type} className="mb-5">
-                    {inlineMessage.text}
-                </Notice>
-            )}
+            <NoticeSlot notice={inlineMessage} className="pb-5" />
 
             {/* === Account Linking Prompt === */}
             {showLinkingPrompt && (
@@ -455,7 +496,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         e.preventDefault();
                         if (linkingPassword) handleAccountLinking(linkingEmail, linkingPassword);
                     }}
-                    className="space-y-4"
+                    className="wb-fade space-y-4"
                 >
                     <TextField id="linking-email" label="Email" type="email" value={linkingEmail} readOnly />
                     <PasswordField
@@ -470,6 +511,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         <SubmitButton
                             loading={busy === 'link'}
                             loadingLabel="Linking…"
+                            doneLabel="Linked"
                             disabled={!linkingPassword}
                             className="flex-1"
                         >
@@ -478,7 +520,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         <Button
                             type="button"
                             variant="outline"
-                            className="h-11 px-4"
+                            className="h-11 px-5"
                             onClick={cancelAccountLinking}
                             disabled={loading}
                         >
@@ -489,44 +531,26 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
             )}
 
             {/* === Social sign-in: the fastest path, so it comes first === */}
-            {!showLinkingPrompt && !resetMode && (
-                <>
-                    <div className="space-y-2.5">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={handleGoogleSignIn}
-                            disabled={loading}
-                            aria-busy={busy === 'google' || undefined}
-                            className="h-11 w-full gap-2.5 text-sm font-medium"
-                        >
-                            {busy === 'google' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <GoogleMark />}
-                            Continue with Google
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={handleMicrosoftSignIn}
-                            disabled={loading}
-                            aria-busy={busy === 'microsoft' || undefined}
-                            className="h-11 w-full gap-2.5 text-sm font-medium"
-                        >
-                            {busy === 'microsoft' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <MicrosoftMark />}
-                            Continue with Microsoft
-                        </Button>
-                    </div>
+            <Collapse open={showSocial} className="-mx-1 px-1">
+                <div className="space-y-2.5 pb-1">
+                    <ProviderButton busy={busy === 'google'} mark={<GoogleMark />} onClick={handleGoogleSignIn} disabled={loading}>
+                        Continue with Google
+                    </ProviderButton>
+                    <ProviderButton busy={busy === 'microsoft'} mark={<MicrosoftMark />} onClick={handleMicrosoftSignIn} disabled={loading}>
+                        Continue with Microsoft
+                    </ProviderButton>
+                </div>
 
-                    <div className="my-6 flex items-center gap-3" role="separator" aria-label="or">
-                        <div className="h-px flex-1 bg-border" />
-                        <span className="shrink-0 text-xs text-[var(--text-tertiary)]">or use email</span>
-                        <div className="h-px flex-1 bg-border" />
-                    </div>
-                </>
-            )}
+                <div className="my-6 flex items-center gap-3" role="separator" aria-label="or">
+                    <div className="h-px flex-1 bg-[hsl(var(--wb-line))]" />
+                    <span className="wb-chip shrink-0 text-[var(--text-tertiary)]">or use email</span>
+                    <div className="h-px flex-1 bg-[hsl(var(--wb-line))]" />
+                </div>
+            </Collapse>
 
             {/* === Email form === */}
             {!showLinkingPrompt && (
-                <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+                <form onSubmit={handleSubmit} noValidate>
                     <TextField
                         id="email"
                         ref={emailRef}
@@ -541,8 +565,8 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         placeholder="name@lab.org"
                     />
 
-                    {!resetMode && (
-                        <div className="space-y-3">
+                    <Collapse open={!resetMode} className="-mx-1 px-1">
+                        <div className="pb-1 pt-4">
                             <PasswordField
                                 id="password"
                                 ref={passwordRef}
@@ -558,18 +582,29 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                                     <button
                                         type="button"
                                         onClick={() => { setResetMode(true); setPassword(''); setInlineMessage(null); setTouched({ email: false, password: false }); }}
-                                        className="-my-2 rounded-md py-2 text-xs font-medium text-primary hover:underline"
+                                        className="-my-2 rounded-full px-2 py-2 text-xs font-medium text-[hsl(var(--brand-700))] outline-none transition-colors hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]"
                                         disabled={loading}
                                     >
                                         Forgot password?
                                     </button>
                                 ) : null}
                             />
-                            {!isLogin && <PasswordRules password={password} minLength={MIN_PASSWORD_LENGTH} />}
+                            <Collapse open={!isLogin}>
+                                <div className="px-1 pb-1 pt-3">
+                                    <PasswordRules password={password} minLength={MIN_PASSWORD_LENGTH} />
+                                </div>
+                            </Collapse>
                         </div>
-                    )}
+                    </Collapse>
 
-                    <SubmitButton loading={busy === 'email'} loadingLabel={submitBusyLabel} disabled={loading} className="mt-2">
+                    <SubmitButton
+                        loading={busy === 'email'}
+                        loadingLabel={submitBusyLabel}
+                        done={doneFlash}
+                        doneLabel={submitDoneLabel}
+                        disabled={loading}
+                        className="mt-5"
+                    >
                         {submitLabel}
                     </SubmitButton>
                 </form>
@@ -583,14 +618,14 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         <button
                             type="button"
                             onClick={switchMode}
-                            className="rounded-sm py-2 font-medium text-primary hover:underline"
+                            className="rounded-full px-2 py-1.5 font-medium text-[hsl(var(--brand-700))] outline-none transition-colors hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] disabled:opacity-50"
                             disabled={loading}
                         >
                             {resetMode ? 'Back to log in' : isLogin ? 'Create an account' : 'Log in'}
                         </button>
                     </p>
                     {!isLogin && !resetMode && (
-                        <p className="mt-2 text-center text-xs leading-5 text-[var(--text-tertiary)]">
+                        <p className="wb-fade mt-2 text-center text-xs leading-5 text-[var(--text-tertiary)]">
                             By creating an account you agree to the{' '}
                             <Link to="/legal/terms" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Terms</Link>
                             {' '}and{' '}

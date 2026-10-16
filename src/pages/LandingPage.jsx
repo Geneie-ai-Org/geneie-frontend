@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ArrowRight,
+  ChevronDown,
   Dna,
   FileUp,
   Filter,
-  Loader2,
   MessageSquareText,
   ScanSearch,
   ShieldCheck,
@@ -15,8 +15,9 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Collapse, Dismissible, StageMark, StateButton, Turn } from '@/components/motion';
 import BrandLogo from '@/components/public/BrandLogo';
+import Reveal from '@/components/public/Reveal';
 import { useBetaSeats } from '@/hooks/useBetaSeats';
 import { joinWaitlist } from '@/services/backendApi';
 import { useSeo } from '@/hooks/useSeo';
@@ -145,10 +146,16 @@ function AccessRequest({ seats, source, onSignIn, idPrefix }) {
   const [submitting, setSubmitting] = useState(false);
   const [joined, setJoined] = useState(null);
   const [error, setError] = useState('');
+  const [lastError, setLastError] = useState('');
   const [trap, setTrap] = useState(''); // honeypot; humans never see it
 
   const isFull = Boolean(seats) && !seats.open;
   const inputId = `${idPrefix}-email`;
+
+  const fail = (msg) => {
+    setError(msg);
+    if (msg) setLastError(msg);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -159,17 +166,17 @@ function AccessRequest({ seats, source, onSignIn, idPrefix }) {
       return;
     }
     if (!email.trim()) {
-      setError('Enter your email so we can reach you.');
+      fail('Enter your email so we can reach you.');
       return;
     }
-    setError('');
+    fail('');
     setSubmitting(true);
     try {
       const result = await joinWaitlist({ email: email.trim(), source });
       setJoined(result);
       toast.success(confirmationFor(result, isFull));
     } catch (err) {
-      setError(err.message || 'We could not submit your request. Please try again.');
+      fail(err.message || 'We could not submit your request. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -177,19 +184,27 @@ function AccessRequest({ seats, source, onSignIn, idPrefix }) {
 
   if (joined) {
     return (
-      <div role="status" className="max-w-md rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm leading-6 text-foreground">
-        {confirmationFor(joined, isFull)}
+      <div
+        role="status"
+        className="wb-rise flex max-w-md items-start gap-3 rounded-2xl border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-50))] px-4 py-3 text-sm leading-6 text-foreground"
+      >
+        <StageMark state="done" size={22} className="mt-0.5 shrink-0" />
+        <span>{confirmationFor(joined, isFull)}</span>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-md">
+    <div className="relative w-full max-w-md">
       <form onSubmit={handleSubmit} noValidate>
-        <label htmlFor={inputId} className="text-sm font-medium">
+        <label htmlFor={inputId} className="px-1 text-[13px] font-medium text-muted-foreground">
           {isFull ? 'Join the waitlist' : 'Request beta access'}
         </label>
-        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+        {/* One pill: the field and its action share an edge, and the whole pill takes the focus ring. */}
+        <div
+          data-invalid={error ? 'true' : undefined}
+          className="mt-2 flex items-center gap-2 rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] p-1 pl-4 transition-[border-color,box-shadow] duration-150 focus-within:border-[hsl(var(--brand-500))] focus-within:shadow-[0_0_0_3px_hsl(var(--brand-300)/0.45)] data-[invalid=true]:border-[var(--error)]"
+        >
           <Input
             id={inputId}
             type="email"
@@ -201,7 +216,7 @@ function AccessRequest({ seats, source, onSignIn, idPrefix }) {
             disabled={submitting}
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? `${inputId}-error` : `${inputId}-hint`}
-            className="h-11 flex-1 px-3 text-base sm:text-sm"
+            className="h-9 min-w-0 flex-1 !rounded-none !border-0 !bg-transparent px-0 text-base !shadow-none !outline-none !ring-0 sm:text-sm"
           />
           {/* Honeypot: off-screen and hidden from assistive tech, so only a bot fills it. */}
           <input
@@ -213,26 +228,21 @@ function AccessRequest({ seats, source, onSignIn, idPrefix }) {
             onChange={(e) => setTrap(e.target.value)}
             className="pointer-events-none absolute left-[-9999px] h-0 w-0 opacity-0"
           />
-          <Button type="submit" disabled={submitting} className="h-11 px-5 text-sm font-medium">
-            {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Sending…
-              </>
-            ) : isFull ? (
-              'Join waitlist'
-            ) : (
-              <>
-                Request access <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </>
-            )}
-          </Button>
+          <StateButton
+            type="submit"
+            state={submitting ? 'running' : 'idle'}
+            labels={{ idle: isFull ? 'Join waitlist' : 'Request access', running: 'Sending…' }}
+            icon={ArrowRight}
+            className={`h-9 shrink-0 px-4 text-sm font-medium ${submitting ? 'disabled:opacity-100' : ''}`}
+          />
         </div>
-        {error ? (
-          <p id={`${inputId}-error`} role="alert" className="mt-2 text-sm text-[var(--error)]">
-            {error}
+        <Dismissible show={Boolean(error)}>
+          <p id={`${inputId}-error`} role="alert" className="px-1 pt-2 text-sm text-[var(--error)]">
+            {error || lastError}
           </p>
-        ) : (
-          <p id={`${inputId}-hint`} className="mt-2 text-xs leading-5 text-muted-foreground">
+        </Dismissible>
+        {!error && (
+          <p id={`${inputId}-hint`} className="mt-2 px-1 text-xs leading-5 text-muted-foreground">
             {seats?.total
               ? seats.remaining > 0
                 ? `${seats.remaining} of ${seats.total} beta seats left. `
@@ -245,7 +255,7 @@ function AccessRequest({ seats, source, onSignIn, idPrefix }) {
       <button
         type="button"
         onClick={onSignIn}
-        className="mt-3 inline-flex min-h-11 items-center rounded-md text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+        className="-ml-3 mt-2 inline-flex h-9 items-center rounded-full px-3 text-sm text-muted-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--wb-pill))] hover:text-foreground focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]"
       >
         Already have an account? Log in
       </button>
@@ -264,25 +274,25 @@ function ProductPreview() {
   ];
   return (
     <figure className="w-full" aria-label="Illustrative example of a Geneie conversation">
-      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-[var(--elevation-md)]">
-        <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-2.5">
+      <div className="wb-card overflow-hidden" style={{ borderRadius: 20 }}>
+        <div className="flex items-center justify-between border-b border-[hsl(var(--wb-line))] px-4 py-2.5">
           <span className="text-xs font-medium text-muted-foreground">Example conversation</span>
-          <span className="text-xs text-[var(--text-tertiary)]">Synthetic data</span>
+          <span className="wb-chip">Synthetic data</span>
         </div>
         <div className="space-y-4 p-4 sm:p-5">
-          <div className="flex justify-end">
-            <p className="max-w-[88%] rounded-xl rounded-br-sm bg-muted px-3.5 py-2.5 text-sm leading-5">
+          <div className="wb-rise flex justify-end" style={{ animationDelay: '120ms' }}>
+            <p className="max-w-[88%] rounded-2xl rounded-br-md bg-[hsl(var(--brand-100))] px-3.5 py-2.5 text-sm leading-5 text-[hsl(var(--brand-700))]">
               Which pathogenic variants fit infantile-onset seizures?
             </p>
           </div>
           <div className="space-y-3 text-sm leading-6">
-            <p className="text-muted-foreground">
+            <p className="wb-rise text-muted-foreground" style={{ animationDelay: '260ms' }}>
               Filtered 1,284 annotated variants to <span className="font-medium text-foreground">3 candidates</span>:
               ClinVar pathogenic or likely pathogenic, gnomAD allele frequency below 0.01, ranked against the HPO terms for the phenotype.
             </p>
-            <div className="overflow-x-auto rounded-lg border border-border">
+            <div className="overflow-x-auto rounded-2xl border border-[hsl(var(--wb-line))]">
               <table className="w-full min-w-[19rem] text-left text-[0.8125rem]">
-                <thead className="bg-muted/50 text-xs text-muted-foreground">
+                <thead className="bg-[hsl(var(--wb-pill))] text-xs text-muted-foreground">
                   <tr>
                     <th scope="col" className="px-3 py-2 font-medium">Gene</th>
                     <th scope="col" className="px-3 py-2 font-medium">Variant</th>
@@ -290,11 +300,11 @@ function ProductPreview() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.gene} className="border-t border-border">
+                  {rows.map((r, i) => (
+                    <tr key={r.gene} className="wb-rise border-t border-[hsl(var(--wb-line))]" style={{ animationDelay: `${380 + i * 70}ms` }}>
                       <td className="px-3 py-2 font-medium">{r.gene}</td>
                       <td className="px-3 py-2 font-mono text-xs">{r.variant}</td>
-                      <td className="px-3 py-2">{r.cls}</td>
+                      <td className="px-3 py-2"><span className="wb-chip" data-tone="brand">{r.cls}</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -303,14 +313,67 @@ function ProductPreview() {
           </div>
         </div>
       </div>
-      <figcaption className="mt-2 text-xs text-[var(--text-tertiary)]">
+      <figcaption className="mt-2 px-1 text-xs text-[var(--text-tertiary)]">
         Illustration only. Not a real case.
       </figcaption>
     </figure>
   );
 }
 
+/* --------------------------------------------------------------------- FAQ */
+
+/** Accordion rows: the answer opens with a height + fade, the chevron turns. Several can be open. */
+function FaqList() {
+  const base = useId();
+  const [open, setOpen] = useState(() => new Set());
+  const toggle = (i) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  return (
+    <div className="wb-card divide-y divide-[hsl(var(--wb-line))] overflow-hidden" style={{ borderRadius: 20 }}>
+      {FAQS.map((item, i) => {
+        const isOpen = open.has(i);
+        const btnId = `${base}-q${i}`;
+        const panelId = `${base}-a${i}`;
+        return (
+          <div key={item.q}>
+            <h3>
+              <button
+                type="button"
+                id={btnId}
+                aria-expanded={isOpen}
+                aria-controls={panelId}
+                onClick={() => toggle(i)}
+                className="flex min-h-12 w-full items-center justify-between gap-4 px-5 py-3.5 text-left text-[0.9375rem] font-medium outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] focus-visible:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[hsl(var(--brand-500))]"
+              >
+                <span>{item.q}</span>
+                <Turn open={isOpen} deg={180} className="shrink-0 text-muted-foreground">
+                  <ChevronDown className="size-4" aria-hidden="true" />
+                </Turn>
+              </button>
+            </h3>
+            <Collapse open={isOpen} id={panelId}>
+              <div role="region" aria-labelledby={btnId} className="px-5 pb-4 pr-10 text-sm leading-6 text-muted-foreground">
+                {item.a}
+              </div>
+            </Collapse>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------------- page */
+
+const SECTION = 'mx-auto max-w-6xl px-5 py-14 sm:px-8 lg:py-16';
+const H2 = 'text-2xl font-semibold tracking-tight sm:text-3xl';
+const NAV_PILL = 'wb-tab !hidden px-3.5 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] md:!flex';
+const FOOT_LINK = 'rounded-full px-3 py-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--wb-pill))] hover:text-foreground';
 
 const LandingPage = () => {
   useSeo({
@@ -336,18 +399,18 @@ const LandingPage = () => {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_SCHEMA) }} />
-      <div className="min-h-dvh bg-background font-sans text-foreground">
+      <div className="wb-scope min-h-dvh font-sans text-foreground">
         <a
           href="#main"
-          className="sr-only z-50 rounded-md bg-background px-3 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
+          className="sr-only z-50 rounded-full bg-[hsl(var(--wb-card))] px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
         >
           Skip to content
         </a>
 
         {/* ------------------------------------------------------------- nav */}
-        <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
+        <header className="sticky top-0 z-40 border-b border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-bg))]">
           <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-5 sm:px-8">
-            <Link to="/" aria-label="Geneie home" className="inline-flex rounded-md">
+            <Link to="/" aria-label="Geneie home" className="inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]">
               <BrandLogo className="h-8 w-auto" />
             </Link>
             <nav aria-label="Primary" className="flex items-center gap-1">
@@ -356,7 +419,7 @@ const LandingPage = () => {
                   key={item.target}
                   href={`#${item.target}`}
                   onClick={(e) => scrollTo(e, item.target)}
-                  className="hidden h-9 items-center rounded-md px-3 text-sm text-muted-foreground transition-colors hover:text-foreground md:inline-flex"
+                  className={NAV_PILL}
                 >
                   {item.label}
                 </a>
@@ -364,7 +427,7 @@ const LandingPage = () => {
               <Button
                 type="button"
                 variant="outline"
-                className="ml-1 h-10 px-4 text-sm font-medium md:h-9"
+                className="ml-1 h-9 px-4 text-sm font-medium"
                 onClick={() => navigate('/auth')}
               >
                 Log in
@@ -375,20 +438,20 @@ const LandingPage = () => {
 
         <main id="main">
           {/* ------------------------------------------------------------ hero */}
-          <section aria-labelledby="hero-title" className="mx-auto grid max-w-6xl items-center gap-12 px-5 pb-16 pt-14 sm:px-8 sm:pt-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:gap-16 lg:pb-24 lg:pt-24">
+          <section aria-labelledby="hero-title" className="mx-auto grid max-w-6xl items-center gap-12 px-5 pb-16 pt-14 sm:px-8 sm:pt-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:gap-16 lg:pb-20 lg:pt-20">
             <div>
-              <p className="text-sm font-medium text-primary">Clinical genomics, in conversation</p>
-              <h1 id="hero-title" className="mt-4 max-w-xl text-[2.25rem] font-semibold leading-[1.1] tracking-tight text-balance sm:text-5xl">
+              <p className="wb-rise wb-chip h-7 px-3 text-[13px] font-medium" data-tone="brand">Clinical genomics, in conversation</p>
+              <h1 id="hero-title" className="wb-rise mt-5 max-w-xl text-[2.25rem] font-semibold leading-[1.1] tracking-tight text-balance sm:text-5xl" style={{ animationDelay: '60ms' }}>
                 From VCF to ranked variants you can question.
               </h1>
-              <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
+              <p className="wb-rise mt-5 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8" style={{ animationDelay: '120ms' }}>
                 Upload a whole-genome or exome file. Geneie annotates it, applies ACMG and phenotype-driven
                 filters in deterministic pipelines, and lets you ask questions about the result in plain language.
               </p>
-              <div className="mt-8">
+              <div className="wb-rise mt-8" style={{ animationDelay: '180ms' }}>
                 <AccessRequest seats={seats} source="landing-hero" idPrefix="hero" onSignIn={() => navigate('/auth')} />
               </div>
-              <p className="mt-8 text-sm text-muted-foreground">
+              <p className="wb-rise mt-8 text-sm text-muted-foreground" style={{ animationDelay: '240ms' }}>
                 For clinicians, researchers, genetic counselors and bioinformaticians working with WGS and WES data.
               </p>
             </div>
@@ -396,56 +459,60 @@ const LandingPage = () => {
           </section>
 
           {/* ---------------------------------------------------- how it works */}
-          <section id="how-it-works" aria-labelledby="how-title" className="scroll-mt-14 border-t border-border">
-            <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8 lg:py-20">
-              <h2 id="how-title" className="text-2xl font-semibold tracking-tight sm:text-3xl">How it works</h2>
-              <p className="mt-2 max-w-xl text-muted-foreground">Three steps from a raw file to answers you can cite.</p>
-              <ol className="mt-10 grid gap-10 md:grid-cols-3 md:gap-8">
+          <section id="how-it-works" aria-labelledby="how-title" className="scroll-mt-14">
+            <div className={SECTION}>
+              <Reveal>
+                <h2 id="how-title" className={H2}>How it works</h2>
+                <p className="mt-2 max-w-xl text-muted-foreground">Three steps from a raw file to answers you can cite.</p>
+              </Reveal>
+              <ol className="mt-8 grid gap-4 md:grid-cols-3">
                 {STEPS.map((step, i) => (
-                  <li key={step.title}>
+                  <Reveal as="li" key={step.title} delay={i * 60} className="wb-card p-5">
                     <div className="flex items-center gap-3">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-sm font-medium tabular-nums">
+                      <span className="flex size-8 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-sm font-medium tabular-nums text-[hsl(var(--brand-700))]">
                         {i + 1}
                       </span>
-                      <step.icon className="h-5 w-5 text-primary" aria-hidden="true" strokeWidth={1.75} />
+                      <step.icon className="h-5 w-5 text-[hsl(var(--brand-500))]" aria-hidden="true" strokeWidth={1.75} />
                     </div>
                     <h3 className="mt-4 text-base font-semibold">{step.title}</h3>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">{step.body}</p>
-                  </li>
+                  </Reveal>
                 ))}
               </ol>
             </div>
           </section>
 
           {/* ------------------------------------------------------ capabilities */}
-          <section id="capabilities" aria-labelledby="cap-title" className="scroll-mt-14 border-t border-border bg-[var(--bg-surface-sunken)]">
-            <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8 lg:py-20">
-              <h2 id="cap-title" className="text-2xl font-semibold tracking-tight sm:text-3xl">What you get</h2>
-              <p className="mt-2 max-w-xl text-muted-foreground">
-                Established tools for the analysis, a language interface for the questions.
-              </p>
-              <ul className="mt-10 grid gap-x-10 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
-                {CAPABILITIES.map((c) => (
-                  <li key={c.title} className="flex gap-3.5">
-                    <c.icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" strokeWidth={1.75} />
-                    <div>
-                      <h3 className="text-base font-semibold">{c.title}</h3>
-                      <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{c.body}</p>
-                    </div>
-                  </li>
+          <section id="capabilities" aria-labelledby="cap-title" className="scroll-mt-14">
+            <div className={SECTION}>
+              <Reveal>
+                <h2 id="cap-title" className={H2}>What you get</h2>
+                <p className="mt-2 max-w-xl text-muted-foreground">
+                  Established tools for the analysis, a language interface for the questions.
+                </p>
+              </Reveal>
+              <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {CAPABILITIES.map((c, i) => (
+                  <Reveal as="li" key={c.title} delay={(i % 3) * 60} className="wb-card p-5">
+                    <span className="flex size-9 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]">
+                      <c.icon className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.75} />
+                    </span>
+                    <h3 className="mt-4 text-base font-semibold">{c.title}</h3>
+                    <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{c.body}</p>
+                  </Reveal>
                 ))}
               </ul>
             </div>
           </section>
 
           {/* ---------------------------------------------------- data handling */}
-          <section aria-labelledby="data-title" className="border-t border-border">
-            <div className="mx-auto grid max-w-6xl gap-8 px-5 py-16 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16 lg:py-20">
+          <section aria-labelledby="data-title">
+            <Reveal className={`${SECTION} grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16`}>
               <div>
-                <h2 id="data-title" className="text-2xl font-semibold tracking-tight sm:text-3xl">Data handling</h2>
+                <h2 id="data-title" className={H2}>Data handling</h2>
                 <p className="mt-2 text-muted-foreground">What to know before you upload.</p>
               </div>
-              <dl className="divide-y divide-border border-y border-border text-sm">
+              <dl className="wb-card divide-y divide-[hsl(var(--wb-line))] px-5 text-sm" style={{ borderRadius: 20 }}>
                 {[
                   ['Closed beta', 'Use de-identified or synthetic data. Identifiable patient data needs a separate written agreement.'],
                   ['Where data lives', 'Application data is stored in AWS Mumbai (ap-south-1) and encrypted in transit.'],
@@ -458,48 +525,39 @@ const LandingPage = () => {
                 ))}
                 <div className="py-4 text-muted-foreground">
                   Read the{' '}
-                  <Link to="/legal/privacy" className="text-primary underline underline-offset-2">Privacy Policy</Link>{' '}
+                  <Link to="/legal/privacy" className="text-[hsl(var(--brand-700))] underline underline-offset-2">Privacy Policy</Link>{' '}
                   and{' '}
-                  <Link to="/legal/terms" className="text-primary underline underline-offset-2">Terms of Use</Link>.
+                  <Link to="/legal/terms" className="text-[hsl(var(--brand-700))] underline underline-offset-2">Terms of Use</Link>.
                 </div>
               </dl>
-            </div>
+            </Reveal>
           </section>
 
           {/* ------------------------------------------------------------- FAQ */}
-          <section id="faq" aria-labelledby="faq-title" className="scroll-mt-14 border-t border-border bg-[var(--bg-surface-sunken)]">
-            <div className="mx-auto grid max-w-6xl gap-8 px-5 py-16 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16 lg:py-20">
-              <h2 id="faq-title" className="text-2xl font-semibold tracking-tight sm:text-3xl">Questions</h2>
-              <Accordion defaultValue={[]} className="w-full border-y border-border">
-                {FAQS.map((item, i) => (
-                  <AccordionItem key={item.q} value={`faq-${i}`}>
-                    <AccordionTrigger className="min-h-11 items-center gap-4 py-3.5 text-[0.9375rem] font-medium hover:no-underline">
-                      {item.q}
-                    </AccordionTrigger>
-                    <AccordionContent className="pb-4 pr-8 text-sm leading-6 text-muted-foreground">
-                      {item.a}
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
-            </div>
+          <section id="faq" aria-labelledby="faq-title" className="scroll-mt-14">
+            <Reveal className={`${SECTION} grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16`}>
+              <h2 id="faq-title" className={H2}>Questions</h2>
+              <FaqList />
+            </Reveal>
           </section>
 
           {/* -------------------------------------------------------- closing CTA */}
-          <section aria-labelledby="cta-title" className="border-t border-border">
-            <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8 lg:py-20">
-              <h2 id="cta-title" className="max-w-xl text-2xl font-semibold tracking-tight sm:text-3xl">
-                Try Geneie on your own variant file.
-              </h2>
-              <div className="mt-6">
-                <AccessRequest seats={seats} source="landing-pricing" idPrefix="cta" onSignIn={() => navigate('/auth')} />
-              </div>
+          <section aria-labelledby="cta-title">
+            <div className={SECTION}>
+              <Reveal className="wb-card px-6 py-10 sm:px-10" style={{ borderRadius: 20 }}>
+                <h2 id="cta-title" className="max-w-xl text-2xl font-semibold tracking-tight sm:text-3xl">
+                  Try Geneie on your own variant file.
+                </h2>
+                <div className="mt-6">
+                  <AccessRequest seats={seats} source="landing-pricing" idPrefix="cta" onSignIn={() => navigate('/auth')} />
+                </div>
+              </Reveal>
             </div>
           </section>
         </main>
 
         {/* ---------------------------------------------------------- footer */}
-        <footer id="contact" className="border-t border-border">
+        <footer id="contact" className="border-t border-[hsl(var(--wb-line))]">
           <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10 sm:px-8 md:flex-row md:items-start md:justify-between">
             <div className="max-w-xs">
               <BrandLogo className="h-8 w-auto" />
@@ -507,14 +565,14 @@ const LandingPage = () => {
                 Genomic variant analysis for researchers and clinicians. A decision-support tool, not a diagnostic device.
               </p>
             </div>
-            <nav aria-label="Footer" className="grid grid-cols-2 gap-x-12 gap-y-1 text-sm sm:grid-cols-3">
-              <Link to="/legal/terms" className="py-2 text-muted-foreground hover:text-foreground hover:underline">Terms of Use</Link>
-              <Link to="/legal/privacy" className="py-2 text-muted-foreground hover:text-foreground hover:underline">Privacy Policy</Link>
-              <a href="mailto:support@geneie.chat" className="py-2 text-muted-foreground hover:text-foreground hover:underline">support@geneie.chat</a>
-              <Link to="/auth" className="py-2 text-muted-foreground hover:text-foreground hover:underline">Log in</Link>
+            <nav aria-label="Footer" className="flex flex-wrap gap-x-1 gap-y-1 text-sm md:max-w-md md:justify-end">
+              <Link to="/legal/terms" className={FOOT_LINK}>Terms of Use</Link>
+              <Link to="/legal/privacy" className={FOOT_LINK}>Privacy Policy</Link>
+              <a href="mailto:support@geneie.chat" className={FOOT_LINK}>support@geneie.chat</a>
+              <Link to="/auth" className={FOOT_LINK}>Log in</Link>
             </nav>
           </div>
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-5 text-xs text-[var(--text-tertiary)] sm:px-8">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 border-t border-[hsl(var(--wb-line))] px-5 py-5 text-xs text-[var(--text-tertiary)] sm:px-8">
             <span>&copy; {new Date().getFullYear()} Geneie</span>
             <a
               href="https://omixir.com/"

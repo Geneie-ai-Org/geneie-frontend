@@ -92,9 +92,9 @@ function ReadToggle({ value, onChange, paired }) {
   );
 }
 
-function ChartBlock({ title, hint, trailing, children }) {
+function ChartBlock({ title, hint, trailing, children, className = '' }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-[hsl(var(--wb-line))] p-3">
+    <div className={`min-w-0 rounded-2xl border border-[hsl(var(--wb-line))] p-3 ${className}`}>
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="m-0 text-[12.5px] font-semibold text-foreground">{title}</p>
@@ -204,7 +204,7 @@ function SummaryBody({ data, wide = false }) {
       )}
 
       {s.insert_size?.histogram?.length > 1 && (
-        <ChartBlock title="Insert size" hint="How long the original DNA fragments were. One clear peak is what you want.">
+        <ChartBlock className={wide ? 'lg:col-span-2' : ''} title="Insert size" hint="How long the original DNA fragments were. One clear peak is what you want.">
           <Histogram
             values={s.insert_size.histogram}
             peak={s.insert_size.peak}

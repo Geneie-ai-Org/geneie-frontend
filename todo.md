@@ -3,7 +3,25 @@
 Every TODO below is to be done on the `newprod` branch of geneie-frontend (branch off
 `origin/newprod`). File paths and line numbers refer to `origin/newprod`.
 
-## TODO — newprod: replace the Module 1 job card with main/dev's drawer stepper
+## DONE — newprod: replace the Module 1 job card with main/dev's drawer stepper
+
+Applied on `feat/newprod-ui-todos` (PR #226). `Module1PipelineStepper.jsx` is deleted; the
+job renders through `PipelineDrawer` from the moment it is queued (ChatPage `showModule1Phase`
+now covers active / artifacts / cancelled / stopping, and the drawer mounts for a FASTQ-only
+conversation). The drawer header carries the GPU/CPU chip; `Module1RunLine` under the steps
+shows the queue line or phase text with Switch to CPU and Leave queue / Stop run as quiet links,
+and the confirm replaces that line (option A). `getModule1PhaseMessage` now drops backend text
+that matches `INFRA_DETAIL_RE` and falls back to `MODULE1_PHASE_MESSAGES`.
+
+Backend alignment checked against `bio-lab-project` `feat/newprod-baseline` (there is no
+backend branch named `newprod`; that is the newprod line): `/api/module1/status` returns
+`cancellable`, `switchable`, `compute`, `compute_preference`, `compute_reason`, queue fields;
+`POST /api/module1/cancel/{id}` and `PATCH /api/module1/preference/{id}` match the frontend
+calls. Not yet seen on a live run — check the queued, running, stopping and cancelled states on
+the next FASTQ job. Still open: which branch geneie.chat deploys from.
+
+Original entry:
+
 
 Seen on geneie.chat 2026-10-16 while the EB_4_S2 run was staging: the Module 1 job
 renders as a standalone bordered card above the composer — sample name + GPU chip,

@@ -34,7 +34,6 @@ import SubscriptionCanceled from '../components/SubscriptionCanceled';
 import ColumnInterpretationResults from '../components/ColumnInterpretationResults';
 import PipelineDrawer from '../components/PipelineDrawer';
 import Module1UploadForm from '../components/Module1UploadForm';
-import Module1PipelineStepper from '../components/Module1PipelineStepper';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
 import VariantUploadLoadingModal from '@/components/VariantUploadLoadingModal';
 import ThinkingIndicator from '@/components/chat/ThinkingIndicator';
@@ -47,7 +46,6 @@ import { conversationPath, isValidConversationId } from '@/lib/conversationRoute
 import { getDeviceId } from '@/lib/deviceId';
 import { useVariantPipeline } from '@/hooks/useVariantPipeline';
 import { useModule1Pipeline } from '@/hooks/useModule1Pipeline';
-import { module1FinishedSuccessfully } from '@/lib/module1PipelinePhases';
 import { useModule1Capacity } from '@/hooks/useModule1Capacity';
 import { useAutomaticPipelineConductor } from '@/hooks/useAutomaticPipelineConductor';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -1238,32 +1236,16 @@ const ChatPage = () => {
     [runAnnovarForCurrentConversation]
   );
 
-  // A FASTQ run reads as the first phase ("Reads → VCF") of the same pipeline card as its VCF —
-  // main's phase-pill drawer — once the run has finished and the VCF is in this conversation.
-  // Until then (queued, running, stopping, cancelled, failed, importing) newprod's stepper owns
-  // the job: only it carries the GPU/CPU chip, queue position and Leave queue / Stop run /
-  // Switch to CPU.
+  // A FASTQ run is the first phase ("Reads → VCF") of the same pipeline drawer as its VCF, from
+  // the moment it is queued: the drawer carries the GPU/CPU chip, queue position and the Leave
+  // queue / Stop run / Switch to CPU links on its status line.
   const showModule1Phase = Boolean(
-    showAnalysisPipeline &&
-      module1.module1Job &&
-      !module1.module1JobActive &&
-      module1.module1ArtifactsVisible &&
-      module1FinishedSuccessfully(module1.module1Job)
+    module1.module1Job &&
+      (module1.module1JobActive ||
+        module1.module1ArtifactsVisible ||
+        module1.module1CancelledVisible ||
+        module1.module1StoppingVisible)
   );
-  const module1PipelineBlock =
-    !showModule1Phase &&
-    (module1.module1JobActive ||
-      module1.module1ArtifactsVisible ||
-      module1.module1CancelledVisible ||
-      module1.module1StoppingVisible) ? (
-      <Module1PipelineStepper
-        job={module1.module1Job}
-        onStartOver={module1.openModule1Form}
-        onCancel={module1.cancelModule1Run}
-        onSwitchCompute={module1.switchModule1Compute}
-        cpuEstimateMin={module1Capacity.status === 'ok' ? module1Capacity.capacity?.est_cpu_total_min ?? null : null}
-      />
-    ) : null;
 
 
   // --- MAIN RENDER GATING LOGIC ---
@@ -1456,10 +1438,13 @@ const ChatPage = () => {
         })
       : null;
 
-  const pipelineDrawer = showAnalysisPipeline ? (
+  const pipelineDrawer = showAnalysisPipeline || showModule1Phase ? (
     <PipelineDrawer
       module1Job={showModule1Phase ? module1.module1Job : null}
       onModule1StartOver={module1.openModule1Form}
+      onModule1Cancel={module1.cancelModule1Run}
+      onModule1SwitchCompute={module1.switchModule1Compute}
+      module1CpuEstimateMin={module1Capacity.status === 'ok' ? module1Capacity.capacity?.est_cpu_total_min ?? null : null}
       fileName={currentDocument?.name ?? currentDocument?.file_name}
       conversationId={activeConversationId}
       expanded={pipelineExpanded}
@@ -1531,12 +1516,9 @@ const ChatPage = () => {
     isVariantSidebarOpen,
     onToggleVariantSidebar: () => setIsVariantSidebarOpen(!isVariantSidebarOpen),
     hasDocument: !!currentDocument,
-    // Module 1's stepper shares the drawer slot with the variant pipeline; only one of
-    // the two is ever non-null for a given conversation.
     pipelineDrawer: (
       <>
         {automaticPipelineBanner}
-        {module1PipelineBlock}
         {pipelineDrawer}
       </>
     ),

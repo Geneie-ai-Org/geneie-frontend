@@ -236,7 +236,7 @@ export function SegmentedPill({ options, value, onChange, className, ariaLabel, 
               else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); move(i, -1); }
             }}
             className={cn(
-              'relative h-7 rounded-full border border-transparent px-3.5 text-[13px] font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none',
+              'relative h-10 rounded-full border border-transparent px-3.5 md:h-7 text-[13px] font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none',
               opt.disabled
                 ? 'cursor-not-allowed text-muted-foreground/70'
                 : active
@@ -326,7 +326,7 @@ export function WizardStepper({ steps, current, className }) {
           );
         })}
       </ol>
-      <span className="shrink-0 text-xs tabular-nums text-muted-foreground" role="status" aria-live="polite">
+      <span className="shrink-0 text-xs tabular-nums text-muted-foreground max-sm:sr-only" role="status" aria-live="polite">
         Step {Math.min(current + 1, steps.length)} of {steps.length}
       </span>
     </div>
@@ -576,7 +576,7 @@ export function UploadErrorBanner({ error, devices, onRetry, onDismiss, retrying
             type="button"
             onClick={onRetry}
             disabled={retrying}
-            className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3.5 text-[13px] font-medium text-foreground outline-none transition-[background-color,transform] duration-150 hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] active:scale-[0.97] disabled:opacity-50"
+            className="mt-2 inline-flex h-10 items-center gap-1.5 rounded-full md:h-8 border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3.5 text-[13px] font-medium text-foreground outline-none transition-[background-color,transform] duration-150 hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] active:scale-[0.97] disabled:opacity-50"
           >
             <RotateCw className="h-3.5 w-3.5" aria-hidden />
             Retry upload

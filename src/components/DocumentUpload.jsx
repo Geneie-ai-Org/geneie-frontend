@@ -1738,8 +1738,8 @@ const DocumentUpload = ({
                 </QuietSummary>
               )}
               {/* Phones: the primary action first and full width, then Cancel, then Back. */}
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex gap-2">
+              <div className="flex flex-col-reverse gap-2 max-sm:grid max-sm:grid-cols-2 max-sm:flex-none sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex gap-2 max-sm:contents">
                   {metadataStep === 'analysis' || metadataStep === 'phenotype' ? (
                     <Button
                       type="button"
@@ -1750,21 +1750,21 @@ const DocumentUpload = ({
                         setMetadataStep(metadataStep === 'phenotype' ? 'analysis' : 'sample');
                       }}
                       disabled={isUploading}
-                      className="max-sm:h-11 max-sm:w-full"
+                      className="max-sm:order-2 max-sm:h-11 max-sm:w-full"
                     >
                       <ChevronLeft className="h-4 w-4" aria-hidden />
                       Back
                     </Button>
                   ) : null}
                 </div>
-                <div className="flex gap-2 max-sm:flex-col-reverse">
+                <div className="flex gap-2 max-sm:contents">
                   <Button
                     type="button"
                     variant="outline"
                     size="lg"
                     onClick={handleInfoFormCancel}
                     disabled={isUploading}
-                    className="max-sm:h-11 max-sm:w-full"
+                    className={`max-sm:order-3 max-sm:h-11 max-sm:w-full ${metadataStep === 'sample' ? 'max-sm:col-span-2' : ''}`}
                   >
                     Cancel
                   </Button>
@@ -1778,7 +1778,7 @@ const DocumentUpload = ({
                           ? `Still needed: ${missingEssentials.join(', ')}`
                           : undefined
                       }
-                      className="max-sm:h-11 max-sm:w-full"
+                      className="max-sm:order-1 max-sm:col-span-2 max-sm:h-11 max-sm:w-full"
                     >
                       Continue
                       <ArrowRight className="size-4" aria-hidden />
@@ -1790,7 +1790,7 @@ const DocumentUpload = ({
                       state={isUploading ? 'running' : 'idle'}
                       icon={editMode ? Check : importMode === 'url' ? Download : Upload}
                       disabled={isUploading}
-                      className="max-sm:h-11 max-sm:w-full"
+                      className="max-sm:order-1 max-sm:col-span-2 max-sm:h-11 max-sm:w-full"
                       labels={{
                         running: editMode ? 'Saving' : 'Uploading',
                         idle: editMode

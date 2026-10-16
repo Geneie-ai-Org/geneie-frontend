@@ -582,7 +582,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                                     <button
                                         type="button"
                                         onClick={() => { setResetMode(true); setPassword(''); setInlineMessage(null); setTouched({ email: false, password: false }); }}
-                                        className="-my-2 rounded-full px-2 py-2 text-xs font-medium text-[hsl(var(--brand-700))] outline-none transition-colors hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]"
+                                        className="-my-3 inline-flex min-h-11 items-center rounded-full px-2.5 text-xs font-medium sm:-my-2 sm:min-h-0 sm:px-2 sm:py-2 text-[hsl(var(--brand-700))] outline-none transition-colors hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]"
                                         disabled={loading}
                                     >
                                         Forgot password?
@@ -618,7 +618,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         <button
                             type="button"
                             onClick={switchMode}
-                            className="rounded-full px-2 py-1.5 font-medium text-[hsl(var(--brand-700))] outline-none transition-colors hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] disabled:opacity-50"
+                            className="inline-flex min-h-11 items-center rounded-full px-2 font-medium text-[hsl(var(--brand-700))] outline-none transition-colors hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] disabled:opacity-50 sm:min-h-0 sm:py-1.5"
                             disabled={loading}
                         >
                             {resetMode ? 'Back to log in' : isLogin ? 'Create an account' : 'Log in'}

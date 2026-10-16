@@ -59,7 +59,7 @@ function groupByRecency(items) {
 }
 
 const DEFAULT_TRIGGER_CLASS =
-  'inline-flex size-8 items-center justify-center rounded-full border border-transparent text-[var(--text-secondary)] transition-colors duration-150 hover:border-[hsl(var(--wb-line))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 aria-expanded:border-[hsl(var(--brand-300))] aria-expanded:bg-[hsl(var(--brand-50))]';
+  'inline-flex size-8 items-center justify-center rounded-full border border-transparent [@media(pointer:coarse)]:size-11 text-[var(--text-secondary)] transition-colors duration-150 hover:border-[hsl(var(--wb-line))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 aria-expanded:border-[hsl(var(--brand-300))] aria-expanded:bg-[hsl(var(--brand-50))]';
 
 /**
  * Notification bell with a recency-grouped popover.

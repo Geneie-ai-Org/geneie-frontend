@@ -10,7 +10,7 @@ const POINTS = [
 ];
 
 const PILL_LINK =
-  'inline-flex h-9 items-center gap-1.5 rounded-full border border-transparent px-3.5 text-[13px] text-muted-foreground outline-none transition-colors duration-150 hover:border-[hsl(var(--wb-line))] hover:bg-[hsl(var(--wb-card))] hover:text-foreground focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]';
+  'inline-flex h-11 items-center gap-1.5 rounded-full border border-transparent px-3.5 text-[13px] text-muted-foreground outline-none transition-colors duration-150 hover:border-[hsl(var(--wb-line))] hover:bg-[hsl(var(--wb-card))] hover:text-foreground focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] lg:h-9';
 
 /**
  * Split layout shared by /auth and the in-app sign-in gate. Left: a calm, static statement
@@ -52,7 +52,7 @@ const AuthPageLayout = ({ children, showHomeLink = false }) => (
 
     <div className="flex min-h-dvh flex-col lg:min-h-0">
       <header className="flex items-center justify-between border-b border-[hsl(var(--wb-line))] bg-[var(--pub-tint)] px-5 py-4 sm:px-8 lg:hidden">
-        <Link to="/" aria-label="Geneie home" className="inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]">
+        <Link to="/" aria-label="Geneie home" className="inline-flex min-h-11 items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]">
           <BrandLogo className="h-8 w-auto" />
         </Link>
         {showHomeLink && (
@@ -76,10 +76,10 @@ const AuthPageLayout = ({ children, showHomeLink = false }) => (
         <div className="wb-card pub-card wb-rise w-full max-w-[26rem] p-6 sm:p-8" style={{ borderRadius: 20 }}>{children}</div>
       </main>
 
-      <footer className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 px-5 pb-6 text-xs text-[var(--text-tertiary)]">
-        <Link to="/legal/terms" className="rounded-full px-3 py-2 transition-colors hover:bg-[hsl(var(--wb-pill))] hover:text-foreground">Terms</Link>
-        <Link to="/legal/privacy" className="rounded-full px-3 py-2 transition-colors hover:bg-[hsl(var(--wb-pill))] hover:text-foreground">Privacy</Link>
-        <a href="mailto:support@geneie.chat" className="rounded-full px-3 py-2 transition-colors hover:bg-[hsl(var(--wb-pill))] hover:text-foreground">support@geneie.chat</a>
+      <footer className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] text-xs text-[var(--text-tertiary)]">
+        <Link to="/legal/terms" className="inline-flex min-h-11 items-center rounded-full px-3 transition-colors hover:bg-[hsl(var(--wb-pill))] hover:text-foreground lg:min-h-0 lg:py-2">Terms</Link>
+        <Link to="/legal/privacy" className="inline-flex min-h-11 items-center rounded-full px-3 transition-colors hover:bg-[hsl(var(--wb-pill))] hover:text-foreground lg:min-h-0 lg:py-2">Privacy</Link>
+        <a href="mailto:support@geneie.chat" className="inline-flex min-h-11 items-center rounded-full px-3 transition-colors hover:bg-[hsl(var(--wb-pill))] hover:text-foreground lg:min-h-0 lg:py-2">support@geneie.chat</a>
       </footer>
     </div>
   </div>

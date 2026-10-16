@@ -44,6 +44,31 @@ function DialogOverlay({
   );
 }
 
+/**
+ * Phones: lifts a bottom-sheet dialog above the on-screen keyboard. Publishes the keyboard height as
+ * --kb-inset on <html> while a dialog is mounted (see the mobile block at the end of workbench.css).
+ */
+function KeyboardInset() {
+  React.useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null
+    if (!vv || !window.matchMedia("(max-width: 767px)").matches) return undefined
+    const root = document.documentElement
+    const update = () => {
+      const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop))
+      root.style.setProperty("--kb-inset", inset > 80 ? `${inset}px` : "0px")
+    }
+    update()
+    vv.addEventListener("resize", update)
+    vv.addEventListener("scroll", update)
+    return () => {
+      vv.removeEventListener("resize", update)
+      vv.removeEventListener("scroll", update)
+      root.style.removeProperty("--kb-inset")
+    }
+  }, [])
+  return null
+}
+
 function DialogContent({
   className,
   children,
@@ -60,6 +85,7 @@ function DialogContent({
           className
         )}
         {...props}>
+        <KeyboardInset />
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close

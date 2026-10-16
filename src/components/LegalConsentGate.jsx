@@ -161,7 +161,7 @@ export default function LegalConsentGate({ children }) {
   );
 
   return (
-    <div className="wb-scope wb-fade fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-5">
+    <div className="wb-scope wb-fade fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))]">
       <div className="wb-card wb-rise w-full max-w-md p-6 sm:p-7" style={{ borderRadius: 20 }}>
         {loadFailed ? (
           <>
@@ -176,7 +176,7 @@ export default function LegalConsentGate({ children }) {
               state="idle"
               labels={{ idle: 'Try again' }}
               onClick={refresh}
-              className="mt-6 h-10 w-full"
+              className="mt-6 h-11 w-full sm:h-10"
             />
           </>
         ) : (
@@ -216,7 +216,7 @@ export default function LegalConsentGate({ children }) {
               labels={{ idle: 'Accept and continue', running: 'Saving…' }}
               onClick={onAccept}
               disabled={!checked || submitting}
-              className="mt-5 h-10 w-full"
+              className="mt-5 h-11 w-full sm:h-10"
             />
             {!checked && (
               <p className="mt-2 text-center text-xs text-[var(--text-tertiary)]">

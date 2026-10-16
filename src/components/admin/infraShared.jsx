@@ -193,11 +193,11 @@ export function Stepper({ value, onChange, min, max, step = 1, disabled, width =
     const base = Number.isFinite(n) ? n : min;
     onChange(String(clamp(Math.round((base + d) / step) * step)));
   };
-  const btn = 'size-7 rounded-full text-muted-foreground';
+  const btn = 'size-7 rounded-full text-muted-foreground max-md:size-10';
   return (
     <div
       className={cn(
-        'inline-flex h-8 items-center rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-0.5 transition-colors duration-150 hover:border-[hsl(var(--brand-300))] focus-within:border-[hsl(var(--ring))] focus-within:ring-2 focus-within:ring-[hsl(var(--ring)/0.35)]',
+        'inline-flex h-8 items-center rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-0.5 max-md:h-11 transition-colors duration-150 hover:border-[hsl(var(--brand-300))] focus-within:border-[hsl(var(--ring))] focus-within:ring-2 focus-within:ring-[hsl(var(--ring)/0.35)]',
         disabled && 'opacity-50',
       )}
       role="group"
@@ -223,7 +223,7 @@ export function Stepper({ value, onChange, min, max, step = 1, disabled, width =
         disabled={disabled}
         aria-label={label}
         onChange={(e) => onChange(e.target.value)}
-        className={cn('h-7 bg-transparent text-center text-[13px] tabular-nums text-foreground outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none', width)}
+        className={cn('h-7 bg-transparent text-center text-[13px] max-md:h-10 max-md:text-base tabular-nums text-foreground outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none', width)}
       />
       <Button
         type="button"

@@ -103,7 +103,7 @@ function RowMenu({ user, disabled, onAction }) {
       <DropdownMenuTrigger
         disabled={disabled}
         aria-label={`Actions for ${label}`}
-        className={cn('inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] disabled:opacity-50 data-[popup-open]:bg-[hsl(var(--brand-100))] data-[popup-open]:text-[hsl(var(--brand-700))]', FOCUS)}
+        className={cn('inline-flex size-7 items-center justify-center rounded-full text-muted-foreground max-md:size-10 transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] disabled:opacity-50 data-[popup-open]:bg-[hsl(var(--brand-100))] data-[popup-open]:text-[hsl(var(--brand-700))]', FOCUS)}
       >
         <Ellipsis className="size-4" aria-hidden="true" />
       </DropdownMenuTrigger>
@@ -213,8 +213,8 @@ export default function UsersTable({
         <table className="w-full min-w-[1020px] border-separate border-spacing-0 text-left">
           <thead>
             <tr>
-              {HEADS.map(([h, cls]) => <th key={h} scope="col" className={cn(thCls, cls)}>{h}</th>)}
-              <th scope="col" className={cn(thCls, 'w-12')}><span className="sr-only">Actions</span></th>
+              {HEADS.map(([h, cls]) => <th key={h} scope="col" className={cn(thCls, cls, h === 'User' && 'max-md:left-0 max-md:z-20')}>{h}</th>)}
+              <th scope="col" className={cn(thCls, 'w-12 max-md:right-0 max-md:z-20')}><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody onKeyDown={nav.onKeyDown}>
@@ -254,12 +254,12 @@ export default function UsersTable({
               const rp = nav.rowProps(u.uid);
               return (
                 <tr key={u.uid} {...rp}>
-                  <td className={cn(tdCls, 'w-full')}>
+                  <td className={cn(tdCls, 'w-full max-md:sticky max-md:left-0 max-md:z-[1] max-md:h-14 max-md:w-[14rem] max-md:min-w-[14rem] max-md:bg-[hsl(var(--wb-card))]')}>
                     {nav.marker(u.uid)}
-                    <div className="flex min-w-0 items-center gap-1">
-                      <span className={cn('min-w-0 max-w-[300px] truncate text-foreground', !u.email && 'text-muted-foreground')} title={u.email || undefined}>{u.email || '(no email)'}</span>
+                    <div className="flex min-w-0 items-center gap-1 max-md:flex-wrap">
+                      <span className={cn('min-w-0 max-w-[300px] truncate max-md:max-w-[10rem] text-foreground', !u.email && 'text-muted-foreground')} title={u.email || undefined}>{u.email || '(no email)'}</span>
                       {u.email && <CopyIcon value={u.email} label="email" />}
-                      <span className="ml-auto flex shrink-0 items-center gap-0.5 pl-2">
+                      <span className="ml-auto flex shrink-0 items-center gap-0.5 pl-2 max-md:ml-0 max-md:basis-full max-md:pl-0">
                         <code className="font-mono text-xs text-muted-foreground" title={u.uid}>{u.uid.length > 12 ? `${u.uid.slice(0, 11)}…` : u.uid}</code>
                         <CopyIcon value={u.uid} label="uid" />
                       </span>
@@ -285,7 +285,7 @@ export default function UsersTable({
                       <span className="text-muted-foreground">–</span>
                     )}
                   </td>
-                  <td className={cn(tdCls, 'text-right')}>
+                  <td className={cn(tdCls, 'text-right max-md:sticky max-md:right-0 max-md:z-[1] max-md:bg-[hsl(var(--wb-card))]')}>
                     <RowMenu user={u} disabled={busy} onAction={onAction} />
                   </td>
                 </tr>

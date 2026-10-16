@@ -115,8 +115,8 @@ const AuthActionPage = () => {
         mode === 'verifyEmail' ? 'Verifying your email' : 'Choose a new password';
     const title = status === 'done' && mode === 'verifyEmail' ? 'Email verified' : status === 'invalid' ? 'This link cannot be used' : heading;
 
-    const linkClass = 'inline-flex h-10 items-center justify-center rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-5 text-sm font-medium text-foreground outline-none transition-colors duration-150 hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]';
-    const primaryLinkClass = 'inline-flex h-10 items-center justify-center rounded-full bg-[hsl(var(--brand-solid))] px-5 text-sm font-medium text-[hsl(var(--on-brand))] outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-solid-hover))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] focus-visible:ring-offset-2';
+    const linkClass = 'inline-flex h-11 items-center justify-center rounded-full sm:h-10 border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-5 text-sm font-medium text-foreground outline-none transition-colors duration-150 hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]';
+    const primaryLinkClass = 'inline-flex h-11 items-center justify-center rounded-full sm:h-10 bg-[hsl(var(--brand-solid))] px-5 text-sm font-medium text-[hsl(var(--on-brand))] outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-solid-hover))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] focus-visible:ring-offset-2';
 
     const markState = status === 'checking' ? 'running' : status === 'invalid' ? 'failed' : status === 'done' ? 'done' : null;
 

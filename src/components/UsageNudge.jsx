@@ -43,16 +43,16 @@ const UsageNudge = ({
     <Dismissible show={Boolean(message)} className={className}>
       <div className="py-0.5">
         <div
-          className="flex min-h-9 items-center gap-2.5 rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] py-1 pl-3.5 pr-1.5 text-[13px] leading-snug tabular-nums text-[var(--text-secondary)]"
+          className="flex min-h-9 items-center gap-2.5 rounded-full max-sm:flex-wrap max-sm:rounded-3xl max-sm:py-2 border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] py-1 pl-3.5 pr-1.5 text-[13px] leading-snug tabular-nums text-[var(--text-secondary)]"
         >
-          <span className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: t.dot }} aria-hidden />
+          <span className="size-1.5 shrink-0 rounded-full max-sm:mt-2 max-sm:self-start" style={{ backgroundColor: t.dot }} aria-hidden />
           <span className="sr-only">{t.word}: </span>
-          <span className="min-w-0 flex-1">{shown}</span>
+          <span className="min-w-0 flex-1 max-sm:min-w-[calc(100%-1.5rem)]">{shown}</span>
           {ctaLabel && onCta && (
             <button
               type="button"
               onClick={onCta}
-              className={`${FOCUS} inline-flex h-7 shrink-0 items-center rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3 text-[13px] font-medium text-[hsl(var(--brand-700))] transition-[background-color,border-color,transform] duration-150 hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] active:scale-[0.97] motion-reduce:transition-none [@media(pointer:coarse)]:h-11`}
+              className={`${FOCUS} inline-flex h-7 shrink-0 items-center rounded-full max-sm:ml-auto border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3 text-[13px] font-medium text-[hsl(var(--brand-700))] transition-[background-color,border-color,transform] duration-150 hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] active:scale-[0.97] motion-reduce:transition-none [@media(pointer:coarse)]:h-11`}
             >
               {ctaLabel}
             </button>

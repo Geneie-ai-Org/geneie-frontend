@@ -94,7 +94,7 @@ export const PasswordField = React.forwardRef(function PasswordField(
           onClick={toggle}
           aria-label={show ? 'Hide password' : 'Show password'}
           aria-pressed={show}
-          className="absolute right-1.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] active:scale-95"
+          className="absolute right-1 top-1/2 flex size-10 -translate-y-1/2 sm:right-1.5 sm:size-8 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] active:scale-95"
         >
           <AnimatePresence mode="wait" initial={false}>
             <motion.span

@@ -217,7 +217,7 @@ function AccessRequest({ seats, source, onSignIn, idPrefix }) {
             disabled={submitting}
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? `${inputId}-error` : `${inputId}-hint`}
-            className="h-9 min-w-0 flex-1 !rounded-none !border-0 !bg-transparent px-0 text-base !shadow-none !outline-none !ring-0 sm:text-sm"
+            className="h-11 min-w-0 flex-1 !rounded-none !border-0 !bg-transparent px-0 text-base !shadow-none !outline-none !ring-0 sm:h-9 sm:text-sm"
           />
           {/* Honeypot: off-screen and hidden from assistive tech, so only a bot fills it. */}
           <input
@@ -234,7 +234,7 @@ function AccessRequest({ seats, source, onSignIn, idPrefix }) {
             state={submitting ? 'running' : 'idle'}
             labels={{ idle: isFull ? 'Join waitlist' : 'Request access', running: 'Sending…' }}
             icon={ArrowRight}
-            className={`h-9 shrink-0 px-4 text-sm font-medium ${submitting ? 'disabled:opacity-100' : ''}`}
+            className={`h-11 shrink-0 px-4 text-sm font-medium sm:h-9 ${submitting ? 'disabled:opacity-100' : ''}`}
           />
         </div>
         <Dismissible show={Boolean(error)}>
@@ -256,7 +256,7 @@ function AccessRequest({ seats, source, onSignIn, idPrefix }) {
       <button
         type="button"
         onClick={onSignIn}
-        className="-ml-3 mt-2 inline-flex h-9 items-center rounded-full px-3 text-sm text-muted-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--wb-pill))] hover:text-foreground focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]"
+        className="-ml-3 mt-2 inline-flex h-11 items-center rounded-full px-3 text-sm sm:h-9 text-muted-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--wb-pill))] hover:text-foreground focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]"
       >
         Already have an account? Log in
       </button>
@@ -379,7 +379,7 @@ function FaqList() {
 const SECTION = 'mx-auto max-w-6xl px-5 py-14 sm:px-8 lg:py-16';
 const H2 = 'text-2xl font-semibold tracking-tight sm:text-3xl';
 const NAV_PILL = 'wb-tab !hidden px-3.5 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] md:!flex';
-const FOOT_LINK = 'rounded-full px-3 py-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--wb-pill))] hover:text-foreground';
+const FOOT_LINK = 'inline-flex min-h-11 items-center rounded-full px-3 py-2 sm:min-h-0 text-muted-foreground transition-colors hover:bg-[hsl(var(--wb-pill))] hover:text-foreground';
 
 const LandingPage = () => {
   useSeo({
@@ -416,7 +416,7 @@ const LandingPage = () => {
         {/* ------------------------------------------------------------- nav */}
         <header className="pub-header sticky top-0 z-40 border-b border-[hsl(var(--wb-line))]">
           <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-5 sm:px-8">
-            <Link to="/" aria-label="Geneie home" className="inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]">
+            <Link to="/" aria-label="Geneie home" className="inline-flex min-h-11 items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] sm:min-h-0">
               <BrandLogo className="h-8 w-auto" />
             </Link>
             <nav aria-label="Primary" className="flex items-center gap-1">
@@ -433,7 +433,7 @@ const LandingPage = () => {
               <Button
                 type="button"
                 variant="outline"
-                className="ml-1 h-9 px-4 text-sm font-medium"
+                className="ml-1 h-11 px-4 text-sm font-medium sm:h-9"
                 onClick={() => navigate('/auth')}
               >
                 Log in
@@ -445,7 +445,7 @@ const LandingPage = () => {
         <main id="main">
           {/* ------------------------------------------------------------ hero */}
           <div className="pub-hero tx tx--lattice">
-          <section aria-labelledby="hero-title" className="mx-auto grid max-w-6xl items-center gap-12 px-5 pb-16 pt-14 sm:px-8 sm:pt-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:gap-16 lg:pb-20 lg:pt-20">
+          <section aria-labelledby="hero-title" className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)] items-center gap-12 px-5 pb-16 pt-14 sm:px-8 sm:pt-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:gap-16 lg:pb-20 lg:pt-20">
             <div>
               <p className="wb-rise wb-chip h-7 px-3 text-[13px] font-medium" data-tone="brand">Clinical genomics, in conversation</p>
               <h1 id="hero-title" className="wb-rise mt-5 max-w-xl text-[2.25rem] font-semibold leading-[1.1] tracking-tight text-balance sm:text-5xl" style={{ animationDelay: '60ms' }}>
@@ -587,20 +587,20 @@ const LandingPage = () => {
                 Genomic variant analysis for researchers and clinicians. A decision-support tool, not a diagnostic device.
               </p>
             </div>
-            <nav aria-label="Footer" className="flex flex-wrap gap-x-1 gap-y-1 text-sm md:max-w-md md:justify-end">
+            <nav aria-label="Footer" className="-ml-3 flex flex-wrap gap-x-1 gap-y-1 text-sm md:ml-0 md:max-w-md md:justify-end">
               <Link to="/legal/terms" className={FOOT_LINK}>Terms of Use</Link>
               <Link to="/legal/privacy" className={FOOT_LINK}>Privacy Policy</Link>
               <a href="mailto:support@geneie.chat" className={FOOT_LINK}>support@geneie.chat</a>
               <Link to="/auth" className={FOOT_LINK}>Log in</Link>
             </nav>
           </div>
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 border-t border-[hsl(var(--wb-line))] px-5 py-5 text-xs text-[var(--text-tertiary)] sm:px-8">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 border-t border-[hsl(var(--wb-line))] px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-xs text-[var(--text-tertiary)] sm:px-8 sm:py-5">
             <span>&copy; {new Date().getFullYear()} Geneie</span>
             <a
               href="https://omixir.com/"
               target="_blank"
               rel="noopener"
-              className="inline-flex items-center gap-1.5 hover:text-foreground"
+              className="inline-flex min-h-11 items-center gap-1.5 hover:text-foreground sm:min-h-0"
             >
               Powered by Omixir
             </a>

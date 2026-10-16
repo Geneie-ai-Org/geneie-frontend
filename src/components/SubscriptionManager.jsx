@@ -75,7 +75,7 @@ const SubscriptionManager = ({ isInputGated, userId }) => {
             )}
             <div className="wb-scope flex min-h-0 flex-1 flex-col overflow-y-auto">
             <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:px-6 sm:py-14">
-                <div className="wb-rise mb-8 flex items-start justify-between gap-4">
+                <div className="wb-rise mb-8 flex flex-col-reverse items-start gap-4 sm:flex-row sm:justify-between">
                     <div className="min-w-0">
                         <span className="wb-chip mb-3" data-tone="brand">
                             {isGuest ? 'Guest' : isPro ? 'Pro plan' : 'Free plan'}
@@ -84,7 +84,7 @@ const SubscriptionManager = ({ isInputGated, userId }) => {
                         <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted-foreground">{content.description}</p>
                     </div>
                     {!isGuest && (
-                        <Button variant="outline" size="lg" className="shrink-0" onClick={() => performLogout(navigate)}>
+                        <Button variant="outline" size="lg" className="shrink-0 max-sm:h-11 max-sm:self-end" onClick={() => performLogout(navigate)}>
                             <LogOut aria-hidden="true" /> Sign out
                         </Button>
                     )}

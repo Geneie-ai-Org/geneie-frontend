@@ -1169,8 +1169,8 @@ const Module1UploadForm = ({
                 </QuietSummary>
               )}
               {/* Phones: the primary action first and full width, then Cancel, then Back. */}
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 items-center gap-2">
+              <div className="flex flex-col-reverse gap-2 max-sm:grid max-sm:grid-cols-2 max-sm:flex-none sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-2 max-sm:contents">
                   {metadataStep !== 'sample' ? (
                     <Button
                       type="button"
@@ -1178,21 +1178,21 @@ const Module1UploadForm = ({
                       size="lg"
                       onClick={() => setMetadataStep(metadataStep === 'phenotype' ? 'analysis' : 'sample')}
                       disabled={module1Submitting}
-                      className="max-sm:h-11 max-sm:w-full"
+                      className="max-sm:order-2 max-sm:h-11 max-sm:w-full"
                     >
                       <ChevronLeft className="h-4 w-4" aria-hidden />
                       Back
                     </Button>
                   ) : null}
                 </div>
-                <div className="flex flex-col items-end gap-1 max-sm:items-stretch">
-                  <div className="flex items-center gap-2 max-sm:flex-col-reverse max-sm:items-stretch">
+                <div className="flex flex-col items-end gap-1 max-sm:contents">
+                  <div className="flex items-center gap-2 max-sm:contents">
                     <Button
                       type="button"
                       variant="outline"
                       size="lg"
                       onClick={closeNow}
-                      className="max-sm:h-11 max-sm:w-full"
+                      className={`max-sm:order-3 max-sm:h-11 max-sm:w-full ${metadataStep === 'sample' ? 'max-sm:col-span-2' : ''}`}
                     >
                       Cancel
                     </Button>
@@ -1206,7 +1206,7 @@ const Module1UploadForm = ({
                             ? `Still needed: ${essentialsMissing.join(', ')}`
                             : undefined
                         }
-                        className="max-sm:h-11 max-sm:w-full"
+                        className="max-sm:order-1 max-sm:col-span-2 max-sm:h-11 max-sm:w-full"
                       >
                         Continue
                         <ArrowRight className="size-4" aria-hidden />
@@ -1220,7 +1220,7 @@ const Module1UploadForm = ({
                         labels={{ idle: finalSubmitLabel, running: isUrlMode ? 'Importing' : 'Uploading' }}
                         disabled={!canSubmit || analysisTypeMissing}
                         title={finalBlockers.length ? finalBlockers.join(' ') : undefined}
-                        className="max-sm:h-11 max-sm:w-full"
+                        className="max-sm:order-1 max-sm:col-span-2 max-sm:h-11 max-sm:w-full"
                       />
                     )}
                   </div>

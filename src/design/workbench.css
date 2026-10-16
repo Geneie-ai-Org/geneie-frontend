@@ -626,3 +626,83 @@
   font-size: 12px;
   font-weight: 500;
 }
+
+/* ======================================================================================
+ * Mobile presentation for dialogs (lane MOBILE-PAGES). Phones only: below 768px every
+ * Dialog / AlertDialog becomes a bottom sheet (rounded top corners, scrolls inside, keeps
+ * clear of the home indicator and the on-screen keyboard). Desktop / tablet are untouched.
+ * Opt out with data-mobile="center" on the content element.
+ * Base UI still owns Esc, the focus trap and focus return; this block is layout only.
+ * `html` prefix + !important beat per-dialog width/height utilities (max-w-*, !min-w-*).
+ * ====================================================================================== */
+@media (max-width: 767px) {
+  html [data-slot='dialog-content']:not([data-mobile='center']),
+  html [data-slot='alert-dialog-content']:not([data-mobile='center']) {
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: var(--kb-inset, 0px) !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    max-height: calc(100dvh - max(env(safe-area-inset-top), 12px) - var(--kb-inset, 0px)) !important;
+    transform: none;
+    border-radius: 20px 20px 0 0;
+    border-bottom-width: 0;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    overscroll-behavior: contain;
+    transition: opacity 200ms var(--ease-out), transform 300ms cubic-bezier(0.22, 1, 0.36, 1), bottom 150ms var(--ease-out);
+  }
+  html [data-slot='dialog-content']:not([data-mobile='center']):not(.overflow-hidden):not(.overflow-y-auto),
+  html [data-slot='alert-dialog-content']:not([data-mobile='center']):not(.overflow-hidden):not(.overflow-y-auto) { overflow-y: auto; }
+  html [data-slot='dialog-content']:not([data-mobile='center'])[data-starting-style],
+  html [data-slot='dialog-content']:not([data-mobile='center'])[data-ending-style],
+  html [data-slot='alert-dialog-content']:not([data-mobile='center'])[data-starting-style],
+  html [data-slot='alert-dialog-content']:not([data-mobile='center'])[data-ending-style] {
+    opacity: 1;
+    transform: translateY(100%);
+  }
+  html [data-slot='dialog-content']:not([data-mobile='center'])[data-ending-style],
+  html [data-slot='alert-dialog-content']:not([data-mobile='center'])[data-ending-style] { transition-duration: 160ms; }
+
+  /* Action bar stays in reach while the body scrolls. */
+  html [data-slot='dialog-content']:not([data-mobile='center']) [data-slot='dialog-footer'],
+  html [data-slot='alert-dialog-content']:not([data-mobile='center']) [data-slot='alert-dialog-footer'] {
+    position: sticky;
+    bottom: calc(-1 * max(1rem, env(safe-area-inset-bottom)));
+    margin-bottom: calc(-1 * max(1rem, env(safe-area-inset-bottom)));
+    z-index: 1;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    border-top: 1px solid hsl(var(--wb-line));
+    background-color: hsl(var(--wb-card));
+  }
+  html [data-slot='dialog-content'] [data-slot='dialog-footer'] :is(button, a),
+  html [data-slot='alert-dialog-content'] [data-slot='alert-dialog-footer'] :is(button, a) { min-height: 44px; }
+  html [data-slot='dialog-content'] :is([data-slot='input'], [data-slot='select-trigger']),
+  html [data-slot='alert-dialog-content'] :is([data-slot='input'], [data-slot='select-trigger']) { min-height: 44px; }
+
+  html [data-slot='dialog-content'] [data-slot='dialog-footer'] > :is(button, a),
+  html [data-slot='alert-dialog-content'] [data-slot='alert-dialog-footer'] > :is(button, a) { width: 100%; justify-content: center; border-radius: 9999px; }
+
+  /* Touch targets inside dialogs: buttons 44px, icon buttons 40px. */
+  html :is([data-slot='dialog-content'], [data-slot='alert-dialog-content']) [data-slot='button']:not([data-size^='icon']) { min-height: 44px; }
+  html :is([data-slot='dialog-content'], [data-slot='alert-dialog-content']) :is(.wb-iconbtn, [data-slot='button'][data-size^='icon']) { min-width: 40px; min-height: 40px; }
+
+  html :is([data-slot='dialog-content'], [data-slot='alert-dialog-content']) .wb-tab { height: auto; min-height: 44px; }
+
+  /* 40px close target in the corner. */
+  html [data-slot='dialog-content'] > [data-slot='dialog-close'] { top: 0.5rem; right: 0.5rem; width: 40px; height: 40px; }
+
+  /* Inputs inside dialogs: 16px so iOS does not zoom on focus. */
+  html [data-slot='dialog-content'] :is(input:not([type='checkbox']):not([type='radio']), textarea, select),
+  html [data-slot='alert-dialog-content'] :is(input:not([type='checkbox']):not([type='radio']), textarea, select) { font-size: 16px; }
+}
+@media (max-width: 767px) and (prefers-reduced-motion: reduce) {
+  html [data-slot='dialog-content'], html [data-slot='alert-dialog-content'] { transition: none; }
+}
+
+/* Admin tools on phones: 40px touch targets (lane MOBILE-PAGES). Tables scroll inside their own box with a sticky first column. */
+@media (max-width: 767px) {
+  .adm-scope :is([data-slot='button']:not([data-size^='icon']), .wb-tab) { min-height: 40px; }
+  .adm-scope :is(input:not([type='checkbox']):not([type='radio']), select, textarea) { min-height: 40px; font-size: 16px; }
+}

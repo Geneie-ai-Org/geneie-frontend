@@ -96,7 +96,7 @@ export function HelpPopover({ title, label = 'Help', align = 'end', className, c
       <PopoverTrigger
         aria-label={title ? `${label}: ${title}` : label}
         className={cn(
-          'inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] data-[popup-open]:bg-[hsl(var(--brand-100))] data-[popup-open]:text-[hsl(var(--brand-700))]',
+          'relative inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 after:absolute after:-inset-2.5 after:content-[\'\'] md:after:hidden hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] data-[popup-open]:bg-[hsl(var(--brand-100))] data-[popup-open]:text-[hsl(var(--brand-700))]',
           FOCUS,
           className,
         )}
@@ -132,7 +132,7 @@ export function CopyIcon({ value, label = 'value', className }) {
       variant="ghost"
       size="icon-xs"
       aria-label={`Copy ${label}`}
-      className={cn('size-6 text-muted-foreground', FOCUS, className)}
+      className={cn('size-6 text-muted-foreground max-md:-mx-1 max-md:-my-2 max-md:size-10', FOCUS, className)}
     />
   );
 }
@@ -140,7 +140,7 @@ export function CopyIcon({ value, label = 'value', className }) {
 /** Page frame shared by /admin-haha and /admin-haha/infra so the two read as one tool. */
 export function AdminFrame({ children }) {
   return (
-    <div className="wb-scope min-h-screen text-foreground">
+    <div className="wb-scope adm-scope min-h-screen text-foreground">
       <div className="mx-auto w-full max-w-[1280px] px-4 py-6 sm:px-6 sm:py-8">{children}</div>
     </div>
   );
@@ -346,7 +346,7 @@ export function Segmented({ items, value, onChange, label, group }) {
     refs.current[next]?.focus();
   };
   return (
-    <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className="flex flex-wrap items-center gap-1">
+    <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className="flex flex-wrap items-center gap-1 max-md:w-full max-md:flex-nowrap max-md:overflow-x-auto max-md:pb-1 [&>*]:shrink-0">
       {items.map((it, i) => {
         const on = it.key === value;
         return (

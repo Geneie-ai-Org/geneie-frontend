@@ -97,7 +97,7 @@ const TopUpSelector = ({ userId, db, currentQueries, onTopUpSuccess }) => {
               <label
                 key={tier.queries}
                 className={cn(
-                  'wb-row wb-rise relative min-h-[52px] cursor-pointer overflow-hidden has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[hsl(var(--ring))]',
+                  'wb-row wb-rise relative min-h-[52px] cursor-pointer overflow-hidden max-sm:!rounded-3xl has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[hsl(var(--ring))]',
                   checked && 'border-[hsl(var(--brand-300))]',
                   loading && 'pointer-events-none opacity-60'
                 )}

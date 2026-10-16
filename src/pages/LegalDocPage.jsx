@@ -204,7 +204,7 @@ export default function LegalDocPage({ doc }) {
       href={`#${id}`}
       onClick={(e) => jump(e, id)}
       aria-current={activeSection === id ? 'location' : undefined}
-      className={`relative block rounded-full px-3.5 py-1.5 text-[0.8125rem] leading-5 outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] ${
+      className={`relative block rounded-full px-3.5 py-3 text-[0.8125rem] leading-5 outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] lg:py-1.5 ${
         activeSection === id
           ? 'font-medium text-[hsl(var(--brand-700))]'
           : 'text-muted-foreground hover:bg-[hsl(var(--wb-pill))] hover:text-foreground'
@@ -219,7 +219,7 @@ export default function LegalDocPage({ doc }) {
     <div className="wb-scope pub-scope tx tx--lattice min-h-dvh bg-[var(--pub-tint)] text-foreground" style={{ '--tx-at': '50% 0%', '--tx-fade': '70% 360px', '--tx-opacity': 0.8, '--tx-opacity-dark': 0.6 }}>
       <header className="pub-header sticky top-0 z-20 border-b border-[hsl(var(--wb-line))] print:hidden">
         <div className="mx-auto flex h-14 max-w-[68rem] items-center justify-between gap-4 px-5 sm:px-8">
-          <Link to="/" aria-label="Geneie home" className="inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]">
+          <Link to="/" aria-label="Geneie home" className="inline-flex min-h-11 items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]">
             <BrandLogo className="h-7 w-auto" />
           </Link>
           <nav aria-label="Legal documents" className="flex items-center gap-1">
@@ -229,7 +229,7 @@ export default function LegalDocPage({ doc }) {
                 to={d.path}
                 aria-current={key === activeKey ? 'page' : undefined}
                 data-selected={key === activeKey ? 'true' : 'false'}
-                className="wb-tab px-3.5 text-[13px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]"
+                className="wb-tab min-h-10 px-3.5 text-[13px] font-medium outline-none sm:min-h-0 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]"
               >
                 {d.title.split(' ')[0]}
               </Link>
@@ -277,7 +277,7 @@ export default function LegalDocPage({ doc }) {
                 variant="outline"
                 size="sm"
                 onClick={() => window.print()}
-                className="ml-auto h-8 gap-1.5 px-3 text-muted-foreground print:hidden"
+                className="ml-auto h-11 gap-1.5 sm:h-8 px-3 text-muted-foreground print:hidden"
               >
                 <Printer className="h-3.5 w-3.5" aria-hidden="true" /> Print
               </Button>
@@ -290,7 +290,7 @@ export default function LegalDocPage({ doc }) {
             <div role="alert" className="wb-rise mt-8 rounded-2xl border border-[var(--error)]/25 bg-[var(--error-soft)] p-4 text-sm">
               <p className="font-medium text-[var(--error)]">We could not load this document.</p>
               <p className="mt-1 text-muted-foreground">{error}. Check your connection and try again.</p>
-              <Button type="button" variant="outline" className="mt-3 h-9" onClick={() => setAttempt((n) => n + 1)}>
+              <Button type="button" variant="outline" className="mt-3 h-11 sm:h-9" onClick={() => setAttempt((n) => n + 1)}>
                 Try again
               </Button>
             </div>

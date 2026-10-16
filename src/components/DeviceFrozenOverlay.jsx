@@ -66,7 +66,7 @@ const DeviceFrozenOverlay = ({ descriptor, devices, onRetry }) => {
 
   return (
     <div
-      className="wb-scope wb-fade fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-5"
+      className="wb-scope wb-fade fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))]"
       style={{ backgroundColor: 'hsl(var(--wb-bg) / 0.96)' }}
       role="alertdialog"
       aria-modal="true"
@@ -107,7 +107,7 @@ const DeviceFrozenOverlay = ({ descriptor, devices, onRetry }) => {
         </p>
 
         <div className="mt-5 flex flex-col gap-2 sm:flex-row-reverse">
-          <Button type="button" onClick={onRetry} disabled={signingOut} autoFocus className="h-10 sm:px-5">
+          <Button type="button" onClick={onRetry} disabled={signingOut} autoFocus className="h-11 sm:h-10 sm:px-5">
             Try again
           </Button>
           <Button
@@ -115,7 +115,7 @@ const DeviceFrozenOverlay = ({ descriptor, devices, onRetry }) => {
             variant="outline"
             onClick={handleSignOut}
             disabled={signingOut}
-            className="h-10 sm:px-5"
+            className="h-11 sm:h-10 sm:px-5"
           >
             {signingOut ? 'Signing out…' : 'Sign out'}
           </Button>

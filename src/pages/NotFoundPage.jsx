@@ -56,7 +56,7 @@ export default function NotFoundPage() {
   return (
     <div className="wb-scope pub-scope pub-hero tx tx--lattice flex min-h-dvh flex-col text-foreground" style={{ '--tx-at': '50% 42%', '--tx-fade': '50% 60%' }}>
       <header className="px-5 py-4 sm:px-8">
-        <Link to="/" aria-label="Geneie home" className="inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]">
+        <Link to="/" aria-label="Geneie home" className="inline-flex min-h-11 items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]">
           <BrandLogo className="h-8 w-auto" />
         </Link>
       </header>
@@ -66,7 +66,7 @@ export default function NotFoundPage() {
           {/* A helix with a piece missing; decorative, so hidden from assistive tech. */}
           <pre
             aria-hidden="true"
-            className="mb-5 select-none overflow-hidden font-mono text-[13px] leading-[1.25] text-[hsl(var(--brand-500))]"
+            className="mb-5 select-none overflow-hidden font-mono text-[clamp(8.5px,2.7vw,13px)] leading-[1.25] text-[hsl(var(--brand-500))]"
           >{GLYPH}</pre>
           <span className="wb-chip font-mono tabular-nums">404</span>
           <h1 className="mt-3 text-2xl font-semibold tracking-tight">This page does not exist</h1>
@@ -79,12 +79,12 @@ export default function NotFoundPage() {
           </code>
 
           <div className="mt-7 flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Link to="/app" className={cn(buttonVariants(), 'h-10 rounded-full bg-[hsl(var(--brand-solid))] px-5 text-sm text-[hsl(var(--on-brand))] hover:bg-[hsl(var(--brand-solid-hover))] active:scale-[0.97]')}>
+            <Link to="/app" className={cn(buttonVariants(), 'h-11 rounded-full bg-[hsl(var(--brand-solid))] px-5 sm:h-10 text-sm text-[hsl(var(--on-brand))] hover:bg-[hsl(var(--brand-solid-hover))] active:scale-[0.97]')}>
               Open Geneie
             </Link>
             <Link
               to="/"
-              className="inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-[hsl(var(--wb-pill))] hover:text-foreground"
+              className="inline-flex h-11 items-center justify-center rounded-full px-4 text-sm font-medium text-muted-foreground sm:h-10 transition-colors hover:bg-[hsl(var(--wb-pill))] hover:text-foreground"
             >
               Back to home page
             </Link>

@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Maximize2 } from 'lucide-react';
+import DocumentViewerDialog from '@/components/workspace/DocumentViewerDialog';
 import { fetchModule1QcSummary } from '@/services/backendApi';
 import { CountUp, StageMark } from '@/components/motion';
 import { QcErrorNotice, QcHeading, QcSkeleton, QcStatusPill, qcSurfaceClass } from '@/components/Module1QcPanel';
@@ -105,7 +107,7 @@ function ChartBlock({ title, hint, trailing, children }) {
   );
 }
 
-function SummaryBody({ data, surface }) {
+function SummaryBody({ data, wide = false }) {
   const s = data.summary;
   const [read, setRead] = useState('r1');
   const rs = s.reads?.[read] || s.reads?.r1 || {};
@@ -165,6 +167,7 @@ function SummaryBody({ data, surface }) {
 
       <FilterBar filtering={s.filtering} />
 
+      <div className={wide ? 'grid gap-3 lg:grid-cols-2' : 'space-y-3'}>
       {qualitySeries.length > 0 && (
         <ChartBlock
           title="Base quality along the read"
@@ -209,6 +212,7 @@ function SummaryBody({ data, surface }) {
           />
         </ChartBlock>
       )}
+      </div>
 
       {over.length > 0 && (
         <div className="min-w-0">
@@ -234,6 +238,7 @@ function SummaryBody({ data, surface }) {
 export default function Module1QcSummary({ conversationId, enabled = true, surface = false }) {
   const [state, setState] = useState({ status: 'idle', data: null, error: null });
   const [attempt, setAttempt] = useState(0);
+  const [expanded, setExpanded] = useState(false);
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   useEffect(() => {
@@ -256,11 +261,33 @@ export default function Module1QcSummary({ conversationId, enabled = true, surfa
       <QcHeading
         title="Read quality"
         hint="Computed by fastp before alignment."
-        trailing={status === 'loading' ? <StageMark state="running" size={16} className="shrink-0" /> : null}
+        trailing={status === 'loading' ? <StageMark state="running" size={16} className="shrink-0" /> : has ? (
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            aria-label="Open read quality full screen"
+            className="wb-chip shrink-0 cursor-pointer gap-1.5 outline-none transition-colors hover:!border-[hsl(var(--brand-300))] hover:!bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] [@media(pointer:coarse)]:!h-9"
+          >
+            <Maximize2 className="size-3" aria-hidden />
+            Full screen
+          </button>
+        ) : null}
       />
       {status === 'loading' && !has && <QcSkeleton rows={3} />}
       {status === 'error' && !has && <QcErrorNotice message={error} onRetry={retry} />}
-      {has && <SummaryBody data={data} surface={surface} />}
+      {has && <SummaryBody data={data} />}
+      {has && (
+        <DocumentViewerDialog
+          open={expanded}
+          onOpenChange={setExpanded}
+          title="Read quality"
+          description={[data.sample_name, data.summary.sequencing].filter(Boolean).join(' · ') || 'Computed by fastp before alignment'}
+        >
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[hsl(var(--wb-bg))] p-4 md:p-6">
+            <div className="mx-auto w-full max-w-[1280px]"><SummaryBody data={data} wide /></div>
+          </div>
+        </DocumentViewerDialog>
+      )}
     </section>
   );
 }

@@ -722,6 +722,21 @@ export async function fetchModule1QcArtifacts(conversationId) {
   return data;
 }
 
+/** Compact fastp numbers + curves for the native QC view (live files, or the copy saved before the purge). */
+export async function fetchModule1QcSummary(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl(`/api/module1/qc-summary/${encodeURIComponent(conversationId)}`), {
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to fetch Module 1 QC summary');
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
 /** Retained Module 1 BAM(+BAI) presigned GET URLs for the alignment browser — gone after purge. */
 export async function fetchModule1BamArtifacts(conversationId) {
   const headers = await getAuthHeaders();

@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { ChevronRight } from 'lucide-react';
 import { Turn } from '@/components/motion';
 import Module1QcPanel from '@/components/Module1QcPanel';
+import Module1QcSummary from '@/components/Module1QcSummary';
 import Module1IgvPanel from '@/components/Module1IgvPanel';
 import Module1QcReportPanel from '@/components/Module1QcReportPanel';
 
@@ -34,6 +35,8 @@ export default function Module1QcSection({ job, variant = 'card' }) {
   const surface = variant === 'panel';
   const sections = (
     <div className={surface ? 'space-y-3' : 'space-y-5'}>
+      <Module1QcSummary conversationId={job.conversationId} surface={surface} />
+
       {job.hasQc && <Module1QcPanel conversationId={job.conversationId} hasQc={job.hasQc} surface={surface} runLabel={job.sampleName} />}
 
       {job.hasBam && (

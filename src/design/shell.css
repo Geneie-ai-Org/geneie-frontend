@@ -3,6 +3,13 @@
  * Loaded after tokens.css. Kept out of App.css so shell work and component work never collide.
  */
 
+/* One row that is exactly the shell's height. Without this the implicit `auto` row grew to the tallest
+ * column's content (the rail measured 894px), so in a short window the thread and its composer
+ * ran past the bottom of the viewport. */
+.chat-app-shell {
+  grid-template-rows: minmax(0, 1fr);
+}
+
 /* Hairline seams instead of heavy borders; the workspace supplies its own header rule. */
 .chat-shell-left::after,
 .chat-shell-right::before {
@@ -43,87 +50,388 @@
   }
 }
 
-/* Composer: a large rounded card, hairline border, soft diffuse shadow (reference frames). */
+/* Composer: a large rounded card, hairline border, soft diffuse shadow (reference frames). The focus
+ * state is a teal border (3:1+ against the card in both themes) plus a soft teal halo. */
 .pipeline-composer {
   border-radius: var(--composer-radius) !important;
-  border: 1px solid hsl(var(--border)) !important;
+  border: 1px solid hsl(var(--wb-line)) !important;
   background-color: hsl(var(--card)) !important;
   box-shadow: var(--shadow-composer) !important;
+  transition: border-color 160ms var(--ease-out), box-shadow 200ms var(--ease-out);
 }
 .dark .pipeline-composer {
   box-shadow: 0 1px 2px hsl(0 0% 0% / 0.3), 0 8px 28px -6px hsl(0 0% 0% / 0.5) !important;
 }
 .pipeline-composer:focus-within {
-  border-color: var(--border-strong) !important;
+  border-color: hsl(var(--brand-500)) !important;
+  box-shadow: 0 0 0 4px hsl(var(--brand-200) / 0.55), var(--shadow-composer) !important;
+}
+.dark .pipeline-composer:focus-within {
+  box-shadow: 0 0 0 4px hsl(var(--brand-500) / 0.18), 0 8px 28px -6px hsl(0 0% 0% / 0.5) !important;
+}
+
+/* ---- Toolbar pills: + Add data, Standard / Explore. Same 32px box as every chat tool, with a
+ * hairline, a brand tint on hover and while open, and a chevron that turns when the menu is open. */
+.chat-tool.chat-pill {
+  gap: 0.375rem;
+  padding: 0 0.75rem 0 0.625rem;
+  border: 1px solid hsl(var(--wb-line));
+  border-radius: 9999px;
+  background-color: hsl(var(--wb-pill));
+  color: var(--text-secondary);
+}
+.chat-tool.chat-pill:hover:not(:disabled) {
+  background-color: hsl(var(--brand-50));
+  border-color: hsl(var(--brand-300));
+  color: hsl(var(--brand-700));
+}
+.chat-tool.chat-pill[data-popup-open],
+.chat-tool.chat-pill[aria-expanded='true'] {
+  background-color: hsl(var(--brand-100));
+  border-color: hsl(var(--brand-300));
+  color: hsl(var(--brand-700));
+}
+.chat-tool.chat-pill:active:not(:disabled) {
+  transform: scale(0.97);
+  background-color: hsl(var(--brand-100));
+}
+.chat-tool.chat-tool--explore.chat-pill {
+  background-color: color-mix(in srgb, var(--perm-warn) 9%, transparent);
+  border-color: color-mix(in srgb, var(--perm-warn) 32%, transparent);
+}
+.chat-tool.chat-pill .chat-pill-chev {
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-right: -0.125rem;
+  opacity: 0.7;
+  transition: transform 200ms var(--ease-out);
+}
+.chat-tool.chat-pill[data-popup-open] .chat-pill-chev,
+.chat-tool.chat-pill[aria-expanded='true'] .chat-pill-chev {
+  transform: rotate(180deg);
+}
+
+/* ---- Send: one circle that morphs idle -> ready -> busy (Stop). */
+.chat-tool.chat-tool-send {
+  position: relative;
+  width: 2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  background-color: hsl(var(--wb-pill));
+  color: var(--text-tertiary);
+  transform: scale(0.94);
+  transition:
+    background-color 200ms var(--ease-out),
+    color 200ms var(--ease-out),
+    box-shadow 200ms var(--ease-out),
+    transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.chat-tool.chat-tool-send:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+}
+.chat-tool.chat-tool-send[data-state='ready'],
+.chat-tool.chat-tool-send[data-state='busy'] {
+  background-color: hsl(var(--brand-solid));
+  color: var(--accent-teal-contrast);
+  transform: scale(1);
+  box-shadow: 0 1px 2px hsl(var(--brand-solid) / 0.3), 0 5px 12px -4px hsl(var(--brand-solid) / 0.45);
+}
+.chat-tool.chat-tool-send[data-state='ready']:hover,
+.chat-tool.chat-tool-send[data-state='busy']:hover {
+  background-color: hsl(var(--brand-solid-hover));
+  color: var(--accent-teal-contrast);
+  transform: scale(1.06);
+}
+.chat-tool.chat-tool-send[data-state='ready']:active,
+.chat-tool.chat-tool-send[data-state='busy']:active {
+  transform: scale(0.94);
+}
+.chat-tool-send .chat-send-arrow,
+.chat-tool-send .chat-send-stop {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  transition: opacity 160ms var(--ease-out), transform 220ms var(--ease-out);
+}
+.chat-tool-send .chat-send-stop {
+  width: 0.7rem;
+  height: 0.7rem;
+  opacity: 0;
+  transform: scale(0.5);
+}
+.chat-tool-send[data-state='busy'] .chat-send-arrow {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.6);
+}
+.chat-tool-send[data-state='busy'] .chat-send-stop {
+  opacity: 1;
+  transform: scale(1);
+}
+.chat-tool-send[data-state='ready']:hover .chat-send-arrow {
+  transform: translateY(-1px);
+}
+.chat-tool-send[data-state='busy']::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  border-top-color: hsl(var(--brand-500));
+  animation: chat-send-spin 900ms linear infinite;
+  pointer-events: none;
+}
+@keyframes chat-send-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Keyboard hint: only while the card has focus. */
+.chat-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+.pipeline-composer:focus-within .chat-hint {
+  opacity: 1;
+  transform: none;
+}
+@media (pointer: coarse), (max-width: 640px) {
+  .chat-hint { display: none; }
+}
+
+/* ---- Add data menu (hand-rolled, anchored above the + pill) and the mode menu content. */
+.chat-upload-menu {
+  min-width: 20.5rem;
+  padding: 0.375rem;
+  border-radius: 1rem;
+  border: 1px solid hsl(var(--wb-line));
+  background-color: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  box-shadow: var(--shadow-lg);
+}
+.chat-add-item {
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.75rem;
+  transition: background-color 120ms var(--ease-out);
+}
+.chat-add-item:hover,
+.chat-add-item:focus-visible {
+  background-color: hsl(var(--brand-50));
+}
+.chat-add-tile {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.625rem;
+  border: 1px solid hsl(var(--brand-200));
+  background-color: hsl(var(--brand-100));
+  color: hsl(var(--brand-700));
+}
+.chat-add-tile svg { width: 1rem; height: 1rem; }
+.chat-add-tile[data-tone='warn'] {
+  border-color: color-mix(in srgb, var(--perm-warn) 30%, transparent);
+  background-color: color-mix(in srgb, var(--perm-warn) 10%, transparent);
+  color: color-mix(in srgb, var(--perm-warn) 88%, var(--text-primary));
+}
+.chat-add-title { font-size: 13px; font-weight: 500; line-height: 1.25; color: var(--text-primary); }
+.chat-add-desc { font-size: 12px; line-height: 1.35; color: hsl(var(--muted-foreground)); }
+[data-slot='dropdown-menu-radio-item'][data-checked]:has(.chat-add-tile) {
+  background-color: hsl(var(--brand-50));
+}
+
+/* ---- Home: the empty conversation. A faint teal-gray canvas with the brand texture behind the greeting
+ * only (never behind the composer or chips), faded at the edges. */
+:root { --home-canvas: hsl(180 12% 95.5%); }
+.dark { --home-canvas: hsl(180 7% 7%); }
+.chat-shell-main:has(.chat-home) { background-color: var(--home-canvas); }
+.chat-home {
+  position: relative;
+  isolation: isolate;
+  background: linear-gradient(180deg, hsl(var(--brand-50)) 0%, transparent 62%), var(--home-canvas);
+}
+.chat-home .chat-home__lattice,
+.chat-home .chat-home__ruler {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+.chat-home .chat-home__lattice {
+  top: 0;
+  height: 60%;
+  --tx-opacity: 0.7;
+  --tx-opacity-dark: 0.45;
+  --tx-size: 22px 22px;
+  --tx-fade-img: radial-gradient(ellipse 62% 78% at 50% 0%, #000 0%, transparent 100%);
+}
+.chat-home .chat-home__ruler {
+  bottom: 0;
+  height: 48px;
+  --tx-opacity: 0.8;
+  --tx-opacity-dark: 0.5;
+  --tx-size: 150px 42px;
+  --tx-edge: 20%;
+}
+.chat-home__inner {
+  position: relative;
+  z-index: 1;
+  padding-bottom: 4vh;
+}
+.chat-home__greeting > * {
+  position: relative;
+}
+.chat-home__mark-row {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 4rem;
+  margin-bottom: 1.25rem;
+}
+.chat-home .chat-home__helix {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(94vw, 1040px);
+  height: 3.75rem;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  --tx-opacity: 0.7;
+  --tx-opacity-dark: 0.42;
+  --tx-size: 180px 66px;
+  --tx-edge: 28%;
+}
+.chat-home__mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.875rem;
+  background-color: hsl(var(--card));
+  border: 1px solid hsl(var(--wb-line));
+  box-shadow: 0 1px 2px hsl(0 0% 0% / 0.05), 0 6px 16px -6px hsl(var(--brand-solid) / 0.35);
+}
+.chat-home__mark > span {
+  display: block;
+  width: 1.0625rem;
+  height: 1.65rem;
+  background-color: hsl(var(--brand-solid));
+  -webkit-mask: url('/geneie-g.svg') center / contain no-repeat;
+  mask: url('/geneie-g.svg') center / contain no-repeat;
+}
+.chat-home__eyebrow {
+  margin-bottom: 0.875rem;
+  padding: 0.2rem 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--brand-200));
+  background-color: hsl(var(--brand-100));
+  color: hsl(var(--brand-700));
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+.chat-home__greeting h2 {
+  text-wrap: balance;
+}
+.chat-home__sub {
+  max-width: 36rem;
+  margin-top: 0.75rem;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  text-wrap: balance;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .chat-home__greeting > * {
+    animation: chat-home-rise 420ms var(--ease-out) both;
+  }
+  .chat-home__greeting > :nth-child(2) { animation-delay: 60ms; }
+  .chat-home__greeting > :nth-child(3) { animation-delay: 110ms; }
+  .chat-home__greeting > :nth-child(4) { animation-delay: 160ms; }
+  @keyframes chat-home-rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+/* ---- Starter chips under the home composer. */
+.chat-starters {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  min-height: 2.25rem;
+}
+.chat-starter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  height: 2.25rem;
+  padding: 0 0.875rem 0 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--wb-line));
+  background-color: hsl(var(--card));
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 1px 1px hsl(0 0% 0% / 0.03);
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    color 150ms var(--ease-out),
+    box-shadow 180ms var(--ease-out);
+}
+.chat-starter svg {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  flex-shrink: 0;
+  color: hsl(var(--brand-500));
+}
+.chat-starter:hover {
+  transform: translateY(-2px);
+  background-color: hsl(var(--brand-50));
+  border-color: hsl(var(--brand-300));
+  color: var(--text-primary);
+  box-shadow: 0 8px 16px -10px hsl(var(--brand-solid) / 0.5);
+}
+.chat-starter:active {
+  transform: translateY(0) scale(0.97);
+  background-color: hsl(var(--brand-100));
+}
+@media (pointer: coarse) {
+  .chat-starter { height: 2.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-starter:hover,
+  .chat-starter:active,
+  .chat-tool.chat-pill:active:not(:disabled),
+  .chat-tool.chat-tool-send,
+  .chat-tool.chat-tool-send[data-state]:hover,
+  .chat-tool.chat-tool-send[data-state]:active {
+    transform: none;
+  }
+  .chat-tool.chat-tool-send[data-state='busy']::after { animation: none; }
 }
 
 /* Rail: light neutral panel. */
 .chat-shell-left { background-color: hsl(var(--sidebar)); }
 
-/*
- * Enter/exit motion for overlays. The UI primitives were authored with Tailwind 4 utilities
- * (animate-in, fade-in-0, zoom-in-95, data-open:) that Tailwind 3 does not generate, so the
- * overlays snapped open. Base UI exposes data-starting-style / data-ending-style; this is the
- * single place those states are animated (opacity + transform only, 150ms in, ~100ms out,
- * reduced-motion respected).
- */
-[data-slot='dialog-overlay'],
-[data-slot='alert-dialog-overlay'],
-[data-slot='sheet-overlay'] {
-  transition: opacity 150ms var(--ease-out);
-}
-[data-slot='dialog-overlay'][data-starting-style],
-[data-slot='dialog-overlay'][data-ending-style],
-[data-slot='alert-dialog-overlay'][data-starting-style],
-[data-slot='alert-dialog-overlay'][data-ending-style],
-[data-slot='sheet-overlay'][data-starting-style],
-[data-slot='sheet-overlay'][data-ending-style] {
-  opacity: 0;
-}
-
-[data-slot='dialog-content'],
-[data-slot='alert-dialog-content'] {
-  transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out);
-}
-[data-slot='dialog-content'][data-starting-style],
-[data-slot='dialog-content'][data-ending-style],
-[data-slot='alert-dialog-content'][data-starting-style],
-[data-slot='alert-dialog-content'][data-ending-style] {
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(0.96);
-}
-[data-slot='dialog-content'][data-ending-style],
-[data-slot='alert-dialog-content'][data-ending-style] {
-  transition-duration: 100ms;
-}
-
-[data-slot='dropdown-menu-content'],
-[data-slot='popover-content'],
-[data-slot='select-content'],
-[data-slot='hover-card-content'],
-[data-slot='tooltip-content'] {
-  transform-origin: var(--transform-origin, center);
-  transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out);
-}
-[data-slot='dropdown-menu-content'][data-starting-style],
-[data-slot='dropdown-menu-content'][data-ending-style],
-[data-slot='popover-content'][data-starting-style],
-[data-slot='popover-content'][data-ending-style],
-[data-slot='select-content'][data-starting-style],
-[data-slot='select-content'][data-ending-style],
-[data-slot='hover-card-content'][data-starting-style],
-[data-slot='hover-card-content'][data-ending-style],
-[data-slot='tooltip-content'][data-starting-style],
-[data-slot='tooltip-content'][data-ending-style] {
-  opacity: 0;
-  transform: scale(0.96);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-slot='dialog-overlay'], [data-slot='alert-dialog-overlay'], [data-slot='sheet-overlay'],
-  [data-slot='dialog-content'], [data-slot='alert-dialog-content'],
-  [data-slot='dropdown-menu-content'], [data-slot='popover-content'], [data-slot='select-content'],
-  [data-slot='hover-card-content'], [data-slot='tooltip-content'] {
-    transition: none;
-  }
-}
+/* Overlay motion, surfaces and item states (menus, selects, popovers, tooltips, dialogs, sheets) live in workbench.css, section "Overlays". */

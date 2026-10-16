@@ -1,6 +1,7 @@
-import { useEffect, useId, useLayoutEffect, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import ExploratoryModeToggle from '@/components/ExploratoryModeToggle';
-import { PanelRight, ArrowUp, Plus, Square, FileText, Dna } from 'lucide-react';
+import { PanelRight, ArrowUp, Plus, Square, FileText, Dna, Upload, Search, Filter, BookOpen } from 'lucide-react';
+import { ChipList, PopIn, SPRING } from '@/components/motion';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -53,7 +54,7 @@ const FileTypeDropdown = ({ showFileTypeDropdown, onSelectVariantFile, onSelectF
   };
 
   const item =
-    'chat-focus-inset w-full px-3 py-2 text-[13px] text-left flex items-center gap-2.5 text-foreground transition-colors duration-150 hover:bg-muted [@media(pointer:coarse)]:py-3';
+    'chat-add-item chat-focus-inset w-full text-left flex items-center gap-3 text-foreground [@media(pointer:coarse)]:py-3';
 
   return (
     <div
@@ -61,16 +62,26 @@ const FileTypeDropdown = ({ showFileTypeDropdown, onSelectVariantFile, onSelectF
       role="menu"
       aria-label="Add data"
       onKeyDown={onKeyDown}
-      className="chat-upload-menu absolute bottom-full left-0 mb-2 rounded-lg border border-border bg-popover text-popover-foreground overflow-hidden shadow-[var(--shadow-md)] min-w-[260px] z-30 py-1"
+      className="chat-upload-menu absolute bottom-full left-0 mb-2 z-30"
     >
       <button type="button" role="menuitem" tabIndex={-1} onClick={onSelectVariantFile} className={item}>
-        <FileText className="size-4 text-muted-foreground" aria-hidden />
-        Variants file (VCF/TSV)
+        <span className="chat-add-tile" aria-hidden>
+          <FileText />
+        </span>
+        <span className="flex min-w-0 flex-col">
+          <span className="chat-add-title">Variants file</span>
+          <span className="chat-add-desc">VCF or TSV. Annotate, filter and ask about the variants.</span>
+        </span>
       </button>
       {onSelectFastq && (
         <button type="button" role="menuitem" tabIndex={-1} onClick={onSelectFastq} className={item}>
-          <Dna className="size-4 text-muted-foreground" aria-hidden />
-          Raw sequencing data (FASTQ)
+          <span className="chat-add-tile" aria-hidden>
+            <Dna />
+          </span>
+          <span className="flex min-w-0 flex-col">
+            <span className="chat-add-title">Raw sequencing data</span>
+            <span className="chat-add-desc">Paired FASTQ. Runs the pipeline to call variants.</span>
+          </span>
         </button>
       )}
     </div>
@@ -130,6 +141,8 @@ const ChatComposer = ({
   blockedAction = null,
   /* The Standard/Explore switch lives in the toolbar. Set false to keep it elsewhere. */
   showModeToggle = true,
+  /* Optional: the parent's ref to the field (the starter chips below focus it after a prefill). */
+  textareaRef: externalTextareaRef = null,
 }) => {
   const isStacked = layout === 'stacked';
   // Two separate gates. Typing is only blocked by the hard gates (no auth, quota
@@ -138,7 +151,8 @@ const ChatComposer = ({
   const canType = !isInputDisabled || isCurrentlyActive;
   const sendDisabled = isInputDisabled || !input.trim();
 
-  const textareaRef = useRef(null);
+  const ownTextareaRef = useRef(null);
+  const textareaRef = externalTextareaRef || ownTextareaRef;
   useAutosizeTextarea(textareaRef, input);
 
   const wasDisabledRef = useRef(!canType);
@@ -202,12 +216,13 @@ const ChatComposer = ({
               ref={plusRef}
               type="button"
               onClick={() => onUploadButtonClick(dropdownSource)}
-              className={`${TOOL_BTN} chat-tool-plus`}
+              className={`${TOOL_BTN} chat-pill chat-tool-plus max-[480px]:!px-0`}
               aria-label="Add data"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
             >
               <Plus aria-hidden />
+              <span className="max-[480px]:hidden">Add data</span>
             </button>
           }
         />
@@ -249,28 +264,11 @@ const ChatComposer = ({
     />
   );
 
-  const stopButton = (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            onClick={onStop}
-            className={`${TOOL_BTN} chat-tool-send`}
-            aria-label="Stop generation"
-          >
-            <Square className="!size-3 fill-current" aria-hidden />
-          </button>
-        }
-      />
-      <TooltipContent>Stop generation</TooltipContent>
-    </Tooltip>
-  );
-
-  const sendOrStop = isCurrentlyActive ? (
-    stopButton
-  ) : (
-    <SendButton onClick={onSend} disabled={sendDisabled} />
+  /* One button that morphs: idle (nothing to send) -> ready (text, can send) -> busy (reply streaming,
+   * the same button becomes Stop). The state is a data attribute so CSS owns the transition. */
+  const sendState = isCurrentlyActive ? 'busy' : sendDisabled ? 'idle' : 'ready';
+  const sendOrStop = (
+    <SendButton state={sendState} onSend={onSend} onStop={onStop} />
   );
 
   return (
@@ -286,7 +284,7 @@ const ChatComposer = ({
         <div
           onClick={handleContainerClick}
           onKeyDown={handleSurfaceKeyDown}
-          className={`pipeline-composer [&.pipeline-composer:focus-within]:!border-[hsl(var(--muted-foreground))] flex flex-col ${
+          className={`pipeline-composer flex flex-col ${
             isStacked ? 'px-4 pt-4 pb-2.5' : 'px-4 pt-3 pb-2.5'
           }`}
         >
@@ -300,6 +298,11 @@ const ChatComposer = ({
             {uploadButton}
             {showModeToggle && <ExploratoryModeToggle variant="inline" />}
             <div className="flex min-w-0 flex-1 items-center justify-end px-2">
+              {!blocked && !(hasDocument && !isStacked) && (
+                <span className="chat-hint" aria-hidden="true">
+                  Enter to send, Shift+Enter for new line
+                </span>
+              )}
               {blocked && blockedLink && (
                 <button
                   type="button"
@@ -315,9 +318,27 @@ const ChatComposer = ({
           </div>
         </div>
         {isStacked && (
+          <StarterChips
+            visible={canType && !input.trim()}
+            hasDocument={hasDocument}
+            showUpload={!!showUpload}
+            onSelectVariantFile={onSelectVariantFile}
+            onSelectFastq={onSelectFastq}
+            onPrefill={(text) => {
+              onInputChange(text);
+              requestAnimationFrame(() => {
+                const el = textareaRef.current;
+                if (!el) return;
+                el.focus();
+                el.setSelectionRange(text.length, text.length);
+              });
+            }}
+          />
+        )}
+        {isStacked && (
           <p
             /* Positioned so the dock's blur layers paint behind it, not over it. */
-            className="relative z-10 text-center text-xs leading-tight mt-2.5"
+            className="relative z-10 text-center text-xs leading-tight mt-5"
             style={{ color: 'hsl(var(--muted-foreground))' }}
           >
             Geneie can make mistakes. Verify important information.
@@ -347,23 +368,75 @@ const VariantSidebarToggle = ({ isVariantSidebarOpen, onToggleVariantSidebar }) 
   </Tooltip>
 );
 
-const SendButton = ({ onClick, disabled }) => (
-  <Tooltip>
-    <TooltipTrigger
-      render={
-        <button
-          type="button"
-          onClick={onClick}
-          disabled={disabled}
-          className={`${TOOL_BTN} chat-tool-send`}
-          aria-label="Send message"
-        >
-          <ArrowUp aria-hidden />
-        </button>
-      }
-    />
-    <TooltipContent>Send message</TooltipContent>
-  </Tooltip>
-);
+const SendButton = ({ state, onSend, onStop }) => {
+  const busy = state === 'busy';
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            onClick={busy ? onStop : onSend}
+            disabled={state === 'idle'}
+            data-state={state}
+            className={`${TOOL_BTN} chat-tool-send`}
+            aria-label={busy ? 'Stop generation' : 'Send message'}
+          >
+            <ArrowUp className="chat-send-arrow" aria-hidden />
+            <Square className="chat-send-stop fill-current" aria-hidden />
+          </button>
+        }
+      />
+      <TooltipContent>{busy ? 'Stop generation' : 'Send message'}</TooltipContent>
+    </Tooltip>
+  );
+};
+
+/**
+ * Starter prompts under the home composer. Chips that suggest a question pre-fill the field (never
+ * send); the upload chips open the same flows as the + menu. They pop in once, staggered, and step
+ * aside as soon as there is text in the field. The copy only promises what works without data.
+ */
+function StarterChips({ visible, hasDocument, showUpload, onSelectVariantFile, onSelectFastq, onPrefill }) {
+  // AnimatePresence skips the entrance of children present on its first render, so arm one frame later.
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setArmed(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  const starters = [
+    hasDocument && { id: 'summarise', label: 'Summarise my variants', icon: Search, prompt: 'Summarise my variants.' },
+    !hasDocument && showUpload && onSelectVariantFile && { id: 'vcf', label: 'Upload a VCF', icon: Upload, onClick: onSelectVariantFile },
+    !hasDocument && showUpload && onSelectFastq && { id: 'fastq', label: 'Upload FASTQ files', icon: Dna, onClick: onSelectFastq },
+    { id: 'gene', label: 'Explain a gene', icon: BookOpen, prompt: 'Explain the BRCA1 gene and the kinds of variants in it that matter clinically.' },
+    { id: 'rare', label: 'Filter rare pathogenic variants', icon: Filter, prompt: 'How do I filter for rare pathogenic variants?' },
+  ].filter(Boolean);
+
+  return (
+    <div className="chat-starters" role="group" aria-label="Starter prompts">
+      <ChipList>
+        {armed && visible
+          ? starters.map((c, i) => (
+              <PopIn
+                key={c.id}
+                className="inline-flex max-w-full"
+                transition={{ ...SPRING, delay: 0.06 + i * 0.06 }}
+              >
+                <button
+                  type="button"
+                  className="chat-starter chat-focus"
+                  onClick={() => (c.onClick ? c.onClick() : onPrefill(c.prompt))}
+                >
+                  <c.icon aria-hidden />
+                  <span className="truncate">{c.label}</span>
+                </button>
+              </PopIn>
+            ))
+          : null}
+      </ChipList>
+    </div>
+  );
+}
 
 export default ChatComposer;

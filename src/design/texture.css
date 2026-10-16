@@ -1,0 +1,31 @@
+/* Brand texture: genome-ruler ticks, a double helix band and a base-pair dot lattice.
+   Drop `tx tx--ticks|helix|lattice` on any relatively positioned block; the pattern is a mask over a
+   brand-tinted layer, so it follows light/dark and never carries its own colour. Keep it behind content,
+   faded toward the edges, and under 0.5 opacity (see docs/DESIGN_PLAYBOOK.md section G).
+
+   Fade: area textures (`lattice`) fade radially around `--tx-at` / `--tx-fade`; band textures (`ticks`,
+   `helix`) are strips, so they fade horizontally toward both ends (`--tx-edge`, default 22%) and keep
+   full strength across the middle. Override `--tx-fade-img` for any other mask.
+   Tuning knobs per element: `--tx-opacity`, `--tx-opacity-dark`, `--tx-color`, `--tx-size`. */
+.tx { position: relative; isolation: isolate; }
+.tx::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: hsl(var(--tx-color, var(--brand-300)));
+  opacity: var(--tx-opacity, 0.6);
+  -webkit-mask-image: var(--tx-img), var(--tx-fade-img, radial-gradient(ellipse var(--tx-fade, 70% 60%) at var(--tx-at, 50% 40%), #000 0%, transparent 100%));
+  mask-image: var(--tx-img), var(--tx-fade-img, radial-gradient(ellipse var(--tx-fade, 70% 60%) at var(--tx-at, 50% 40%), #000 0%, transparent 100%));
+  -webkit-mask-composite: source-in; mask-composite: intersect;
+  -webkit-mask-size: var(--tx-size, auto), 100% 100%; mask-size: var(--tx-size, auto), 100% 100%;
+  -webkit-mask-repeat: var(--tx-repeat, repeat), no-repeat; mask-repeat: var(--tx-repeat, repeat), no-repeat;
+}
+.tx { --tx-band-fade: linear-gradient(90deg, transparent 0%, #000 var(--tx-edge, 22%), #000 calc(100% - var(--tx-edge, 22%)), transparent 100%); }
+.tx--lattice { --tx-img: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2724%27 height=%2724%27%3E%3Ccircle cx=%2712%27 cy=%2712%27 r=%271.1%27 fill=%27black%27/%3E%3C/svg%3E"); --tx-size: 24px 24px; }
+.tx--ticks { --tx-img: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%2728%27 viewBox=%270 0 100 28%27 fill=%27none%27 stroke=%27black%27 stroke-width=%271%27%3E%3Cpath d=%27M0.5 28V14%27/%3E%3Cpath d=%27M10.5 28V20%27/%3E%3Cpath d=%27M20.5 28V20%27/%3E%3Cpath d=%27M30.5 28V20%27/%3E%3Cpath d=%27M40.5 28V20%27/%3E%3Cpath d=%27M50.5 28V14%27/%3E%3Cpath d=%27M60.5 28V20%27/%3E%3Cpath d=%27M70.5 28V20%27/%3E%3Cpath d=%27M80.5 28V20%27/%3E%3Cpath d=%27M90.5 28V20%27/%3E%3Cpath d=%27M0 27.5H100%27/%3E%3C/svg%3E"); --tx-size: 100px 28px; --tx-repeat: repeat-x; --tx-fade-img: var(--tx-band-fade); }
+.tx--ticks::before { -webkit-mask-position: 0 100%, 0 0; mask-position: 0 100%, 0 0; }
+.tx--helix { --tx-img: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27120%27 height=%2744%27 viewBox=%270 0 120 44%27 fill=%27none%27 stroke=%27black%27 stroke-width=%271.4%27 stroke-linecap=%27round%27%3E%3Cpolyline points=%270,22.0 3,19.8 6,17.7 9,15.6 12,13.8 15,12.1 18,10.7 21,9.5 24,8.7 27,8.2 30,8.0 33,8.2 36,8.7 39,9.5 42,10.7 45,12.1 48,13.8 51,15.6 54,17.7 57,19.8 60,22.0 63,24.2 66,26.3 69,28.4 72,30.2 75,31.9 78,33.3 81,34.5 84,35.3 87,35.8 90,36.0 93,35.8 96,35.3 99,34.5 102,33.3 105,31.9 108,30.2 111,28.4 114,26.3 117,24.2 120,22.0%27/%3E%3Cpolyline points=%270,22.0 3,24.2 6,26.3 9,28.4 12,30.2 15,31.9 18,33.3 21,34.5 24,35.3 27,35.8 30,36.0 33,35.8 36,35.3 39,34.5 42,33.3 45,31.9 48,30.2 51,28.4 54,26.3 57,24.2 60,22.0 63,19.8 66,17.7 69,15.6 72,13.8 75,12.1 78,10.7 81,9.5 84,8.7 87,8.2 90,8.0 93,8.2 96,8.7 99,9.5 102,10.7 105,12.1 108,13.8 111,15.6 114,17.7 117,19.8 120,22.0%27/%3E%3Cpath d=%27M10 15.0V29.0M20 9.9V34.1M30 8.0V36.0M40 9.9V34.1M50 15.0V29.0M70 29.0V15.0M80 34.1V9.9M90 36.0V8.0M100 34.1V9.9M110 29.0V15.0%27 stroke-width=%271%27/%3E%3C/svg%3E"); --tx-size: 120px 44px; --tx-repeat: repeat-x; --tx-fade-img: var(--tx-band-fade); }
+.tx--helix::before { -webkit-mask-position: 0 50%, 0 0; mask-position: 0 50%, 0 0; }
+.dark .tx::before { --tx-color: var(--brand-500); opacity: var(--tx-opacity-dark, 0.4); }
+@media (prefers-reduced-motion: no-preference) {
+  .tx--drift::before { animation: tx-drift 60s linear infinite; }
+  @keyframes tx-drift { to { -webkit-mask-position: 120px 50%, 0 0; mask-position: 120px 50%, 0 0; } }
+}

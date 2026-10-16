@@ -90,8 +90,8 @@ export default function ExploratoryModeToggle({ variant = 'floating', className 
   if (isInline) {
     const Icon = on ? Compass : Zap;
     const options = [
-      { id: 'standard', label: 'Standard', hint: 'Fast, reproducible answers', icon: Zap },
-      { id: 'explore', label: 'Explore', hint: 'An agent reasons across your data in steps', icon: Compass },
+      { id: 'standard', label: 'Standard', hint: 'Fast, reproducible answers from the pipeline.', icon: Zap },
+      { id: 'explore', label: 'Explore', hint: 'An agent works through your data in steps. Slower, shows its work.', icon: Compass },
     ];
     return (
       <DropdownMenu>
@@ -99,30 +99,29 @@ export default function ExploratoryModeToggle({ variant = 'floating', className 
           aria-label={`Answer mode: ${on ? 'Explore' : 'Standard'}`}
           title={TITLE}
           className={cn(
-            'chat-tool chat-tool--label chat-focus chat-mode-label',
+            'chat-tool chat-tool--label chat-pill chat-focus chat-mode-label',
             on && 'chat-tool--explore',
             className
           )}
         >
           <Icon aria-hidden />
           <span>{on ? 'Explore' : 'Standard'}</span>
-          <ChevronDown className="opacity-70" aria-hidden />
+          <ChevronDown className="chat-pill-chev" aria-hidden />
         </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-64 !p-1">
+        <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-[18.5rem] !p-1.5">
           <DropdownMenuRadioGroup value={on ? 'explore' : 'standard'} onValueChange={(v) => set(v === 'explore')}>
             {options.map((o) => (
               <DropdownMenuRadioItem
                 key={o.id}
                 value={o.id}
-                className="items-start gap-2.5 px-2 py-1.5 pr-8"
+                className="items-center gap-3 !rounded-xl px-2 py-2 pr-9"
               >
-                <o.icon
-                  className={`mt-0.5 size-4 ${o.id === 'explore' ? 'text-[var(--perm-warn)]' : 'text-muted-foreground'}`}
-                  aria-hidden
-                />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="text-[13px] font-medium text-foreground">{o.label}</span>
-                  <span className="text-xs leading-snug text-muted-foreground">{o.hint}</span>
+                <span className="chat-add-tile" data-tone={o.id === 'explore' ? 'warn' : undefined} aria-hidden>
+                  <o.icon />
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="chat-add-title">{o.label}</span>
+                  <span className="chat-add-desc">{o.hint}</span>
                 </span>
               </DropdownMenuRadioItem>
             ))}

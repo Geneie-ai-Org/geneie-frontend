@@ -11,7 +11,7 @@ function FilterPill({ chip, onEdit, onRemove, disabled }) {
   return (
     <PopIn
       className={cn(
-        'inline-flex h-7 max-w-full items-center rounded-full border pr-1 text-[12.5px] transition-colors duration-200',
+        'inline-flex h-7 max-w-full items-center rounded-full border pr-1 text-[12.5px] transition-colors duration-200 [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:text-[13.5px]',
         chip.pending
           ? 'border-dashed border-[var(--warning)] bg-[hsl(var(--wb-card))] text-foreground'
           : 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]'
@@ -21,7 +21,7 @@ function FilterPill({ chip, onEdit, onRemove, disabled }) {
       <button
         type="button"
         onClick={() => onEdit(chip.col)}
-        className={cn('inline-flex min-w-0 items-center gap-1.5 rounded-full pl-2 pr-1.5 text-left', FOCUS)}
+        className={cn('inline-flex h-full min-w-0 items-center gap-1.5 rounded-full pl-2 pr-1.5 text-left [@media(pointer:coarse)]:pl-3', FOCUS)}
         aria-label={`Edit ${chip.col} filter`}
       >
         <KindGlyph kind={chip.kind} className="opacity-70" />
@@ -36,7 +36,7 @@ function FilterPill({ chip, onEdit, onRemove, disabled }) {
         onClick={() => onRemove(chip.col)}
         disabled={disabled}
         aria-label={`Remove ${chip.col} filter`}
-        className={cn('inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-[hsl(var(--brand-200))] hover:text-[hsl(var(--brand-700))] disabled:opacity-50', FOCUS)}
+        className={cn('inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-[hsl(var(--brand-200))] hover:text-[hsl(var(--brand-700))] disabled:opacity-50 [@media(pointer:coarse)]:size-9', FOCUS)}
       >
         <X className="size-3" aria-hidden />
       </button>
@@ -86,7 +86,7 @@ export default function FilterBar({
               disabled={resetDisabled}
               aria-label="Reset all filters"
               title="Reset all filters"
-              className={cn('wb-iconbtn !size-7 disabled:opacity-50 max-md:!size-9', FOCUS)}
+              className={cn('wb-iconbtn !size-7 disabled:opacity-50 [@media(pointer:coarse)]:!size-9', FOCUS)}
             >
               <RotateCcw aria-hidden className="size-3.5" />
             </button>
@@ -118,7 +118,7 @@ export default function FilterBar({
           {proprietaryLabel && (
             <PopIn
               key="__proprietary"
-              className="inline-flex h-7 max-w-full items-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] pl-3 pr-1 text-[12.5px] font-medium text-[hsl(var(--brand-700))]"
+              className="inline-flex h-7 max-w-full items-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] pl-3 pr-1 text-[12.5px] font-medium text-[hsl(var(--brand-700))] [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:text-[13.5px]"
             >
               <span className="truncate">{proprietaryLabel}</span>
               <button
@@ -126,7 +126,7 @@ export default function FilterBar({
                 onClick={onRemoveProprietary}
                 disabled={proprietaryDisabled}
                 aria-label={`Remove ${proprietaryLabel}`}
-                className={cn('ml-1 inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-[hsl(var(--brand-200))] hover:text-[hsl(var(--brand-700))] disabled:opacity-50', FOCUS)}
+                className={cn('ml-1 inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-[hsl(var(--brand-200))] hover:text-[hsl(var(--brand-700))] disabled:opacity-50 [@media(pointer:coarse)]:size-9', FOCUS)}
               >
                 <X className="size-3" aria-hidden />
               </button>
@@ -153,7 +153,7 @@ export default function FilterBar({
                 onClick={() => (on ? saved.onDeactivate() : saved.onApply(p.id))}
                 title={on ? `${p.name} is applied. Click to deactivate.` : `Apply ${p.name}`}
                 className={cn(
-                  'inline-flex h-7 max-w-[12rem] items-center gap-1.5 rounded-full border px-2.5 text-[12.5px] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none max-md:h-9',
+                  'inline-flex h-7 max-w-[12rem] items-center gap-1.5 rounded-full border px-2.5 text-[12.5px] [@media(pointer:coarse)]:px-3.5 [@media(pointer:coarse)]:text-[13.5px] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none [@media(pointer:coarse)]:h-9',
                   on
                     ? 'border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-100))] font-medium text-[hsl(var(--brand-700))]'
                     : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] text-foreground hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))]',

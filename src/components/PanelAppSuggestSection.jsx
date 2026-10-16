@@ -96,7 +96,7 @@ function PanelRow({ row, checked, disabled, onToggle, topScore, rank, showCue })
       disabled={disabled}
       onClick={() => onToggle(id)}
       title={row.reason || undefined}
-      className={`group mb-1.5 flex w-full items-start gap-2.5 rounded-2xl border px-3 py-2.5 text-left outline-none transition-[background-color,border-color,transform] duration-150 last:mb-0 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] active:scale-[0.995] disabled:opacity-60 motion-reduce:transition-none max-md:min-h-11 ${
+      className={`group mb-1.5 flex w-full items-start gap-2.5 rounded-2xl border px-3 py-2.5 text-left outline-none transition-[background-color,border-color,transform] duration-150 last:mb-0 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] active:scale-[0.995] disabled:opacity-60 motion-reduce:transition-none [@media(pointer:coarse)]:min-h-11 ${
         checked
           ? 'border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-100))]'
           : 'border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))]'
@@ -419,7 +419,7 @@ export default function PanelAppSuggestSection({
         </p>
       </div>
 
-      <div className="wb-card flex items-center justify-between gap-3 px-3.5 py-2 max-md:min-h-11">
+      <div className="wb-card flex items-center justify-between gap-3 px-3.5 py-2 [@media(pointer:coarse)]:min-h-11">
         <span className="flex min-w-0 items-center gap-1.5">
           <span id={switchLabelId} className="text-[13px] font-medium text-foreground">
             Include lower-confidence genes
@@ -459,14 +459,14 @@ export default function PanelAppSuggestSection({
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search all panels by name"
             aria-label="Search gene panels"
-            className="h-9 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-9 pr-9 text-base text-foreground outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)] disabled:opacity-60 md:text-[13px] max-md:h-11 [&::-webkit-search-cancel-button]:hidden"
+            className="h-9 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-9 pr-9 text-base text-foreground outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)] disabled:opacity-60 md:text-[13px] [@media(pointer:coarse)]:h-11 [&::-webkit-search-cancel-button]:hidden"
           />
           {searchQuery ? (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
               aria-label="Clear search"
-              className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:size-9"
+              className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] [@media(pointer:coarse)]:size-9"
             >
               <X className="size-3.5" aria-hidden />
             </button>
@@ -497,7 +497,7 @@ export default function PanelAppSuggestSection({
             type="button"
             variant="outline"
             size="xs"
-            className="shrink-0 max-md:h-9"
+            className="shrink-0 [@media(pointer:coarse)]:h-9"
             onClick={() => {
               setError('');
               setRetryNonce((n) => n + 1);
@@ -670,7 +670,7 @@ export default function PanelAppSuggestSection({
               size="xs"
               onClick={clearSelection}
               disabled={busy}
-              className="max-md:h-9"
+              className="[@media(pointer:coarse)]:h-9"
             >
               Clear all
             </Button>

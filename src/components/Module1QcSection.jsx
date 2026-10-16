@@ -71,7 +71,7 @@ export default function Module1QcSection({ job, variant = 'card' }) {
         type="button"
         onClick={() => setQcOpen((v) => !v)}
         aria-expanded={qcOpen}
-        className="flex min-h-9 w-full items-center gap-1.5 rounded-full px-2.5 text-left text-[13px] font-medium text-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
+        className="flex min-h-9 [@media(pointer:coarse)]:min-h-11 w-full items-center gap-1.5 rounded-full px-2.5 text-left text-[13px] font-medium text-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
       >
         <Turn open={qcOpen} className="shrink-0 text-muted-foreground">
           <ChevronRight className="size-3.5" aria-hidden />

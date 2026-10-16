@@ -569,7 +569,7 @@ const PipelineDrawer = ({
           onClick={onEditSampleInfo}
           title="Edit sample info"
           aria-label="Edit sample info"
-          className={`wb-iconbtn ${ICON_FOCUS} max-md:size-11`}
+          className={`wb-iconbtn ${ICON_FOCUS} [@media(pointer:coarse)]:!size-11`}
         >
           <Pencil className="size-3.5" aria-hidden />
         </button>
@@ -580,7 +580,7 @@ const PipelineDrawer = ({
           onClick={() => setRemoveFileDialogOpen(true)}
           title="Remove variant file"
           aria-label="Remove variant file"
-          className={`wb-iconbtn !border-transparent !bg-transparent hover:!border-[color-mix(in_srgb,var(--error)_30%,transparent)] hover:!bg-[var(--error-soft)] hover:!text-[var(--error)] ${ICON_FOCUS} max-md:size-11`}
+          className={`wb-iconbtn !border-transparent !bg-transparent hover:!border-[color-mix(in_srgb,var(--error)_30%,transparent)] hover:!bg-[var(--error-soft)] hover:!text-[var(--error)] ${ICON_FOCUS} [@media(pointer:coarse)]:!size-11`}
         >
           <Trash2 className="size-3.5" aria-hidden />
         </button>

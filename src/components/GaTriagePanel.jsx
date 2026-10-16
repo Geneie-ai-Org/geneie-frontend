@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { downloadGaTriageArtifact, fetchGaTriage } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
+import { usePanelWidth } from '@/hooks/useWorkbenchWidth';
 import { Collapse, CountUp, SelectionMarker, SPRING, StateButton, Turn } from '@/components/motion';
 import { ClassGlyph, ClassPill, CLASS_TONES, classKey, StackedBar } from '@/components/tabs/ClassPill';
 
@@ -240,7 +241,7 @@ function CardSkeleton({ rows = 5 }) {
 }
 
 const PILL_FIELD =
-  'h-8 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-8 pr-8 text-[13px] text-foreground outline-none transition-colors duration-150 placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none max-md:h-11 max-md:text-base';
+  'h-8 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-8 pr-8 text-[13px] text-foreground outline-none transition-colors duration-150 placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:text-[16px]';
 
 /**
  * Genome Analyst triage list. Plain workspace content: it fills its parent, scrolls its own
@@ -268,6 +269,7 @@ export default function GaTriagePanel({
   const [focusKey, setFocusKey] = useState(null); // the card that holds keyboard focus (drives the sliding tint)
   const [justDownloaded, setJustDownloaded] = useState(false);
   const reduce = useReducedMotion();
+  const [panelRef] = usePanelWidth();
   const intro = useRef(true); // cards rise with a stagger on first load only
   // Boolean dep only — parent often replaces `variantData` with a new object each
   // pipeline tick; object identity in the effect deps cancelled the in-flight timer
@@ -463,15 +465,15 @@ export default function GaTriagePanel({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2.5 px-4 pb-4 pt-1 text-foreground">
+    <div ref={panelRef} className="group/tab flex h-full min-h-0 flex-col gap-2.5 px-4 pb-4 pt-1 text-foreground group-data-[w=narrow]/tab:overflow-y-auto group-data-[w=narrow]/tab:overscroll-contain group-data-[w=narrow]/tab:px-3 group-data-[w=narrow]/tab:pb-[max(1rem,var(--mtabs-safe-b,env(safe-area-inset-bottom)))]">
       {/* Summary card: title, job status, counts, and the one primary action. */}
       <section className="wb-card shrink-0 space-y-2.5 px-3.5 py-3" aria-label="Triage summary">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <div className="flex min-w-0 items-center gap-2.5">
             <span aria-hidden className="flex size-7 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]">
               <ListChecks className="size-3.5" />
             </span>
-            <h2 className="truncate text-[14px] font-semibold">Top candidates</h2>
+            <h2 className="whitespace-nowrap text-[14px] font-semibold">Top candidates</h2>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <button
@@ -480,7 +482,7 @@ export default function GaTriagePanel({
               disabled={loading}
               aria-label="Refresh triage"
               title="Refresh triage"
-              className={cn('wb-iconbtn disabled:opacity-60 max-md:size-11', FOCUS)}
+              className={cn('wb-iconbtn disabled:opacity-60 [@media(pointer:coarse)]:!size-11', FOCUS)}
             >
               <RefreshCw className={cn('size-3.5', loading && 'animate-spin motion-reduce:animate-none')} aria-hidden />
             </button>
@@ -492,7 +494,7 @@ export default function GaTriagePanel({
               onClick={handleDownload}
               disabled={!canDownload}
               aria-describedby={!canDownload ? 'ga-download-reason' : undefined}
-              className="h-8 max-md:h-11"
+              className="h-8 [@media(pointer:coarse)]:h-11"
             />
           </div>
         </div>
@@ -533,7 +535,7 @@ export default function GaTriagePanel({
               aria-expanded={showHow}
               aria-controls="ga-how"
               onClick={() => setShowHow((v) => !v)}
-              className={cn('-ml-1 inline-flex h-7 items-center gap-1.5 rounded-full px-2 text-[12px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none max-md:h-11', FOCUS)}
+              className={cn('-ml-1 inline-flex h-7 items-center gap-1.5 rounded-full px-2 text-[12px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none [@media(pointer:coarse)]:h-11', FOCUS)}
             >
               <Info aria-hidden className="size-3.5" />
               Why are these ranked?
@@ -567,7 +569,7 @@ export default function GaTriagePanel({
             <span className="font-medium">{String(error).replace(/[.\s]+$/, '')}.</span>{' '}
             <span className="text-muted-foreground">Check your connection, then retry.</span>
           </span>
-          <Button type="button" variant="outline" size="xs" onClick={() => load()} className="h-6 shrink-0 px-2.5 max-md:h-9">
+          <Button type="button" variant="outline" size="xs" onClick={() => load()} className="h-6 shrink-0 px-2.5 [@media(pointer:coarse)]:h-10">
             Retry
           </Button>
         </div>
@@ -576,8 +578,8 @@ export default function GaTriagePanel({
       {/* Search, sort and call filters, only once there is a list to work on. */}
       {hasRows ? (
         <div className="shrink-0 space-y-2">
-          <div className="flex items-center gap-1.5">
-            <label className="relative flex min-w-0 flex-1 items-center">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <label className="relative flex min-w-[11rem] flex-1 items-center">
               <Search aria-hidden className="pointer-events-none absolute left-3 size-3.5 text-muted-foreground" />
               <input
                 type="search"
@@ -593,7 +595,7 @@ export default function GaTriagePanel({
                   type="button"
                   onClick={() => setQuery('')}
                   aria-label="Clear search"
-                  className={cn('absolute right-1.5 inline-flex size-5 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none max-md:size-8', FOCUS)}
+                  className={cn('absolute right-1.5 inline-flex size-5 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none [@media(pointer:coarse)]:size-8', FOCUS)}
                 >
                   <X aria-hidden className="size-3" />
                 </button>
@@ -609,7 +611,7 @@ export default function GaTriagePanel({
                   aria-label={id === 'score' ? 'Sort by score, high to low' : `Sort by ${text.toLowerCase()}, low to high`}
                   title={id === 'score' ? 'Sort by score, high to low' : `Sort by ${text.toLowerCase()}, low to high`}
                   className={cn(
-                    'relative inline-flex h-7 items-center rounded-full border border-transparent px-2.5 text-[12px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none max-md:h-9',
+                    'relative inline-flex h-7 items-center rounded-full border border-transparent px-2.5 text-[12px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none [@media(pointer:coarse)]:h-10',
                     sortBy === id && 'text-[hsl(var(--brand-700))]',
                     FOCUS
                   )}
@@ -638,7 +640,7 @@ export default function GaTriagePanel({
               aria-controls="ga-filters"
               onClick={() => setShowFilters((v) => !v)}
               className={cn(
-                'inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors duration-150 motion-reduce:transition-none max-md:h-9',
+                'inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors duration-150 motion-reduce:transition-none [@media(pointer:coarse)]:h-10',
                 activeFilterCount > 0 || showFilters
                   ? 'border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]'
                   : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] text-muted-foreground hover:border-[hsl(var(--brand-300))] hover:text-[hsl(var(--brand-700))]',
@@ -654,7 +656,7 @@ export default function GaTriagePanel({
               <button
                 type="button"
                 onClick={() => { setLabelFilter('all'); setClassFilter('all'); }}
-                className={cn('inline-flex h-7 items-center rounded-full px-2.5 text-[12px] font-medium text-muted-foreground hover:text-foreground max-md:h-9', FOCUS)}
+                className={cn('inline-flex h-7 items-center rounded-full px-2.5 text-[12px] font-medium text-muted-foreground hover:text-foreground [@media(pointer:coarse)]:h-10', FOCUS)}
               >
                 Clear
               </button>
@@ -676,7 +678,7 @@ export default function GaTriagePanel({
                     aria-pressed={active}
                     onClick={() => setLabelFilter(id)}
                     className={cn(
-                      'relative inline-flex h-7 items-center rounded-full border px-3 text-[12px] tabular-nums transition-colors duration-150 motion-reduce:transition-none max-md:h-9',
+                      'relative inline-flex h-7 items-center rounded-full border px-3 text-[12px] tabular-nums transition-colors duration-150 motion-reduce:transition-none [@media(pointer:coarse)]:h-10',
                       active
                         ? 'border-transparent font-semibold text-[hsl(var(--brand-700))]'
                         : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] font-medium text-muted-foreground hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))]',
@@ -714,7 +716,7 @@ export default function GaTriagePanel({
                     aria-pressed={active}
                     onClick={() => setClassFilter(active ? 'all' : k)}
                     className={cn(
-                      'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px] tabular-nums transition-[background-color,border-color,color] duration-150 motion-reduce:transition-none max-md:h-9',
+                      'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px] tabular-nums transition-[background-color,border-color,color] duration-150 motion-reduce:transition-none [@media(pointer:coarse)]:h-10',
                       active
                         ? 'border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-100))] font-semibold text-[hsl(var(--brand-700))]'
                         : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] font-medium text-muted-foreground hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))]',
@@ -735,7 +737,7 @@ export default function GaTriagePanel({
       ) : null}
 
       {/* Body: the only scroll region. */}
-      <motion.div layoutScroll className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-1">
+      <motion.div layoutScroll className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-1 group-data-[w=narrow]/tab:flex-none group-data-[w=narrow]/tab:overflow-visible">
         {loading && !data ? (
           <div role="status" aria-label="Loading triage" aria-busy="true"><CardSkeleton rows={6} /></div>
         ) : !ready ? (
@@ -753,7 +755,7 @@ export default function GaTriagePanel({
               tone="error"
               title="Triage failed"
               action={(
-                <Button type="button" variant="outline" size="sm" className="max-md:h-11" onClick={() => load()} disabled={loading}>
+                <Button type="button" variant="outline" size="sm" className="[@media(pointer:coarse)]:h-11" onClick={() => load()} disabled={loading}>
                   <RefreshCw aria-hidden /> Check again
                 </Button>
               )}
@@ -776,7 +778,7 @@ export default function GaTriagePanel({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="max-md:h-11"
+                className="[@media(pointer:coarse)]:h-11"
                 onClick={() => {
                   setQuery('');
                   setLabelFilter('all');
@@ -824,7 +826,7 @@ export default function GaTriagePanel({
                       aria-expanded={open}
                       aria-controls={detailId}
                       onClick={() => setExpandedKey(open ? null : r.key)}
-                      className={cn('relative z-[2] flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-[hsl(var(--wb-row-hover))] motion-reduce:transition-none max-md:min-h-11', FOCUS, 'focus-visible:-outline-offset-2')}
+                      className={cn('relative z-[2] flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-[hsl(var(--wb-row-hover))] motion-reduce:transition-none [@media(pointer:coarse)]:min-h-11', FOCUS, 'focus-visible:-outline-offset-2')}
                     >
                       <span
                         className="flex size-7 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-pill))] text-[12px] font-semibold tabular-nums text-foreground"

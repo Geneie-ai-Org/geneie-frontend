@@ -85,7 +85,7 @@ export function PhenotypeSummary({ meta, onEdit }) {
       <div className="flex items-center justify-between gap-2">
         <h3 className="m-0 text-[14px] font-semibold text-foreground">Saved on this sample</h3>
         {onEdit ? (
-          <Button type="button" variant="outline" size="sm" onClick={onEdit} className="h-7 text-[12px] max-md:h-11">
+          <Button type="button" variant="outline" size="sm" onClick={onEdit} className="h-7 text-[12px] [@media(pointer:coarse)]:h-11">
             <PencilLine aria-hidden />
             Edit
           </Button>
@@ -110,7 +110,7 @@ export function PhenotypeSummary({ meta, onEdit }) {
                   aria-expanded={more}
                   aria-controls="pheno-more-terms"
                   onClick={() => setMore((v) => !v)}
-                  className="-ml-1 inline-flex h-7 items-center gap-1 rounded-full px-2 text-[12px] font-medium text-muted-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none max-md:h-11"
+                  className="-ml-1 inline-flex h-7 items-center gap-1 rounded-full px-2 text-[12px] font-medium text-muted-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none [@media(pointer:coarse)]:h-11"
                 >
                   {more ? 'Show fewer' : `Show ${rest.length} more`}
                   <Turn open={more} deg={180}><ChevronDown aria-hidden className="size-3" /></Turn>

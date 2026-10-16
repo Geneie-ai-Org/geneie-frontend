@@ -144,7 +144,7 @@ function ColumnRow({ role, matched, tone = 'success', word, note, rid, flash = f
     <li
       id={rid}
       tabIndex={-1}
-      className={`flex min-h-10 items-center gap-2 border-t px-3 py-1.5 text-[13px] outline-none transition-colors duration-500 first:border-t-0 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none max-md:min-h-11 ${flash ? 'bg-[hsl(var(--brand-100))]' : ''}`}
+      className={`flex min-h-10 items-center gap-2 border-t px-3 py-1.5 text-[13px] outline-none transition-colors duration-500 first:border-t-0 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none [@media(pointer:coarse)]:min-h-11 ${flash ? 'bg-[hsl(var(--brand-100))]' : ''}`}
       style={{ borderColor: LINE }}
     >
       <span className="min-w-0 flex-1 truncate" style={{ color: C.text }} title={note || role}>
@@ -184,7 +184,7 @@ function ColumnGroup({ label, found, missing, open, onToggle, children }) {
           aria-expanded={open}
           aria-controls={panelId}
           onClick={onToggle}
-          className={`flex min-h-10 w-full items-center gap-2 bg-[hsl(var(--wb-pill))] px-3 py-1.5 text-left text-[13px] font-medium transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] motion-reduce:transition-none max-md:min-h-11 ${FOCUS} focus-visible:-outline-offset-2`}
+          className={`flex min-h-10 w-full items-center gap-2 bg-[hsl(var(--wb-pill))] px-3 py-1.5 text-left text-[13px] font-medium transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] motion-reduce:transition-none [@media(pointer:coarse)]:min-h-11 ${FOCUS} focus-visible:-outline-offset-2`}
         >
           <Turn open={open} className="shrink-0">
             <ChevronRight className="size-3.5" style={{ color: C.textDim }} aria-hidden />
@@ -257,7 +257,7 @@ function IssueCard({ issue, open, onToggle, onJump }) {
                     type="button"
                     onClick={() => onJump(issue.id, c)}
                     title={`Show ${c.name} in the column list`}
-                    className={`inline-flex h-6 max-w-full items-center rounded-full border px-2.5 font-mono text-[12px] transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] motion-reduce:transition-none max-md:h-9 ${FOCUS}`}
+                    className={`inline-flex h-6 max-w-full items-center rounded-full border px-2.5 font-mono text-[12px] transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] motion-reduce:transition-none [@media(pointer:coarse)]:h-9 ${FOCUS}`}
                     style={{ borderColor: tint(s.fg, 30), color: C.text, background: 'hsl(var(--wb-card))' }}
                   >
                     <span className="truncate">{c.name}</span>
@@ -281,7 +281,7 @@ function IssueCard({ issue, open, onToggle, onJump }) {
                   aria-expanded={open}
                   aria-controls={panelId}
                   onClick={onToggle}
-                  className={`inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[12px] font-medium transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] motion-reduce:transition-none max-md:h-11 ${FOCUS}`}
+                  className={`inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[12px] font-medium transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] motion-reduce:transition-none [@media(pointer:coarse)]:h-11 ${FOCUS}`}
                   style={{ color: 'hsl(var(--brand-700))' }}
                 >
                   <Turn open={open}><ChevronRight aria-hidden className="size-3.5" /></Turn>
@@ -413,7 +413,7 @@ const ColumnInterpretationResults = ({
             <p className="text-[15px] font-medium" style={{ color: C.text }}>The file check did not finish</p>
             <p className="max-w-xs text-[13px] leading-5" style={{ color: C.textMuted }}>{String(checkError)}</p>
             {onRetryCheck ? (
-              <Button type="button" variant="outline" size="sm" onClick={onRetryCheck} className="mt-1.5 max-md:h-11"><RefreshCw aria-hidden /> Check again</Button>
+              <Button type="button" variant="outline" size="sm" onClick={onRetryCheck} className="mt-1.5 [@media(pointer:coarse)]:h-11"><RefreshCw aria-hidden /> Check again</Button>
             ) : null}
           </div>
         </div>
@@ -666,7 +666,7 @@ const ColumnInterpretationResults = ({
             size="sm"
             onClick={() => onConvertToVcf()}
             disabled={isConvertingToVcf || backgroundJobActive}
-            className="max-md:h-11"
+            className="[@media(pointer:coarse)]:h-11"
           />
         ) : null
       ) : null,
@@ -893,7 +893,7 @@ const ColumnInterpretationResults = ({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <SeverityBadge sev={vSev} />
-          <Button type="button" variant="ghost" size="icon-sm" onClick={() => onClose?.()} aria-label="Close" className="-mr-1.5 max-md:size-11">
+          <Button type="button" variant="ghost" size="icon-sm" onClick={() => onClose?.()} aria-label="Close" className="-mr-1.5 [@media(pointer:coarse)]:size-11">
             <X aria-hidden />
           </Button>
         </div>
@@ -942,7 +942,7 @@ const ColumnInterpretationResults = ({
         aria-expanded={showPassed}
         aria-controls="fc-passed"
         onClick={() => setShowPassed((v) => !v)}
-        className={`flex min-h-10 w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] font-medium transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] motion-reduce:transition-none max-md:min-h-11 ${FOCUS} focus-visible:-outline-offset-2`}
+        className={`flex min-h-10 w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] font-medium transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] motion-reduce:transition-none [@media(pointer:coarse)]:min-h-11 ${FOCUS} focus-visible:-outline-offset-2`}
       >
         <Turn open={showPassed}><ChevronRight aria-hidden className="size-3.5" style={{ color: C.textDim }} /></Turn>
         <CircleCheck aria-hidden className="size-3.5" style={{ color: C.success }} />
@@ -976,7 +976,7 @@ const ColumnInterpretationResults = ({
               variant="outline"
               onClick={annovarEnabled && !annovarAlreadyRun ? annotateRun : undefined}
               disabled={!(annovarEnabled && !annovarAlreadyRun) && !isRunningAnnovar}
-              className="max-md:h-11"
+              className="[@media(pointer:coarse)]:h-11"
             />
             {annotateReason ? <p className="text-xs" style={{ color: annovarQuotaBlocked ? C.error : C.textMuted }}>{annotateReason}</p> : null}
             {annovarMeterLabel && !annovarQuotaBlocked ? (
@@ -995,7 +995,7 @@ const ColumnInterpretationResults = ({
             variant="outline"
             onClick={() => onProprietaryFilterClick?.('filter_1')}
             disabled={!acmgFilterCanApply || isApplyingProprietaryFilter || acmgFilterActive}
-            className="max-md:h-11"
+            className="[@media(pointer:coarse)]:h-11"
             style={acmgFilterActive ? { borderColor: 'hsl(var(--brand-300))', background: 'hsl(var(--brand-100))', color: 'hsl(var(--brand-700))' } : undefined}
           />
           {/* Quota and readiness are different problems, so they get different copy. */}
@@ -1020,7 +1020,7 @@ const ColumnInterpretationResults = ({
               : 'Run annotation first. Phenotype prioritization needs an annotated file.';
           return (
             <div className="max-w-xs space-y-1">
-              <Button type="button" variant="outline" onClick={() => onOpenExomiser()} disabled={!exomiserEnabled} className="max-md:h-11">
+              <Button type="button" variant="outline" onClick={() => onOpenExomiser()} disabled={!exomiserEnabled} className="[@media(pointer:coarse)]:h-11">
                 <PhenotypeAiLabel variant="inline" />
               </Button>
               {!exomiserEnabled && step1?.passed ? (
@@ -1068,16 +1068,16 @@ const ColumnInterpretationResults = ({
 
   const footer = (
     <div
-      className={`flex flex-shrink-0 flex-col gap-2 border-t px-4 py-3 ${embedded ? '' : 'bg-background sm:px-6'}`}
+      className={`flex flex-shrink-0 flex-col gap-2 border-t px-4 pt-3 pb-[max(0.75rem,var(--mtabs-safe-b,env(safe-area-inset-bottom)))] ${embedded ? '' : 'bg-background sm:px-6'}`}
       style={{ borderColor: LINE }}
     >
       {decisionNote ? <p className="m-0 text-xs leading-5" style={{ color: C.textMuted }}>{decisionNote}</p> : null}
       <div className="flex flex-wrap items-center justify-end gap-2">
         {verdict === 'pass' || (!fixPrimary && verdict !== 'blocked') ? (
-          <Button type="button" onClick={handleDismiss} className="max-md:h-11">{continueLabel}</Button>
+          <Button type="button" onClick={handleDismiss} className="[@media(pointer:coarse)]:h-11">{continueLabel}</Button>
         ) : (
           <>
-            <Button type="button" variant="outline" onClick={handleDismiss} className="max-md:h-11">
+            <Button type="button" variant="outline" onClick={handleDismiss} className="[@media(pointer:coarse)]:h-11">
               {backgroundJobActive ? 'Continue in background' : 'Proceed anyway'}
             </Button>
             {fixPrimary?.annotate ? (
@@ -1087,10 +1087,10 @@ const ColumnInterpretationResults = ({
                 icon={Tags}
                 onClick={annovarEnabled ? annotateRun : undefined}
                 disabled={!annovarEnabled && !isRunningAnnovar}
-                className="max-md:h-11"
+                className="[@media(pointer:coarse)]:h-11"
               />
             ) : fixPrimary ? (
-              <Button type="button" onClick={fixPrimary.run} className="max-md:h-11">{fixPrimary.label}</Button>
+              <Button type="button" onClick={fixPrimary.run} className="[@media(pointer:coarse)]:h-11">{fixPrimary.label}</Button>
             ) : null}
           </>
         )}

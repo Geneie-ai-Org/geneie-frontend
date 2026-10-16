@@ -4,6 +4,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { HighlightPill } from '@/components/ui/highlight-pill';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { usePhone } from '@/hooks/useWorkbenchWidth';
+import BottomSheet from './BottomSheet';
 
 /** Glyph per column type: number, category, or yes/no. */
 export const KIND_GLYPH = { number: Hash, category: ListChecks, boolean: ToggleLeft };
@@ -72,6 +74,7 @@ export default function AddFilterCommand({ open, onOpenChange, columns, renderEd
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const uid = useId();
+  const phone = usePhone();
 
   useEffect(() => {
     if (!open) { setQuery(''); setCol(null); setActive(0); }
@@ -126,21 +129,160 @@ export default function AddFilterCommand({ open, onOpenChange, columns, renderEd
     else if (e.key === 'Enter') { e.preventDefault(); choose(options[at]); }
   };
 
-  return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger
-        disabled={disabled}
-        render={
+  const triggerClass =
+    'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-dashed border-[hsl(var(--brand-300))] bg-transparent pl-2 pr-1.5 text-[12.5px] font-medium text-[hsl(var(--brand-700))] outline-none transition-colors duration-150 hover:border-solid hover:bg-[hsl(var(--brand-50))] aria-expanded:border-solid aria-expanded:bg-[hsl(var(--brand-100))] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:pl-3 [@media(pointer:coarse)]:pr-3.5 [@media(pointer:coarse)]:text-[14px]';
+  const triggerInner = (
+    <>
+      <Plus aria-hidden className="size-3.5" />
+      Add filter
+      <kbd aria-hidden className="ov-kbd !ml-0.5 max-md:hidden">/</kbd>
+    </>
+  );
+
+  // The same two views serve the desktop popover and the phone sheet; `sheet` only changes sizes.
+  const listView = (sheet) => (
+    <div className={cn('flex flex-col', sheet && 'min-h-0 flex-1')}>
+      <div className={cn('flex items-center gap-2 border-b border-[hsl(var(--wb-line))] px-3 transition-colors duration-150 focus-within:border-[hsl(var(--brand-500))]', sheet && 'border-t')}>
+        <Search aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        <input
+          ref={inputRef}
+          type="text"
+          role="combobox"
+          aria-expanded="true"
+          aria-controls={`${uid}-list`}
+          aria-activedescendant={activeId ? `${uid}-${activeId}` : undefined}
+          aria-label="Find a column"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={onInputKeyDown}
+          placeholder="Find a column, or type qual > 100"
+          spellCheck={false}
+          autoComplete="off"
+          autoCapitalize="none"
+          enterKeyHint="go"
+          className={cn('min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none', sheet ? 'h-12 text-[16px]' : 'h-11 text-[13px]')}
+        />
+      </div>
+      <div
+        id={`${uid}-list`}
+        ref={listRef}
+        role="listbox"
+        aria-label="Columns"
+        className={cn('relative overflow-y-auto overscroll-contain p-1.5', sheet ? 'min-h-0 flex-1 pb-[max(0.75rem,env(safe-area-inset-bottom))]' : 'max-h-[min(22rem,52vh)]')}
+      >
+        <HighlightPill />
+        {options.length === 0 ? (
+          <p className="px-3 py-6 text-center text-[13px] text-muted-foreground">No column matches “{query.trim()}”.</p>
+        ) : null}
+        {rows.map((r) => {
+          if (r.type === 'head') return <p key={r.id} role="presentation" className="ov-label !px-3 !pb-1 !pt-2">{r.label}</p>;
+          const on = r.id === activeId;
+          if (r.type === 'quick') {
+            return (
+              <div
+                key={r.id}
+                id={`${uid}-${r.id}`}
+                data-opt={r.id}
+                role="option"
+                aria-selected={on}
+                data-highlighted={on ? '' : undefined}
+                onPointerMove={() => setActive(options.indexOf(r))}
+                onClick={() => choose(r)}
+                className={cn('ov-item', sheet && '!min-h-12')}
+              >
+                <CornerDownLeft aria-hidden />
+                <span className="min-w-0 flex-1 truncate tabular-nums">Set <span className="font-medium">{r.quick.label}</span></span>
+                <kbd className="ov-kbd max-md:hidden">Enter</kbd>
+              </div>
+            );
+          }
+          return (
+            <div
+              key={r.id}
+              id={`${uid}-${r.id}`}
+              data-opt={r.id}
+              role="option"
+              aria-selected={on}
+              data-highlighted={on ? '' : undefined}
+              onPointerMove={() => setActive(options.indexOf(r))}
+              onClick={() => choose(r)}
+              className={cn('ov-item', sheet && '!min-h-12 !text-[15px]')}
+            >
+              <KindGlyph kind={r.c.kind} />
+              <span className={cn('min-w-0 flex-1 truncate', r.c.active && 'font-medium')}>
+                {r.c.name}
+                {query.trim() ? <span className="ml-2 text-[12px] font-normal text-muted-foreground">{r.group}</span> : null}
+              </span>
+              {r.c.active ? <span role="img" aria-label="Filter set" className="size-1.5 shrink-0 rounded-full bg-[hsl(var(--brand-500))]" /> : null}
+              {r.c.hint ? <span className={cn('shrink-0 truncate text-[12px] tabular-nums text-muted-foreground', sheet ? 'max-w-[7rem]' : 'max-w-[9rem]')}>{r.c.hint}</span> : null}
+            </div>
+          );
+        })}
+      </div>
+      {!sheet && (
+        <div className="flex items-center gap-3 border-t border-[hsl(var(--wb-line))] px-3 py-2 text-[12px] text-muted-foreground max-md:hidden">
+          <span className="inline-flex items-center gap-1"><kbd className="ov-kbd !ml-0">↑</kbd><kbd className="ov-kbd !ml-0">↓</kbd> move</span>
+          <span className="inline-flex items-center gap-1"><kbd className="ov-kbd !ml-0">Enter</kbd> choose</span>
+          <span className="inline-flex items-center gap-1"><kbd className="ov-kbd !ml-0">Esc</kbd> close</span>
+        </div>
+      )}
+    </div>
+  );
+
+  const editorView = (sheet) => (
+    <div className={cn(sheet && 'flex min-h-0 flex-1 flex-col')}>
+      {!sheet && (
+        <div className="flex items-center gap-2 border-b border-[hsl(var(--wb-line))] px-2.5 py-2">
           <button
             type="button"
-            aria-keyshortcuts="/"
-            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-dashed border-[hsl(var(--brand-300))] bg-transparent pl-2 pr-1.5 text-[12.5px] font-medium text-[hsl(var(--brand-700))] outline-none transition-colors duration-150 hover:border-solid hover:bg-[hsl(var(--brand-50))] aria-expanded:border-solid aria-expanded:bg-[hsl(var(--brand-100))] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
-          />
-        }
-      >
-        <Plus aria-hidden className="size-3.5" />
-        Add filter
-        <kbd aria-hidden className="ov-kbd !ml-0.5 max-md:hidden">/</kbd>
+            onClick={() => setCol(null)}
+            aria-label="Back to all columns"
+            title="Back to all columns"
+            className="wb-iconbtn !size-7 outline-none [@media(pointer:coarse)]:!size-10"
+          >
+            <ArrowLeft aria-hidden className="size-3.5" />
+          </button>
+          <KindGlyph kind={picked.kind} className="text-[hsl(var(--brand-700))]" />
+          <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{picked.name}</span>
+          <span className="shrink-0 text-[12px] text-muted-foreground">{picked.group}</span>
+        </div>
+      )}
+      <div className={cn('overflow-y-auto overflow-x-hidden overscroll-contain p-3', sheet ? 'min-h-0 flex-1 border-t border-[hsl(var(--wb-line))] px-4 py-4' : 'max-h-[min(26rem,60vh)]')}>{renderEditor(picked.name)}</div>
+      <div className={cn('flex items-center justify-between gap-2 border-t border-[hsl(var(--wb-line))] px-3 py-2', sheet && 'px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3')}>
+        <span className="text-[12px] text-muted-foreground">Changes stay drafts until you press Apply.</span>
+        <Button type="button" size="sm" onClick={() => onOpenChange(false)} className={cn('[@media(pointer:coarse)]:!h-10 [@media(pointer:coarse)]:!px-5', sheet && '!h-11 shrink-0 !px-6 !text-[14px]')}>Done</Button>
+      </div>
+    </div>
+  );
+
+  if (phone) {
+    return (
+      <>
+        <button type="button" disabled={disabled} onClick={() => onOpenChange(true)} aria-haspopup="dialog" aria-expanded={open} className={triggerClass}>
+          {triggerInner}
+        </button>
+        <BottomSheet
+          open={open}
+          onOpenChange={onOpenChange}
+          title={picked ? picked.name : 'Add filter'}
+          initialFocus={false}
+          leading={picked ? (
+            <button type="button" onClick={() => setCol(null)} aria-label="Back to all columns" className="wb-iconbtn !size-11 shrink-0 outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-[hsl(var(--ring))]">
+              <ArrowLeft aria-hidden className="size-[18px]" />
+            </button>
+          ) : null}
+          trailing={picked ? <span className="shrink-0 text-[12px] text-muted-foreground">{picked.group}</span> : null}
+        >
+          {picked ? editorView(true) : listView(true)}
+        </BottomSheet>
+      </>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger disabled={disabled} aria-keyshortcuts="/" render={<button type="button" className={triggerClass} />}>
+        {triggerInner}
       </PopoverTrigger>
       <PopoverContent
         align="start"
@@ -148,112 +290,7 @@ export default function AddFilterCommand({ open, onOpenChange, columns, renderEd
         initialFocus={picked ? undefined : inputRef}
         className="w-[min(25rem,calc(100vw-2rem))] gap-0 overflow-hidden p-0"
       >
-        {picked ? (
-          <div>
-            <div className="flex items-center gap-2 border-b border-[hsl(var(--wb-line))] px-2.5 py-2">
-              <button
-                type="button"
-                onClick={() => setCol(null)}
-                aria-label="Back to all columns"
-                title="Back to all columns"
-                className="wb-iconbtn !size-7 outline-none"
-              >
-                <ArrowLeft aria-hidden className="size-3.5" />
-              </button>
-              <KindGlyph kind={picked.kind} className="text-[hsl(var(--brand-700))]" />
-              <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{picked.name}</span>
-              <span className="shrink-0 text-[12px] text-muted-foreground">{picked.group}</span>
-            </div>
-            <div className="max-h-[min(26rem,60vh)] overflow-y-auto overscroll-contain p-3">{renderEditor(picked.name)}</div>
-            <div className="flex items-center justify-between gap-2 border-t border-[hsl(var(--wb-line))] px-3 py-2">
-              <span className="text-[12px] text-muted-foreground">Changes stay drafts until you press Apply.</span>
-              <Button type="button" size="sm" onClick={() => onOpenChange(false)}>Done</Button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2 border-b border-[hsl(var(--wb-line))] px-3 transition-colors duration-150 focus-within:border-[hsl(var(--brand-500))]">
-              <Search aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-              <input
-                ref={inputRef}
-                type="text"
-                role="combobox"
-                aria-expanded="true"
-                aria-controls={`${uid}-list`}
-                aria-activedescendant={activeId ? `${uid}-${activeId}` : undefined}
-                aria-label="Find a column"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={onInputKeyDown}
-                placeholder="Find a column, or type qual > 100"
-                spellCheck={false}
-                autoComplete="off"
-                className="h-11 min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none"
-              />
-            </div>
-            <div
-              id={`${uid}-list`}
-              ref={listRef}
-              role="listbox"
-              aria-label="Columns"
-              className="relative max-h-[min(22rem,52vh)] overflow-y-auto overscroll-contain p-1.5"
-            >
-              <HighlightPill />
-              {options.length === 0 ? (
-                <p className="px-3 py-6 text-center text-[13px] text-muted-foreground">No column matches “{query.trim()}”.</p>
-              ) : null}
-              {rows.map((r) => {
-                if (r.type === 'head') return <p key={r.id} role="presentation" className="ov-label !px-3 !pb-1 !pt-2">{r.label}</p>;
-                const on = r.id === activeId;
-                if (r.type === 'quick') {
-                  return (
-                    <div
-                      key={r.id}
-                      id={`${uid}-${r.id}`}
-                      data-opt={r.id}
-                      role="option"
-                      aria-selected={on}
-                      data-highlighted={on ? '' : undefined}
-                      onPointerMove={() => setActive(options.indexOf(r))}
-                      onClick={() => choose(r)}
-                      className="ov-item"
-                    >
-                      <CornerDownLeft aria-hidden />
-                      <span className="min-w-0 flex-1 truncate tabular-nums">Set <span className="font-medium">{r.quick.label}</span></span>
-                      <kbd className="ov-kbd">Enter</kbd>
-                    </div>
-                  );
-                }
-                return (
-                  <div
-                    key={r.id}
-                    id={`${uid}-${r.id}`}
-                    data-opt={r.id}
-                    role="option"
-                    aria-selected={on}
-                    data-highlighted={on ? '' : undefined}
-                    onPointerMove={() => setActive(options.indexOf(r))}
-                    onClick={() => choose(r)}
-                    className="ov-item"
-                  >
-                    <KindGlyph kind={r.c.kind} />
-                    <span className={cn('min-w-0 flex-1 truncate', r.c.active && 'font-medium')}>
-                      {r.c.name}
-                      {query.trim() ? <span className="ml-2 text-[12px] font-normal text-muted-foreground">{r.group}</span> : null}
-                    </span>
-                    {r.c.active ? <span role="img" aria-label="Filter set" className="size-1.5 shrink-0 rounded-full bg-[hsl(var(--brand-500))]" /> : null}
-                    {r.c.hint ? <span className="max-w-[9rem] shrink-0 truncate text-[12px] tabular-nums text-muted-foreground">{r.c.hint}</span> : null}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex items-center gap-3 border-t border-[hsl(var(--wb-line))] px-3 py-2 text-[12px] text-muted-foreground max-md:hidden">
-              <span className="inline-flex items-center gap-1"><kbd className="ov-kbd !ml-0">↑</kbd><kbd className="ov-kbd !ml-0">↓</kbd> move</span>
-              <span className="inline-flex items-center gap-1"><kbd className="ov-kbd !ml-0">Enter</kbd> choose</span>
-              <span className="inline-flex items-center gap-1"><kbd className="ov-kbd !ml-0">Esc</kbd> close</span>
-            </div>
-          </div>
-        )}
+        {picked ? editorView(false) : listView(false)}
       </PopoverContent>
     </Popover>
   );

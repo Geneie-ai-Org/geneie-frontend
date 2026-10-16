@@ -41,6 +41,7 @@ import { useDoneFlash } from '@/components/motion/useDoneFlash';
 import { sampleHasPhenotype } from '@/components/PhenotypeInputPanel';
 import AddFilterCommand, { KindGlyph } from '@/components/variants/AddFilterCommand';
 import FilterBar from '@/components/variants/FilterBar';
+import { usePanelWidth } from '@/hooks/useWorkbenchWidth';
 import ApplyStatus, { describeDiff } from '@/components/variants/ApplyStatus';
 import { RangeHistogram } from '@/components/variants/Histogram';
 import { useVariantSample, sampleCaption } from '@/components/variants/useVariantSample';
@@ -350,14 +351,14 @@ const safeId = (name) => String(name).replace(/[^a-zA-Z0-9_-]/g, '_');
 const BOOLISH = /^(true|false|yes|no|y|n|t|f|0|1)$/i;
 
 const FIELD_CLASS =
-  'h-9 max-md:h-11 w-full min-w-0 rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3.5 text-[13px] md:text-[13px] tabular-nums text-foreground placeholder:text-muted-foreground outline-none transition-[color,background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)] disabled:cursor-not-allowed disabled:opacity-50';
+  'h-9 [@media(pointer:coarse)]:h-11 w-full min-w-0 rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3.5 text-[13px] md:text-[13px] [@media(pointer:coarse)]:text-[16px] tabular-nums text-foreground placeholder:text-muted-foreground outline-none transition-[color,background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)] disabled:cursor-not-allowed disabled:opacity-50';
 
 const TEXTAREA_CLASS =
   'w-full resize-none rounded-2xl border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3.5 py-2 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)]';
 
 /** Small round icon-only control inside a field or chip (clear, remove). */
 const MINI_ICON_BTN =
-  'inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:opacity-50 max-md:size-9';
+  'inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:opacity-50 [@media(pointer:coarse)]:size-9';
 
 /** Dual-handle range slider + min/max fields for numeric column filters. */
 function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinChange, onMaxChange, disabled, onEnterApply = null, flashKey = 0, histogram = null }) {
@@ -561,7 +562,7 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
   // The thumb grows while it is dragged. The scale lives in the inline transform (which already
   // centres the thumb), so it is not overridden by the centring translate.
   const thumbClass = (active) =>
-    `absolute size-[18px] rounded-full border-2 border-[hsl(var(--brand-500))] bg-[hsl(var(--wb-card))] outline-none transition-[transform,box-shadow] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.45)] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--brand-50))] motion-reduce:transition-none ${
+    `absolute size-[18px] [@media(pointer:coarse)]:size-6 before:absolute before:-inset-3 before:content-[''] rounded-full border-2 border-[hsl(var(--brand-500))] bg-[hsl(var(--wb-card))] outline-none transition-[transform,box-shadow] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.45)] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--brand-50))] motion-reduce:transition-none ${
       active ? 'z-20 shadow-[0_0_0_5px_hsl(var(--brand-500)/0.18)]' : 'z-10'
     }`;
   const thumbTransform = (active) => (active && !reduceMotion ? 'translate(-50%, -50%) scale(1.25)' : 'translate(-50%, -50%)');
@@ -573,7 +574,7 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
       )}
       <div
         ref={trackRef}
-        className={`relative flex h-6 items-center ${disabled ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}
+        className={`relative flex h-6 [@media(pointer:coarse)]:h-11 items-center ${disabled ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}
         onPointerDown={onTrackPointerDown}
         role="presentation"
       >
@@ -664,7 +665,7 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
           );
         })}
       </div>
-      <p className="text-[12px] text-muted-foreground">Press Enter in a field to apply.</p>
+      <p className="text-[12px] text-muted-foreground [@media(pointer:coarse)]:hidden">Press Enter in a field to apply.</p>
     </div>
   );
 }
@@ -699,7 +700,7 @@ function CategoricalEditor({ values, selected, disabled, onChange, counts = null
               aria-checked={active}
               disabled={disabled}
               onClick={() => onChange(opt.value === null ? [] : [opt.value])}
-              className={`relative h-7 max-md:h-10 flex-1 rounded-full border border-transparent px-2 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`relative h-7 [@media(pointer:coarse)]:h-10 flex-1 rounded-full border border-transparent px-2 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:cursor-not-allowed disabled:opacity-50 ${
                 active
                   ? 'text-[hsl(var(--brand-700))]'
                   : 'text-muted-foreground hover:bg-[hsl(var(--brand-50))] hover:text-foreground'
@@ -801,7 +802,7 @@ function CategoricalEditor({ values, selected, disabled, onChange, counts = null
             {shown.map((value) => (
               <li key={String(value)}>
                 <label
-                  className={`flex items-center gap-2 px-2.5 py-1.5 max-md:min-h-11 text-[13px] ${
+                  className={`flex items-center gap-2 px-2.5 py-1.5 [@media(pointer:coarse)]:min-h-11 text-[13px] ${
                     disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-[hsl(var(--brand-50))]'
                   }`}
                 >
@@ -896,7 +897,7 @@ function ColumnFilterEditor({
                   setFlashKey((k) => k + 1);
                 }}
                 disabled={disabled}
-                className="h-7 max-md:h-10 rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3 text-[12px] font-medium text-muted-foreground outline-none transition-colors hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-7 [@media(pointer:coarse)]:h-10 rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3 text-[12px] font-medium text-muted-foreground outline-none transition-colors hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {p.label}
               </button>
@@ -943,7 +944,7 @@ function ColumnFilterEditor({
           <button
             type="button"
             onClick={onClear}
-            className="inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[12px] font-medium text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:min-h-11"
+            className="inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[12px] font-medium text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] [@media(pointer:coarse)]:min-h-11"
           >
             <RotateCcw className="size-3" aria-hidden />
             Clear this filter
@@ -1048,6 +1049,7 @@ const VariantFilterSidebar = ({
   const [applyDiff, setApplyDiff] = useState(null); // { from, to, added, changed, removed } for the last manual Apply
   const [undoApplyPending, setUndoApplyPending] = useState(false); // Undo of a Reset: re-apply once the reset settles
   const rootRef = useRef(null);
+  const [, narrowPanel] = usePanelWidth(520, rootRef);
   const [expandedGroups, setExpandedGroups] = useState({}); // groupName -> open (unset = default)
   const [initializedConversationId, setInitializedConversationId] = useState(null); // Prevent re-initializing filters on polling updates
   const [savedFilterPresets, setSavedFilterPresets] = useState([]);
@@ -2565,7 +2567,7 @@ const VariantFilterSidebar = ({
           aria-expanded={isExpanded}
           aria-controls={`filter-col-${safeId(colName)}`}
           onClick={() => setOpenFilterPopup(isExpanded ? null : colName)}
-          className={`group/row relative flex min-h-9 w-full items-center gap-2 rounded-full border px-3 py-1 text-left text-[13px] outline-none transition-colors max-md:min-h-11 ${
+          className={`group/row relative flex min-h-9 w-full items-center gap-2 rounded-full border px-3 py-1 text-left text-[13px] outline-none transition-colors [@media(pointer:coarse)]:min-h-11 ${
             isExpanded
               ? 'border-[hsl(var(--brand-200))]'
               : 'border-transparent hover:border-[hsl(var(--brand-200))] hover:bg-[hsl(var(--brand-50))]'
@@ -2661,7 +2663,7 @@ const VariantFilterSidebar = ({
   };
 
   const ringBrand = 'focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]';
-  const pillBtn = 'h-8 max-md:h-11 text-[13px]';
+  const pillBtn = 'h-8 [@media(pointer:coarse)]:h-11 text-[13px]';
   const canRunAnnotation = !isGuest && typeof runAnnovar === 'function';
   const annotateState = isRunningAnnovar ? 'running' : annotateDone ? 'done' : 'idle';
   const runAnnotationButton = canRunAnnotation ? (
@@ -2732,14 +2734,14 @@ const VariantFilterSidebar = ({
           title="Apply filters (Ctrl or Cmd + Enter)"
           disabled={isManualFiltersDisabled || !hasUnappliedFilterChanges}
           aria-describedby="filter-apply-status"
-          className={`h-9 flex-1 max-md:h-11 ${settled(state)}`}
+          className={`h-9 flex-1 [@media(pointer:coarse)]:h-11 ${settled(state)}`}
         />
       );
     }
     // A blocked plan: the way forward is the upgrade, when the host gave us a handler.
     if ((filterMode === 'acmg' || filterMode === 'exomiser') && acmgQuotaBlocked && upgradeAction && !(filterMode === 'acmg' ? activeProprietaryFilter === 'filter_1' : exoIsActive)) {
       return (
-        <Button type="button" onClick={upgradeAction.onClick} aria-describedby="filter-apply-status" className="h-9 flex-1 max-md:h-11">
+        <Button type="button" onClick={upgradeAction.onClick} aria-describedby="filter-apply-status" className="h-9 flex-1 [@media(pointer:coarse)]:h-11">
           {upgradeAction.label}
         </Button>
       );
@@ -2747,7 +2749,7 @@ const VariantFilterSidebar = ({
     // Locked Phenotype: the primary action is the one that unlocks it, not a dead Run button.
     if (filterMode === 'exomiser' && phenotypeMissing && onEditSampleInfo && !exoIsActive) {
       return (
-        <Button type="button" onClick={onEditSampleInfo} aria-describedby="filter-apply-status" className="h-9 flex-1 max-md:h-11">
+        <Button type="button" onClick={onEditSampleInfo} aria-describedby="filter-apply-status" className="h-9 flex-1 [@media(pointer:coarse)]:h-11">
           <PencilLine aria-hidden />
           Add a phenotype
         </Button>
@@ -2765,7 +2767,7 @@ const VariantFilterSidebar = ({
           variant="outline"
           onClick={() => handleApplyProprietaryFilter('filter_1')}
           aria-describedby="filter-apply-status"
-          className={`h-9 flex-1 !text-[var(--error)] max-md:h-11 ${settled(isApplyingProprietaryFilter ? 'running' : 'idle')}`}
+          className={`h-9 flex-1 !text-[var(--error)] [@media(pointer:coarse)]:h-11 ${settled(isApplyingProprietaryFilter ? 'running' : 'idle')}`}
         />
       ) : (
         <StateButton
@@ -2775,7 +2777,7 @@ const VariantFilterSidebar = ({
           onClick={() => handleApplyProprietaryFilter('filter_1')}
           disabled={!acmgFilterCanApply || acmgApplyDone}
           aria-describedby="filter-apply-status"
-          className={`h-9 flex-1 max-md:h-11 ${settled(isApplyingProprietaryFilter ? 'running' : acmgApplyDone ? 'done' : 'idle')}`}
+          className={`h-9 flex-1 [@media(pointer:coarse)]:h-11 ${settled(isApplyingProprietaryFilter ? 'running' : acmgApplyDone ? 'done' : 'idle')}`}
         />
       );
     }
@@ -2787,7 +2789,7 @@ const VariantFilterSidebar = ({
         variant="outline"
         onClick={() => handleApplyProprietaryFilter('filter_3')}
         aria-describedby="filter-apply-status"
-        className={`h-9 flex-1 !text-[var(--error)] max-md:h-11 ${settled(isApplyingProprietaryFilter ? 'running' : 'idle')}`}
+        className={`h-9 flex-1 !text-[var(--error)] [@media(pointer:coarse)]:h-11 ${settled(isApplyingProprietaryFilter ? 'running' : 'idle')}`}
       />
     ) : (
       <StateButton
@@ -2801,7 +2803,7 @@ const VariantFilterSidebar = ({
         onClick={() => runExomiser && runExomiser()}
         disabled={exoRunDone || phenotypeMissing || !exoCanRun || !runExomiser || acmgQuotaBlocked}
         aria-describedby="filter-apply-status"
-        className={`h-9 flex-1 max-md:h-11 ${settled(exoRunning ? 'running' : exoRunDone ? 'done' : 'idle')}`}
+        className={`h-9 flex-1 [@media(pointer:coarse)]:h-11 ${settled(exoRunning ? 'running' : exoRunDone ? 'done' : 'idle')}`}
       />
     );
   };
@@ -2835,7 +2837,7 @@ const VariantFilterSidebar = ({
     variantData?.sample_only_ingest && (
       <Popover>
         <PopoverTrigger
-          className="wb-iconbtn outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:size-11"
+          className="wb-iconbtn outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] [@media(pointer:coarse)]:size-11"
           aria-label="About this file"
         >
           <Info className="size-3.5" />
@@ -2937,7 +2939,7 @@ const VariantFilterSidebar = ({
   };
 
   return (
-    <div ref={rootRef} onKeyDown={onRootKeyDown} className="variant-filter-sidebar flex h-full min-h-0 w-full min-w-0 flex-col text-foreground [&_input::placeholder]:!text-muted-foreground [&_textarea::placeholder]:!text-muted-foreground">
+    <div ref={rootRef} onKeyDown={onRootKeyDown} className="variant-filter-sidebar group/tab flex h-full min-h-0 w-full min-w-0 flex-col text-foreground [&_input::placeholder]:!text-muted-foreground [&_textarea::placeholder]:!text-muted-foreground">
       {/* Confirmation dialogs (short, focused) */}
       <AlertDialog open={removeFileDialogOpen} onOpenChange={setRemoveFileDialogOpen}>
         <AlertDialogContent>
@@ -3050,7 +3052,7 @@ const VariantFilterSidebar = ({
                   data-state={selected ? 'active' : 'inactive'}
                   data-selected={selected ? 'true' : 'false'}
                   style={{ height: 30 }}
-                  className={`wb-tab wb-tab--slide min-w-0 flex-1 justify-center gap-1.5 px-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.55)] max-md:!h-11 [&_svg]:!text-current ${
+                  className={`wb-tab wb-tab--slide min-w-0 flex-1 justify-center gap-1.5 px-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.55)] [@media(pointer:coarse)]:!h-11 [&_svg]:!text-current ${
                     selected ? 'font-semibold' : 'font-medium'
                   }`}
                 >
@@ -3292,8 +3294,8 @@ const VariantFilterSidebar = ({
                                       className={TEXTAREA_CLASS}
                                     />
                                     <div className="flex gap-2">
-                                      <Button type="button" size="sm" onClick={handleUpdateSelectedGarden} className="max-md:h-11">Save</Button>
-                                      <Button type="button" size="sm" variant="outline" onClick={() => setIsEditingGardenEntry(false)} className="max-md:h-11">Cancel</Button>
+                                      <Button type="button" size="sm" onClick={handleUpdateSelectedGarden} className="[@media(pointer:coarse)]:h-11">Save</Button>
+                                      <Button type="button" size="sm" variant="outline" onClick={() => setIsEditingGardenEntry(false)} className="[@media(pointer:coarse)]:h-11">Cancel</Button>
                                     </div>
                                   </div>
                                 ) : (
@@ -3307,11 +3309,11 @@ const VariantFilterSidebar = ({
                                       </p>
                                     </div>
                                     {isActive ? (
-                                      <Button type="button" size="sm" variant="outline" onClick={resetFilters} disabled={isApplying} className="max-md:h-11" title="Deactivate this saved filter and clear its filters">
+                                      <Button type="button" size="sm" variant="outline" onClick={resetFilters} disabled={isApplying} className="[@media(pointer:coarse)]:h-11" title="Deactivate this saved filter and clear its filters">
                                         <X aria-hidden /> Deactivate
                                       </Button>
                                     ) : (
-                                      <Button type="button" size="sm" variant="outline" onClick={() => handleApplySelectedGarden(preset.id)} disabled={isApplyingPreset || isManualFiltersDisabled} className="max-md:h-11">
+                                      <Button type="button" size="sm" variant="outline" onClick={() => handleApplySelectedGarden(preset.id)} disabled={isApplyingPreset || isManualFiltersDisabled} className="[@media(pointer:coarse)]:h-11">
                                         {isApplyingPreset && selectedPresetId === preset.id ? 'Applying…' : 'Apply'}
                                       </Button>
                                     )}
@@ -3320,7 +3322,7 @@ const VariantFilterSidebar = ({
                                       size="icon-sm"
                                       variant="ghost"
                                       aria-label={`Edit ${preset.name}`}
-                                      className="max-md:size-11"
+                                      className="[@media(pointer:coarse)]:size-11"
                                       onClick={() => {
                                         setSelectedPresetId(preset.id);
                                         setIsEditingGardenEntry(true);
@@ -3335,7 +3337,7 @@ const VariantFilterSidebar = ({
                                       size="icon-sm"
                                       variant="ghost"
                                       aria-label={`Delete ${preset.name}`}
-                                      className="max-md:size-11 hover:text-[var(--error)]"
+                                      className="[@media(pointer:coarse)]:size-11 hover:text-[var(--error)]"
                                       onClick={() => handleDeleteSelectedGarden(preset.id)}
                                     >
                                       <Trash2 aria-hidden />
@@ -3356,7 +3358,7 @@ const VariantFilterSidebar = ({
                                           variant="outline"
                                           onClick={handleRunAnnovarFromGarden}
                                           disabled={annovarQuotaBlocked}
-                                          className={`max-md:h-11 ${annotateState !== 'idle' ? 'disabled:opacity-100' : ''}`}
+                                          className={`[@media(pointer:coarse)]:h-11 ${annotateState !== 'idle' ? 'disabled:opacity-100' : ''}`}
                                         />
                                       }
                                     >
@@ -3383,7 +3385,7 @@ const VariantFilterSidebar = ({
                             setGardenNotesInput('');
                           }}
                           disabled={!canSavePreset || isManualFiltersDisabled}
-                          className="wb-fade w-full max-md:h-11"
+                          className="wb-fade w-full [@media(pointer:coarse)]:h-11"
                         >
                           <Plus aria-hidden />
                           Save current filters
@@ -3422,11 +3424,11 @@ const VariantFilterSidebar = ({
                                 setIsGardenSaveFormOpen(false);
                               }}
                               disabled={isSavingPreset || !gardenNameInput.trim()}
-                              className="max-md:h-11"
+                              className="[@media(pointer:coarse)]:h-11"
                             >
                               {isSavingPreset ? 'Saving…' : 'Save'}
                             </Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => setIsGardenSaveFormOpen(false)} className="max-md:h-11">
+                            <Button type="button" size="sm" variant="outline" onClick={() => setIsGardenSaveFormOpen(false)} className="[@media(pointer:coarse)]:h-11">
                               Cancel
                             </Button>
                           </div>
@@ -3473,7 +3475,7 @@ const VariantFilterSidebar = ({
                   <div className="wb-card px-4 py-8 text-center">
                     <p className="text-[13px] font-medium text-foreground">No columns match &ldquo;{columnSearchQuery}&rdquo;</p>
                     <p className="mt-1 text-[13px] text-muted-foreground">Check the spelling or search for part of the name.</p>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setColumnSearchQuery('')} className="mt-3 max-md:h-11">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setColumnSearchQuery('')} className="mt-3 [@media(pointer:coarse)]:h-11">
                       Clear search
                     </Button>
                   </div>
@@ -3526,7 +3528,7 @@ const VariantFilterSidebar = ({
       {/* The live count, then the one primary action for the selected mode (Apply for Manual) beside
         * Reset. Download and the report are quiet outline pills. The scroll area above is a sibling,
         * so this bar never overlaps a focused control. */}
-      <div className="shrink-0 space-y-2 border-t border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] px-4 pb-3 pt-2.5">
+      <div className="shrink-0 space-y-2 border-t border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] px-4 pb-3 pt-2.5 group-data-[w=narrow]/tab:space-y-1.5 group-data-[w=narrow]/tab:pb-[max(0.75rem,var(--mtabs-safe-b,env(safe-area-inset-bottom)))] group-data-[w=narrow]/tab:pt-2">
         <div id="filter-apply-status" role="status" className="space-y-0.5">
           {/* Manual mode shows the apply state machine (Draft, Applying, Applied) with the diff. The count itself
             * lives in the pinned filter bar above, so it is not repeated here. */}
@@ -3578,7 +3580,7 @@ const VariantFilterSidebar = ({
                 ? 'Reset all filters and restore all preview variants for chat'
                 : 'Reset all active filters (manual and proprietary) and restore all variants'
             }
-            className="h-9 max-md:h-11"
+            className="h-9 [@media(pointer:coarse)]:h-11"
           >
             <RotateCcw aria-hidden />
             Reset
@@ -3595,6 +3597,7 @@ const VariantFilterSidebar = ({
               downloadGate={downloadGate}
               uiCount={underConsiderationCount}
               eligibilityMessage={chatEligibility?.message || null}
+              compact={narrowPanel}
               onReconcileUiCount={(nextCount) => {
                 const n = Number(nextCount);
                 if (!Number.isFinite(n)) return;
@@ -3618,6 +3621,7 @@ const VariantFilterSidebar = ({
               gaTriageUpdatedAt={gaTriageUpdatedAt}
               onRequestOpen={onClinicalReportOpen}
               hideEligibilityReason
+              compact={narrowPanel}
             />
           </div>
         )}

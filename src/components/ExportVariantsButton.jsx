@@ -30,6 +30,8 @@ export default function ExportVariantsButton({
   onReconcileUiCount = null,
   /** The chat-eligibility sentence the host already shows once; this control never repeats it. */
   eligibilityMessage = null,
+  /** Phone-width footers: the short form of the label (the full text stays in the title). */
+  compact = false,
 }) {
   const [eligibility, setEligibility] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -142,9 +144,11 @@ export default function ExportVariantsButton({
       : countMismatch
         ? 'Counts out of sync. Refresh'
         : canExport
-          ? annotatedOnly
-            ? 'Download annotated'
-            : `Download ${rowCount.toLocaleString()} variants`
+          ? compact
+            ? 'Download'
+            : annotatedOnly
+              ? 'Download annotated'
+              : `Download ${rowCount.toLocaleString()} variants`
           : isLoading && !eligibility
             ? 'Checking export…'
             : rowCount > 0
@@ -187,7 +191,7 @@ export default function ExportVariantsButton({
         disabled={!interactive && !isExporting}
         title={title}
         aria-busy={isExporting || undefined}
-        className={`h-9 max-md:h-11 w-full min-w-0 justify-start gap-1.5 px-3.5 text-[13px] tabular-nums disabled:opacity-100 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate ${
+        className={`h-9 [@media(pointer:coarse)]:h-11 w-full min-w-0 justify-start gap-1.5 px-3.5 text-[13px] tabular-nums disabled:opacity-100 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate ${
           countMismatch ? '!border-[var(--error)] !text-[var(--error)]' : interactive ? '' : 'text-muted-foreground'
         }`}
       />

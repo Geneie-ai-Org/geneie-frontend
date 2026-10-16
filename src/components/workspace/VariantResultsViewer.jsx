@@ -29,6 +29,8 @@ import { exportVariants, getAuthHeaders, parseApiErrorDetail } from '@/services/
 import { apiUrl } from '@/config/api';
 import { readTsvStream } from '@/lib/tsvStream';
 import { cn } from '@/lib/utils';
+import BottomSheet from '@/components/variants/BottomSheet';
+import { useCoarse, usePanelWidth, usePhone } from '@/hooks/useWorkbenchWidth';
 import {
   CLASS_TONE_CLASS,
   DETAIL_GROUPS,
@@ -69,6 +71,9 @@ const FOCUS = 'outline-none focus-visible:outline focus-visible:outline-2 focus-
 const GUTTER_W = 44;
 const HEAD_H = 32;
 const ROW_H = { compact: 28, comfortable: 40 };
+// Fingers: taller header and rows (a 48px row is a comfortable tap, 36px the densest still hittable).
+const HEAD_H_TOUCH = 40;
+const ROW_H_TOUCH = { compact: 36, comfortable: 48 };
 const MIN_COL = 72;
 const MAX_COL = 260;
 const SAMPLE_ROWS = 120;
@@ -115,7 +120,7 @@ async function loadResults(conversationId, signal, onProgress) {
 
 /** Whole-panel frame: a canvas gutter around white cards, like the other workbench tabs. */
 const Frame = React.forwardRef(function Frame({ children }, ref) {
-  return <div ref={ref} className="relative flex h-full min-h-0 flex-col gap-2.5 overflow-hidden px-4 pb-4 pt-1">{children}</div>;
+  return <div ref={ref} className="group/tab relative flex h-full min-h-0 flex-col gap-2.5 overflow-hidden px-4 pb-4 pt-1 group-data-[w=narrow]/tab:px-3 group-data-[w=narrow]/tab:pb-[max(0.75rem,var(--mtabs-safe-b,env(safe-area-inset-bottom)))]">{children}</div>;
 });
 
 function Notice({ icon: Icon = Table2, tone = 'brand', title, body, role, children }) {
@@ -140,19 +145,19 @@ function Notice({ icon: Icon = Table2, tone = 'brand', title, body, role, childr
 }
 
 /** Loading placeholder with the same header, gutter and row height as the table, so nothing jumps. */
-function TableSkeleton({ rowH }) {
+function TableSkeleton({ rowH, headH = HEAD_H, gutterW = GUTTER_W }) {
   const cols = [64, 132, 92, 84];
   return (
     <div role="status" aria-label="Loading variants" className="min-w-full">
-      <div className="flex items-center border-b border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))]" style={{ height: HEAD_H }}>
-        <span style={{ width: GUTTER_W }} className="shrink-0" />
+      <div className="flex items-center border-b border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))]" style={{ height: headH }}>
+        <span style={{ width: gutterW }} className="shrink-0" />
         {cols.map((w, i) => (
           <span key={i} className="px-3"><span className="block h-2.5 rounded-full bg-[hsl(var(--brand-200))]" style={{ width: w * 0.7 }} /></span>
         ))}
       </div>
       {Array.from({ length: 14 }, (_, i) => (
         <div key={i} className="flex items-center border-b border-[hsl(var(--wb-line)/0.6)]" style={{ height: rowH }}>
-          <span style={{ width: GUTTER_W }} className="flex shrink-0 justify-end px-2"><span className="wb-shimmer h-2.5 w-4 rounded-full" /></span>
+          <span style={{ width: gutterW }} className="flex shrink-0 justify-end px-2"><span className="wb-shimmer h-2.5 w-4 rounded-full" /></span>
           <span className="px-3" style={{ width: cols[0] + 24 }}><span className="wb-shimmer block h-5 rounded-full" style={{ width: 40 + ((i * 29) % 28) }} /></span>
           <span className="px-3" style={{ width: cols[1] + 24 }}><span className="wb-shimmer block h-2.5 rounded-full" style={{ width: 70 + ((i * 53) % 60) }} /></span>
           <span className="px-3" style={{ width: cols[2] + 24 }}><span className="wb-shimmer block h-5 rounded-full" style={{ width: 54 + ((i * 37) % 36) }} /></span>
@@ -182,7 +187,7 @@ function RemovableChip({ children, removeLabel, onRemove }) {
 }
 
 const PILL_FIELD =
-  'h-8 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-8 pr-8 text-[13px] text-foreground outline-none transition-colors duration-150 placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none';
+  'h-8 [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:text-[16px] w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-8 pr-8 text-[13px] text-foreground outline-none transition-colors duration-150 placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none';
 
 /* ---------------------------------------------------------------------------- cell renderers */
 
@@ -272,12 +277,13 @@ function estimateWidth(kind, name, rows, i, compact) {
  * One floating Copy button for the whole table. It owns its hover state and listens on the table wrapper
  * natively, so moving the pointer across cells never re-renders the rows.
  */
-function HoverCopy({ wrapRef, scrollerRef }) {
+function HoverCopy({ wrapRef, scrollerRef, gutterW = GUTTER_W }) {
   const [hov, setHov] = useState(null); // { top, h, right, value }
   useEffect(() => {
     const wrap = wrapRef.current;
     const scroller = scrollerRef.current;
-    if (!wrap) return undefined;
+    // A tap fires mouseover too; the floating Copy button is for a hovering pointer only (the row detail has Copy).
+    if (!wrap || (typeof window !== 'undefined' && window.matchMedia?.('(hover: none)').matches)) return undefined;
     const over = (e) => {
       if (e.target.closest?.('[data-hovercopy]')) return; // the pointer moved onto the button itself
       const td = e.target.closest?.('td[data-copy]');
@@ -299,7 +305,7 @@ function HoverCopy({ wrapRef, scrollerRef }) {
   }, [wrapRef, scrollerRef]);
   if (!hov) return null;
   return (
-    <div data-hovercopy className="absolute z-[8] flex items-center" style={{ top: hov.top, height: hov.h, left: Math.max(GUTTER_W, hov.right - 28) }}>
+    <div data-hovercopy className="absolute z-[8] flex items-center" style={{ top: hov.top, height: hov.h, left: Math.max(gutterW, hov.right - 28) }}>
       <CopyButton getText={() => hov.value} label="" copiedLabel="" variant="outline" size="icon-xs" aria-label="Copy value" title="Copy value" className="size-5 rounded-full bg-[hsl(var(--wb-card))] shadow-sm [&_svg]:!size-3" />
     </div>
   );
@@ -332,7 +338,7 @@ function DetailValue({ name, kind, raw, freqRange }) {
   return <span className={cn('[overflow-wrap:anywhere]', (isMonoKind(kind) || isMonoName(name)) && 'font-[family-name:var(--font-mono)] text-[12px]')}>{raw}</span>;
 }
 
-function RowDetail({ n, row, header, meta, freqRanges, visible, onClose, onStep, canPrev, canNext, narrow }) {
+function RowDetail({ n, row, header, meta, freqRanges, visible, onClose, onStep, canPrev, canNext, narrow, sheet }) {
   const reduce = useReducedMotion();
   const selfRef = useRef(null);
   useEffect(() => { selfRef.current?.focus({ preventScroll: true }); }, []);
@@ -350,55 +356,59 @@ function RowDetail({ n, row, header, meta, freqRanges, visible, onClose, onStep,
   const hg = hi >= 0 ? compactHgvs(row[hi]) : null;
   return (
     <>
-      {narrow ? <motion.button type="button" aria-label="Close row details" tabIndex={-1} onClick={onClose} initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduce ? 0 : 0.18 }} className="absolute inset-0 z-30 cursor-default bg-background/60" /> : null}
+      {narrow && !sheet ? <motion.button type="button" aria-label="Close row details" tabIndex={-1} onClick={onClose} initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduce ? 0 : 0.18 }} className="absolute inset-0 z-30 cursor-default bg-background/60" /> : null}
       <motion.section
         ref={selfRef}
         tabIndex={-1}
         key="detail"
         role="dialog"
         aria-label={`Row ${n} details`}
-        initial={reduce ? false : { x: '104%', opacity: 0.6 }}
-        animate={{ x: 0, opacity: 1 }}
-        exit={reduce ? { opacity: 0 } : { x: '104%', opacity: 0.6 }}
+        initial={reduce ? false : sheet ? { y: '100%', opacity: 0.6 } : { x: '104%', opacity: 0.6 }}
+        animate={{ x: 0, y: 0, opacity: 1 }}
+        exit={reduce ? { opacity: 0 } : sheet ? { y: '100%', opacity: 0.6 } : { x: '104%', opacity: 0.6 }}
         transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 40 }}
         onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); } }}
-        className="wb-card absolute bottom-3 right-3 top-1 z-40 flex outline-none w-[min(calc(100%-1.5rem),25rem)] flex-col overflow-hidden shadow-[0_18px_40px_-18px_hsl(var(--foreground)/0.3)]"
+        className={cn(
+          'wb-card absolute z-40 flex flex-col overflow-hidden outline-none shadow-[0_18px_40px_-18px_hsl(var(--foreground)/0.3)]',
+          // On a phone the row opens as a full-height sheet over the table (the tab strip above stays put).
+          sheet ? 'inset-x-0 bottom-0 top-0 !rounded-b-none !rounded-t-[22px] !border-x-0 !border-b-0 shadow-[0_-12px_32px_-18px_hsl(var(--foreground)/0.35)]' : 'bottom-3 right-3 top-1 w-[min(calc(100%-1.5rem),25rem)]'
+        )}
       >
-        <div className="flex items-center gap-2 border-b border-[hsl(var(--wb-line))] px-3 py-2.5">
+        <div className={cn('flex items-center gap-2 border-b border-[hsl(var(--wb-line))] px-3 py-2.5', sheet && 'gap-1.5 px-2.5 py-2')}>
           <span className="wb-chip tabular-nums" data-tone="brand">Row {n.toLocaleString()}</span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               {gi >= 0 && row[gi] ? <GenePill value={row[gi]} /> : null}
             </div>
           </div>
-          <button type="button" onClick={() => onStep(-1)} disabled={!canPrev} aria-label="Previous row" title="Previous row" className={cn('wb-iconbtn !size-7 disabled:opacity-40', FOCUS)}><ChevronLeft aria-hidden className="size-3.5" /></button>
-          <button type="button" onClick={() => onStep(1)} disabled={!canNext} aria-label="Next row" title="Next row" className={cn('wb-iconbtn !size-7 disabled:opacity-40', FOCUS)}><ChevronRight aria-hidden className="size-3.5" /></button>
-          <button type="button" onClick={onClose} aria-label="Close row details" title="Close (Esc)" className={cn('wb-iconbtn !size-7', FOCUS)}><X aria-hidden className="size-3.5" /></button>
+          <button type="button" onClick={() => onStep(-1)} disabled={!canPrev} aria-label="Previous row" title="Previous row" className={cn('wb-iconbtn !size-7 disabled:opacity-40', '[@media(pointer:coarse)]:!size-11', FOCUS)}><ChevronLeft aria-hidden className="size-3.5 [@media(pointer:coarse)]:size-[18px]" /></button>
+          <button type="button" onClick={() => onStep(1)} disabled={!canNext} aria-label="Next row" title="Next row" className={cn('wb-iconbtn !size-7 disabled:opacity-40', '[@media(pointer:coarse)]:!size-11', FOCUS)}><ChevronRight aria-hidden className="size-3.5 [@media(pointer:coarse)]:size-[18px]" /></button>
+          <button type="button" onClick={onClose} aria-label="Close row details" title="Close (Esc)" className={cn('wb-iconbtn !size-7', '[@media(pointer:coarse)]:!size-11', FOCUS)}><X aria-hidden className="size-3.5 [@media(pointer:coarse)]:size-[18px]" /></button>
         </div>
         {hg ? (
-          <p className="truncate border-b border-[hsl(var(--wb-line))] px-3 py-2 font-[family-name:var(--font-mono)] text-[12px] text-foreground" title={row[hi]}>
+          <p className={cn('border-b border-[hsl(var(--wb-line))] px-3 py-2 font-[family-name:var(--font-mono)] text-[12px] text-foreground', sheet ? '[overflow-wrap:anywhere]' : 'truncate')} title={row[hi]}>
             {hg.c}{hg.p ? <span className="ml-2 text-muted-foreground">{hg.p}</span> : null}
           </p>
         ) : null}
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+        <div className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3', sheet && 'pb-[max(1rem,var(--mtabs-safe-b,env(safe-area-inset-bottom)))]')}>
           {sections.map(([label, names]) => (
             <section key={label} aria-label={label} className="pt-3">
               <h3 className="wb-card-title mb-1.5 flex items-center gap-1.5">{label}<span className="tabular-nums">{names.length}</span></h3>
-              <dl className="grid grid-cols-[minmax(0,8.5rem)_minmax(0,1fr)] gap-x-3 gap-y-0.5">
+              <dl className={cn('grid gap-x-3 gap-y-0.5 [@media(pointer:coarse)]:items-center', sheet ? 'grid-cols-[minmax(0,7.25rem)_minmax(0,1fr)]' : 'grid-cols-[minmax(0,8.5rem)_minmax(0,1fr)]')}>
                 {names.map((name) => {
                   const i = header.indexOf(name);
                   const raw = row[i] || '';
                   const m = meta[name] || { kind: 'text' };
                   return (
                     <div key={name} className="group/val contents">
-                      <dt className="truncate rounded-l-lg py-1 pl-1 font-[family-name:var(--font-mono)] text-[11.5px] text-muted-foreground group-hover/val:bg-[hsl(var(--wb-row-hover))]" title={name}>
+                      <dt className="truncate rounded-l-lg py-1 pl-1 font-[family-name:var(--font-mono)] text-[11.5px] [@media(pointer:coarse)]:py-2 text-muted-foreground group-hover/val:bg-[hsl(var(--wb-row-hover))]" title={name}>
                         {name}
                         {visible.includes(name) ? <span aria-label=" (shown in table)" className="ml-1 inline-block size-1 rounded-full bg-[hsl(var(--brand-500))] align-middle" /> : null}
                       </dt>
-                      <dd className="relative flex min-w-0 items-start justify-between gap-1 rounded-r-lg py-1 pr-1 text-[13px] group-hover/val:bg-[hsl(var(--wb-row-hover))]">
+                      <dd className="relative flex min-w-0 items-start justify-between gap-1 rounded-r-lg py-1 pr-1 text-[13px] [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:py-1.5 group-hover/val:bg-[hsl(var(--wb-row-hover))]">
                         <span className="min-w-0 flex-1"><DetailValue name={name} kind={m.kind} raw={raw} freqRange={freqRanges[name]} /></span>
                         {!isMissing(raw) ? (
-                          <CopyButton getText={() => raw} label="" copiedLabel="" variant="ghost" size="icon-xs" aria-label={`Copy ${name}`} title={`Copy ${name}`} className="size-5 shrink-0 opacity-0 transition-opacity duration-150 focus-visible:opacity-100 group-hover/val:opacity-100 max-md:opacity-100 motion-reduce:transition-none [&_svg]:!size-3" />
+                          <CopyButton getText={() => raw} label="" copiedLabel="" variant="ghost" size="icon-xs" aria-label={`Copy ${name}`} title={`Copy ${name}`} className="size-5 shrink-0 opacity-0 transition-opacity duration-150 focus-visible:opacity-100 group-hover/val:opacity-100 [@media(pointer:coarse)]:size-10 [@media(pointer:coarse)]:opacity-100 motion-reduce:transition-none [&_svg]:!size-3 [@media(pointer:coarse)]:[&_svg]:!size-4" />
                         ) : null}
                       </dd>
                     </div>
@@ -438,7 +448,13 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
   const frameRef = useRef(null);
   const colInputRef = useRef(null);
   const reduce = useReducedMotion();
-  const rowH = ROW_H[density];
+  const coarse = useCoarse();
+  const phone = usePhone();
+  const [, narrowPanel] = usePanelWidth(520, frameRef);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const headH = coarse ? HEAD_H_TOUCH : HEAD_H;
+  const gutterW = narrowPanel ? 36 : GUTTER_W;
+  const rowH = (coarse ? ROW_H_TOUCH : ROW_H)[density];
   const compact = density === 'compact';
 
   useEffect(() => {
@@ -529,7 +545,7 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
     () => colIdx.map((i, k) => estimateWidth(kinds[k], visibleCols[k] || '', rows, i, compact)),
     [colIdx, rows, kinds, visibleCols, compact],
   );
-  const tableWidth = GUTTER_W + widths.reduce((a, b) => a + b, 0);
+  const tableWidth = gutterW + widths.reduce((a, b) => a + b, 0);
 
   const view = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -723,7 +739,7 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
     'after:pointer-events-none after:absolute after:inset-y-0 after:left-full after:w-2 after:bg-gradient-to-r after:from-foreground/10 after:to-transparent after:transition-opacity after:duration-150 motion-reduce:after:transition-none',
     scroll.x ? 'after:opacity-100' : 'after:opacity-0'
   );
-  const gutter = 'sticky left-0 z-[5] px-2 text-right text-[12px] tabular-nums text-muted-foreground select-none';
+  const gutter = 'sticky left-0 z-[5] px-2 group-data-[w=narrow]/tab:px-1 text-right text-[12px] tabular-nums text-muted-foreground select-none';
   const selRow = selected != null ? view.find(({ n }) => n === selected) : null;
   const showDetail = detailOpen && selRow;
   const selAt = selRow ? view.indexOf(selRow) : -1;
@@ -745,11 +761,78 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
     return out;
   })();
 
+  const COLS_BTN = 'rounded-full border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3 hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] aria-expanded:border-[hsl(var(--brand-300))] aria-expanded:bg-[hsl(var(--brand-100))] aria-expanded:text-[hsl(var(--brand-700))] group-data-[w=narrow]/tab:min-w-0 group-data-[w=narrow]/tab:flex-1 [@media(pointer:coarse)]:h-10';
+  const resetColsButton = (
+    <button
+      type="button"
+      onClick={resetCols}
+      className={cn('h-6 rounded-full border border-border px-2.5 text-[12px] text-foreground transition-colors duration-150 hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:px-4 [@media(pointer:coarse)]:text-[13px]', FOCUS)}
+    >
+      Reset
+    </button>
+  );
+  const colSearchField = (
+    <label className="relative flex items-center">
+      <Search aria-hidden className="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground" />
+      <input
+        ref={colInputRef}
+        type="text"
+        value={colQuery}
+        onChange={(e) => setColQuery(e.target.value)}
+        placeholder={`Search ${header.length} columns`}
+        aria-label="Search columns"
+        autoComplete="off"
+        autoCapitalize="none"
+        spellCheck={false}
+        className="h-8 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-8 pr-2 text-[12.5px] outline-none placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[hsl(var(--ring))] [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:pl-9 [@media(pointer:coarse)]:text-[16px]"
+      />
+    </label>
+  );
+  const pickerList = (sheet) => (
+    <>
+      {pickerGroups.map(([label, names]) => (
+        <section key={label} aria-label={label} className="pb-2 pt-1">
+          <h3 className="wb-card-title mb-1 flex items-center gap-1.5 px-0.5">{label}<span className="tabular-nums">{names.length}</span></h3>
+          <div className={cn('flex flex-wrap', sheet ? 'gap-1.5' : 'gap-1')}>
+            {names.map((h, i) => {
+              const on = visibleCols.includes(h);
+              const Icon = KIND_ICON[meta[h]?.kind] || Type;
+              return (
+                <button
+                  key={h}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={on}
+                  onClick={() => toggleCol(h)}
+                  style={colRiseStyle(i)}
+                  className={cn(
+                    'inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border px-2.5 text-[12px] transition-colors duration-150 motion-reduce:transition-none',
+                    sheet && '!h-10 px-3.5',
+                    '[@media(pointer:coarse)]:!h-10',
+                    on
+                      ? 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] font-medium text-[hsl(var(--brand-700))]'
+                      : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] text-muted-foreground hover:border-[hsl(var(--brand-300))] hover:text-foreground',
+                    FOCUS
+                  )}
+                >
+                  <Icon aria-hidden className="size-3 shrink-0 opacity-70" />
+                  <span className={cn('truncate font-[family-name:var(--font-mono)] text-[11.5px]', sheet && '!text-[12.5px]')}>{h}</span>
+                  {on ? <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-[hsl(var(--brand-500))]" /> : null}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+      {!popCols.length && <p className="px-2 py-3 text-[12px] text-muted-foreground">No column matches “{colQuery.trim()}”.</p>}
+    </>
+  );
+
   return (
     <Frame ref={frameRef}>
-      {/* Toolbar: pill search, columns, copy, export. */}
-      <div className="flex shrink-0 items-center gap-1.5">
-        <label className="relative flex min-w-0 flex-1 items-center">
+      {/* Toolbar: pill search, columns, copy, export. A narrow panel puts the search on its own full-width row. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+        <label className="relative flex min-w-[9rem] flex-1 items-center group-data-[w=narrow]/tab:basis-full">
           <Search aria-hidden className="pointer-events-none absolute left-3 size-3.5 text-muted-foreground" />
           <input
             type="search"
@@ -758,6 +841,8 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
             onKeyDown={(e) => { if (e.key === 'Escape' && query) { e.preventDefault(); e.stopPropagation(); setQuery(''); } }}
             placeholder="Search rows"
             aria-label="Search rows"
+            enterKeyHint="search"
+            autoComplete="off"
             className={cn(PILL_FIELD, '[&::-webkit-search-cancel-button]:hidden')}
           />
           {query && (
@@ -765,83 +850,49 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
               type="button"
               onClick={() => { setQuery(''); setPage(0); }}
               aria-label="Clear search"
-              className={cn('absolute right-1.5 inline-flex size-5 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none', FOCUS)}
+              className={cn('absolute right-1.5 inline-flex size-5 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none [@media(pointer:coarse)]:size-8', FOCUS)}
             >
               <X aria-hidden className="size-3" />
             </button>
           )}
         </label>
-        <Popover onOpenChange={(o) => { if (!o) setColQuery(''); }}>
-          <PopoverTrigger
+        {phone ? (
+          <Button
+            type="button"
+            variant="outline"
             disabled={!header.length}
-            render={<Button variant="outline" className="rounded-full border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3 hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] aria-expanded:border-[hsl(var(--brand-300))] aria-expanded:bg-[hsl(var(--brand-100))] aria-expanded:text-[hsl(var(--brand-700))]" aria-label={header.length ? `Columns, ${visibleCols.length} of ${header.length} shown` : 'Columns'} />}
+            onClick={() => setPickerOpen(true)}
+            aria-haspopup="dialog"
+            aria-label={header.length ? `Columns, ${visibleCols.length} of ${header.length} shown` : 'Columns'}
+            className={COLS_BTN}
           >
             <Columns3 aria-hidden /> Columns
             {header.length ? (
               <span className="rounded-full bg-[hsl(var(--brand-100))] px-1.5 text-[12px] tabular-nums leading-[18px] text-[hsl(var(--brand-700))]">{visibleCols.length}/{header.length}</span>
             ) : null}
-          </PopoverTrigger>
-          <PopoverContent align="end" sideOffset={8} initialFocus={colInputRef} className="w-[min(20rem,calc(100vw-2rem))] gap-1.5 p-2.5">
-            <div className="flex items-center justify-between gap-2 px-0.5">
-              <span className="text-[12px] font-medium text-muted-foreground">Choose columns</span>
-              <button
-                type="button"
-                onClick={resetCols}
-                className={cn('h-6 rounded-full border border-border px-2.5 text-[12px] text-foreground transition-colors duration-150 hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none', FOCUS)}
-              >
-                Reset
-              </button>
-            </div>
-            <label className="relative flex items-center">
-              <Search aria-hidden className="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground" />
-              <input
-                ref={colInputRef}
-                type="text"
-                value={colQuery}
-                onChange={(e) => setColQuery(e.target.value)}
-                placeholder={`Search ${header.length} columns`}
-                aria-label="Search columns"
-                className="h-8 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-8 pr-2 text-[12.5px] outline-none placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[hsl(var(--ring))]"
-              />
-            </label>
-            <div className="max-h-72 overflow-y-auto overscroll-contain pr-0.5">
-              {pickerGroups.map(([label, names]) => (
-                <section key={label} aria-label={label} className="pb-2 pt-1">
-                  <h3 className="wb-card-title mb-1 flex items-center gap-1.5 px-0.5">{label}<span className="tabular-nums">{names.length}</span></h3>
-                  <div className="flex flex-wrap gap-1">
-                    {names.map((h, i) => {
-                      const on = visibleCols.includes(h);
-                      const Icon = KIND_ICON[meta[h]?.kind] || Type;
-                      return (
-                        <button
-                          key={h}
-                          type="button"
-                          role="checkbox"
-                          aria-checked={on}
-                          onClick={() => toggleCol(h)}
-                          style={colRiseStyle(i)}
-                          className={cn(
-                            'inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border px-2.5 text-[12px] transition-colors duration-150 motion-reduce:transition-none',
-                            on
-                              ? 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] font-medium text-[hsl(var(--brand-700))]'
-                              : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] text-muted-foreground hover:border-[hsl(var(--brand-300))] hover:text-foreground',
-                            FOCUS
-                          )}
-                        >
-                          <Icon aria-hidden className="size-3 shrink-0 opacity-70" />
-                          <span className="truncate font-[family-name:var(--font-mono)] text-[11.5px]">{h}</span>
-                          {on ? <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-[hsl(var(--brand-500))]" /> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
-              {!popCols.length && <p className="px-2 py-3 text-[12px] text-muted-foreground">No column matches “{colQuery.trim()}”.</p>}
-            </div>
-          </PopoverContent>
-        </Popover>
-        <CopyButton getText={getTsv} label="" copiedLabel="" size="icon" className="shrink-0 rounded-full border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))]" disabled={!view.length} title="Copy visible rows as TSV" aria-label="Copy visible rows as TSV" />
+          </Button>
+        ) : (
+          <Popover onOpenChange={(o) => { if (!o) setColQuery(''); }}>
+            <PopoverTrigger
+              disabled={!header.length}
+              render={<Button variant="outline" className={COLS_BTN} aria-label={header.length ? `Columns, ${visibleCols.length} of ${header.length} shown` : 'Columns'} />}
+            >
+              <Columns3 aria-hidden /> Columns
+              {header.length ? (
+                <span className="rounded-full bg-[hsl(var(--brand-100))] px-1.5 text-[12px] tabular-nums leading-[18px] text-[hsl(var(--brand-700))]">{visibleCols.length}/{header.length}</span>
+              ) : null}
+            </PopoverTrigger>
+            <PopoverContent align="end" sideOffset={8} initialFocus={colInputRef} className="w-[min(20rem,calc(100vw-2rem))] gap-1.5 p-2.5">
+              <div className="flex items-center justify-between gap-2 px-0.5">
+                <span className="text-[12px] font-medium text-muted-foreground">Choose columns</span>
+                {resetColsButton}
+              </div>
+              {colSearchField}
+              <div className="max-h-72 overflow-y-auto overscroll-contain pr-0.5">{pickerList(false)}</div>
+            </PopoverContent>
+          </Popover>
+        )}
+        <CopyButton getText={getTsv} label="" copiedLabel="" size="icon" className="shrink-0 rounded-full border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] [@media(pointer:coarse)]:size-10" disabled={!view.length} title="Copy visible rows as TSV" aria-label="Copy visible rows as TSV" />
         <StateButton
           state={exportState}
           labels={{ idle: 'Export', running: 'Preparing', done: 'Exported' }}
@@ -851,9 +902,26 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
           disabled={!settled}
           title={total != null ? `Download all ${total.toLocaleString()} variants as TSV` : 'Download all variants as TSV'}
           aria-label={total != null ? `Export all ${total.toLocaleString()} variants as TSV` : 'Export all variants as TSV'}
-          className="shrink-0 rounded-full border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3 hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] disabled:opacity-60"
+          className="shrink-0 rounded-full border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3 hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] disabled:opacity-60 [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:px-4"
         />
       </div>
+
+      {/* Phone: the column picker is a bottom sheet (a floating popover would not fit above the keyboard). */}
+      {phone ? (
+        <BottomSheet
+          open={pickerOpen}
+          onOpenChange={(o) => { setPickerOpen(o); if (!o) setColQuery(''); }}
+          title="Choose columns"
+          initialFocus={false}
+          trailing={resetColsButton}
+        >
+          <div className="shrink-0 border-t border-[hsl(var(--wb-line))] px-3 py-2.5">{colSearchField}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-[hsl(var(--wb-line))] px-3 py-1">{pickerList(true)}</div>
+          <div className="shrink-0 border-t border-[hsl(var(--wb-line))] px-3 pb-[max(0.75rem,var(--mtabs-safe-b,env(safe-area-inset-bottom)))] pt-2.5">
+            <Button type="button" onClick={() => setPickerOpen(false)} className="!h-11 w-full !text-[14px]">Show {visibleCols.length} {visibleCols.length === 1 ? 'column' : 'columns'}</Button>
+          </div>
+        </BottomSheet>
+      ) : null}
 
       {/* Live chip row: what you are looking at right now. Chips spring in and out. */}
       <div className="relative flex shrink-0 flex-wrap items-center gap-1.5" role="status">
@@ -888,7 +956,7 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
           ) : null}
         </ChipList>
         {isTruncated && onOpenFilters && (
-          <Button variant="outline" size="xs" onClick={onOpenFilters} className="ml-auto h-6 rounded-full px-2.5 text-[12px]">
+          <Button variant="outline" size="xs" onClick={onOpenFilters} className="ml-auto h-6 rounded-full px-2.5 text-[12px] [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:px-3.5 [@media(pointer:coarse)]:text-[13px]">
             <SlidersHorizontal aria-hidden /> Open filters
           </Button>
         )}
@@ -904,18 +972,18 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
           onScroll={onScroll}
           onKeyDown={onTableKey}
           aria-busy={loading || undefined}
-          style={{ scrollPaddingTop: HEAD_H, scrollPaddingLeft: GUTTER_W }}
+          style={{ scrollPaddingTop: headH, scrollPaddingLeft: gutterW }}
           className="peer min-h-0 flex-1 overflow-auto focus-visible:outline-none"
         >
           {loading ? (
-            <TableSkeleton rowH={rowH} />
+            <TableSkeleton rowH={rowH} headH={headH} gutterW={gutterW} />
           ) : (
             <div ref={wrapRef} className="relative" style={{ width: tableWidth, minWidth: '100%' }}>
               {/* Header band: brand tint with a very faint lattice that fades toward the left, behind the labels. */}
               <div
                 aria-hidden
                 className={cn('tx tx--lattice pointer-events-none !sticky left-0 top-0 z-[9] -mb-8 w-full border-b border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] transition-shadow duration-150 motion-reduce:transition-none', scroll.y && 'shadow-[0_2px_6px_-3px_hsl(var(--foreground)/0.2)]')}
-                style={{ height: HEAD_H, '--tx-opacity': 0.75, '--tx-opacity-dark': 0.3, '--tx-at': '340px 50%', '--tx-fade': '280px 150%', '--tx-size': '12px 12px' }}
+                style={{ height: headH, '--tx-opacity': 0.75, '--tx-opacity-dark': 0.3, '--tx-at': '340px 50%', '--tx-fade': '280px 150%', '--tx-size': '12px 12px' }}
               />
               {/* The selection marker: a tint over the row and a bar on the left edge (pinned while scrolling sideways). */}
               {mk ? (
@@ -940,18 +1008,18 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
                   </div>
                 </>
               ) : null}
-              <HoverCopy wrapRef={wrapRef} scrollerRef={scrollerRef} />
+              <HoverCopy wrapRef={wrapRef} scrollerRef={scrollerRef} gutterW={gutterW} />
               <table
                 style={{ width: '100%', tableLayout: 'fixed' }}
                 className="border-separate border-spacing-0 text-[13px]"
               >
                 <colgroup>
-                  <col style={{ width: GUTTER_W }} />
+                  <col style={{ width: gutterW }} />
                   {widths.map((w, k) => <col key={visibleCols[k]} style={{ width: w }} />)}
                 </colgroup>
                 <thead>
-                  <tr style={{ height: HEAD_H }}>
-                    <th scope="col" style={{ height: HEAD_H }} className={cn(th, thPinned, gutter, 'z-20 font-normal')}><span aria-hidden>#</span><span className="sr-only">Row number</span></th>
+                  <tr style={{ height: headH }}>
+                    <th scope="col" style={{ height: headH }} className={cn(th, thPinned, gutter, 'z-20 font-normal')}><span aria-hidden>#</span><span className="sr-only">Row number</span></th>
                     {visibleCols.map((c, k) => {
                       const on = sort?.col === c;
                       const pinned = k === 0;
@@ -960,14 +1028,14 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
                           key={c}
                           scope="col"
                           aria-sort={on ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                          style={{ height: HEAD_H, ...(pinned ? { left: GUTTER_W } : null) }}
+                          style={{ height: headH, ...(pinned ? { left: gutterW } : null) }}
                           className={cn(th, 'group/th p-0', pinned && cn('z-20', thPinned), numeric[k] && 'text-right', on && 'font-semibold')}
                         >
                           <button
                             type="button"
                             onClick={() => cycleSort(c)}
                             title={`Sort by ${c}`}
-                            style={{ height: HEAD_H - 1 }}
+                            style={{ height: headH - 1 }}
                             className={cn('flex w-full items-center gap-1 px-3 transition-colors duration-150 hover:bg-[hsl(var(--brand-200)/0.5)] motion-reduce:transition-none', FOCUS, 'focus-visible:-outline-offset-2', numeric[k] && 'flex-row-reverse')}
                           >
                             <span className="truncate">{c}</span>
@@ -1005,7 +1073,7 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
                               key={i}
                               title={raw || undefined}
                               data-copy={copyable ? raw : undefined}
-                              style={{ height: rowH, ...(k === 0 ? { left: GUTTER_W } : null) }}
+                              style={{ height: rowH, ...(k === 0 ? { left: gutterW } : null) }}
                               className={cn(
                                 'overflow-hidden text-ellipsis whitespace-nowrap px-3 text-foreground',
                                 line,
@@ -1040,18 +1108,18 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
         <div aria-hidden className="pointer-events-none absolute inset-0 z-30 rounded-2xl ring-2 ring-inset ring-[hsl(var(--brand-500))] opacity-0 peer-focus-visible:opacity-100" />
 
         {/* Footer: where you are in the loaded rows, the page size, and row density. */}
-        <div className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-[hsl(var(--wb-line))] px-3 py-1 text-[12px] tabular-nums text-muted-foreground">
+        <div className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 border-t border-[hsl(var(--wb-line))] px-3 py-1 text-[12px] tabular-nums text-muted-foreground">
           <div className="flex min-w-0 items-center gap-1">
-            <button type="button" onClick={() => setPage(Math.max(0, pg - 1))} disabled={pg === 0} aria-label="Previous page" title="Previous page" className={cn('wb-iconbtn !size-6 disabled:opacity-40', FOCUS)}><ChevronLeft aria-hidden className="size-3.5" /></button>
+            <button type="button" onClick={() => setPage(Math.max(0, pg - 1))} disabled={pg === 0} aria-label="Previous page" title="Previous page" className={cn('wb-iconbtn !size-6 disabled:opacity-40 [@media(pointer:coarse)]:!size-10', FOCUS)}><ChevronLeft aria-hidden className="size-3.5 [@media(pointer:coarse)]:size-[18px]" /></button>
             <span className="min-w-0 truncate px-1" aria-live="polite">
               {view.length ? `${firstShown.toLocaleString()}–${lastShown.toLocaleString()} of ${view.length.toLocaleString()}` : loading ? 'Loading rows' : '0 rows'}
-              {isTruncated && !searching ? ' loaded' : ''}
+              {isTruncated && !searching ? <span className="group-data-[w=narrow]/tab:hidden"> loaded</span> : ''}
             </span>
-            <button type="button" onClick={() => setPage(Math.min(pageCount - 1, pg + 1))} disabled={pg >= pageCount - 1} aria-label="Next page" title="Next page" className={cn('wb-iconbtn !size-6 disabled:opacity-40', FOCUS)}><ChevronRight aria-hidden className="size-3.5" /></button>
+            <button type="button" onClick={() => setPage(Math.min(pageCount - 1, pg + 1))} disabled={pg >= pageCount - 1} aria-label="Next page" title="Next page" className={cn('wb-iconbtn !size-6 disabled:opacity-40 [@media(pointer:coarse)]:!size-10', FOCUS)}><ChevronRight aria-hidden className="size-3.5 [@media(pointer:coarse)]:size-[18px]" /></button>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <Select value={String(limit)} onValueChange={(v) => chooseLimit(Number(v))} disabled={loading}>
-              <SelectTrigger size="sm" aria-label="Rows per page" className="!h-7 !gap-1 !pl-2.5 !pr-1.5 !text-[12px]">
+              <SelectTrigger size="sm" aria-label="Rows per page" className="!h-7 !gap-1 !pl-2.5 !pr-1.5 !text-[12px] [@media(pointer:coarse)]:!h-10 [@media(pointer:coarse)]:!pl-3.5 [@media(pointer:coarse)]:!text-[13px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent side="top" align="end">
@@ -1060,7 +1128,7 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
                 ))}
               </SelectContent>
             </Select>
-            <div role="group" aria-label="Row density" className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill))] p-0.5">
+            <div role="group" aria-label="Row density" className="inline-flex shrink-0 [@media(pointer:coarse)]:group-data-[w=narrow]/tab:hidden items-center gap-0.5 rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill))] p-0.5">
               {[['compact', 'Compact rows', Rows3], ['comfortable', 'Comfortable rows', Rows2]].map(([id, label, Icon]) => (
                 <button
                   key={id}
@@ -1070,7 +1138,7 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
                   title={label}
                   onClick={() => chooseDensity(id)}
                   className={cn(
-                    'relative inline-flex size-6 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none',
+                    'relative inline-flex size-6 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none [@media(pointer:coarse)]:size-9',
                     density === id && 'text-[hsl(var(--brand-700))]',
                     FOCUS
                   )}
@@ -1084,7 +1152,7 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
                       className="absolute inset-0 border border-[hsl(var(--brand-200))] bg-[hsl(var(--wb-card))]"
                     />
                   ) : null}
-                  <Icon aria-hidden className="relative size-3.5" />
+                  <Icon aria-hidden className="relative size-3.5 [@media(pointer:coarse)]:size-4" />
                 </button>
               ))}
             </div>
@@ -1104,6 +1172,7 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
             freqRanges={freqRanges}
             visible={visibleCols}
             narrow={narrow}
+            sheet={narrowPanel}
             canPrev={selAt > 0}
             canNext={selAt >= 0 && selAt < view.length - 1}
             onStep={stepRow}

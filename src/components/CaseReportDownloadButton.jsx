@@ -118,6 +118,8 @@ export default function CaseReportDownloadButton({
   onRequestOpen,
   /** The host already shows the chat-eligibility sentence once; do not repeat it under the button. */
   hideEligibilityReason = false,
+  /** Phone-width footers: a blocked button reads just "Report" (the reason is written under it). */
+  compact = false,
 }) {
   const { blocked, label, title, gaInFlight, gaStalled } = getClinicalReportGate({
     downloadGate,
@@ -145,10 +147,10 @@ export default function CaseReportDownloadButton({
         }}
         disabled={blocked}
         title={title}
-        className="h-9 w-full justify-start gap-1.5 px-3.5 text-[13px] max-md:h-11"
+        className="h-9 w-full justify-start gap-1.5 px-3.5 text-[13px] [@media(pointer:coarse)]:h-11"
       >
         <FileText aria-hidden />
-        <span className="min-w-0 truncate">{label}</span>
+        <span className="min-w-0 truncate">{compact && blocked && !gaInFlight ? 'Report' : label}</span>
       </Button>
       {/* Why the button is locked is shown as text, not only in a tooltip. */}
       {blocked && !gaInFlight && title && !(hideEligibilityReason && title === chatEligibility?.message) && (

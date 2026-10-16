@@ -1360,7 +1360,7 @@ export default function PhenotypeInputPanel({
               onClick={clearNoteOnly}
               aria-label="Clear note and detected findings"
               title="Clear note and detected findings"
-              className="absolute right-2 top-2 flex size-7 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:size-11"
+              className="absolute right-2 top-2 flex size-7 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] [@media(pointer:coarse)]:size-11"
             >
               <X className="size-3.5" aria-hidden />
             </button>
@@ -1373,7 +1373,7 @@ export default function PhenotypeInputPanel({
             <button
               type="button"
               onClick={() => setDraft(EXAMPLE_NOTE)}
-              className="rounded-full font-medium underline underline-offset-2 outline-none transition-colors hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:inline-flex max-md:min-h-11 max-md:items-center"
+              className="rounded-full font-medium underline underline-offset-2 outline-none transition-colors hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:inline-flex [@media(pointer:coarse)]:min-h-11 max-md:items-center"
               style={{ color: 'hsl(var(--brand-solid))' }}
             >
               Use example
@@ -1516,7 +1516,7 @@ export default function PhenotypeInputPanel({
                   disabled={disabled}
                   onClick={() => setShowMoreDiseases((v) => !v)}
                   aria-expanded={showMoreDiseases}
-                  className="text-muted-foreground max-md:h-11"
+                  className="text-muted-foreground [@media(pointer:coarse)]:h-11"
                 >
                   {showMoreDiseases ? (
                     <>
@@ -1585,7 +1585,7 @@ export default function PhenotypeInputPanel({
                   size="xs"
                   disabled={disabled || clinicalSelectedCount === clinicalCandidates.length}
                   onClick={() => setGroupSelected(clinicalCandidates, true)}
-                  className="max-md:h-11 max-md:px-3"
+                  className="[@media(pointer:coarse)]:h-11 max-md:px-3"
                 >
                   Select all {clinicalCandidates.length}
                 </Button>
@@ -1595,7 +1595,7 @@ export default function PhenotypeInputPanel({
                   size="xs"
                   disabled={disabled || clinicalSelectedCount === 0}
                   onClick={() => setGroupSelected(clinicalCandidates, false)}
-                  className="max-md:h-11 max-md:px-3"
+                  className="[@media(pointer:coarse)]:h-11 max-md:px-3"
                 >
                   Clear
                 </Button>
@@ -1640,7 +1640,7 @@ export default function PhenotypeInputPanel({
                             disabled={disabled}
                             onClick={() => toggleCandidate(c.hpo_id)}
                             aria-label={`Remove ${label} from ranking`}
-                            className="inline-flex size-5 shrink-0 items-center justify-center rounded-full outline-none transition-colors hover:bg-[hsl(var(--brand-100))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:opacity-50 max-md:size-8"
+                            className="inline-flex size-5 shrink-0 items-center justify-center rounded-full outline-none transition-colors hover:bg-[hsl(var(--brand-100))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:opacity-50 [@media(pointer:coarse)]:size-8"
                           >
                             <X className="size-3" aria-hidden />
                           </button>
@@ -1681,7 +1681,7 @@ export default function PhenotypeInputPanel({
                 size="sm"
                 onClick={() => setShowAllFindings((v) => !v)}
                 aria-expanded={showAllFindings}
-                className="text-muted-foreground max-md:h-11"
+                className="text-muted-foreground [@media(pointer:coarse)]:h-11"
               >
                 {showAllFindings ? (
                   <>
@@ -1710,7 +1710,7 @@ export default function PhenotypeInputPanel({
                 onClick={() => setShowInheritance((v) => !v)}
                 disabled={disabled}
                 aria-expanded={showInheritance}
-                className="text-muted-foreground max-md:h-11"
+                className="text-muted-foreground [@media(pointer:coarse)]:h-11"
               >
                 {showInheritance ? 'Hide' : 'Show'} inheritance terms ({inheritanceCandidates.length})
                 {showInheritance ? <ChevronUp aria-hidden /> : <ChevronDown aria-hidden />}
@@ -1808,17 +1808,17 @@ function FindingSearch({ selectedIds, onPick }) {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Escape' && q) { e.preventDefault(); e.stopPropagation(); setQ(''); } }}
-          placeholder="Or add a finding by name, for example “nail dystrophy”"
+          placeholder="Or add a finding, e.g. “nail dystrophy”"
           aria-label="Add a finding by name"
           aria-describedby="pheno-add-status"
-          className="h-9 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-9 pr-9 text-base text-foreground outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)] md:text-[13px] max-md:h-11 [&::-webkit-search-cancel-button]:hidden"
+          className="h-9 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-9 pr-9 text-base text-foreground outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)] md:text-[13px] [@media(pointer:coarse)]:h-11 [&::-webkit-search-cancel-button]:hidden"
         />
         {q ? (
           <button
             type="button"
             onClick={() => setQ('')}
             aria-label="Clear search"
-            className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:size-9"
+            className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] [@media(pointer:coarse)]:size-10"
           >
             <X className="size-3.5" aria-hidden />
           </button>
@@ -1838,7 +1838,7 @@ function FindingSearch({ selectedIds, onPick }) {
                   disabled={picked}
                   onClick={() => { onPick(h); }}
                   title={`${h.hpo_name || h.matched_phrase} · ${h.hpo_id}`}
-                  className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-2 pr-3 text-xs font-medium text-foreground outline-none transition-colors duration-150 hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:opacity-60 motion-reduce:transition-none max-md:min-h-11"
+                  className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-2 pr-3 text-xs font-medium text-foreground outline-none transition-colors duration-150 hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:opacity-60 motion-reduce:transition-none [@media(pointer:coarse)]:min-h-11"
                 >
                   {picked ? <Check aria-hidden className="size-3 shrink-0" /> : <Plus aria-hidden className="size-3 shrink-0 text-muted-foreground" />}
                   <span className="truncate">{h.hpo_name || h.matched_phrase || h.hpo_id}</span>
@@ -1893,7 +1893,7 @@ function FindingChip({ candidate: c, label, disabled, onToggle }) {
       onClick={() => onToggle(c.hpo_id)}
       aria-pressed={selected}
       title={c.hpo_id ? `${label} · ${c.hpo_id}` : label}
-      className={`inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border pl-2 pr-3 text-xs font-medium outline-none transition-[background-color,border-color,color,transform] duration-150 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] active:scale-[0.97] disabled:opacity-60 motion-reduce:transition-none max-md:min-h-11 max-md:px-3 ${
+      className={`inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border pl-2 pr-3 text-xs font-medium outline-none transition-[background-color,border-color,color,transform] duration-150 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] active:scale-[0.97] disabled:opacity-60 motion-reduce:transition-none [@media(pointer:coarse)]:min-h-11 max-md:px-3 ${
         selected
           ? 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]'
           : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] text-foreground hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))]'
@@ -1927,7 +1927,7 @@ function ConditionRow({ condition: c, active, disabled, onToggle }) {
       onClick={() => onToggle(c)}
       aria-pressed={active}
       title={c.disease_id ? `${c.disease_name} · ${c.disease_id}` : c.disease_name}
-      className={`flex w-full items-start gap-2.5 rounded-2xl border px-3 py-2 text-left outline-none transition-[background-color,border-color,transform] duration-150 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] active:scale-[0.995] disabled:opacity-60 motion-reduce:transition-none max-md:min-h-11 ${
+      className={`flex w-full items-start gap-2.5 rounded-2xl border px-3 py-2 text-left outline-none transition-[background-color,border-color,transform] duration-150 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] active:scale-[0.995] disabled:opacity-60 motion-reduce:transition-none [@media(pointer:coarse)]:min-h-11 ${
         active
           ? 'border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-100))]'
           : 'border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))]'

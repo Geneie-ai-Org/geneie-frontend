@@ -212,7 +212,7 @@ export default function AcmgModePanel({
               title="No manual filters active"
               detail={manualBlocked ? 'The ACMG filter and manual filters cannot run together.' : null}
               action={manualBlocked ? (
-                <Button type="button" variant="outline" size="sm" onClick={onResetManual} disabled={resetDisabled} className="h-8 max-md:h-11 text-[13px]">
+                <Button type="button" variant="outline" size="sm" onClick={onResetManual} disabled={resetDisabled} className="h-8 [@media(pointer:coarse)]:h-11 text-[13px]">
                   <RotateCcw aria-hidden />
                   Reset manual filters
                 </Button>

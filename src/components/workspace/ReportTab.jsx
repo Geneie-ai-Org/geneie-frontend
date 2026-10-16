@@ -77,7 +77,7 @@ const STATE_WORD = { done: 'Done', running: 'Running', failed: 'Failed', pending
 function ActionPill({ action }) {
   if (!action) return null;
   return (
-    <Button type="button" variant="outline" size="sm" onClick={action.onClick} className="shrink-0 gap-1.5">
+    <Button type="button" variant="outline" size="sm" onClick={action.onClick} className="shrink-0 gap-1.5 [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:px-4">
       {action.label}
       <ArrowRight className="size-3.5" aria-hidden="true" />
     </Button>
@@ -451,7 +451,7 @@ export default function ReportTab({
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-1 pt-3">
             <h3 className="wb-card-title">Choose variants</h3>
             {load === 'ready' ? (
-              <div className="flex flex-wrap items-center gap-1">
+              <div className="flex flex-wrap items-center gap-1 [@media(pointer:coarse)]:gap-0 [@media(pointer:coarse)]:-mx-1.5 [@media(pointer:coarse)]:w-[calc(100%+0.75rem)] [@media(pointer:coarse)]:justify-between">
                 {gaReady ? (
                   <StateButton
                     variant="ghost"
@@ -460,14 +460,15 @@ export default function ReportTab({
                     icon={Download}
                     labels={{ idle: 'Ranking table', running: 'Downloading', done: 'Downloaded', error: 'Try again' }}
                     onClick={downloadTsv}
+                    className="[@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:px-2"
                   />
                 ) : null}
                 {gaReady ? (
-                  <Button type="button" variant="ghost" size="sm" onClick={useRankingPicks} disabled={suggestionCount === 0} title={`Reset to the ${suggestionCount} Include pick${suggestionCount === 1 ? '' : 's'} (Primary and Strong)`}>
+                  <Button type="button" variant="ghost" size="sm" onClick={useRankingPicks} disabled={suggestionCount === 0} className="[@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:px-2" title={`Reset to the ${suggestionCount} Include pick${suggestionCount === 1 ? '' : 's'} (Primary and Strong)`}>
                     Use ranking picks
                   </Button>
                 ) : null}
-                <Button type="button" variant="ghost" size="sm" onClick={clearAll} disabled={includeCount + additionalCount === 0}>Clear all</Button>
+                <Button type="button" variant="ghost" size="sm" onClick={clearAll} disabled={includeCount + additionalCount === 0} className="[@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:px-2">Clear all</Button>
               </div>
             ) : null}
           </div>
@@ -493,7 +494,7 @@ export default function ReportTab({
               <StageMark state="failed" size={26} />
               <p className="text-[13px] font-medium text-foreground">Could not load the candidates</p>
               <p className="max-w-sm text-[13px] leading-5 text-muted-foreground">{loadError}</p>
-              <Button type="button" variant="outline" size="sm" onClick={fetchCandidates} className="mt-1 gap-1.5"><RotateCw className="size-3.5" aria-hidden="true" />Try again</Button>
+              <Button type="button" variant="outline" size="sm" onClick={fetchCandidates} className="mt-1 gap-1.5 [@media(pointer:coarse)]:h-10"><RotateCw className="size-3.5" aria-hidden="true" />Try again</Button>
             </div>
           ) : candidates.length === 0 ? (
             <p className="px-6 pb-6 pt-3 text-center text-[13px] leading-5 text-muted-foreground">No variants are in the current working set. Apply a filter in Variants, then come back.</p>
@@ -507,13 +508,13 @@ export default function ReportTab({
                     type="button"
                     aria-pressed={effectiveFilter === f.id}
                     onClick={() => { setFilter(f.id); setShown(PAGE); }}
-                    className={cn('wb-chip cursor-pointer tabular-nums transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] motion-reduce:transition-none', FOCUS)}
+                    className={cn('wb-chip cursor-pointer tabular-nums transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] motion-reduce:transition-none [@media(pointer:coarse)]:!h-10 [@media(pointer:coarse)]:!px-3.5 [@media(pointer:coarse)]:!text-[13px]', FOCUS)}
                     data-tone={effectiveFilter === f.id ? 'brand' : undefined}
                   >
                     {f.label}<span className="text-muted-foreground">{nf(f.n)}</span>
                   </button>
                 ))}
-                <label className="relative ml-auto min-w-[8rem] flex-1 basis-36">
+                <label className="relative ml-auto min-w-[8rem] flex-1 basis-36 [@media(pointer:coarse)]:basis-full">
                   <span className="sr-only">Search variants</span>
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                   <input
@@ -521,7 +522,7 @@ export default function ReportTab({
                     value={query}
                     onChange={(e) => { setQuery(e.target.value); setShown(PAGE); }}
                     placeholder="Search gene or variant"
-                    className="h-7 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-8 pr-3 text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)]"
+                    className="h-7 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:text-[16px] [@media(pointer:coarse)]:pl-9 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-8 pr-3 text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)]"
                   />
                 </label>
               </div>
@@ -560,7 +561,7 @@ export default function ReportTab({
                           ) : null}
                           {suggested && why ? (
                             <details className="text-xs text-muted-foreground">
-                              <summary className="inline-block cursor-pointer select-none rounded-full outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]">Why</summary>
+                              <summary className="inline-block cursor-pointer select-none rounded-full outline-none [@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:min-h-10 [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:pr-4 hover:text-foreground focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]">Why</summary>
                               <p className="mt-0.5 whitespace-pre-line">{why}</p>
                             </details>
                           ) : null}
@@ -580,7 +581,7 @@ export default function ReportTab({
               {visible.length > shown ? (
                 <div className="flex items-center justify-between gap-2 border-t border-[hsl(var(--wb-line))] px-4 py-2.5 text-xs text-muted-foreground">
                   <span className="tabular-nums">Showing {nf(Math.min(shown, visible.length))} of {nf(visible.length)}</span>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setShown((n) => n + PAGE)}>Show {Math.min(PAGE, visible.length - shown)} more</Button>
+                  <Button type="button" variant="outline" size="sm" className="[@media(pointer:coarse)]:h-10" onClick={() => setShown((n) => n + PAGE)}>Show {Math.min(PAGE, visible.length - shown)} more</Button>
                 </div>
               ) : null}
               <p className="px-4 pb-3 text-xs leading-5 text-muted-foreground">Picking the same option again clears it. Unmarked variants stay out of the PDF. Picks stay here until you generate.</p>
@@ -649,7 +650,7 @@ export default function ReportTab({
       </div>
 
       {/* ---- footer: one primary ----------------------------------------------------------- */}
-      <div className="shrink-0 space-y-2 border-t border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] px-4 py-3">
+      <div className="shrink-0 space-y-2 border-t border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] px-4 pt-3 pb-[max(0.75rem,var(--mtabs-safe-b,env(safe-area-inset-bottom)))]">
         {genError ? (
           <div role="alert" className="flex items-start gap-2 rounded-2xl border border-[var(--error)]/40 bg-[var(--error)]/[0.06] px-3 py-2 text-[13px] leading-5">
             <span className="mt-0.5 shrink-0"><StageMark state="failed" size={18} /></span>

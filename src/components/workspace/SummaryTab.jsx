@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowRight, ChevronRight, FileText, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { usePanelWidth } from '@/hooks/useWorkbenchWidth';
 import { CountUp, StageMark, StateButton } from '@/components/motion';
 import { PIPELINE_STEP_DEFS, computePipelineSteps, getPipelineBackgroundActive, resolveDisplayStatuses } from '@/lib/variantPipelineSteps';
 import { formatIstWhen, formatJobDuration, jobDurationMs } from '@/lib/istTime';
@@ -265,7 +266,7 @@ function StageRail({ stages }) {
             >
               <StageMark state={s.state} size={26} />
             </span>
-            <span className={cn('mt-2 block max-w-full truncate text-[12.5px] leading-4', s.state === 'pending' ? 'text-muted-foreground' : 'font-medium text-foreground')}>
+            <span className={cn('mt-2 block max-w-full text-[12.5px] leading-4 [overflow-wrap:anywhere]', s.state === 'pending' ? 'text-muted-foreground' : 'font-medium text-foreground')}>
               {s.label}
             </span>
             <span
@@ -368,8 +369,8 @@ function GlyphStages({ stages }) {
 
 function JumpCard({ title, meta, onClick, glyph }) {
   return (
-    <button type="button" onClick={onClick} className={cn('group wb-card flex h-full w-full min-w-0 flex-col overflow-hidden text-left transition-[border-color,background-color,transform] duration-150 hover:border-[hsl(var(--brand-300))] active:scale-[0.995] motion-reduce:transition-none', FOCUS)}>
-      <span aria-hidden="true" className="flex h-[54px] items-center border-b border-[hsl(var(--wb-line))] bg-[hsl(var(--brand-50))] px-3.5 transition-colors duration-150 group-hover:bg-[hsl(var(--brand-100))]">{glyph}</span>
+    <button type="button" onClick={onClick} className={cn('group wb-card flex h-full w-full min-w-0 flex-col overflow-hidden text-left group-data-[w=narrow]/tab:flex-row transition-[border-color,background-color,transform] duration-150 hover:border-[hsl(var(--brand-300))] active:scale-[0.995] motion-reduce:transition-none', FOCUS)}>
+      <span aria-hidden="true" className="flex h-[54px] items-center group-data-[w=narrow]/tab:h-auto group-data-[w=narrow]/tab:w-24 group-data-[w=narrow]/tab:shrink-0 group-data-[w=narrow]/tab:border-b-0 group-data-[w=narrow]/tab:border-r border-b border-[hsl(var(--wb-line))] bg-[hsl(var(--brand-50))] px-3.5 transition-colors duration-150 group-hover:bg-[hsl(var(--brand-100))]">{glyph}</span>
       <span className="flex flex-1 items-center gap-2 px-3.5 py-2.5">
         <span className="min-w-0 flex-1">
           <span className="block text-[13px] font-medium leading-[18px] text-foreground">{title}</span>
@@ -393,7 +394,8 @@ function SectionTitle({ children, trailing }) {
 }
 
 function Shell({ children, className }) {
-  return <div className={cn('h-full min-h-0 space-y-3 overflow-y-auto px-4 pb-6 pt-1', className)}>{children}</div>;
+  const [ref] = usePanelWidth();
+  return <div ref={ref} className={cn('group/tab h-full min-h-0 space-y-3 overflow-y-auto overscroll-contain px-4 pb-6 pt-1 group-data-[w=narrow]/tab:px-3 group-data-[w=narrow]/tab:pb-[max(1.5rem,var(--mtabs-safe-b,env(safe-area-inset-bottom)))]', className)}>{children}</div>;
 }
 
 export default function SummaryTab({ summary, jumps = [], emptyAction, loading = false, error = null, className }) {
@@ -549,7 +551,7 @@ export default function SummaryTab({ summary, jumps = [], emptyAction, loading =
       {jumps.length > 0 ? (
         <section className="wb-rise" style={{ animationDelay: '140ms' }} aria-label="Open">
           <h3 className="wb-card-title mb-2 px-1">Open</h3>
-          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(168px,1fr))] gap-2 p-0">
+          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(168px,1fr))] gap-2 p-0 group-data-[w=narrow]/tab:grid-cols-1">
             {jumps.map((j) => (
               <li key={j.id} className="flex min-w-0">
                 <JumpCard title={j.title} meta={j.id === 'pipeline' ? pipelineMeta : j.meta} onClick={j.onClick} glyph={glyphFor(j.id)} />

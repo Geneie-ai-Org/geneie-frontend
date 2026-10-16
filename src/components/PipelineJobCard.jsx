@@ -95,7 +95,7 @@ export function BrailleSpinner({ className }) {
  */
 export function ActionButton({ pulse = false, ...rest }) {
   const reduce = useReducedMotion();
-  const btn = <StateButton {...rest} />;
+  const btn = <StateButton {...rest} className={cn('[@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:px-4', rest.className)} />;
   if (!pulse || reduce) return btn;
   return (
     <motion.span className="inline-flex" initial={{ scale: 1 }} animate={{ scale: [1, 1.07, 1] }} transition={{ delay: 0.55, duration: 0.5, ease: 'easeInOut' }}>
@@ -367,7 +367,7 @@ export function JobConsole({ lines, title = 'job record', className }) {
           getText={() => text}
           label="Copy"
           variant="ghost"
-          className="wb-console__copy h-6 rounded-full px-2 text-[11.5px]"
+          className="wb-console__copy h-6 rounded-full px-2 text-[11.5px] [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:px-3.5"
           aria-label={`Copy ${title}`}
         />
       </figcaption>
@@ -483,7 +483,7 @@ function TimelineRow({ step, index, last, progress, reserve, expanded, onToggle 
                     type="button"
                     onClick={step.onClick}
                     disabled={step.disabled}
-                    className={cn('inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-xs font-medium text-[hsl(var(--brand-700))] transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] disabled:opacity-50 motion-reduce:transition-none', FOCUS)}
+                    className={cn('inline-flex h-7 [@media(pointer:coarse)]:h-10 items-center gap-1 rounded-full px-2.5 [@media(pointer:coarse)]:px-3.5 text-xs font-medium text-[hsl(var(--brand-700))] transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] disabled:opacity-50 motion-reduce:transition-none', FOCUS)}
                   >
                     {step.title || `Open ${step.label}`}
                     <ArrowRight className="size-3" aria-hidden />
@@ -690,7 +690,7 @@ function PanelBody({
             aria-expanded={detailsOpen}
             aria-controls={detailsId}
             className={cn(
-              '-ml-2 inline-flex h-8 items-center gap-1.5 rounded-full border border-transparent px-2.5 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:border-[hsl(var(--wb-line))] hover:bg-[hsl(var(--wb-pill))] hover:text-foreground motion-reduce:transition-none',
+              '-ml-2 inline-flex h-8 [@media(pointer:coarse)]:h-10 items-center gap-1.5 rounded-full border border-transparent px-2.5 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:border-[hsl(var(--wb-line))] hover:bg-[hsl(var(--wb-pill))] hover:text-foreground motion-reduce:transition-none',
               FOCUS
             )}
           >
@@ -795,7 +795,7 @@ export default function PipelineJobCard({
             onClick={onStepsToggle}
             aria-expanded={Boolean(stepsOpen)}
             aria-controls={stepsId}
-            className="-mx-1.5 inline-flex min-h-8 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55"
+            className="-mx-1.5 inline-flex min-h-8 [@media(pointer:coarse)]:min-h-11 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55"
           >
             <Turn open={Boolean(stepsOpen)}><ChevronRight className="h-3.5 w-3.5" aria-hidden /></Turn>
             {stepsOpen ? `Hide ${stepsLabel.toLowerCase()}` : `${stepsLabel}`}

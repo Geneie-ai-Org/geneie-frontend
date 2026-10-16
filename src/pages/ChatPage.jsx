@@ -28,6 +28,8 @@ import SubscriptionManager from '../components/SubscriptionManager';
 import SubscriptionPage from '../components/SubscriptionPage';
 import ConversationSidebar from '../components/ConversationSidebar';
 import RailResizer from '@/components/chat/RailResizer';
+import { useWorkspaceLanding } from '@/hooks/useWorkspaceLanding';
+import LandingPills from '@/components/workspace/LandingPills';
 import DocumentUpload from '../components/DocumentUpload';
 import VariantFilterSidebar from '../components/VariantFilterSidebar';
 import ProfileManagement from '../components/ProfileManagement';
@@ -86,6 +88,8 @@ const ChatPage = () => {
   const [conversations, setConversations] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const autoOpenedReportForConvRef = useRef(null);
+  // Set once the landing hook exists (further down); early effects call it through the ref.
+  const landTabRef = useRef(null);
   const [currentDocument, setCurrentDocument] = useState(null);
   const [variantData, setVariantData] = useState(null);
   const [isVariantSidebarOpen, setIsVariantSidebarOpen] = useState(false);
@@ -557,6 +561,7 @@ const ChatPage = () => {
       const wasInFlight = prevStatus === 'pending' || prevStatus === 'running' || prevStatus === 'queued';
       if (wasInFlight && (status === 'completed' || status === 'ready')) {
         void settleChatEligibilityRef.current?.(activeConversationId, { fresh: true });
+        landTabRef.current?.('triage', 'Triage ranking is ready.');
       }
       const expectingRun = (gaFilterKey || gaEnrichmentActive) && Date.now() - armedAt < 20000;
       if (inFlight || gaEnrichmentActive || gaIndexingActive || expectingRun) {
@@ -1228,9 +1233,7 @@ const ChatPage = () => {
   // When the file-check results appear, open the workspace on that tab instead of a modal.
   useEffect(() => {
     if (showFileAnalysisModal) {
-      setOpenTabs((prev) => (prev.includes('file') ? prev : [...prev, 'file']));
-      setWorkspaceTab('file');
-      setIsVariantSidebarOpen(true);
+      landTabRef.current?.('file', 'File check finished. Review the findings.');
     }
   }, [showFileAnalysisModal]);
 
@@ -1346,10 +1349,72 @@ const ChatPage = () => {
     if (!showAutomaticReportCta || reportGate?.blocked) return;
     if (autoOpenedReportForConvRef.current === activeConversationId) return;
     autoOpenedReportForConvRef.current = activeConversationId;
-    setIsVariantSidebarOpen(true);
-    setOpenTabs((prev) => (prev.includes('report') ? prev : [...prev, 'report']));
-    setWorkspaceTab('report');
+    landTabRef.current?.('report', 'Your report is ready to review.');
   }, [showAutomaticReportCta, reportGate?.blocked, activeConversationId]);
+
+  // ---- Landing cues: when work arrives for a workbench tab, say so quietly (see useWorkspaceLanding) ----
+  const landing = useWorkspaceLanding({
+    resetKey: activeConversationId,
+    panelOpen: isVariantSidebarOpen,
+    activeTab: workspaceTab,
+  });
+  const landingStateRef = useRef({});
+  landingStateRef.current = { open: isVariantSidebarOpen, tab: workspaceTab, mobile: isMobile };
+  const landTab = useCallback(
+    (tabId, text) => {
+      const { open, tab, mobile } = landingStateRef.current;
+      setOpenTabs((prev) => (prev.includes(tabId) ? prev : [...prev, tabId]));
+      if (!open && !mobile) {
+        // Closed workbench: open it on the arriving tab. (On a phone it would cover the thread: flag only.)
+        setIsVariantSidebarOpen(true);
+        setWorkspaceTab(tabId);
+        landing.land(tabId, text, 'opened');
+      } else if (open && tab === tabId) {
+        landing.land(tabId, text, 'here');
+      } else {
+        // The user is elsewhere: do not move them, flag the tab instead.
+        landing.land(tabId, text, 'flag');
+      }
+    },
+    [landing.land]
+  );
+  landTabRef.current = landTab;
+  useEffect(() => {
+    if (!import.meta.env.DEV) return undefined;
+    window.__geneieLand = (tabId, text) => landTabRef.current?.(tabId, text || 'Test arrival.');
+    return () => { delete window.__geneieLand; };
+  }, []);
+
+  // Annotation and filter runs: land on the true -> false edge once the result is visible in state.
+  const annotatingNow = Boolean(isRunningAnnovar || pipelineSnapshot.annovarJob?.status === 'running');
+  const reducingNow = Boolean(isApplyingProprietaryFilter || isRunningExomiser);
+  const landWatchRef = useRef({ key: null, annotating: false, reducing: false });
+  useEffect(() => {
+    const w = landWatchRef.current;
+    if (w.key !== activeConversationId) {
+      landWatchRef.current = { key: activeConversationId, annotating: annotatingNow, reducing: reducingNow };
+      return;
+    }
+    if (w.annotating && !annotatingNow && pipelineSnapshot.hasAnnotatedFile) {
+      landTabRef.current?.('variants', 'Annotation finished. Your variants are ready to filter.');
+    }
+    if (w.reducing && !reducingNow && conversationFilterState.activeProprietaryFilter) {
+      const n = Number(conversationFilterState.filteredVariantCount);
+      landTabRef.current?.(
+        'results',
+        Number.isFinite(n) ? `Filter applied. ${n.toLocaleString()} variants in scope.` : 'Filter applied. Results are ready.'
+      );
+    }
+    w.annotating = annotatingNow;
+    w.reducing = reducingNow;
+  }, [
+    activeConversationId,
+    annotatingNow,
+    reducingNow,
+    pipelineSnapshot.hasAnnotatedFile,
+    conversationFilterState.activeProprietaryFilter,
+    conversationFilterState.filteredVariantCount,
+  ]);
 
   if (!isAuthReady || userLoading) {
     return <SessionLoadingScreen />;
@@ -1579,6 +1644,7 @@ const ChatPage = () => {
       </div>
     ) : null;
 
+  const tabLabels = { summary: 'Summary', variants: 'Variants', results: 'Results', pipeline: 'Pipeline', file: 'File check', triage: 'Triage', report: 'Report' };
   const openWorkspaceTab = (tab) => {
     setOpenTabs((prev) => (prev.includes(tab) ? prev : [...prev, tab]));
     setWorkspaceTab(tab);
@@ -1957,6 +2023,7 @@ const ChatPage = () => {
               )}
 
               <div className={`w-full ${isMobile ? 'shrink-0' : ''}`}>
+                <LandingPills pending={landing.pending} labels={tabLabels} onOpen={openWorkspaceTab} />
                 <ChatComposer {...composerProps} layout="stacked" dropdownSource="new-chat" textareaRef={homeComposerRef} />
               </div>
               </div>
@@ -2200,6 +2267,7 @@ const ChatPage = () => {
                     </div>
                   );
                 })()}
+                <LandingPills pending={landing.pending} labels={tabLabels} onOpen={openWorkspaceTab} />
                 <ChatComposer {...composerProps} layout="inline" dropdownSource="conversation" />
               </div>
             </>
@@ -2220,6 +2288,10 @@ const ChatPage = () => {
           onCloseTab={closeWorkspaceTab}
           onReorderTabs={(ids) => setOpenTabs((prev) => [...ids, ...prev.filter((x) => !ids.includes(x))])}
           onClose={() => setIsVariantSidebarOpen(false)}
+          landed={landing.pending}
+          landing={landing.note}
+          onLandingView={openWorkspaceTab}
+          onLandingDismiss={landing.dismissNote}
           persistKey={activeConversationId || undefined}
           onRestore={({ openIds, activeId }) => {
             if (Array.isArray(openIds) && openIds.length) setOpenTabs(openIds);

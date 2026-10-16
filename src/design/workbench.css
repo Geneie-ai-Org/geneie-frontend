@@ -551,3 +551,78 @@
 .wb-console [data-slot='button'].wb-console__copy { color: hsl(180 10% 78%); background-color: transparent; border-color: transparent; }
 .wb-console [data-slot='button'].wb-console__copy:hover { background-color: hsl(180 8% 20%); color: hsl(0 0% 100%); }
 .wb-console pre:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: -2px; }
+
+
+/* ---- Landing cues: work arrived in a workbench tab ---- */
+.wb-tab-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background-color: hsl(var(--brand-500));
+  box-shadow: 0 0 0 2px hsl(var(--wb-card));
+}
+@media (prefers-reduced-motion: no-preference) {
+  .wb-tab-dot { animation: wb-dot-ping 1.8s var(--ease-out) 3; }
+  @keyframes wb-dot-ping {
+    0% { box-shadow: 0 0 0 2px hsl(var(--wb-card)), 0 0 0 2px hsl(var(--brand-500) / 0.55); }
+    70% { box-shadow: 0 0 0 2px hsl(var(--wb-card)), 0 0 0 9px hsl(var(--brand-500) / 0); }
+    100% { box-shadow: 0 0 0 2px hsl(var(--wb-card)), 0 0 0 9px hsl(var(--brand-500) / 0); }
+  }
+}
+.wb-landing {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2rem;
+  margin: 0 0.75rem 0.25rem;
+  padding: 0.25rem 0.375rem 0.25rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--brand-200));
+  background-color: hsl(var(--brand-50));
+  color: hsl(var(--brand-700));
+  font-size: 13px;
+  line-height: 1.25rem;
+}
+.wb-landing-check,
+.wb-landing-pill .wb-landing-check {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 9999px;
+  background-color: hsl(var(--brand-100));
+  color: hsl(var(--brand-700));
+}
+.wb-landing-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  height: 2rem;
+  padding: 0 0.375rem 0 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--brand-200));
+  background-color: hsl(var(--brand-50));
+  color: hsl(var(--brand-700));
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 150ms var(--ease-out), background-color 150ms var(--ease-out);
+}
+.wb-landing-pill:hover { border-color: hsl(var(--brand-300)); background-color: hsl(var(--brand-100)); }
+.wb-landing-pill:active { transform: scale(0.98); }
+.wb-landing-open {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0 0.5rem;
+  height: 1.375rem;
+  border-radius: 9999px;
+  background-color: hsl(var(--wb-card));
+  border: 1px solid hsl(var(--brand-200));
+  font-size: 12px;
+  font-weight: 500;
+}

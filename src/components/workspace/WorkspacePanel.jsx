@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2, PanelRightClose, PanelsTopLeft, Plus, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Maximize2, Minimize2, PanelRightClose, PanelsTopLeft, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -133,6 +133,10 @@ export default function WorkspacePanel({
   onToggleExpand,
   persistKey,
   onRestore,
+  landed,
+  landing,
+  onLandingView,
+  onLandingDismiss,
   className,
 }) {
   const uid = useId();
@@ -499,6 +503,12 @@ export default function WorkspacePanel({
                   {t.badge ? (
                     <span className="wb-tab-badge">{t.badge}</span>
                   ) : null}
+                  {landed?.[t.id] && !selected ? (
+                    <>
+                      <span className="wb-tab-dot" aria-hidden="true" />
+                      <span className="sr-only"> (new)</span>
+                    </>
+                  ) : null}
                 </button>
                 {t.closable ? (
                   <button
@@ -598,6 +608,44 @@ export default function WorkspacePanel({
           <PanelRightClose className="size-4" />
         </IconButton>
       </div>
+
+      {/* Landing note: work arrived. Quiet, self-dismissing; "View" only when the user was not moved. */}
+      <AnimatePresence initial={false}>
+        {landing ? (
+          <motion.div
+            key={landing.id}
+            role="status"
+            aria-live="polite"
+            initial={reduceMotion ? false : { opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="wb-landing">
+              <span className="wb-landing-check" aria-hidden="true"><Check className="size-3" /></span>
+              <span className="min-w-0 flex-1 truncate">{landing.text}</span>
+              {landing.actionable ? (
+                <button
+                  type="button"
+                  onClick={() => onLandingView?.(landing.tabId)}
+                  className={cn('wb-landing-open transition-colors duration-150 hover:!bg-[hsl(var(--brand-100))] motion-reduce:transition-none', FOCUS)}
+                >
+                  View
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => onLandingDismiss?.()}
+                aria-label="Dismiss"
+                className={cn('flex size-6 shrink-0 items-center justify-center rounded-full text-[hsl(var(--brand-700))]/70 transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none', FOCUS)}
+              >
+                <X className="size-3" aria-hidden="true" />
+              </button>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       {/* Per-tab toolbar: quiet centred title, optional actions on the right. */}
       <div

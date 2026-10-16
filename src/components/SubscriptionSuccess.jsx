@@ -1,6 +1,8 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { StageMark } from '@/components/motion';
+import AutoCloseBar from './account/AutoCloseBar';
 
 const cleanUrl = () => window.history.replaceState({}, document.title, window.location.pathname);
 
@@ -58,27 +60,35 @@ const SubscriptionSuccess = ({ onClose }) => {
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
-      className="mx-4 w-full max-w-md rounded-xl border border-border bg-card p-8 text-center shadow-lg"
+      className="wb-scope wb-card wb-pop mx-4 w-full max-w-md rounded-3xl p-8 text-center shadow-[var(--shadow-lg)]"
+      style={{ backgroundColor: 'hsl(var(--wb-card))' }}
     >
       {loading ? (
         <div role="status">
-          <Loader2 aria-hidden="true" className="mx-auto mb-4 size-8 animate-spin text-muted-foreground motion-reduce:animate-none" />
+          <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill))]">
+            <StageMark state="running" size={28} />
+          </span>
           <h2 id={titleId} className="text-[18px] font-medium text-foreground">Confirming your payment</h2>
-          <p className="mt-1.5 text-sm text-muted-foreground">This usually takes a few seconds.</p>
+          <p className="mt-1.5 text-[14px] text-muted-foreground">This usually takes a few seconds.</p>
         </div>
       ) : (
         <>
-          <CheckCircle2 aria-hidden="true" className="mx-auto mb-4 size-8 text-[var(--success)]" />
+          <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))]">
+            <StageMark state="done" size={32} />
+          </span>
           <div role="status">
+            <span className="wb-chip mb-3" data-tone="brand">Pro plan</span>
             <h2 id={titleId} className="text-[18px] font-medium text-foreground">Pro is active</h2>
-            <p className="mt-1.5 text-sm text-muted-foreground">
+            <p className="mt-1.5 text-[14px] text-muted-foreground">
               You now have unlimited chat exchanges and access to bioinformatics pipelines.
             </p>
           </div>
           <Button size="lg" className="mt-6 h-10 w-full" onClick={handleContinue} autoFocus>
-            Continue to Geneie
+            Continue to Geneie <ArrowRight aria-hidden="true" />
           </Button>
-          <p className="mt-3 text-xs text-muted-foreground">This closes on its own in a few seconds.</p>
+          {/* The track drains over the same 5 seconds as the existing auto-close timer. */}
+          <AutoCloseBar seconds={5} />
+          <p className="mt-2 text-[12px] text-muted-foreground">This closes on its own in a few seconds.</p>
         </>
       )}
     </div>

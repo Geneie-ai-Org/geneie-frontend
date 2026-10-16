@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Loader2, AlertCircle, Receipt } from 'lucide-react';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Check, AlertCircle, Receipt, ArrowUpRight, ExternalLink, RotateCw } from 'lucide-react';
+import { CopyButton, HoldButton, StateButton } from '@/components/motion';
 import { useAuth } from '../hooks/useAuth';
 import { getAuth } from 'firebase/auth';
 import { apiUrl } from '@/config/api';
@@ -19,7 +19,6 @@ import {
 } from '@/components/ui/dialog';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -29,42 +28,58 @@ import {
 } from '@/components/ui/alert-dialog';
 
 /**
- * One plan in a comparison. Flat card, hairline border; the highlighted plan swaps its
- * border to the accent. `current` adds a text marker (never colour alone).
+ * One plan in a comparison: a white hairline card. The plan you are on gets a teal tint and a
+ * "Current plan" pill (a word and a dot, never colour alone); the highlighted plan keeps a teal
+ * hairline. Prices are tabular so two cards line up.
  */
 export const PlanCard = ({ name, price, priceNote, blurb, features, current, highlighted, children }) => (
   <section
     aria-label={`${name} plan`}
+    data-current={current ? 'true' : undefined}
     className={cn(
-      'flex flex-col rounded-lg border bg-card p-5',
-      highlighted ? 'border-primary ring-1 ring-primary' : 'border-border'
+      'wb-card wb-rise flex flex-col p-5 transition-colors duration-150',
+      current && 'border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-50))]',
+      !current && highlighted && 'border-[hsl(var(--brand-300))]'
     )}
   >
     <div className="flex items-center justify-between gap-2">
-      <h3 className="text-sm font-semibold text-foreground">{name}</h3>
-      {current && (
-        <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-[12px] font-medium text-muted-foreground">
-          Current plan
-        </span>
-      )}
+      <h3 className="text-[15px] font-semibold text-foreground">{name}</h3>
+      {current ? (
+        <span className="wb-status" data-state="done">Current plan</span>
+      ) : highlighted ? (
+        <span className="wb-chip" data-tone="brand">Recommended</span>
+      ) : null}
     </div>
     {price && (
-      <p className="mt-3 flex items-baseline gap-1">
+      <p className="mt-4 flex items-baseline gap-1.5">
         <span className="text-[28px] font-semibold leading-none tabular-nums text-foreground">{price}</span>
-        {priceNote && <span className="text-sm text-muted-foreground">{priceNote}</span>}
+        {priceNote && <span className="text-[13px] text-muted-foreground">{priceNote}</span>}
       </p>
     )}
     {blurb && <p className="mt-2 text-[13px] text-muted-foreground">{blurb}</p>}
-    <ul className="mt-4 flex-1 space-y-2">
-      {features.map((f) => (
-        <li key={f} className="flex items-start gap-2 text-sm text-foreground">
-          <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
+    <ul className="mt-5 flex-1 space-y-2.5">
+      {features.map((f, i) => (
+        <li key={f} className="wb-rise flex items-start gap-2.5 text-[14px] text-foreground" style={{ animationDelay: `${Math.min(i, 8) * 30 + 60}ms` }}>
+          <span className="mt-px flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]" aria-hidden="true">
+            <Check className="size-3" strokeWidth={3} />
+          </span>
           <span>{f}</span>
         </li>
       ))}
     </ul>
-    {children && <div className="mt-5">{children}</div>}
+    {children && <div className="mt-6">{children}</div>}
   </section>
+);
+
+/** An inline notice: error-soft pill-cornered strip with an icon, a sentence and an optional action. */
+const Notice = ({ children, action }) => (
+  <div role="alert" className="wb-fade flex items-center justify-between gap-3 rounded-2xl border border-transparent bg-[var(--error-soft)] px-3.5 py-2.5 text-[13px] text-[var(--error)]">
+    <span className="flex items-start gap-2">
+      <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+      <span>{children}</span>
+    </span>
+    {action}
+  </div>
 );
 
 const SubscriptionPage = ({ isOpen, onClose, userId }) => {
@@ -177,7 +192,7 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
       }
 
       const data = await response.json();
-      // Redirect to Dodo Payments checkout
+      // Redirect to the hosted checkout
       if (data.url) {
         window.location.href = data.url;
       } else {
@@ -217,7 +232,7 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
       }
 
       const data = await response.json();
-      // Redirect to Dodo Payments customer portal or profile page
+      // Redirect to the hosted billing portal
       if (data.url) {
         window.location.href = data.url;
       } else if (data.message) {
@@ -249,7 +264,8 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
   const proMonthlyDisplay = subscriptionDetails?.pricing?.proMonthlyUsd ?? 27.99;
 
   const chatMeter = meterFor(limits, 'chat');
-  const freeChatFeature = chatMeter.tracked && !chatMeter.unlimited && chatMeter.limit != null
+  // On Pro the chat meter describes Pro's pool, not the Free plan's allowance, so only quote a number while on Free.
+  const freeChatFeature = !isPro && chatMeter.tracked && !chatMeter.unlimited && chatMeter.limit != null
     ? `${chatMeter.limit} chat exchanges`
     : 'Limited chat exchanges';
 
@@ -260,49 +276,46 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-        <DialogContent showCloseButton={false} className="max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-1.5rem)] overflow-y-auto sm:max-w-3xl">
+        <DialogContent showCloseButton={false} className="max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-1.5rem)] gap-5 overflow-y-auto bg-[hsl(var(--wb-bg))] p-5 sm:max-w-3xl">
           <DialogHeader>
             <div className="flex items-center justify-between gap-3">
               <DialogTitle className="text-[18px] font-medium">Plan and billing</DialogTitle>
-              <DialogClose render={<Button variant="ghost" size="icon-sm" className="-mr-1" aria-label="Close plan and billing" />}>
-                <X aria-hidden="true" />
+              <DialogClose render={<button type="button" className="wb-iconbtn" aria-label="Close plan and billing" />}>
+                <X className="size-4" aria-hidden="true" />
               </DialogClose>
             </div>
-            <DialogDescription>
+            <DialogDescription className="tabular-nums">
               {isPro
                 ? [startDate && `Pro since ${startDate}`, endDate && `renews ${endDate}`].filter(Boolean).join(', ') || 'You are on Pro.'
                 : 'Compare plans and upgrade when you need more room.'}
             </DialogDescription>
           </DialogHeader>
 
-          {actionError && (
-            <div role="alert" className="flex items-start gap-2 rounded-md border border-border bg-[var(--error-soft)] px-3 py-2 text-[13px] text-destructive">
-              <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-              <span>{actionError}</span>
-            </div>
-          )}
+          {actionError && <Notice>{actionError}</Notice>}
 
           {!loading && loadError && (
-            <div role="alert" className="flex items-center justify-between gap-3 rounded-md border border-border bg-[var(--error-soft)] px-3 py-2 text-[13px] text-destructive">
-              <span className="flex items-start gap-2">
-                <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-                <span>Could not load your plan details, so the plan shown may be out of date. Check your connection, then retry.</span>
-              </span>
-              <Button variant="outline" size="lg" className="shrink-0 max-md:h-11" onClick={loadSubscriptionData}>Retry</Button>
-            </div>
+            <Notice
+              action={
+                <Button variant="outline" size="lg" className="shrink-0 max-md:h-11" onClick={loadSubscriptionData}>
+                  <RotateCw aria-hidden="true" /> Retry
+                </Button>
+              }
+            >
+              Could not load your plan details, so the plan shown may be out of date. Check your connection, then retry.
+            </Notice>
           )}
 
           {loading ? (
             <div aria-busy="true">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {[0, 1].map((i) => (
-                  <div key={i} className="flex h-[19.5rem] flex-col rounded-lg border border-border p-5">
-                    <Skeleton className="h-4 w-16" />
-                    <Skeleton className="mt-4 h-7 w-24" />
-                    <Skeleton className="mt-3 h-3.5 w-40" />
-                    <Skeleton className="mt-6 h-3.5 w-full" />
-                    <Skeleton className="mt-3 h-3.5 w-5/6" />
-                    <Skeleton className="mt-3 h-3.5 w-2/3" />
+                  <div key={i} className="wb-card flex h-[19.5rem] flex-col p-5">
+                    <div className="wb-shimmer h-4 w-16 rounded-full" />
+                    <div className="wb-shimmer mt-5 h-7 w-24 rounded-full" />
+                    <div className="wb-shimmer mt-3 h-3.5 w-40 rounded-full" />
+                    <div className="wb-shimmer mt-7 h-3.5 w-full rounded-full" />
+                    <div className="wb-shimmer mt-3 h-3.5 w-5/6 rounded-full" />
+                    <div className="wb-shimmer mt-3 h-3.5 w-2/3 rounded-full" />
                   </div>
                 ))}
               </div>
@@ -329,57 +342,82 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
                 >
                   {!isPro ? (
                     <>
-                      <Button size="lg" className="h-10 w-full max-md:h-11" onClick={handleUpgrade} disabled={busy !== null}>
-                        {busy === 'upgrade' ? (<><Loader2 className="animate-spin motion-reduce:animate-none" /> Opening checkout</>) : 'Upgrade to Pro'}
-                      </Button>
-                      <p className="mt-2 text-center text-[12px] text-muted-foreground">
+                      <StateButton
+                        size="lg"
+                        state={busy === 'upgrade' ? 'running' : 'idle'}
+                        labels={{ idle: 'Upgrade to Pro', running: 'Redirecting…' }}
+                        icon={ArrowUpRight}
+                        onClick={handleUpgrade}
+                        disabled={busy !== null}
+                        className="h-10 w-full max-md:h-11"
+                      />
+                      <p className="mt-2.5 text-center text-[12px] text-muted-foreground">
                         Cards, UPI, QR code, net banking and wallets.
                       </p>
                     </>
                   ) : (
-                    <Button variant="outline" size="lg" className="h-10 w-full max-md:h-11" onClick={handleManageBilling} disabled={busy !== null}>
-                      {busy === 'billing' ? (<><Loader2 className="animate-spin motion-reduce:animate-none" /> Opening portal</>) : 'Manage billing and payment methods'}
-                    </Button>
+                    <StateButton
+                      variant="outline"
+                      size="lg"
+                      state={busy === 'billing' ? 'running' : 'idle'}
+                      labels={{ idle: 'Manage billing and payment methods', running: 'Redirecting…' }}
+                      icon={ExternalLink}
+                      onClick={handleManageBilling}
+                      disabled={busy !== null}
+                      className="h-10 w-full max-md:h-11"
+                    />
                   )}
                 </PlanCard>
               </div>
 
-              <section aria-label="Billing history">
-                <h3 className="mb-2 text-sm font-medium text-foreground">Billing history</h3>
+              {isPro && subscriptionDetails?.subscriptionId && (
+                <div className="wb-card wb-rise flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="wb-card-title">Subscription ID</p>
+                    <p className="mt-1 break-all font-mono text-[12px] text-foreground">{subscriptionDetails.subscriptionId}</p>
+                  </div>
+                  <CopyButton size="sm" label="Copy ID" getText={() => subscriptionDetails.subscriptionId} aria-label="Copy subscription ID" />
+                </div>
+              )}
+
+              <section aria-label="Billing history" className="wb-card wb-rise p-4" style={{ animationDelay: '90ms' }}>
+                <h3 className="wb-card-title mb-2">Billing history</h3>
                 {billingHistory.length > 0 ? (
-                  <ul className="divide-y divide-border border-y border-border">
+                  <ul className="divide-y divide-[hsl(var(--wb-line))]">
                     {billingHistory.map((invoice, idx) => (
                       <li key={idx} className="flex items-center justify-between gap-3 py-2.5">
                         <div className="min-w-0">
-                          <p className="truncate text-sm text-foreground">{invoice.description || 'Pro plan subscription'}</p>
-                          <p className="text-[12px] text-muted-foreground">{fmt(invoice.date)}</p>
+                          <p className="truncate text-[14px] text-foreground">{invoice.description || 'Pro plan subscription'}</p>
+                          <p className="text-[12px] tabular-nums text-muted-foreground">{fmt(invoice.date)}</p>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm tabular-nums text-foreground">${invoice.amount}</p>
-                          <p className={cn('text-[12px]', invoice.status === 'paid' || !invoice.status ? 'text-muted-foreground' : 'text-destructive')}>
+                        <div className="flex items-center gap-3 text-right">
+                          <span className="text-[14px] tabular-nums text-foreground">${invoice.amount}</span>
+                          <span className="wb-status" data-state={invoice.status === 'paid' || !invoice.status ? 'done' : 'failed'}>
                             {invoice.status || 'paid'}
-                          </p>
+                          </span>
                         </div>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <div className="flex items-center gap-3 rounded-lg border border-dashed border-border px-4 py-3 text-[13px] text-muted-foreground">
-                    <Receipt aria-hidden="true" className="size-4 shrink-0" />
+                  <div className="flex items-center gap-3 py-1 text-[13px] text-muted-foreground">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill))]" aria-hidden="true">
+                      <Receipt className="size-4" />
+                    </span>
                     <span>No invoices yet. They appear here after your first payment.</span>
                   </div>
                 )}
               </section>
 
               {isPro && (
-                <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+                <div className="wb-card wb-rise flex items-center justify-between gap-3 px-4 py-3" style={{ animationDelay: '120ms', borderColor: 'color-mix(in srgb, var(--error) 28%, transparent)' }}>
                   <p className="text-[13px] text-muted-foreground">
                     Canceling keeps Pro until the end of your billing period.
                   </p>
                   <Button
                     variant="outline"
                     size="lg"
-                    className="shrink-0 max-md:h-11 border-destructive/40 text-destructive hover:bg-[var(--error-soft)] hover:text-destructive"
+                    className="shrink-0 !border-[color-mix(in_srgb,var(--error)_35%,transparent)] !text-[var(--error)] hover:!border-[var(--error)] hover:!bg-[var(--error-soft)] hover:!text-[var(--error)] max-md:h-11"
                     onClick={() => setConfirmCancel(true)}
                     disabled={busy !== null}
                   >
@@ -391,18 +429,20 @@ const SubscriptionPage = ({ isOpen, onClose, userId }) => {
           )}
 
         <AlertDialog open={confirmCancel} onOpenChange={setConfirmCancel}>
-          <AlertDialogContent>
+          <AlertDialogContent className="data-[size=default]:sm:max-w-md">
             <AlertDialogHeader>
               <AlertDialogTitle>Cancel your Pro subscription?</AlertDialogTitle>
               <AlertDialogDescription>
                 You will lose Pro features at the end of your billing period. We will open the billing portal to finish cancelling.
               </AlertDialogDescription>
+              <p className="text-[12px] text-muted-foreground">To confirm, press and hold &ldquo;Continue to billing portal&rdquo;.</p>
             </AlertDialogHeader>
-            <AlertDialogFooter>
+            <AlertDialogFooter className="items-center">
               <AlertDialogCancel>Keep Pro</AlertDialogCancel>
-              <AlertDialogAction variant="destructive" onClick={handleCancelSubscription}>
+              {/* Hold to confirm. onConfirm runs the same handler the old confirm button ran, once (it also closes this dialog). */}
+              <HoldButton tone="danger" doneLabel="Opening portal" onConfirm={handleCancelSubscription} className="h-9 whitespace-nowrap px-4 text-[var(--error)]">
                 Continue to billing portal
-              </AlertDialogAction>
+              </HoldButton>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

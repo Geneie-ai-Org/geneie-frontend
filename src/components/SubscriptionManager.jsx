@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { performLogout } from '@/lib/logout';
 import { meterFor } from '@/services/tierLimits';
 import { useAuth } from '../hooks/useAuth';
+import { ArrowUpRight, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import SubscriptionPage, { PlanCard } from './SubscriptionPage';
 
@@ -72,15 +73,19 @@ const SubscriptionManager = ({ isInputGated, userId }) => {
                     userId={userId}
                 />
             )}
-            <main className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 py-10 sm:px-6 sm:py-14">
-                <div className="mb-8 flex items-start justify-between gap-4">
+            <div className="wb-scope flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:px-6 sm:py-14">
+                <div className="wb-rise mb-8 flex items-start justify-between gap-4">
                     <div className="min-w-0">
+                        <span className="wb-chip mb-3" data-tone="brand">
+                            {isGuest ? 'Guest' : isPro ? 'Pro plan' : 'Free plan'}
+                        </span>
                         <h1 className="text-[18px] font-semibold text-foreground">{content.title}</h1>
-                        <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">{content.description}</p>
+                        <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted-foreground">{content.description}</p>
                     </div>
                     {!isGuest && (
-                        <Button variant="ghost" size="lg" className="shrink-0 text-muted-foreground" onClick={() => performLogout(navigate)}>
-                            Sign out
+                        <Button variant="outline" size="lg" className="shrink-0" onClick={() => performLogout(navigate)}>
+                            <LogOut aria-hidden="true" /> Sign out
                         </Button>
                     )}
                 </div>
@@ -114,11 +119,13 @@ const SubscriptionManager = ({ isInputGated, userId }) => {
                                 onClick={content.action}
                             >
                                 {content.upgradeText}
+                                {!isPro && !isGuest ? <ArrowUpRight aria-hidden="true" /> : null}
                             </Button>
                         )}
                     </PlanCard>
                 </div>
             </main>
+            </div>
         </>
     );
 };

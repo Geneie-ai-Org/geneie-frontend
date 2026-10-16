@@ -9,6 +9,7 @@ export function useNotifications() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const intervalRef = useRef(null);
   const mountedRef = useRef(true);
@@ -40,6 +41,7 @@ export function useNotifications() {
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const headers = await getHeaders();
       const base = getApiOrigin();
@@ -50,8 +52,9 @@ export function useNotifications() {
         setNotifications(data.notifications || []);
         setUnreadCount(data.unread_count ?? 0);
       }
-    } catch (_) {
-      // Silently ignore
+    } catch (e) {
+      // The popover shows an error state with a retry; polling errors stay silent.
+      if (mountedRef.current) setError(e instanceof Error ? e.message : 'Failed to fetch notifications');
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -136,6 +139,8 @@ export function useNotifications() {
     unreadCount,
     notifications,
     loading,
+    error,
+    refetch: fetchNotifications,
     dropdownOpen,
     toggleDropdown,
     closeDropdown,

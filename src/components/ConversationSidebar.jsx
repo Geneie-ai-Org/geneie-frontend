@@ -26,7 +26,7 @@ import { useLimits } from '@/hooks/useLimits';
 import { meterFor } from '@/services/tierLimits';
 import NotificationBell from './NotificationBell';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Progress } from '@/components/ui/progress';
+import UsageMeter, { UsageBar, meterStatus } from './account/UsageMeter';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
@@ -220,7 +220,7 @@ function Avatar({ name, size = 24 }) {
     return (
         <span
             aria-hidden="true"
-            className="flex shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[12px] font-medium text-[var(--text-secondary)]"
+            className="flex shrink-0 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[12px] font-medium text-[hsl(var(--brand-700))]"
             style={{ width: size, height: size }}
         >
             {name.charAt(0).toUpperCase()}
@@ -430,17 +430,14 @@ const ConversationSidebar = ({
         }
     };
 
-    // Usage meter
+    // Usage meter. The count is shown as it is (49 of 10 stays 49 of 10); the bar is the only thing clamped.
     const showMeter = chatMeter.tracked && !chatMeter.unlimited && chatMeter.limit != null;
     const used = chatMeter.used || 0;
-    const usedPct = showMeter ? Math.min((used / chatMeter.limit) * 100, 100) : 0;
-    const meterTone = !showMeter ? '' : used >= chatMeter.limit ? 'error' : usedPct >= 80 ? 'warning' : 'ok';
-    const meterBar = cn(
-        '[&_[data-slot=progress-track]]:h-1 [&_[data-slot=progress-track]]:bg-border [&_[data-slot=progress-indicator]]:duration-500',
-        meterTone === 'error' && '[&_[data-slot=progress-indicator]]:bg-[var(--error)]',
-        meterTone === 'warning' && '[&_[data-slot=progress-indicator]]:bg-[var(--warning)]',
-        meterTone === 'ok' && '[&_[data-slot=progress-indicator]]:bg-primary'
-    );
+    const meterWord = showMeter ? meterStatus(used, chatMeter.limit).word : null;
+    const meterSummary = showMeter ? `Exchanges: ${used} of ${chatMeter.limit} used${meterWord ? `, ${meterWord.toLowerCase()}` : ''}` : '';
+    const planLabel = userTier === 'admin' ? 'Admin' : userTier === 'pro' || userTier === 'super_pro' ? 'Pro' : userTier === 'beta' ? 'Beta' : 'Free';
+    // Footer icon buttons are pills: a visible edge appears on hover and while open.
+    const FOOT_BTN = 'rounded-full hover:border-[hsl(var(--wb-line))] border border-transparent hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] aria-expanded:bg-[hsl(var(--brand-50))] aria-expanded:border-[hsl(var(--brand-300))]';
 
     const expandAndSearch = () => {
         focusSearchAfterOpen.current = true;
@@ -777,26 +774,21 @@ const ConversationSidebar = ({
                 {/* Footer: usage, account */}
                 <div className="mt-auto shrink-0">
                     {showMeter && expanded && (
-                        <div className="px-4 pb-1 pt-2" role="group" aria-label="Chat usage">
-                            <div className="mb-1.5 flex items-center justify-between text-[12px]">
-                                <span className="text-muted-foreground">Exchanges</span>
-                                <span className={cn('tabular-nums', meterTone === 'error' ? 'font-medium text-destructive' : 'text-[var(--text-secondary)]')}>
-                                    {used}/{chatMeter.limit}
-                                </span>
-                            </div>
-                            <Progress
-                                value={usedPct}
-                                aria-label={`Exchanges used: ${used} of ${chatMeter.limit}`}
-                                className={cn('w-full', meterBar)}
-                            />
-                        </div>
+                        <UsageMeter
+                            compact
+                            label="Exchanges"
+                            used={used}
+                            limit={chatMeter.limit}
+                            className="px-4 pb-1 pt-2"
+                        />
                     )}
 
                     {expanded ? (
                         <div className="flex h-12 items-center gap-1 px-3 max-md:h-14">
                             <Avatar name={displayName} />
-                            <span className="ml-1.5 min-w-0 flex-1 truncate text-[13px] text-[var(--text-primary)]" title={email || displayName}>
-                                {displayName}
+                            <span className="ml-1.5 flex min-w-0 flex-1 flex-col" title={email || displayName}>
+                                <span className="truncate text-[13px] leading-tight text-[var(--text-primary)]">{displayName}</span>
+                                <span className="truncate text-[12px] leading-tight text-muted-foreground">{planLabel} plan</span>
                             </span>
 
                             <NotificationBell
@@ -804,7 +796,7 @@ const ConversationSidebar = ({
                                 onOpenSettings={onOpenProfile}
                                 tooltip="Notifications"
                                 side={isMobile ? 'top' : 'right'}
-                                triggerClassName={cn(ICON_BTN, 'size-8 max-md:size-11')}
+                                triggerClassName={cn(ICON_BTN, FOOT_BTN, 'size-8 max-md:size-11')}
                             />
                             <DropdownMenu>
                                 <Tip
@@ -813,7 +805,7 @@ const ConversationSidebar = ({
                                     render={
                                         <DropdownMenuTrigger
                                             aria-label="Account menu"
-                                            className={cn(ICON_BTN, 'size-8 max-md:size-11')}
+                                            className={cn(ICON_BTN, FOOT_BTN, 'size-8 max-md:size-11')}
                                         />
                                     }
                                 >
@@ -826,10 +818,10 @@ const ConversationSidebar = ({
                         <div className="flex flex-col items-center gap-0.5 py-2">
                             {showMeter && (
                                 <Tip
-                                    label={`Exchanges ${used}/${chatMeter.limit}`}
-                                    render={<div role="img" aria-label={`Exchanges used: ${used} of ${chatMeter.limit}`} className="mb-1 w-7 py-1.5" />}
+                                    label={meterSummary}
+                                    render={<div role="img" aria-label={meterSummary} className="mb-1 w-7 py-1.5" />}
                                 >
-                                    <Progress value={usedPct} className={cn('w-full', meterBar)} />
+                                    <UsageBar decorative used={used} limit={chatMeter.limit} />
                                 </Tip>
                             )}
                             <NotificationBell
@@ -837,7 +829,7 @@ const ConversationSidebar = ({
                                 onOpenSettings={onOpenProfile}
                                 tooltip="Notifications"
                                 side="right"
-                                triggerClassName={cn(ICON_BTN, 'size-8')}
+                                triggerClassName={cn(ICON_BTN, FOOT_BTN, 'size-8')}
                             />
                             <DropdownMenu>
                                 <Tip
@@ -845,7 +837,7 @@ const ConversationSidebar = ({
                                     render={
                                         <DropdownMenuTrigger
                                             aria-label="Account menu"
-                                            className="flex size-8 items-center justify-center rounded-[var(--row-radius)] transition-colors duration-150 hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 aria-expanded:bg-sidebar-accent"
+                                            className="flex size-8 items-center justify-center rounded-full border border-transparent transition-colors duration-150 hover:border-[hsl(var(--wb-line))] hover:bg-[hsl(var(--brand-50))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 aria-expanded:border-[hsl(var(--brand-300))] aria-expanded:bg-[hsl(var(--brand-50))]"
                                         />
                                     }
                                 >

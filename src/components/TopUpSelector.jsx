@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, ArrowUpRight, Check } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import { apiUrl } from '@/config/api';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import { CountUp, SelectionMarker, StateButton } from '@/components/motion';
 
 const BEST_VALUE_QUERIES = 500; // lowest price per query
 const topUpTiers = [
@@ -54,7 +54,7 @@ const TopUpSelector = ({ userId, db, currentQueries, onTopUpSuccess }) => {
 
       const data = await response.json();
 
-      // Redirect to Dodo Payments checkout
+      // Redirect to the hosted checkout
       if (data.url) {
         window.location.href = data.url;
       } else {
@@ -68,78 +68,91 @@ const TopUpSelector = ({ userId, db, currentQueries, onTopUpSuccess }) => {
   };
 
   return (
-    <div className="w-full">
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-foreground">Buy more queries</h3>
-        <p className="mt-1 text-[13px] text-muted-foreground">
-          You have <span className="font-medium tabular-nums text-foreground">{currentQueries || 0}</span> queries left.
-          Top-ups are added to your balance and don&rsquo;t expire.
-        </p>
-      </div>
-
-      {error && (
-        <div role="alert" className="mb-4 flex items-start gap-2 rounded-md border border-border bg-[var(--error-soft)] px-3 py-2 text-[13px] text-destructive">
-          <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          <span>{error}</span>
+    <div className="wb-scope w-full" style={{ backgroundColor: 'transparent' }}>
+      <div className="wb-card p-5">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-[15px] font-semibold text-foreground">Buy more queries</h3>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              Top-ups are added to your balance and don&rsquo;t expire.
+            </p>
+          </div>
+          <span className="wb-chip shrink-0 tabular-nums" data-tone="brand" aria-label={`${currentQueries || 0} queries left`}>
+            <span><CountUp value={Number(currentQueries) || 0} duration={0.5} /> left</span>
+          </span>
         </div>
-      )}
 
-      <div role="radiogroup" aria-label="Top-up size" className="divide-y divide-border overflow-hidden rounded-lg border border-border">
-        {topUpTiers.map((tier) => {
-          const checked = tier.queries === selectedQueries;
-          const tag = tier.queries === BEST_VALUE_QUERIES ? 'Best value' : tier.popular ? 'Popular' : null;
-          return (
-            <label
-              key={tier.queries}
-              className={cn(
-                'flex min-h-11 cursor-pointer items-center gap-3 px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring/70',
-                checked ? 'bg-primary/5' : 'bg-card hover:bg-accent/50'
-              )}
-            >
-              <input
-                type="radio"
-                name="topup-tier"
-                value={tier.queries}
-                checked={checked}
-                disabled={loading}
-                onChange={() => setSelectedQueries(tier.queries)}
-                className="size-4 shrink-0 accent-[hsl(var(--primary))]"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium tabular-nums text-foreground">{tier.queries} queries</span>
-                  {tag && (
-                    <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-[12px] font-medium text-muted-foreground">
-                      {tag}
-                    </span>
+        {error && (
+          <div role="alert" className="wb-fade mb-4 flex items-start gap-2 rounded-2xl bg-[var(--error-soft)] px-3.5 py-2.5 text-[13px] text-[var(--error)]">
+            <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div role="radiogroup" aria-label="Top-up size" className="space-y-2">
+          {topUpTiers.map((tier, i) => {
+            const checked = tier.queries === selectedQueries;
+            const tag = tier.queries === BEST_VALUE_QUERIES ? 'Best value' : tier.popular ? 'Popular' : null;
+            return (
+              <label
+                key={tier.queries}
+                className={cn(
+                  'wb-row wb-rise relative min-h-[52px] cursor-pointer overflow-hidden has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[hsl(var(--ring))]',
+                  checked && 'border-[hsl(var(--brand-300))]',
+                  loading && 'pointer-events-none opacity-60'
+                )}
+                style={{ animationDelay: `${Math.min(i, 8) * 30}ms` }}
+              >
+                {checked && <SelectionMarker group="topup" bar={false} />}
+                <input
+                  type="radio"
+                  name="topup-tier"
+                  value={tier.queries}
+                  checked={checked}
+                  disabled={loading}
+                  onChange={() => setSelectedQueries(tier.queries)}
+                  className="sr-only"
+                />
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'relative flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors duration-150',
+                    checked ? 'border-[hsl(var(--brand-solid))] bg-[hsl(var(--brand-solid))] text-[hsl(var(--on-brand))]' : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))]'
                   )}
+                >
+                  {checked && <Check className="wb-draw-lucide size-3" strokeWidth={3} />}
                 </span>
-                <span className="mt-0.5 block text-[12px] tabular-nums text-muted-foreground">
-                  ${tier.perQuery.toFixed(3)} per query{tier.discount > 0 ? `, save ${tier.discount}%` : ''}
+                <span className="relative min-w-0 flex-1">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="text-[14px] font-medium tabular-nums text-foreground">{tier.queries} queries</span>
+                    {tag && <span className="wb-chip" data-tone="brand">{tag}</span>}
+                  </span>
+                  <span className="mt-0.5 block text-[12px] tabular-nums text-muted-foreground">
+                    ${tier.perQuery.toFixed(3)} per query{tier.discount > 0 ? `, save ${tier.discount}%` : ''}
+                  </span>
                 </span>
-              </span>
-              <span className="text-sm font-medium tabular-nums text-foreground">${tier.price.toFixed(2)}</span>
-            </label>
-          );
-        })}
-      </div>
+                <span className="relative pr-2 text-[14px] font-medium tabular-nums text-foreground">${tier.price.toFixed(2)}</span>
+              </label>
+            );
+          })}
+        </div>
 
-      <div className="mt-4 flex items-center justify-between gap-4">
-        <p className="text-sm text-muted-foreground">
-          Total <span className="ml-1 text-lg font-semibold tabular-nums text-foreground">${selected.price.toFixed(2)}</span>
-        </p>
-        <Button size="lg" className="h-10 px-5" onClick={() => handlePurchase(selected)} disabled={loading}>
-          {loading ? (
-            <>
-              <Loader2 className="animate-spin motion-reduce:animate-none" />
-              Opening checkout
-            </>
-          ) : (
-            `Buy ${selected.queries} queries`
-          )}
-        </Button>
+        <div className="mt-5 flex items-center justify-between gap-4">
+          <p className="text-[14px] text-muted-foreground">
+            Total <span key={selected.price} className="wb-fade ml-1 inline-block text-[18px] font-semibold tabular-nums text-foreground">${selected.price.toFixed(2)}</span>
+          </p>
+          <StateButton
+            size="lg"
+            state={loading ? 'running' : 'idle'}
+            labels={{ idle: `Buy ${selected.queries} queries`, running: 'Redirecting…' }}
+            icon={ArrowUpRight}
+            onClick={() => handlePurchase(selected)}
+            disabled={loading}
+            className="h-10 px-5"
+          />
+        </div>
+        <p className="mt-3 text-[12px] text-muted-foreground">Pro subscribers also receive 50 queries per month.</p>
       </div>
-      <p className="mt-3 text-[12px] text-muted-foreground">Pro subscribers also receive 50 queries per month.</p>
     </div>
   );
 };

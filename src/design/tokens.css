@@ -32,7 +32,7 @@
 
   --border: 60 4% 90.5%;
   --input: 60 3% 60%;
-  --ring: 175 32% 40%;                  /* focus ring: soft teal, 4.3:1 on white (the old 30% lightness read heavy) */
+  --ring: 177 40% 30%;                  /* focus ring; kept dark enough that ring-ring/70 stays >= 3:1 on the rail */
 
   --chart-1: 173 72% 30%;
   --chart-2: 217 70% 52%;
@@ -287,7 +287,7 @@ html, body {
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }
-:is([class*='focus-visible:ring'], [class*='focus:ring']):focus-visible:not([class*='focus-visible:outline-none']) {
+:is([class*='focus-visible:ring'], [class*='focus:ring']):focus-visible:not([class*='focus-visible:outline-none']):not([class*='focus:outline']):not([class*='outline-0']) {
   --tw-ring-shadow: 0 0 #0000 !important;
   --tw-ring-offset-shadow: 0 0 #0000 !important;
 }

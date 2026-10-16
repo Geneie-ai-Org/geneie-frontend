@@ -462,8 +462,8 @@
 [data-slot='alert-dialog-overlay'],
 [data-slot='sheet-overlay'] {
   background-color: hsl(var(--ov-scrim));
-  -webkit-backdrop-filter: blur(3px);
-  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
   transition: opacity 180ms var(--ease-out);
 }
 
@@ -508,7 +508,7 @@
 [data-slot='dialog-content'][data-starting-style], [data-slot='dialog-content'][data-ending-style],
 [data-slot='alert-dialog-content'][data-starting-style], [data-slot='alert-dialog-content'][data-ending-style] {
   opacity: 0;
-  transform: translate(-50%, calc(var(--tw-translate-y, -50%) + 8px)) scale(0.97);
+  transform: translate(var(--tw-translate-x, -50%), calc(var(--tw-translate-y, -50%) + 8px)) scale(0.97);
 }
 [data-slot='dialog-content'][data-ending-style],
 [data-slot='alert-dialog-content'][data-ending-style] { transition-duration: 110ms; }

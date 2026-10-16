@@ -37,7 +37,7 @@ export function HighlightPill() {
       pill.dataset.show = "false"
     }
     const place = (item) => {
-      if (!item || item.hasAttribute("data-disabled") || item.getAttribute("aria-disabled") === "true") {
+      if (!item || (item.hasAttribute("data-disabled") && item.getAttribute("data-disabled") !== "false") || item.getAttribute("aria-disabled") === "true") {
         hide()
         return
       }

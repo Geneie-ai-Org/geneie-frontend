@@ -389,8 +389,8 @@
 .ov-item[data-popup-open] { color: hsl(var(--brand-700)); }
 .ov-item[data-highlighted] svg,
 .ov-item[data-popup-open] svg { color: currentColor; }
-.ov-item:active:not([data-disabled]) { transform: scale(0.98); }
-.ov-item[data-disabled] { opacity: 0.45; pointer-events: none; }
+.ov-item:active:not([data-disabled]:not([data-disabled='false'])) { transform: scale(0.98); }
+.ov-item[data-disabled]:not([data-disabled='false']) { opacity: 0.45; pointer-events: none; }
 /* Destructive rows are plain until the pointer or keyboard lands on them, then pick up the status colour. */
 .ov-item[data-variant='destructive'][data-highlighted] { color: var(--error); }
 .ov-item[data-variant='destructive'][data-highlighted] svg { color: var(--error); }
@@ -536,7 +536,7 @@
   [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'],
   .ov-item, .ov-pill, .ov-trigger, .ov-trigger .ov-chev { transition: none; }
   .ov-check svg { animation: none; }
-  .ov-item:active:not([data-disabled]) { transform: none; }
+  .ov-item:active:not([data-disabled]:not([data-disabled='false'])) { transform: none; }
 }
 /* Pages outside the chat shell opt in with className="wb-scope" on their root. */
 .wb-scope { background-color: hsl(var(--wb-bg)); }

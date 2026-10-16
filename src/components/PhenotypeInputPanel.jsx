@@ -4,13 +4,14 @@
  * Disease matches are a shortcut to load annotated findings for review.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Check, ChevronDown, ChevronUp, Circle, Info, Lock, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, ChevronUp, Circle, Info, Lock, Plus, Search, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ChipList, CountUp, PopIn, StageMark } from '@/components/motion';
-import { interpretPhenotypeNarrative, resolveHpoTerms } from '@/services/mongodbApi';
+import { interpretPhenotypeNarrative, resolveHpoTerms, suggestHpoTerms } from '@/services/mongodbApi';
 import PanelAppSuggestSection from '@/components/PanelAppSuggestSection';
+import { AiSuggestedTag } from '@/components/tabs/ModeParts';
 
 export const PHENOTYPE_MODE_FINDINGS = 'findings';
 export const PHENOTYPE_MODE_DISEASE = 'disease';
@@ -745,6 +746,29 @@ export default function PhenotypeInputPanel({
     });
   };
 
+  /** A term the user searched for and picked: it joins the list already selected, marked as theirs. */
+  const addFinding = (hit) => {
+    const hid = String(hit?.hpo_id || '').trim().toUpperCase();
+    if (!hid.startsWith('HP:')) return;
+    const exists = candidates.some((c) => c.hpo_id === hid);
+    const next = exists
+      ? candidates.map((c) => (c.hpo_id === hid ? { ...c, selected: true } : c))
+      : [
+          ...candidates,
+          {
+            hpo_id: hid,
+            hpo_name: hit.hpo_name || '',
+            matched_phrase: hit.matched_phrase || hit.hpo_name || '',
+            match_score: hit.match_score,
+            match_type: 'user_added',
+            origin: 'user',
+            selected: true,
+            selected_default: false,
+          },
+        ];
+    emit({ candidates: next, phenotype_findings: findingsLabelFrom(next) });
+  };
+
   const setGroupSelected = (group, selected) => {
     const ids = new Set(group.map((c) => c.hpo_id));
     const next = candidates.map((c) => (ids.has(c.hpo_id) ? { ...c, selected } : c));
@@ -1240,8 +1264,9 @@ export default function PhenotypeInputPanel({
     return clinicalCandidates
       .map((c, i) => ({ c, i }))
       .sort((a, b) => {
-        const ao = a.c.origin === 'disease_annotation' ? 1 : 0;
-        const bo = b.c.origin === 'disease_annotation' ? 1 : 0;
+        const rank = (o) => (o === 'disease_annotation' ? 2 : o === 'user' ? 1 : 0);
+        const ao = rank(a.c.origin);
+        const bo = rank(b.c.origin);
         if (ao !== bo) return ao - bo;
         const diff = score(b.c) - score(a.c);
         if (diff !== 0) return diff;
@@ -1250,7 +1275,7 @@ export default function PhenotypeInputPanel({
       .map((x) => x.c);
   }, [clinicalCandidates]);
 
-  const noteFoundCount = orderedClinical.filter((c) => c.origin !== 'disease_annotation').length;
+  const noteFoundCount = orderedClinical.filter((c) => c.origin !== 'disease_annotation' && c.origin !== 'user').length;
   const clinicalSelectedCount = clinicalCandidates.filter((c) => c.selected).length;
   const visibleFindings = showAllFindings
     ? orderedClinical
@@ -1259,9 +1284,10 @@ export default function PhenotypeInputPanel({
   const hiddenSelectedCount = showAllFindings
     ? 0
     : orderedClinical.slice(FINDINGS_PREVIEW).filter((c) => c.selected).length;
-  const noteGroup = visibleFindings.filter((c) => c.origin !== 'disease_annotation');
+  const noteGroup = visibleFindings.filter((c) => c.origin !== 'disease_annotation' && c.origin !== 'user');
+  const userGroup = visibleFindings.filter((c) => c.origin === 'user');
   const conditionGroup = visibleFindings.filter((c) => c.origin === 'disease_annotation');
-  const groupsLabelled = noteGroup.length > 0 && conditionGroup.length > 0;
+  const groupsLabelled = [noteGroup, userGroup, conditionGroup].filter((g) => g.length > 0).length > 1;
 
   const unmappedCount = noteUnmapped.length;
   const draftLen = draft.trim().length;
@@ -1416,6 +1442,13 @@ export default function PhenotypeInputPanel({
           </div>
         )}
       </section>
+
+      {!disabled && (
+        <FindingSearch
+          selectedIds={new Set(candidates.filter((c) => c.selected).map((c) => c.hpo_id))}
+          onPick={addFinding}
+        />
+      )}
 
       {/* Loading skeleton: matches the finding chips' size, so nothing jumps when they arrive. */}
       {interpreting && !showFindingsStep && !showConditionStep && (
@@ -1582,11 +1615,54 @@ export default function PhenotypeInputPanel({
             </p>
           )}
 
+          {clinicalSelectedCount > 0 && (
+            <div className="rounded-2xl border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-50))] px-3 py-2.5" role="group" aria-label="Selected for ranking">
+              <p className="mb-1.5 flex items-center justify-between gap-2 text-xs font-medium text-[hsl(var(--brand-700))]">
+                <span>Selected for ranking</span>
+                <span className="tabular-nums"><CountUp value={clinicalSelectedCount} duration={0.3} /></span>
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <ChipList>
+                  {clinicalCandidates.filter((c) => c.selected).map((c) => {
+                    const label = c.hpo_name || c.matched_phrase || c.hpo_id;
+                    const ai = c.origin === 'note_phrase' || (c.origin !== 'disease_annotation' && c.origin !== 'user');
+                    return (
+                      <PopIn key={c.hpo_id} className="max-w-full">
+                        <span
+                          className={`inline-flex h-7 max-w-full items-center gap-1 rounded-full border bg-[hsl(var(--wb-card))] pl-2.5 pr-1 text-xs font-medium text-[hsl(var(--brand-700))] ${ai ? 'border-dashed border-[hsl(var(--brand-300))]' : 'border-[hsl(var(--brand-200))]'}`}
+                          title={c.hpo_id ? `${label} · ${c.hpo_id}` : label}
+                        >
+                          {ai ? <Sparkles aria-hidden className="size-3 shrink-0" /> : null}
+                          <span className="truncate">{label}</span>
+                          {ai ? <span className="sr-only"> (AI suggested)</span> : null}
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => toggleCandidate(c.hpo_id)}
+                            aria-label={`Remove ${label} from ranking`}
+                            className="inline-flex size-5 shrink-0 items-center justify-center rounded-full outline-none transition-colors hover:bg-[hsl(var(--brand-100))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:opacity-50 max-md:size-8"
+                          >
+                            <X className="size-3" aria-hidden />
+                          </button>
+                        </span>
+                      </PopIn>
+                    );
+                  })}
+                </ChipList>
+              </div>
+            </div>
+          )}
+
           {clinicalCandidates.length > 0 && (
             <div className="space-y-2.5">
               {noteGroup.length > 0 && (
-                <FindingGroup label={groupsLabelled ? 'From your note' : null}>
+                <FindingGroup label={groupsLabelled ? 'From your note' : null} aiTag>
                   {noteGroup.map(renderChip)}
+                </FindingGroup>
+              )}
+              {userGroup.length > 0 && (
+                <FindingGroup label="Added by you">
+                  {userGroup.map(renderChip)}
                 </FindingGroup>
               )}
               {conditionGroup.length > 0 && (
@@ -1673,7 +1749,107 @@ export default function PhenotypeInputPanel({
           />
         </section>
       )}
+
+      {/* What saving does, in words. The parent dialog owns the Save button. */}
+      {selectedCount > 0 && (
+        <section className="wb-rise rounded-2xl border border-dashed border-[hsl(var(--wb-line-strong))] px-3.5 py-3" aria-label="What happens next">
+          <p className="m-0 text-xs font-semibold text-foreground">What happens next</p>
+          <p className="m-0 mt-1 text-xs leading-relaxed text-muted-foreground">
+            Saving keeps these {selectedCount} finding{selectedCount === 1 ? '' : 's'} on the sample. When you run Phenotype
+            on the annotated file, variants are ranked by how well they fit them
+            {showPanelsStep ? '. The gene panels you pick boost their genes in the Triage ranking' : ''}.
+          </p>
+        </section>
+      )}
     </div>
+  );
+}
+
+/** Add one finding by name: live suggestions from the HPO typeahead, picked as pills. */
+function FindingSearch({ selectedIds, onPick }) {
+  const [q, setQ] = useState('');
+  const [hits, setHits] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const seq = useRef(0);
+  useEffect(() => {
+    const text = q.trim();
+    const mine = ++seq.current;
+    if (text.length < 2) {
+      setHits([]);
+      setLoading(false);
+      setFailed(false);
+      return undefined;
+    }
+    setLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await suggestHpoTerms({ text, limit: 8 });
+        if (mine !== seq.current) return;
+        setHits((res?.suggestions || []).filter((h) => String(h?.hpo_id || '').startsWith('HP:')));
+        setFailed(false);
+      } catch {
+        if (mine !== seq.current) return;
+        setHits([]);
+        setFailed(true);
+      } finally {
+        if (mine === seq.current) setLoading(false);
+      }
+    }, 260);
+    return () => clearTimeout(t);
+  }, [q]);
+  const text = q.trim();
+  return (
+    <section className="space-y-2" aria-label="Add a finding">
+      <div className="relative">
+        <Search aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <input
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Escape' && q) { e.preventDefault(); e.stopPropagation(); setQ(''); } }}
+          placeholder="Or add a finding by name, for example “nail dystrophy”"
+          aria-label="Add a finding by name"
+          aria-describedby="pheno-add-status"
+          className="h-9 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-9 pr-9 text-base text-foreground outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)] md:text-[13px] max-md:h-11 [&::-webkit-search-cancel-button]:hidden"
+        />
+        {q ? (
+          <button
+            type="button"
+            onClick={() => setQ('')}
+            aria-label="Clear search"
+            className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:size-9"
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        ) : null}
+      </div>
+      <p id="pheno-add-status" role="status" aria-live="polite" className="min-h-4 text-xs text-muted-foreground">
+        {loading ? 'Searching…' : failed ? 'Search is unavailable right now.' : text.length >= 2 && hits.length === 0 ? 'No matching terms. Try another word.' : ''}
+      </p>
+      {hits.length > 0 ? (
+        <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0" aria-label="Suggested terms">
+          {hits.map((h) => {
+            const picked = selectedIds.has(String(h.hpo_id).toUpperCase());
+            return (
+              <li key={h.hpo_id}>
+                <button
+                  type="button"
+                  disabled={picked}
+                  onClick={() => { onPick(h); }}
+                  title={`${h.hpo_name || h.matched_phrase} · ${h.hpo_id}`}
+                  className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-2 pr-3 text-xs font-medium text-foreground outline-none transition-colors duration-150 hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:opacity-60 motion-reduce:transition-none max-md:min-h-11"
+                >
+                  {picked ? <Check aria-hidden className="size-3 shrink-0" /> : <Plus aria-hidden className="size-3 shrink-0 text-muted-foreground" />}
+                  <span className="truncate">{h.hpo_name || h.matched_phrase || h.hpo_id}</span>
+                  {picked ? <span className="sr-only"> (already selected)</span> : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </section>
   );
 }
 
@@ -1692,10 +1868,15 @@ function StepHeader({ id, n, title, aside }) {
   );
 }
 
-function FindingGroup({ label, children }) {
+function FindingGroup({ label, aiTag = false, children }) {
   return (
     <div className="space-y-1.5">
-      {label ? <p className="px-1 text-xs font-medium text-muted-foreground">{label}</p> : null}
+      {label || aiTag ? (
+        <p className="flex items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground">
+          {label}
+          {aiTag ? <AiSuggestedTag>AI suggested from your note</AiSuggestedTag> : null}
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-1.5 max-md:gap-2">
         <ChipList>{children}</ChipList>
       </div>

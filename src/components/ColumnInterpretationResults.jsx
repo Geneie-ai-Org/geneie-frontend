@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useId, useRef } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { CheckCircle2, AlertCircle, ArrowRight, ChevronRight, ClipboardCheck, FileText, Info, Trash2, Filter, Stethoscope, Tags, X } from 'lucide-react';
+import { ArrowRight, ChevronRight, CircleCheck, CircleX, ClipboardCheck, FileText, Filter, Info, RefreshCw, Tags, Trash2, TriangleAlert, Wrench, X } from 'lucide-react';
 import { usePopOnChange } from '@/components/PipelineJobCard';
 import { Collapse, CountUp, HoldButton, StateButton, Turn } from '@/components/motion';
 import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
@@ -138,10 +138,15 @@ function summarizeStep(step) {
 }
 
 /** One column per row: the role we need, the column it was matched to in the file (a mono pill), and a status pill. */
-function ColumnRow({ role, matched, tone = 'success', word, note }) {
+function ColumnRow({ role, matched, tone = 'success', word, note, rid, flash = false }) {
   const reduce = useReducedMotion();
   return (
-    <li className="flex min-h-10 items-center gap-2 border-t px-3 py-1.5 text-[13px] first:border-t-0 max-md:min-h-11" style={{ borderColor: LINE }}>
+    <li
+      id={rid}
+      tabIndex={-1}
+      className={`flex min-h-10 items-center gap-2 border-t px-3 py-1.5 text-[13px] outline-none transition-colors duration-500 first:border-t-0 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none max-md:min-h-11 ${flash ? 'bg-[hsl(var(--brand-100))]' : ''}`}
+      style={{ borderColor: LINE }}
+    >
       <span className="min-w-0 flex-1 truncate" style={{ color: C.text }} title={note || role}>
         {role}
       </span>
@@ -198,6 +203,106 @@ function ColumnGroup({ label, found, missing, open, onToggle, children }) {
   );
 }
 
+/** Severity of a finding. Colour is paired with a distinct glyph and a word, never alone. */
+const SEV = {
+  blocking: { word: 'Blocking', icon: CircleX, fg: C.error, bg: C.errorSoft },
+  warning: { word: 'Warning', icon: TriangleAlert, fg: C.warning, bg: C.warningSoft },
+  note: { word: 'Note', icon: Info, fg: C.info, bg: C.infoSoft },
+  pass: { word: 'Passed', icon: CircleCheck, fg: C.success, bg: C.successSoft },
+};
+
+function SeverityBadge({ sev }) {
+  const s = SEV[sev];
+  const Icon = s.icon;
+  return (
+    <span
+      className="inline-flex h-[22px] shrink-0 items-center gap-1 rounded-full border px-2 text-[12px] font-medium"
+      style={{ background: s.bg, color: s.fg, borderColor: tint(s.fg, 24) }}
+    >
+      <Icon aria-hidden className="size-3" />
+      {s.word}
+    </span>
+  );
+}
+
+const missingNames = (cols) => Object.entries(cols || {}).filter(([, c]) => !c?.found).map(([n]) => n);
+const allNames = (cols) => Object.keys(cols || {});
+
+/** One finding: severity, what is wrong, what to do, the affected columns as jump chips, and the column list. */
+function IssueCard({ issue, open, onToggle, onJump }) {
+  const s = SEV[issue.sev];
+  const Icon = s.icon;
+  const panelId = `fc-issue-panel-${issue.id}`;
+  return (
+    <li id={`fc-issue-${issue.id}`} className="wb-card overflow-hidden">
+      <div className="flex items-start gap-3 px-3.5 py-3">
+        <span
+          aria-hidden
+          className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border"
+          style={{ background: s.bg, color: s.fg, borderColor: tint(s.fg, 24) }}
+        >
+          <Icon className="size-3.5" />
+        </span>
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <h4 className="m-0 text-[14px] font-medium leading-5" style={{ color: C.text }}>{issue.title}</h4>
+            <SeverityBadge sev={issue.sev} />
+          </div>
+          {issue.body ? <p className="m-0 text-[13px] leading-5" style={{ color: C.textMuted }}>{issue.body}</p> : null}
+          {issue.cols?.length ? (
+            <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0" aria-label="Affected columns">
+              {issue.cols.map((c) => (
+                <li key={`${c.sectionKey}-${c.name}`}>
+                  <button
+                    type="button"
+                    onClick={() => onJump(issue.id, c)}
+                    title={`Show ${c.name} in the column list`}
+                    className={`inline-flex h-6 max-w-full items-center rounded-full border px-2.5 font-mono text-[12px] transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] motion-reduce:transition-none max-md:h-9 ${FOCUS}`}
+                    style={{ borderColor: tint(s.fg, 30), color: C.text, background: 'hsl(var(--wb-card))' }}
+                  >
+                    <span className="truncate">{c.name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {issue.hint ? (
+            <p className="m-0 flex items-start gap-1.5 text-[13px] leading-5" style={{ color: C.text }}>
+              <Wrench aria-hidden className="mt-[3px] size-3.5 shrink-0" style={{ color: 'hsl(var(--brand-700))' }} />
+              <span><span className="font-medium">How to fix: </span>{issue.hint}</span>
+            </p>
+          ) : null}
+          {issue.actions || issue.detail ? (
+            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              {issue.actions}
+              {issue.detail ? (
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  aria-controls={panelId}
+                  onClick={onToggle}
+                  className={`inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[12px] font-medium transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] motion-reduce:transition-none max-md:h-11 ${FOCUS}`}
+                  style={{ color: 'hsl(var(--brand-700))' }}
+                >
+                  <Turn open={open}><ChevronRight aria-hidden className="size-3.5" /></Turn>
+                  {open ? 'Hide column list' : 'Show column list'}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </div>
+      {issue.detail ? (
+        <Collapse open={open} id={panelId}>
+          <div className="space-y-2 border-t bg-[hsl(var(--wb-pill)/0.5)] px-3 py-3" style={{ borderColor: LINE }}>
+            {issue.detail}
+          </div>
+        </Collapse>
+      ) : null}
+    </li>
+  );
+}
+
 const ColumnInterpretationResults = ({
   interpretationResult,
   onClose,
@@ -230,15 +335,19 @@ const ColumnInterpretationResults = ({
   // Workspace mode: render as plain panel content (no overlay, no close button, no Escape).
   // Default false keeps today's modal mount in ChatPage working.
   embedded = false,
+  // Optional states for a host that tracks the check itself (not wired by ChatPage yet).
+  checking = false,
+  checkError = null,
+  onRetryCheck,
 }) => {
-  const [expandedStep, setExpandedStep] = useState(initialStep ?? (hasAnnotatedFile ? 2 : null)); // Track which step is expanded
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // Explicit remove-file confirmation only
   const [showAnnovarConfirm, setShowAnnovarConfirm] = useState(false); // Confirm Annotation when all columns present
   const [openGroups, setOpenGroups] = useState({}); // sectionKey -> open (unset = open only when something is missing)
+  const [openIssues, setOpenIssues] = useState(() => (initialStep ? { [`cols${initialStep}`]: true } : {}));
+  const [showPassed, setShowPassed] = useState(false);
+  const [flashId, setFlashId] = useState(null);
   const settled = useSettled(); // bars start empty on open and glide to their value
   const reduceMotion = useReducedMotion();
-  // Direction of travel between steps (1 = forward). Only recomputed when the step actually changes.
-  const stepNav = useRef({ step: initialStep ?? (hasAnnotatedFile ? 2 : 1), dir: 1 });
 
   // Close on ESC (modal mode only). A nested confirm takes precedence over closing the whole view.
   useEffect(() => {
@@ -252,12 +361,65 @@ const ColumnInterpretationResults = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [embedded, showDeleteConfirm, showAnnovarConfirm, onClose]);
 
+  useEffect(() => {
+    if (!flashId) return undefined;
+    const t = setTimeout(() => setFlashId(null), 1800);
+    return () => clearTimeout(t);
+  }, [flashId]);
+
+  /** Chip click: open the finding's column list, open the right group, scroll to the row and flash it. */
+  const jumpToColumn = (issueId, col) => {
+    const rid = `fc-col-${col.sectionKey}-${col.name}`;
+    setOpenIssues((prev) => ({ ...prev, [issueId]: true }));
+    setOpenGroups((prev) => ({ ...prev, [col.sectionKey]: true }));
+    setFlashId(rid);
+    // Wait for the list to open, then bring the row into view and move focus to it.
+    setTimeout(() => {
+      const el = document.getElementById(rid);
+      if (!el) return;
+      el.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' });
+      el.focus({ preventScroll: true });
+    }, reduceMotion ? 30 : 280);
+  };
+
   const backgroundJobActive = isRunningAnnovar || isApplyingProprietaryFilter;
   const genomeMismatch = interpretationResult?.genome_build_check?.status === 'mismatch';
 
-  if (!interpretationResult) {
+  if (checking || checkError || !interpretationResult) {
     // Modal mode renders nothing without a result; the workspace tab explains itself instead.
-    return embedded ? (
+    if (!embedded) return null;
+    if (checking) {
+      return (
+        <div className="flex h-full min-h-0 flex-col gap-3 px-4 pb-4 pt-1" role="status" aria-busy="true" aria-label="Checking your file">
+          <div className="wb-card space-y-3 p-4">
+            <div className="flex items-center gap-3">
+              <span className="wb-shimmer size-9 rounded-full" />
+              <span className="flex-1 space-y-2"><span className="wb-shimmer block h-3.5 w-28 rounded-full" /><span className="wb-shimmer block h-3 w-48 rounded-full" /></span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">{[0, 1, 2].map((i) => <span key={i} className="wb-shimmer h-14 rounded-2xl" />)}</div>
+          </div>
+          {[0, 1].map((i) => <div key={i} className="wb-card space-y-2 p-4"><span className="wb-shimmer block h-3.5 w-40 rounded-full" /><span className="wb-shimmer block h-3 w-3/4 rounded-full" /></div>)}
+          <p className="px-1 text-[13px]" style={{ color: C.textMuted }}>Checking the columns of your file. This usually takes a few seconds.</p>
+        </div>
+      );
+    }
+    if (checkError) {
+      return (
+        <div className="flex h-full min-h-0 flex-col px-4 pb-4 pt-1">
+          <div className="wb-card flex flex-col items-center gap-2 px-6 py-10 text-center" role="alert">
+            <span className="mb-1 flex size-11 items-center justify-center rounded-full border" style={{ background: C.errorSoft, color: C.error, borderColor: tint(C.error, 22) }} aria-hidden="true">
+              <CircleX className="size-5" />
+            </span>
+            <p className="text-[15px] font-medium" style={{ color: C.text }}>The file check did not finish</p>
+            <p className="max-w-xs text-[13px] leading-5" style={{ color: C.textMuted }}>{String(checkError)}</p>
+            {onRetryCheck ? (
+              <Button type="button" variant="outline" size="sm" onClick={onRetryCheck} className="mt-1.5 max-md:h-11"><RefreshCw aria-hidden /> Check again</Button>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+    return (
       <div className="flex h-full min-h-0 flex-col items-center justify-center gap-1.5 px-8 text-center text-foreground">
         <span className="mb-1 flex size-10 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-500))]" aria-hidden="true">
           <ClipboardCheck className="size-5" />
@@ -267,10 +429,10 @@ const ColumnInterpretationResults = ({
           Geneie checks the columns of a variants file as soon as you add one. The result appears here.
         </p>
       </div>
-    ) : null;
+    );
   }
 
-  const { step1, step2, step3, overall_status, recommendations } = interpretationResult;
+  const { step1, step2, step3, recommendations } = interpretationResult;
   const annovarQuotaBlocked = annovarGate?.allowed === false;
   const annovarEnabled = Boolean(step1?.passed) && !genomeMismatch && !annovarQuotaBlocked;
   const annovarMeter = annovarGate?.meter;
@@ -282,107 +444,8 @@ const ColumnInterpretationResults = ({
   const acmgMeterLabel = acmgMeter?.tracked && !acmgMeter.unlimited && acmgMeter.remaining != null
     ? formatAcmgPhenotypeMeterLabel(acmgMeter.remaining, acmgMeter.limit)
     : null;
+  const annovarAlreadyRun = hasAnnotatedFile || Boolean(step2?.passed);
 
-  // Determine status for each step
-  const step1Status = step1?.passed ? 'passed' : 'failed';
-  const step2Req = step2?.required_columns || {};
-  const step2AcmgReady = Boolean(
-    step2Req.CLNSIG?.found || step2Req.InterVar_automated?.found
-  );
-  const step2Status = step2?.not_implemented
-    ? 'pending'
-    : step2?.passed
-      ? 'passed'
-      : step2?.partially_passed
-        ? 'partial'
-        : 'failed';
-  const step3Status = step3?.not_implemented ? 'pending' : (step3?.passed ? 'passed' : 'failed');
-
-  // Calculate Step 1 progress percentage based on found columns
-  const step1Progress = (() => {
-    if (step1?.passed) return 100;
-    const required = step1?.required_columns || {};
-    const totalRequired = Object.keys(required).length;
-    if (totalRequired === 0) return 0;
-    const foundCount = Object.values(required).filter(col => col.found).length;
-    return Math.round((foundCount / totalRequired) * 100);
-  })();
-
-  // Calculate Step 2 progress (proprietary filter columns + pathogenicity predictors)
-  const step2Progress = (() => {
-    if (step2?.passed) return 100;
-    if (step2?.not_implemented) return 0;
-
-    const required = step2?.required_columns || {};
-    const predictors = step2?.pathogenicity_predictor_group || {};
-    const requiredFound = Object.values(required).filter((col) => col.found).length;
-    const totalRequired = Object.keys(required).length;
-    const predictorFound = Object.values(predictors).filter((col) => col.found).length;
-    const minPredictors = 2;
-
-    let progress = totalRequired > 0 ? (requiredFound / totalRequired) * 70 : 0;
-    progress += Math.min(predictorFound / minPredictors, 1) * 30;
-    return Math.round(Math.min(progress, 99));
-  })();
-
-  // Calculate Step 3 progress percentage based on found columns
-  const step3Progress = (() => {
-    if (step3?.passed) return 100;
-    if (step3?.not_implemented) return 0;
-    
-    const required = step3?.required_columns || {};
-    const sample_genotype_group = step3?.sample_genotype_group || {};
-    const pathogenicity_score_group = step3?.pathogenicity_score_group || {};
-    const conditional = step3?.conditional_columns || {};
-    
-    // Count required columns found
-    const requiredFound = Object.values(required).filter(col => col.found).length;
-    const totalRequired = Object.keys(required).length;
-    
-    // Check if at least one from each group is found
-    const hasGenotype = Object.values(sample_genotype_group).some(col => col.found);
-    const hasScore = Object.values(pathogenicity_score_group).some(col => col.found);
-    
-    // Count conditional columns that are required and found
-    // Conditional columns are marked with col.required = true if they're actually required
-    const conditionalEntries = Object.entries(conditional);
-    const conditionalRequired = conditionalEntries.filter(([_, col]) => col.required && col.found).length;
-    const totalConditionalRequired = conditionalEntries.filter(([_, col]) => col.required).length;
-    
-    // Step 3 needs: all required + 1 genotype + 1 score + required conditionals
-    // Each component is weighted equally
-    const components = [];
-    
-    // Required columns component (0-100% based on found/total)
-    if (totalRequired > 0) {
-      components.push((requiredFound / totalRequired) * 100);
-    }
-    
-    // Genotype group component (0 or 100%)
-    components.push(hasGenotype ? 100 : 0);
-    
-    // Score group component (0 or 100%)
-    components.push(hasScore ? 100 : 0);
-    
-    // Conditional required component (0-100% based on found/total)
-    if (totalConditionalRequired > 0) {
-      components.push((conditionalRequired / totalConditionalRequired) * 100);
-    }
-    
-    // Average all components
-    if (components.length === 0) return 0;
-    const average = components.reduce((sum, val) => sum + val, 0) / components.length;
-    return Math.round(average);
-  })();
-
-  // Get overall recommendations (now generated at top level, not per-step)
-  // Recommendations are now short and prioritized:
-  // - TSV/CSV:
-  //     - If Step 1 fails: "Upload a VCF file (VCF tab) to enable ANNOVAR annotation."
-  // - VCF:
-  //     - If Step 1 fails: Essential VCF columns missing → recommend raw data upload (no ANNOVAR).
-  // - Any source:
-  //     - If Step 1 passes but Step 2/3 fails: "Run ANNOVAR to add missing columns."
   // Recommendations come from the backend, which still names the ANNOVAR tool.
   // The UI only ever says "Annotation", so strip the tool name before display.
   const allRecommendations = (recommendations || []).map((r) =>
@@ -393,42 +456,27 @@ const ColumnInterpretationResults = ({
           .replace(/\bANNOVAR\b/g, 'Annotation')
       : r
   );
-  
-  // Get primary recommendation (first one, usually most important)
   const primaryRecommendation = allRecommendations.length > 0 ? allRecommendations[0] : null;
-  
-  // Determine which button is recommended based on step status
-  const getRecommendedButton = () => {
-    if (!step1?.passed) {
-      // For TSV/CSV, recommend VCF upload. For VCF uploads, Step 1 failure means
-      // essential VCF columns are missing — recommend raw sequencing (FASTQ) upload.
-      return isVcfFile ? 'fastq' : 'vcf';
-    } else if (!step2?.passed) {
-      return 'annovar';
-    } else if (!step3?.passed) {
-      return null;
-    }
-    return null; // No specific recommendation, all passed
-  };
-  
-  const recommendedButton = getRecommendedButton();
 
-  const getStepLabel = (status) => {
-    if (status === 'passed') return 'Complete';
-    if (status === 'pending') return 'Pending';
-    return 'Incomplete';
-  };
+  const rowsFlagged = (() => {
+    const r = interpretationResult || {};
+    return (
+      (r.variants_skipped_invalid_alleles || 0) +
+      (r.variants_skipped_invalid_predictors || 0) +
+      (r.variants_skipped_invalid_genotype || 0) +
+      (r.variants_skipped_invalid_mandatory_annotation || 0)
+    );
+  })();
+  const gbc = interpretationResult?.genome_build_check;
 
-  // Short status line shown under each stepper node.
-  const getStepSubtitle = (status) => {
-    if (status === 'passed') return 'Complete';
-    if (status === 'pending') return 'Not started';
-    if (status === 'partial') return 'Partly met';
-    return 'Needs columns';
-  };
+  const columnTotals = [step1, step2, step3].map(summarizeStep).reduce(
+    (acc, t) => ({ found: acc.found + t.found, missing: acc.missing + t.missing }),
+    { found: 0, missing: 0 }
+  );
+  const totalColumns = columnTotals.found + columnTotals.missing;
+  const foundPct = totalColumns > 0 ? Math.round((columnTotals.found / totalColumns) * 100) : 0;
 
-  /** One group of columns as a list: a sticky header with the counts, then one 32px row per column.
-   *  Groups with nothing missing start collapsed; groups with a problem start open. */
+  /** One group of columns as a list. Groups with nothing missing start collapsed; groups with a problem start open. */
   const renderColumnGroup = (sectionKey, label, columns, columnsNoValidValues = [], opts = {}) => {
     const entries = Object.entries(columns);
     if (!entries.length) return null;
@@ -442,6 +490,7 @@ const ColumnInterpretationResults = ({
     const missingTone = opts.optional || groupSatisfied ? 'neutral' : 'error';
     const defaultOpen = issues.length > 0 && !groupSatisfied && !opts.optional;
     const open = openGroups[sectionKey] ?? defaultOpen;
+    const rid = (name) => `fc-col-${sectionKey}-${name}`;
 
     return (
       <ColumnGroup
@@ -454,6 +503,8 @@ const ColumnInterpretationResults = ({
         {issues.map(([colName]) => (
           <ColumnRow
             key={colName}
+            rid={rid(colName)}
+            flash={flashId === rid(colName)}
             role={colName}
             tone={missingTone}
             word={columnsNoValidValues.includes(colName) ? 'No values' : opts.missingLabel || 'Missing'}
@@ -462,6 +513,8 @@ const ColumnInterpretationResults = ({
         {found.map(([colName, colInfo]) => (
           <ColumnRow
             key={colName}
+            rid={rid(colName)}
+            flash={flashId === rid(colName)}
             role={colName}
             matched={colInfo.matched_column && colInfo.matched_column !== colName ? colInfo.matched_column : colName}
             tone="success"
@@ -481,6 +534,7 @@ const ColumnInterpretationResults = ({
     const issues = entries.filter(([, c]) => !c.found);
     const missingCount = issues.filter(([, c]) => c.required).length;
     const open = openGroups[sectionKey] ?? missingCount > 0;
+    const rid = (name) => `fc-col-${sectionKey}-${name}`;
 
     return (
       <ColumnGroup
@@ -493,6 +547,8 @@ const ColumnInterpretationResults = ({
         {issues.map(([colName, colInfo]) => (
           <ColumnRow
             key={colName}
+            rid={rid(colName)}
+            flash={flashId === rid(colName)}
             role={colName}
             tone={colInfo.required ? 'error' : 'neutral'}
             word={colInfo.required ? 'Missing' : 'Optional'}
@@ -501,6 +557,8 @@ const ColumnInterpretationResults = ({
         {found.map(([colName, colInfo]) => (
           <ColumnRow
             key={colName}
+            rid={rid(colName)}
+            flash={flashId === rid(colName)}
             role={colName}
             matched={colInfo.matched_column && colInfo.matched_column !== colName ? colInfo.matched_column : colName}
             tone="success"
@@ -512,213 +570,307 @@ const ColumnInterpretationResults = ({
     );
   };
 
-  const renderStepDetails = (stepNumber, stepData) => {
+  /** The column lists behind a finding, one step at a time. */
+  const renderStepDetailsFor = (stepNumber, stepData) => {
+    if (!stepData || stepData.not_implemented) return null;
+    const columnsNoValidValues = stepData.columns_no_valid_values || [];
     if (stepNumber === 1) {
-      const required = stepData.required_columns || {};
-      const columnsNoValidValues = stepData.columns_no_valid_values || [];
+      return <div className="space-y-2">{renderColumnGroup('step1_required', 'Required columns', stepData.required_columns || {}, columnsNoValidValues)}</div>;
+    }
+    if (stepNumber === 2) {
+      const missing_groups = stepData.missing_groups || [];
       return (
         <div className="space-y-2">
-          {renderColumnGroup(`step1_required`, 'Required columns', required, columnsNoValidValues)}
-        </div>
-      );
-    } else if (stepNumber === 2) {
-      if (stepData.not_implemented) {
-        return (
-          <Notice tone="info" icon={Info}>
-            Column definitions are pending. Proprietary filters stay unavailable until the column list is provided.
-          </Notice>
-        );
-      }
-
-      const required = stepData.required_columns || {};
-      const pathogenicity_group = stepData.pathogenicity_predictor_group || {};
-      const missing_groups = stepData.missing_groups || [];
-      const columnsNoValidValues = stepData.columns_no_valid_values || [];
-
-      return (
-        <div className="space-y-3 text-sm">
-          <div className="space-y-2">
-          {renderColumnGroup(`step2_required`, 'Required columns', required, columnsNoValidValues)}
-          {renderColumnGroup(`step2_pathogenicity`, 'Pathogenicity predictors (at least 2 required)', pathogenicity_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 2 })}
-          </div>
-
+          {renderColumnGroup('step2_required', 'Required columns', stepData.required_columns || {}, columnsNoValidValues)}
+          {renderColumnGroup('step2_pathogenicity', 'Pathogenicity predictors (at least 2 required)', stepData.pathogenicity_predictor_group || {}, columnsNoValidValues, { missingLabel: 'Not found', minFound: 2 })}
           {missing_groups.length > 0 && (
-            <Notice tone="error" icon={AlertCircle}>
+            <Notice tone="error" icon={TriangleAlert}>
               <p className="font-medium">Missing groups</p>
               <ul className="mt-1 list-inside list-disc">
-                {missing_groups.map((group, idx) => (
-                  <li key={idx}>{group}</li>
-                ))}
-              </ul>
-            </Notice>
-          )}
-        </div>
-      );
-    } else if (stepNumber === 3) {
-      if (stepData.not_implemented) {
-        return null;
-      }
-
-      const required = stepData.required_columns || {};
-      const sample_genotype_group = stepData.sample_genotype_group || {};
-      const pathogenicity_score_group = stepData.pathogenicity_score_group || {};
-      const conditional = stepData.conditional_columns || {};
-      const columnsNoValidValues = stepData.columns_no_valid_values || [];
-      const optional = stepData.optional_columns || {};
-      const missing_groups = stepData.missing_groups || [];
-
-      return (
-        <div className="space-y-3 text-sm">
-          <div className="space-y-2">
-          {renderColumnGroup(`step3_required`, 'Required columns', required, columnsNoValidValues)}
-          {renderColumnGroup(`step3_genotype`, 'Sample genotype (any one required)', sample_genotype_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 1 })}
-          {renderColumnGroup(`step3_pathscore`, 'Pathogenicity scores (any one required)', pathogenicity_score_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 1 })}
-          {renderConditionalGroup(`step3_conditional`, 'Conditional columns', conditional)}
-          {renderColumnGroup(`step3_optional`, 'Optional columns', optional, [], { missingLabel: 'Not found', optional: true })}
-          </div>
-
-          {missing_groups.length > 0 && (
-            <Notice tone="warning" icon={AlertCircle}>
-              <p className="font-medium">Missing column groups</p>
-              <ul className="mt-1 list-inside list-disc">
-                {missing_groups.map((group, idx) => (
-                  <li key={idx}>{group}</li>
-                ))}
+                {missing_groups.map((group, idx) => <li key={idx}>{group}</li>)}
               </ul>
             </Notice>
           )}
         </div>
       );
     }
-    return null;
+    const missing_groups = stepData.missing_groups || [];
+    return (
+      <div className="space-y-2">
+        {renderColumnGroup('step3_required', 'Required columns', stepData.required_columns || {}, columnsNoValidValues)}
+        {renderColumnGroup('step3_genotype', 'Sample genotype (any one required)', stepData.sample_genotype_group || {}, columnsNoValidValues, { missingLabel: 'Not found', minFound: 1 })}
+        {renderColumnGroup('step3_pathscore', 'Pathogenicity scores (any one required)', stepData.pathogenicity_score_group || {}, columnsNoValidValues, { missingLabel: 'Not found', minFound: 1 })}
+        {renderConditionalGroup('step3_conditional', 'Conditional columns', stepData.conditional_columns || {})}
+        {missing_groups.length > 0 && (
+          <Notice tone="warning" icon={TriangleAlert}>
+            <p className="font-medium">Missing column groups</p>
+            <ul className="mt-1 list-inside list-disc">
+              {missing_groups.map((group, idx) => <li key={idx}>{group}</li>)}
+            </ul>
+          </Notice>
+        )}
+      </div>
+    );
   };
 
-  /** Close dialog only — file stays on the conversation (Phase F background UX). */
-  const handleDismiss = () => {
-    onClose?.();
-  };
+  // ---- Findings, derived from the check result
+  const issues = [];
+  const passes = [];
 
-  const handleConfirmDelete = async () => {
-    if (onDeleteDocument) {
-      await onDeleteDocument();
-    }
-    setShowDeleteConfirm(false);
-    onClose?.();
-  };
+  // What the user can do about a missing-columns problem on step 1.
+  const canFixByUpload = showVcfTabHighlight && (isVcfFile ? onUploadRawSequencing : onTryVcfUpload);
+  const fixUploadLabel = isVcfFile ? 'Upload raw sequencing data' : 'Try VCF upload';
+  const runFixUpload = () => (isVcfFile ? onUploadRawSequencing?.() : onTryVcfUpload?.());
 
-  // --- Stepper model ---
-  const stepperSteps = [
-    {
-      n: 1,
-      name: isVcfFile ? 'Ready for annotation' : 'VCF reconstruction',
-      icon: FileText,
-      status: step1Status,
-      progress: step1Progress,
-      data: step1,
+  if (genomeMismatch) {
+    issues.push({
+      id: 'genome',
+      sev: 'blocking',
+      title: 'Genome build mismatch',
+      body: gbc.message || `You selected ${(gbc.declared || '').toUpperCase()}, but the coordinates match ${(gbc.likely || '').toUpperCase()}.`,
+      hint: 'Update the genome in sample information, or re-upload the file. Annotation and phenotype prioritization stay off until then.',
+    });
+  } else if (gbc?.status === 'inconclusive') {
+    issues.push({
+      id: 'genome',
+      sev: 'warning',
+      title: 'Genome build not verified',
+      body: gbc.message || 'Geneie could not confirm which genome build the coordinates use.',
+      hint: 'Double-check the genome in sample information before running annotation.',
+    });
+  } else if (gbc?.status === 'match') {
+    passes.push(`Genome build verified: ${(gbc.declared || '').toUpperCase()}`);
+  }
+
+  if (step1 && !step1.passed) {
+    const miss = [...new Set([...missingNames(step1.required_columns), ...(step1.columns_no_valid_values || [])])];
+    const total = allNames(step1.required_columns).length;
+    issues.push({
+      id: 'cols1',
+      sev: 'blocking',
+      title: 'Required columns missing',
+      body: miss.length
+        ? `${miss.length}${total ? ` of ${total}` : ''} required ${miss.length === 1 ? 'column is' : 'columns are'} missing or empty. Annotation cannot run without them.`
+        : 'Some required columns are missing or empty. Annotation cannot run without them.',
+      cols: miss.map((name) => ({ name, sectionKey: 'step1_required' })),
+      hint: isVcfFile
+        ? 'Essential VCF columns are missing. Upload raw sequencing data when it is available.'
+        : 'Upload a VCF for better results, or convert this file to VCF.',
+      actions: canFixByUpload || (!isVcfFile && onConvertToVcf) ? (
+        !isVcfFile && onConvertToVcf ? (
+          <StateButton
+            state={isConvertingToVcf ? 'running' : 'idle'}
+            labels={{ idle: 'Convert file to VCF', running: 'Converting' }}
+            icon={FileText}
+            variant="outline"
+            size="sm"
+            onClick={() => onConvertToVcf()}
+            disabled={isConvertingToVcf || backgroundJobActive}
+            className="max-md:h-11"
+          />
+        ) : null
+      ) : null,
+      detail: renderStepDetailsFor(1, step1),
+    });
+  } else if (step1) {
+    passes.push(`Required columns present (${allNames(step1.required_columns).length})`);
+  }
+
+  if (step2 && !step2.not_implemented && !step2.passed) {
+    const reqMiss = missingNames(step2.required_columns);
+    const predMiss = missingNames(step2.pathogenicity_predictor_group);
+    const predFound = allNames(step2.pathogenicity_predictor_group).length - predMiss.length;
+    const predShort = step2.pathogenicity_predictor_group && predFound < 2;
+    const cols = [
+      ...reqMiss.map((name) => ({ name, sectionKey: 'step2_required' })),
+      ...(predShort ? predMiss.map((name) => ({ name, sectionKey: 'step2_pathogenicity' })) : []),
+    ];
+    const bits = [];
+    if (reqMiss.length) bits.push(`${reqMiss.length} required annotation ${reqMiss.length === 1 ? 'column' : 'columns'} missing`);
+    if (predShort) bits.push(`${predFound} of 2 pathogenicity predictors found`);
+    issues.push({
+      id: 'cols2',
+      sev: 'warning',
+      title: 'Annotation columns incomplete',
+      body: bits.length ? `${bits.join('; ')}. The ACMG filter and phenotype ranking need them.` : 'Some annotation columns are missing. The ACMG filter and phenotype ranking need them.',
+      cols,
+      hint: step1?.passed
+        ? (primaryRecommendation && /annotation/i.test(primaryRecommendation) ? primaryRecommendation : 'Run annotation to add the missing columns.')
+        : 'Fix the required columns first. Annotation cannot run until then.',
+      detail: renderStepDetailsFor(2, step2),
+    });
+  } else if (step2 && !step2.not_implemented) {
+    passes.push('Annotation columns present');
+  }
+  if (step2?.pathogenicity_predictor_limitation) {
+    issues.push({
+      id: 'predictors',
+      sev: 'note',
+      title: 'Fewer pathogenicity predictors',
+      body: 'Not all predictor columns are present. Filtering works with the predictors you have (for example SIFT, PolyPhen), so results may be more limited.',
+    });
+  }
+
+  if (step3 && !step3.not_implemented && !step3.passed) {
+    const reqMiss = missingNames(step3.required_columns);
+    const gtGroup = step3.sample_genotype_group || {};
+    const psGroup = step3.pathogenicity_score_group || {};
+    const gtMiss = Object.keys(gtGroup).length > 0 && !Object.values(gtGroup).some((c) => c.found) ? allNames(gtGroup) : [];
+    const psMiss = Object.keys(psGroup).length > 0 && !Object.values(psGroup).some((c) => c.found) ? allNames(psGroup) : [];
+    const condMiss = Object.entries(step3.conditional_columns || {}).filter(([, c]) => c.required && !c.found).map(([n]) => n);
+    const cols = [
+      ...reqMiss.map((name) => ({ name, sectionKey: 'step3_required' })),
+      ...gtMiss.map((name) => ({ name, sectionKey: 'step3_genotype' })),
+      ...psMiss.map((name) => ({ name, sectionKey: 'step3_pathscore' })),
+      ...condMiss.map((name) => ({ name, sectionKey: 'step3_conditional' })),
+    ];
+    const bits = [];
+    if (reqMiss.length) bits.push(`${reqMiss.length} required ${reqMiss.length === 1 ? 'column' : 'columns'} missing`);
+    if (gtMiss.length) bits.push('no sample genotype column');
+    if (psMiss.length) bits.push('no pathogenicity score column');
+    if (condMiss.length) bits.push(`${condMiss.length} conditional ${condMiss.length === 1 ? 'column' : 'columns'} required`);
+    issues.push({
+      id: 'cols3',
+      sev: 'warning',
+      title: 'Clinical decision columns missing',
+      body: bits.length ? `${bits.join('; ')}.` : 'Some columns for the clinical decision step are missing.',
+      cols,
+      hint: 'Add these columns to your file. Annotation can supply some of them.',
+      detail: renderStepDetailsFor(3, step3),
+    });
+  } else if (step3 && !step3.not_implemented) {
+    passes.push('Clinical decision columns present');
+  }
+
+  if (rowsFlagged > 0) {
+    issues.push({
+      id: 'flagged',
+      sev: 'warning',
+      title: `${rowsFlagged.toLocaleString()} ${rowsFlagged === 1 ? 'row' : 'rows'} flagged for quality review`,
+      body: 'Values in these rows did not look valid (alleles, predictors, genotype or mandatory annotation). Every row is stored; none were removed.',
+    });
+  }
+
+  const optMiss = missingNames(step3?.optional_columns);
+  if (optMiss.length) {
+    issues.push({
+      id: 'optional',
+      sev: 'note',
+      title: 'Optional columns not found',
+      body: 'Nothing is blocked by these. They add extra evidence when present.',
+      cols: optMiss.map((name) => ({ name, sectionKey: 'step3_optional' })),
+      detail: renderColumnGroup('step3_optional', 'Optional columns', step3.optional_columns || {}, [], { missingLabel: 'Not found', optional: true }),
+    });
+  }
+
+  const sevOrder = { blocking: 0, warning: 1, note: 2 };
+  issues.sort((a, b) => sevOrder[a.sev] - sevOrder[b.sev]);
+  const counts = {
+    blocking: issues.filter((i) => i.sev === 'blocking').length,
+    warning: issues.filter((i) => i.sev === 'warning').length,
+    note: issues.filter((i) => i.sev === 'note').length,
+  };
+  const verdict = counts.blocking > 0 ? 'blocked' : counts.warning > 0 || interpretationResult.overall_status !== 'passed' ? 'warn' : 'pass';
+
+  // ---- The decision: what to do first, and the way past it --------------------------------------
+  const annotateFixes = step1?.passed && !genomeMismatch && (step2 && !step2.not_implemented && !step2.passed) && !annovarAlreadyRun;
+  const handleDismiss = () => onClose?.();
+  const continueLabel = backgroundJobActive ? 'Continue in background' : chatAllowed ? 'Continue' : 'Continue to chat';
+  const annotateRun = () => {
+    const allComplete = step1?.passed && step2?.passed && step3?.passed;
+    if (allComplete) setShowAnnovarConfirm(true);
+    else onAnnovarClick?.();
+  };
+  const annotateState = isRunningAnnovar ? 'running' : annovarAlreadyRun ? 'done' : 'idle';
+  const annotateReason = genomeMismatch
+    ? 'Annotation and phenotype prioritization need a matching genome build. Fix the mismatch first.'
+    : !step1?.passed
+      ? isVcfFile
+        ? 'Essential VCF columns are missing. Upload raw data when available.'
+        : 'Upload a VCF to enable annotation.'
+      : annovarQuotaBlocked
+        ? annovarGate.reason
+        : annovarAlreadyRun
+          ? 'Already run on this file.'
+          : null;
+
+  const verdictCopy = {
+    blocked: {
+      word: 'Blocking',
+      title: 'Fix this before annotating',
+      body: `${counts.blocking} blocking ${counts.blocking === 1 ? 'problem keeps' : 'problems keep'} annotation off. You can still continue to chat without it.`,
     },
-    {
-      n: 2,
-      name: step2?.step_name || 'Annotation stage',
-      icon: Filter,
-      status: step2Status,
-      progress: step2Progress,
-      data: step2,
+    warn: {
+      word: 'Warnings',
+      title: 'Ready, with limits',
+      body: counts.warning > 0
+        ? `${counts.warning} ${counts.warning === 1 ? 'warning limits' : 'warnings limit'} what you can run. Nothing is blocked.`
+        : 'Some features may be limited. Nothing is blocked.',
     },
-    {
-      n: 3,
-      name: 'Clinical decision',
-      icon: Stethoscope,
-      status: step3Status,
-      progress: step3Progress,
-      data: step3,
-    },
+    pass: { word: 'Passed', title: 'Ready for analysis', body: 'Every check passed. You can annotate, filter and chat.' },
+  }[verdict];
+  const VerdictIcon = verdict === 'blocked' ? CircleX : verdict === 'warn' ? TriangleAlert : CircleCheck;
+  const vSev = verdict === 'blocked' ? 'blocking' : verdict === 'warn' ? 'warning' : 'pass';
+  const vS = SEV[vSev];
+
+  const tiles = [
+    { key: 'blocking', value: counts.blocking, label: 'Blocking' },
+    { key: 'warning', value: counts.warning, label: counts.warning === 1 ? 'Warning' : 'Warnings' },
+    { key: 'pass', value: passes.length, label: 'Passed' },
   ];
 
-  // Always start on Step 1 — users walk through the pipeline in order via Next/Prev.
-  const selectedStep = expandedStep ?? 1;
-  if (stepNav.current.step !== selectedStep) {
-    stepNav.current = { step: selectedStep, dir: selectedStep > stepNav.current.step ? 1 : -1 };
-  }
-  const stepDir = stepNav.current.dir;
-  const selectedStepData = stepperSteps.find((s) => s.n === selectedStep);
-  const canGoBack = selectedStep > 1;
-  const canGoForward = selectedStep < stepperSteps.length;
-  const nextIsPrimary = selectedStepData?.status !== 'failed';
-  const goToStep = (n) => setExpandedStep(Math.max(1, Math.min(stepperSteps.length, n)));
-
-  const rowsFlagged = (() => {
-    const r = interpretationResult || {};
-    return (
-      (r.variants_skipped_invalid_alleles || 0) +
-      (r.variants_skipped_invalid_predictors || 0) +
-      (r.variants_skipped_invalid_genotype || 0) +
-      (r.variants_skipped_invalid_mandatory_annotation || 0)
-    );
-  })();
-  const gbc = interpretationResult?.genome_build_check;
-
-  const stepTone = (status) =>
-    status === 'passed' ? 'success' : status === 'pending' ? 'info' : status === 'partial' ? 'warning' : 'error';
-
-  const columnTotals = [step1, step2, step3].map(summarizeStep).reduce(
-    (acc, t) => ({ found: acc.found + t.found, missing: acc.missing + t.missing }),
-    { found: 0, missing: 0 }
-  );
-
-  // Arrow keys, Home and End move between the step tabs (roving tabindex, automatic activation).
-  const onStepTabKeyDown = (e) => {
-    const last = stepperSteps.length;
-    let next = null;
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = selectedStep >= last ? 1 : selectedStep + 1;
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = selectedStep <= 1 ? last : selectedStep - 1;
-    else if (e.key === 'Home') next = 1;
-    else if (e.key === 'End') next = last;
-    if (next == null) return;
-    e.preventDefault();
-    setExpandedStep(next);
-    document.getElementById(`file-step-tab-${next}`)?.focus();
-  };
-
-  const totalColumns = columnTotals.found + columnTotals.missing;
-  const foundPct = totalColumns > 0 ? Math.round((columnTotals.found / totalColumns) * 100) : 0;
-  const summaryCard = (
-    <section className="wb-card p-4" aria-labelledby="file-analysis-title">
+  const verdictCard = (
+    <section className="wb-card p-4" aria-labelledby="file-check-verdict-title" data-verdict={verdict}>
       <div className="flex items-start gap-3">
         <span
-          className="flex size-9 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-500))]"
           aria-hidden="true"
+          className="flex size-10 shrink-0 items-center justify-center rounded-full border"
+          style={{ background: vS.bg, color: vS.fg, borderColor: tint(vS.fg, 24) }}
         >
-          <ClipboardCheck className="size-4" />
+          <VerdictIcon className="size-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 id="file-analysis-title" className="m-0 text-[15px] font-medium leading-6" style={{ color: C.text }}>
-            File check
-          </h2>
-          <p className="m-0 mt-0.5 text-[13px] leading-5" style={{ color: C.textMuted }}>
-            {overall_status === 'passed' ? 'Your file is ready for analysis.' : 'Some features may be limited.'}
-          </p>
+          <div className="flex items-start justify-between gap-2">
+            <h2 id="file-check-verdict-title" className="m-0 text-[15px] font-medium leading-6" style={{ color: C.text }}>
+              {verdictCopy.title}
+            </h2>
+            <SeverityBadge sev={vSev} />
+          </div>
+          <p className="m-0 mt-0.5 text-[13px] leading-5" style={{ color: C.textMuted }}>{verdictCopy.body}</p>
         </div>
-        <Chip tone={overall_status === 'passed' ? 'success' : 'warning'}>
-          {overall_status === 'passed' ? 'Ready' : 'Limited'}
-        </Chip>
       </div>
-      <div className="mt-4 rounded-xl bg-[hsl(var(--brand-50))] px-3.5 py-3">
-        <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
-          <span className="text-[28px] font-medium leading-none tabular-nums tracking-tight text-[hsl(var(--brand-700))]">
-            <RollUp value={columnTotals.found} />
-          </span>
-          <span className="text-[13px]" style={{ color: C.textMuted }}>
-            {columnTotals.found === 1 ? 'column' : 'columns'} recognised
-            {columnTotals.missing > 0 ? (
-              <>
-                , <span className="font-medium tabular-nums" style={{ color: C.error }}><RollUp value={columnTotals.missing} /></span> need a look
-              </>
-            ) : null}
-          </span>
-        </div>
-        {totalColumns > 0 ? (
+
+      <ul className="m-0 mt-3.5 grid list-none grid-cols-3 gap-2 p-0" aria-label="Check results">
+        {tiles.map((t) => {
+          const s = SEV[t.key];
+          const Icon = s.icon;
+          const live = t.value > 0;
+          return (
+            <li
+              key={t.key}
+              className="flex flex-col gap-1 rounded-2xl border px-3 py-2"
+              style={live ? { background: s.bg, borderColor: tint(s.fg, 22) } : { borderColor: LINE }}
+            >
+              <span className="flex items-center gap-1.5 text-[12px]" style={{ color: live ? s.fg : C.textMuted }}>
+                <Icon aria-hidden className="size-3.5" />
+                {t.label}
+              </span>
+              <span className="text-[22px] font-medium leading-none tabular-nums" style={{ color: live ? C.text : C.textMuted }}>
+                <RollUp value={t.value} />
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+
+      {totalColumns > 0 ? (
+        <div className="mt-3.5">
+          <div className="flex items-baseline justify-between gap-2 text-xs tabular-nums" style={{ color: C.textMuted }}>
+            <span><span className="font-medium" style={{ color: C.text }}>{columnTotals.found}</span> of {totalColumns} columns recognised</span>
+            {columnTotals.missing > 0 ? <span><span className="font-medium" style={{ color: C.error }}>{columnTotals.missing}</span> to look at</span> : <span>All found</span>}
+          </div>
           <div
-            className="wb-track mt-3"
+            className="wb-track mt-1.5"
             role="progressbar"
             aria-label="Columns recognised"
             aria-valuemin={0}
@@ -727,11 +879,8 @@ const ColumnInterpretationResults = ({
           >
             <div className="wb-fill" style={{ width: `${settled ? Math.max(foundPct, 2) : 0}%` }} />
           </div>
-        ) : null}
-        <p className="m-0 mt-2 text-xs tabular-nums" style={{ color: C.textMuted }}>
-          Across {stepperSteps.length} steps
-        </p>
-      </div>
+        </div>
+      ) : null}
     </section>
   );
 
@@ -739,45 +888,155 @@ const ColumnInterpretationResults = ({
     <div className="flex-shrink-0 border-b border-border px-4 pb-3 pt-4 sm:px-6">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 id="file-analysis-title" className="text-sm font-semibold" style={{ color: C.text }}>
-            File analysis
-          </h2>
-          <p className="mt-0.5 text-[13px]" style={{ color: C.textMuted }}>
-            {overall_status === 'passed' ? 'Your file is ready for analysis.' : 'Some features may be limited.'}
-          </p>
-          <p className="mt-1 text-[13px] tabular-nums" style={{ color: C.textMuted }}>
-            <span style={{ color: C.success }}>{columnTotals.found.toLocaleString()} found</span>
-            {' '}&middot;{' '}
-            <span style={{ color: columnTotals.missing > 0 ? C.error : C.textMuted }}>
-              {columnTotals.missing.toLocaleString()} missing
-            </span>
-            {' '}across {stepperSteps.length} steps
-          </p>
+          <h2 id="file-analysis-title" className="text-sm font-semibold" style={{ color: C.text }}>File check</h2>
+          <p className="mt-0.5 text-[13px]" style={{ color: C.textMuted }}>{verdictCopy.title}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Chip tone={overall_status === 'passed' ? 'success' : 'warning'}>
-            {overall_status === 'passed' ? 'Ready' : 'Limited'}
-          </Chip>
-          {!embedded && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => onClose?.()}
-              aria-label="Close"
-              className="-mr-1.5 max-md:size-11"
-            >
-              <X aria-hidden />
-            </Button>
-          )}
+          <SeverityBadge sev={vSev} />
+          <Button type="button" variant="ghost" size="icon-sm" onClick={() => onClose?.()} aria-label="Close" className="-mr-1.5 max-md:size-11">
+            <X aria-hidden />
+          </Button>
         </div>
       </div>
     </div>
   );
 
+  const groups = [
+    ['blocking', 'Blocking'],
+    ['warning', 'Warnings'],
+    ['note', 'Notes'],
+  ];
+
+  const issuesList = issues.length > 0 ? (
+    <div className="space-y-4">
+      {groups.map(([sev, title]) => {
+        const list = issues.filter((i) => i.sev === sev);
+        if (!list.length) return null;
+        return (
+          <section key={sev} aria-label={title} className="space-y-2">
+            <h3 className="m-0 flex items-center gap-2 px-1 text-[12px] font-medium uppercase tracking-wide" style={{ color: SEV[sev].fg }}>
+              {title}
+              <span className="rounded-full px-1.5 text-[11px] tabular-nums" style={{ background: SEV[sev].bg }}>{list.length}</span>
+            </h3>
+            <ul className="m-0 list-none space-y-2 p-0">
+              {list.map((issue) => (
+                <IssueCard
+                  key={issue.id}
+                  issue={issue}
+                  open={Boolean(openIssues[issue.id])}
+                  onToggle={() => setOpenIssues((prev) => ({ ...prev, [issue.id]: !prev[issue.id] }))}
+                  onJump={jumpToColumn}
+                />
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
+  ) : null;
+
+  const passedBlock = passes.length > 0 ? (
+    <section className="wb-card overflow-hidden" aria-label="Passed checks">
+      <button
+        type="button"
+        aria-expanded={showPassed}
+        aria-controls="fc-passed"
+        onClick={() => setShowPassed((v) => !v)}
+        className={`flex min-h-10 w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] font-medium transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] motion-reduce:transition-none max-md:min-h-11 ${FOCUS} focus-visible:-outline-offset-2`}
+      >
+        <Turn open={showPassed}><ChevronRight aria-hidden className="size-3.5" style={{ color: C.textDim }} /></Turn>
+        <CircleCheck aria-hidden className="size-3.5" style={{ color: C.success }} />
+        <span className="flex-1" style={{ color: C.text }}>Passed checks</span>
+        <span className="text-xs tabular-nums" style={{ color: C.textMuted }}>{passes.length}</span>
+      </button>
+      <Collapse open={showPassed} id="fc-passed">
+        <ul className="m-0 list-none border-t p-0" style={{ borderColor: LINE }}>
+          {passes.map((p) => (
+            <li key={p} className="flex items-center gap-2 border-t px-3.5 py-2 text-[13px] first:border-t-0" style={{ borderColor: LINE, color: C.text }}>
+              <CircleCheck aria-hidden className="size-3.5 shrink-0" style={{ color: C.success }} />
+              {p}
+            </li>
+          ))}
+        </ul>
+      </Collapse>
+    </section>
+  ) : null;
+
+  // What comes after the check: the tools that need a clean file. Hidden while the file is blocked.
+  const nextTools = verdict !== 'blocked' ? (
+    <section className="wb-card space-y-3 p-4" aria-label="After the check">
+      <p className="wb-card-title m-0">After the check</p>
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
+        {!annotateFixes ? (
+          <div className="max-w-xs space-y-1">
+            <StateButton
+              state={annotateState}
+              labels={{ idle: 'Run annotation', running: 'Running annotation', done: 'Annotation done' }}
+              icon={Tags}
+              variant="outline"
+              onClick={annovarEnabled && !annovarAlreadyRun ? annotateRun : undefined}
+              disabled={!(annovarEnabled && !annovarAlreadyRun) && !isRunningAnnovar}
+              className="max-md:h-11"
+            />
+            {annotateReason ? <p className="text-xs" style={{ color: annovarQuotaBlocked ? C.error : C.textMuted }}>{annotateReason}</p> : null}
+            {annovarMeterLabel && !annovarQuotaBlocked ? (
+              <p className="text-[12px] tabular-nums" style={{ color: C.textMuted }}>
+                {annovarMeterLabel}{annovarMeterDetail && <span> · {annovarMeterDetail}</span>}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="max-w-xs space-y-1">
+          <StateButton
+            state={isApplyingProprietaryFilter ? 'running' : acmgFilterActive ? 'done' : 'idle'}
+            labels={{ idle: 'ACMG', running: 'Applying', done: 'ACMG applied' }}
+            icon={Filter}
+            variant="outline"
+            onClick={() => onProprietaryFilterClick?.('filter_1')}
+            disabled={!acmgFilterCanApply || isApplyingProprietaryFilter || acmgFilterActive}
+            className="max-md:h-11"
+            style={acmgFilterActive ? { borderColor: 'hsl(var(--brand-300))', background: 'hsl(var(--brand-100))', color: 'hsl(var(--brand-700))' } : undefined}
+          />
+          {/* Quota and readiness are different problems, so they get different copy. */}
+          {!acmgFilterCanApply && !acmgFilterActive && step1?.passed && !acmgQuotaBlocked ? (
+            <p className="text-xs" style={{ color: C.textMuted }}>Run annotation first. The ACMG filter needs ClinVar or InterVar annotations and gnomAD frequency.</p>
+          ) : null}
+          {(acmgMeterLabel || acmgQuotaBlocked) && !acmgFilterActive ? (
+            <p className="text-[12px] tabular-nums" style={{ color: acmgQuotaBlocked ? C.error : C.textMuted }}>
+              {acmgQuotaBlocked ? acmgExomiserGate.reason : acmgMeterLabel}
+              {!acmgQuotaBlocked && acmgMeterDetail && <span> · {acmgMeterDetail}</span>}
+            </p>
+          ) : null}
+        </div>
+
+        {onOpenExomiser ? (() => {
+          // Exomiser applies draw on the same metered budget as ACMG.
+          const exomiserEnabled = exomiserCanApply && !genomeMismatch && !acmgQuotaBlocked && !phenotypeMissing;
+          const reason = genomeMismatch
+            ? 'Annotation and phenotype prioritization need a matching genome build. Fix the mismatch first.'
+            : phenotypeMissing
+              ? 'Add a phenotype description in sample info to enable phenotype-driven prioritization. Everything else runs without one.'
+              : 'Run annotation first. Phenotype prioritization needs an annotated file.';
+          return (
+            <div className="max-w-xs space-y-1">
+              <Button type="button" variant="outline" onClick={() => onOpenExomiser()} disabled={!exomiserEnabled} className="max-md:h-11">
+                <PhenotypeAiLabel variant="inline" />
+              </Button>
+              {!exomiserEnabled && step1?.passed ? (
+                <p className="text-xs" style={{ color: genomeMismatch ? C.error : C.textMuted }}>{reason}</p>
+              ) : null}
+            </div>
+          );
+        })() : null}
+      </div>
+      <p className="m-0 text-xs" style={{ color: C.textMuted }}>You can also skip filters and chat directly.</p>
+    </section>
+  ) : null;
+
   const content = (
     <div className={`min-h-0 flex-1 space-y-3 overflow-y-auto ${embedded ? 'px-4 pb-4 pt-1' : 'px-4 py-4 sm:px-6'}`}>
-      {embedded && summaryCard}
+      {verdictCard}
 
       {backgroundJobActive && (
         <Notice tone="info" icon={Info}>
@@ -787,348 +1046,55 @@ const ColumnInterpretationResults = ({
         </Notice>
       )}
 
-      {rowsFlagged > 0 && (
-        <Notice tone="warning" icon={AlertCircle}>
-          <span className="font-medium tabular-nums">{rowsFlagged.toLocaleString()}</span> rows flagged for quality
-          review. All stored.
-        </Notice>
-      )}
-
-      {gbc?.status === 'mismatch' && (
-        <Notice tone="error" icon={AlertCircle}>
-          <span className="font-medium">Genome mismatch.</span>{' '}
-          {gbc.message ||
-            `You selected ${(gbc.declared || '').toUpperCase()}, but coordinates match ${(gbc.likely || '').toUpperCase()}. Annotation and phenotype prioritization cannot run until this is resolved. Update the genome in sample information or re-upload.`}
-        </Notice>
-      )}
-      {gbc?.status === 'match' && (
-        <p className="m-0 flex items-center gap-1.5 px-1 text-xs" style={{ color: C.textMuted }}>
-          <CheckCircle2 className="size-3.5" style={{ color: C.success }} aria-hidden />
-          Genome build verified: {(gbc.declared || '').toUpperCase()}
-        </p>
-      )}
-      {gbc?.status === 'inconclusive' && (
-        <Notice tone="warning" icon={AlertCircle}>
-          {gbc.message || 'Could not verify the genome build. Double-check it before running annotation.'}
-        </Notice>
-      )}
-
-      {/* Steps: three pill cards, one per stage. */}
-      <div role="tablist" aria-label="Analysis steps" aria-orientation="horizontal" onKeyDown={onStepTabKeyDown} className="grid grid-cols-3 gap-2">
-        {stepperSteps.map((s) => {
-          const isSel = s.n === selectedStep;
-          const tone = stepTone(s.status);
-          return (
-            <button
-              key={s.n}
-              type="button"
-              role="tab"
-              id={`file-step-tab-${s.n}`}
-              aria-selected={isSel}
-              aria-controls="file-step-panel"
-              tabIndex={isSel ? 0 : -1}
-              onClick={() => setExpandedStep(s.n)}
-              className={`flex min-w-0 flex-col items-start gap-2 rounded-2xl border p-3 text-left transition-colors duration-150 motion-reduce:transition-none max-md:min-h-11 ${FOCUS} ${
-                isSel
-                  ? 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))]'
-                  : 'border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))]'
-              }`}
-            >
-              <span className="text-xs tabular-nums" style={{ color: isSel ? 'hsl(var(--brand-700))' : C.textMuted }}>
-                Step {s.n}
-              </span>
-              <span className="text-[13px] font-medium leading-snug" style={{ color: C.text }}>
-                {s.name}
-              </span>
-              <Chip tone={tone}>{getStepSubtitle(s.status)}</Chip>
-              <span aria-hidden className="wb-track w-full" style={isSel ? { background: 'hsl(var(--wb-card))' } : undefined}>
-                <span
-                  className="wb-fill block"
-                  style={{
-                    width: `${settled ? s.progress : 0}%`,
-                    background: s.status === 'failed' ? C.error : undefined,
-                  }}
-                />
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Step detail and its actions travel together: they slide 8px in the direction of travel. */}
-      <AnimatePresence mode="wait" initial={false} custom={stepDir}>
-        <motion.div
-          key={selectedStep}
-          custom={stepDir}
-          className="space-y-3"
-          variants={{
-            enter: (d) => ({ opacity: 0, x: reduceMotion ? 0 : d * 8 }),
-            center: { opacity: 1, x: 0, transition: { duration: reduceMotion ? 0 : 0.18, ease: [0.22, 1, 0.36, 1] } },
-            exit: (d) => ({ opacity: 0, x: reduceMotion ? 0 : d * -8, transition: { duration: reduceMotion ? 0 : 0.12, ease: [0.4, 0, 1, 1] } }),
-          }}
-          initial="enter"
-          animate="center"
-          exit="exit"
-        >
-      {/* Selected step detail */}
-      {selectedStepData && (
-        <div
-          role="tabpanel"
-          id="file-step-panel"
-          aria-labelledby={`file-step-tab-${selectedStepData.n}`}
-          tabIndex={0}
-          className={`wb-card space-y-3 p-4 ${FOCUS}`}
-        >
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="m-0 text-[13px] font-medium" style={{ color: C.text }}>
-              {selectedStepData.name}
-            </h3>
-            {(() => {
-              const t = summarizeStep(selectedStepData.data);
-              return t.found + t.missing > 0 ? (
-                <span className="shrink-0 text-xs tabular-nums" style={{ color: C.textMuted }}>
-                  {t.found} found{t.missing > 0 ? `, ${t.missing} missing` : ''}
-                </span>
-              ) : null;
-            })()}
-          </div>
-          {renderStepDetails(selectedStepData.n, selectedStepData.data) || (
-            <p className="m-0 text-xs" style={{ color: C.textMuted }}>
-              No column details available for this step yet.
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Limitation: not all Pathog predictor columns present (Step 2) */}
-      {step2?.pathogenicity_predictor_limitation && (
-        <Notice tone="warning" icon={AlertCircle}>
-          Not all pathogenicity predictor columns are present. Filtering works with the predictors you have
-          (for example SIFT, PolyPhen); results may be limited.
-        </Notice>
-      )}
-
-      {/* Actions for this step. Reasons are plain text under the button, never hover-only. */}
-      <div className="wb-card space-y-3 p-4">
-        <p className="wb-card-title m-0">
-          {selectedStep === 1 ? 'Review' : selectedStep === 2 ? 'Annotate' : 'Apply filters'}
-        </p>
-        <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
-          {selectedStep === 1 && (
-            <>
-              {showVcfTabHighlight && (
-                <>
-                  <div className="max-w-xs space-y-1">
-                    <Button
-                      type="button"
-                      variant={recommendedButton === 'vcf' || recommendedButton === 'fastq' ? 'default' : 'outline'}
-                      onClick={() => {
-                        if (recommendedButton === 'vcf' && onTryVcfUpload) {
-                          onTryVcfUpload();
-                        } else if (recommendedButton === 'fastq' && onUploadRawSequencing) {
-                          onUploadRawSequencing();
-                        }
-                      }}
-                      className="max-md:h-11"
-                    >
-                      {isVcfFile ? 'Upload raw sequencing data' : 'Try VCF upload for better results'}
-                    </Button>
-                    {primaryRecommendation && (recommendedButton === 'vcf' || recommendedButton === 'fastq') && (
-                      <p className="text-xs" style={{ color: C.textMuted }}>
-                        {primaryRecommendation}
-                      </p>
-                    )}
-                  </div>
-                  {!isVcfFile && onConvertToVcf && (
-                    <StateButton
-                      state={isConvertingToVcf ? 'running' : 'idle'}
-                      labels={{ idle: 'Convert file to VCF', running: 'Converting' }}
-                      icon={FileText}
-                      variant="outline"
-                      onClick={() => onConvertToVcf()}
-                      disabled={isConvertingToVcf || backgroundJobActive}
-                      className="max-md:h-11"
-                    />
-                  )}
-                </>
-              )}
-
-              {!showVcfTabHighlight && step1?.passed && (
-                <p className="text-xs" style={{ color: C.textMuted }}>
-                  All required columns are present. Continue to the next step.
-                </p>
-              )}
-            </>
-          )}
-
-          {selectedStep === 2 && (
-            <>
-              {hasAnnotatedFile && (
-                <p className="w-full text-xs" style={{ color: C.success }}>
-                  Columns added. Continue to apply filters.
-                </p>
-              )}
-
-              {/* Run Annotation stays on screen once the file is annotated, disabled, so the
-                * step keeps the same shape before and after the run. */}
-              {(() => {
-                const annovarAlreadyRun = hasAnnotatedFile || step2?.passed;
-                const annovarActionable = annovarEnabled && !annovarAlreadyRun;
-                const reason = genomeMismatch
-                  ? 'Annotation and phenotype prioritization need a matching genome build. Fix the mismatch first.'
-                  : !step1?.passed
-                    ? isVcfFile
-                      ? 'Essential VCF columns are missing. Upload raw data when available.'
-                      : 'Upload a VCF to enable annotation.'
-                    : annovarQuotaBlocked
-                      ? annovarGate.reason
-                      : annovarAlreadyRun
-                        ? 'Already run on this file.'
-                        : recommendedButton === 'annovar'
-                          ? primaryRecommendation
-                          : null;
-                return (
-                  <div className="max-w-xs space-y-1">
-                    <StateButton
-                      state={isRunningAnnovar ? 'running' : annovarAlreadyRun ? 'done' : 'idle'}
-                      labels={{ idle: 'Run annotation', running: 'Running annotation', done: 'Annotation done' }}
-                      icon={Tags}
-                      variant={annovarActionable && !nextIsPrimary ? 'default' : 'outline'}
-                      onClick={
-                        annovarActionable
-                          ? () => {
-                              const allComplete = step1?.passed && step2?.passed && step3?.passed;
-                              if (allComplete) setShowAnnovarConfirm(true);
-                              else onAnnovarClick?.();
-                            }
-                          : undefined
-                      }
-                      disabled={!annovarActionable && !isRunningAnnovar}
-                      className="max-md:h-11"
-                    />
-                    {reason && (
-                      <p className="text-xs" style={{ color: genomeMismatch || annovarQuotaBlocked ? C.error : C.textMuted }}>
-                        {reason}
-                      </p>
-                    )}
-                    {annovarMeterLabel && !annovarQuotaBlocked && (
-                      <p className="text-[12px] tabular-nums" style={{ color: C.textMuted }}>
-                        {annovarMeterLabel}
-                        {annovarMeterDetail && <span> · {annovarMeterDetail}</span>}
-                      </p>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {!hasAnnotatedFile && step2?.passed && (
-                <p className="w-full text-xs" style={{ color: C.textMuted }}>
-                  All annotation columns are present. Continue to the next step.
-                </p>
-              )}
-            </>
-          )}
-
-          {selectedStep === 3 && (
-            <>
-              <div className="max-w-xs space-y-1">
-                <StateButton
-                  state={isApplyingProprietaryFilter ? 'running' : acmgFilterActive ? 'done' : 'idle'}
-                  labels={{ idle: 'ACMG', running: 'Applying', done: 'ACMG applied' }}
-                  icon={Filter}
-                  variant="outline"
-                  onClick={() => onProprietaryFilterClick?.('filter_1')}
-                  disabled={!acmgFilterCanApply || isApplyingProprietaryFilter || acmgFilterActive}
-                  className="max-md:h-11"
-                  style={acmgFilterActive ? { borderColor: 'hsl(var(--brand-300))', background: 'hsl(var(--brand-100))', color: 'hsl(var(--brand-700))' } : undefined}
-                />
-                {/* Quota and readiness are different problems, so they get different copy. */}
-                {!acmgFilterCanApply && !acmgFilterActive && step1?.passed && !acmgQuotaBlocked && (
-                  <p className="text-xs" style={{ color: C.textMuted }}>
-                    Run annotation first. The ACMG filter needs ClinVar or InterVar annotations and gnomAD frequency.
-                  </p>
-                )}
-                {(acmgMeterLabel || acmgQuotaBlocked) && !acmgFilterActive && (
-                  <p className="text-[12px] tabular-nums" style={{ color: acmgQuotaBlocked ? C.error : C.textMuted }}>
-                    {acmgQuotaBlocked ? acmgExomiserGate.reason : acmgMeterLabel}
-                    {!acmgQuotaBlocked && acmgMeterDetail && <span> · {acmgMeterDetail}</span>}
-                  </p>
-                )}
-              </div>
-
-              {/* Exomiser needs an annotated file; remaining eligibility (phenotype, germline) is checked in the sidebar tab */}
-              {onOpenExomiser && (() => {
-                // Exomiser applies draw on the same metered budget as ACMG.
-                const exomiserEnabled =
-                  exomiserCanApply && !genomeMismatch && !acmgQuotaBlocked && !phenotypeMissing;
-                const reason = genomeMismatch
-                  ? 'Annotation and phenotype prioritization need a matching genome build. Fix the mismatch first.'
-                  : phenotypeMissing
-                    ? 'Add a phenotype description in sample info to enable phenotype-driven prioritization. Everything else runs without one.'
-                    : 'Run annotation first. Phenotype prioritization needs an annotated file.';
-                return (
-                  <div className="max-w-xs space-y-1">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => onOpenExomiser()}
-                      disabled={!exomiserEnabled}
-                      className="max-md:h-11"
-                    >
-                      <PhenotypeAiLabel variant="inline" />
-                    </Button>
-                    {!exomiserEnabled && step1?.passed && (
-                      <p className="text-xs" style={{ color: genomeMismatch ? C.error : C.textMuted }}>
-                        {reason}
-                      </p>
-                    )}
-                  </div>
-                );
-              })()}
-
-              <p className="w-full text-xs" style={{ color: C.textMuted }}>
-                You can also skip filters and chat directly.
-              </p>
-            </>
-          )}
-        </div>
-      </div>
-        </motion.div>
-      </AnimatePresence>
+      {issuesList}
+      {passedBlock}
+      {nextTools}
     </div>
   );
 
+  // The decision bar: one primary action that follows the verdict, and the way past it.
+  const fixPrimary = verdict === 'blocked'
+    ? (canFixByUpload ? { label: fixUploadLabel, run: runFixUpload } : null)
+    : annotateFixes
+      ? { annotate: true }
+      : null;
+  const decisionNote = verdict === 'blocked'
+    ? 'Recommended: fix it first. If you proceed anyway, annotation and the filters that need these columns will not run.'
+    : annotateFixes
+      ? 'Annotation adds the missing columns. Proceeding without it keeps those features limited.'
+      : verdict === 'warn'
+        ? 'Nothing here stops you. The warnings only limit some features.'
+        : null;
+
   const footer = (
     <div
-      className={`flex flex-shrink-0 items-center justify-between gap-3 border-t px-4 py-3 ${embedded ? '' : 'bg-background sm:px-6'}`}
+      className={`flex flex-shrink-0 flex-col gap-2 border-t px-4 py-3 ${embedded ? '' : 'bg-background sm:px-6'}`}
       style={{ borderColor: LINE }}
     >
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => goToStep(selectedStep - 1)}
-        disabled={!canGoBack}
-        className="max-md:h-11"
-      >
-        Previous
-      </Button>
-      <span className="text-xs tabular-nums" style={{ color: C.textMuted }} aria-live="polite">
-        Step {selectedStep} of {stepperSteps.length}
-      </span>
-      {canGoForward ? (
-        <Button
-          type="button"
-          variant={nextIsPrimary ? 'default' : 'outline'}
-          onClick={() => goToStep(selectedStep + 1)}
-          className="max-md:h-11"
-        >
-          Next
-        </Button>
-      ) : (
-        <Button type="button" onClick={handleDismiss} className="max-md:h-11">
-          {backgroundJobActive ? 'Continue in background' : chatAllowed ? 'Continue' : 'Continue to chat'}
-        </Button>
-      )}
+      {decisionNote ? <p className="m-0 text-xs leading-5" style={{ color: C.textMuted }}>{decisionNote}</p> : null}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {verdict === 'pass' || (!fixPrimary && verdict !== 'blocked') ? (
+          <Button type="button" onClick={handleDismiss} className="max-md:h-11">{continueLabel}</Button>
+        ) : (
+          <>
+            <Button type="button" variant="outline" onClick={handleDismiss} className="max-md:h-11">
+              {backgroundJobActive ? 'Continue in background' : 'Proceed anyway'}
+            </Button>
+            {fixPrimary?.annotate ? (
+              <StateButton
+                state={annotateState}
+                labels={{ idle: 'Run annotation', running: 'Running annotation', done: 'Annotation done' }}
+                icon={Tags}
+                onClick={annovarEnabled ? annotateRun : undefined}
+                disabled={!annovarEnabled && !isRunningAnnovar}
+                className="max-md:h-11"
+              />
+            ) : fixPrimary ? (
+              <Button type="button" onClick={fixPrimary.run} className="max-md:h-11">{fixPrimary.label}</Button>
+            ) : null}
+          </>
+        )}
+      </div>
     </div>
   );
 
@@ -1145,7 +1111,16 @@ const ColumnInterpretationResults = ({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep file</AlertDialogCancel>
-            <HoldButton tone="danger" icon={Trash2} doneLabel="Removing" onConfirm={handleConfirmDelete}>
+            <HoldButton
+              tone="danger"
+              icon={Trash2}
+              doneLabel="Removing"
+              onConfirm={async () => {
+                if (onDeleteDocument) await onDeleteDocument();
+                setShowDeleteConfirm(false);
+                onClose?.();
+              }}
+            >
               Hold to delete file
             </HoldButton>
           </AlertDialogFooter>
@@ -1184,7 +1159,7 @@ const ColumnInterpretationResults = ({
           {footer}
         </div>
       ) : (
-        // Modal mode (current ChatPage mount). The backdrop does not close, which avoids
+        // Modal mode (kept for hosts that still mount it as a dialog). The backdrop does not close, which avoids
         // stacked-modal mis-clicks; use the close button or Continue.
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 supports-backdrop-filter:backdrop-blur-sm">
           <div

@@ -79,20 +79,15 @@ function PanelRow({ row, checked, disabled, onToggle, topScore, rank, showCue })
   const ratio = hasScore ? Math.min(1, score / topScore) : 0;
   const green = Number(row.green_count) || 0;
   const amber = Number(row.amber_count) || 0;
-  const metaBits = [];
-  if (geneN > 0) {
-    metaBits.push(
-      `${fmt(geneN)} ${showCue ? 'matching ' : ''}gene${geneN === 1 ? '' : 's'}`
-    );
-    if (showCue && (green || amber)) {
-      const parts = [];
-      if (green) parts.push(`${green} high-confidence`);
-      if (amber) parts.push(`${amber} lower`);
-      metaBits.push(parts.join(', '));
-    }
-  } else if (showCue && row.reason) {
-    metaBits.push(row.reason);
-  }
+  // Why this panel is listed: the API's own reason, minus the gene counts the pills already show.
+  const why = showCue
+    ? String(row.reason || '')
+        .split(';')
+        .map((x) => x.trim())
+        .filter((x) => x && !/gene\(s\)$/i.test(x) && x !== 'gene overlap')
+        .join('; ')
+    : '';
+  const whyText = why ? `${why.charAt(0).toUpperCase()}${why.slice(1)}` : '';
   return (
     <button
       type="button"
@@ -101,10 +96,10 @@ function PanelRow({ row, checked, disabled, onToggle, topScore, rank, showCue })
       disabled={disabled}
       onClick={() => onToggle(id)}
       title={row.reason || undefined}
-      className={`group flex w-full items-start gap-2.5 rounded-2xl border px-3 py-2 text-left outline-none transition-[background-color,border-color,transform] duration-150 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] active:scale-[0.995] disabled:opacity-60 motion-reduce:transition-none max-md:min-h-11 ${
+      className={`group mb-1.5 flex w-full items-start gap-2.5 rounded-2xl border px-3 py-2.5 text-left outline-none transition-[background-color,border-color,transform] duration-150 last:mb-0 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] active:scale-[0.995] disabled:opacity-60 motion-reduce:transition-none max-md:min-h-11 ${
         checked
           ? 'border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-100))]'
-          : 'border-transparent hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))]'
+          : 'border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))]'
       }`}
     >
       <span
@@ -122,17 +117,27 @@ function PanelRow({ row, checked, disabled, onToggle, topScore, rank, showCue })
           <span className="min-w-0 flex-1 break-words text-[13px] font-medium leading-snug text-foreground">
             {row.panel_name || id}
           </span>
+        </span>
+        <span className="mt-1.5 flex flex-wrap items-center gap-1">
           {showCue && rank === 0 && hasScore ? (
             <span className="wb-chip !h-5 shrink-0 text-[11px]" data-tone="brand">
               Top match
             </span>
           ) : null}
+          <span className="inline-flex h-5 items-center rounded-full border border-[hsl(var(--wb-line-strong))] px-2 text-[11px] font-medium text-muted-foreground">PanelApp</span>
+          {geneN > 0 ? (
+            <span className="inline-flex h-5 items-center rounded-full bg-[hsl(var(--wb-pill))] px-2 text-[11px] font-medium tabular-nums text-foreground">
+              {fmt(geneN)} {showCue ? 'matching ' : ''}gene{geneN === 1 ? '' : 's'}
+            </span>
+          ) : null}
+          {showCue && green ? (
+            <span className="inline-flex h-5 items-center rounded-full bg-[hsl(var(--wb-pill))] px-2 text-[11px] tabular-nums text-muted-foreground">{green} high-confidence</span>
+          ) : null}
+          {showCue && amber ? (
+            <span className="inline-flex h-5 items-center rounded-full bg-[hsl(var(--wb-pill))] px-2 text-[11px] tabular-nums text-muted-foreground">{amber} lower</span>
+          ) : null}
         </span>
-        {metaBits.length > 0 ? (
-          <span className="mt-0.5 block truncate text-xs tabular-nums text-muted-foreground">
-            {metaBits.join(' · ')}
-          </span>
-        ) : null}
+        {whyText ? <span className="mt-1 block text-xs leading-snug text-muted-foreground">{whyText}</span> : null}
       </span>
       {showCue && hasScore ? (
         <span className="flex shrink-0 flex-col items-end gap-1 pt-1" title={`Match score ${score}`}>

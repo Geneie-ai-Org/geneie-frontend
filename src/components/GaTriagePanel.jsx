@@ -2,19 +2,24 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
   Check,
   ChevronDown,
   Download,
+  Info,
   ListChecks,
   RefreshCw,
   Search,
   SearchX,
+  SlidersHorizontal,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { downloadGaTriageArtifact, fetchGaTriage } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
 import { Collapse, CountUp, SelectionMarker, SPRING, StateButton, Turn } from '@/components/motion';
+import { ClassGlyph, ClassPill, CLASS_TONES, classKey, StackedBar } from '@/components/tabs/ClassPill';
 
 // Full-alpha 2px ring (the global one is 45% alpha, under 3:1 on white).
 const FOCUS = 'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--ring))]';
@@ -105,6 +110,45 @@ function numericScore(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+/** The GA output joins lists with " | ". */
+function splitList(v) {
+  return String(v || '')
+    .split('|')
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+/** direct_phenotype_match -> "Direct phenotype match". */
+function humanize(v) {
+  const s = String(v || '').trim().replace(/_/g, ' ');
+  if (!s) return '';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Order of the GA calls in the distribution bar, with the fill each one gets. */
+function callBand(label) {
+  const low = String(label || '').toLowerCase();
+  if (low.startsWith('primary')) return { order: 0, short: 'Primary', fill: 'hsl(var(--brand-solid))' };
+  if (low.includes('strong clinical')) return { order: 1, short: 'Strong', fill: 'hsl(var(--brand-500))' };
+  if (low.includes('follow-up') || low.includes('follow up')) return { order: 2, short: 'Follow-up', fill: 'var(--info)' };
+  if (low.includes('vus') || low.includes('weak')) return { order: 3, short: 'VUS or weak', fill: 'hsl(var(--brand-300))' };
+  if (low.includes('not causative')) return { order: 5, short: 'Not causative', fill: 'hsl(var(--wb-line-strong))', hatch: true };
+  return { order: 4, short: humanGaLabel(label), fill: 'hsl(var(--wb-line-strong))' };
+}
+
+function distribution(data) {
+  const counts = data?.ga_label_counts && typeof data.ga_label_counts === 'object' ? data.ga_label_counts : {};
+  const merged = new Map();
+  for (const [label, n] of Object.entries(counts)) {
+    const v = Number(n);
+    if (!Number.isFinite(v) || v <= 0) continue;
+    const band = callBand(label);
+    const prev = merged.get(band.short);
+    merged.set(band.short, { key: band.short, label: band.short, value: (prev?.value || 0) + v, fill: band.fill, hatch: band.hatch, order: band.order });
+  }
+  return [...merged.values()].sort((a, b) => a.order - b.order);
+}
+
 /** Rank and gene read low to high, score reads high to low. */
 const SORTS = [
   ['rank', 'Rank'],
@@ -139,6 +183,41 @@ function Notice({ icon: Icon = ListChecks, tone = 'brand', title, children, acti
       <p className="text-[15px] font-medium text-foreground">{title}</p>
       <p className="max-w-xs text-[13px] leading-5 text-muted-foreground">{children}</p>
       {action ? <div className="mt-1.5">{action}</div> : null}
+    </div>
+  );
+}
+
+/** The calm "not run yet" state: the shape of the result, drawn quietly, with the reason in words. */
+function GhostPreview({ message }) {
+  return (
+    <div className="space-y-3">
+      <div className="wb-card flex items-start gap-3 px-4 py-3.5">
+        <span aria-hidden className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]">
+          <ListChecks className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[14px] font-medium text-foreground">Triage has not run yet</p>
+          <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">{message}</p>
+          <p className="mt-1.5 text-[12px] leading-5 text-muted-foreground">
+            When it has, the top candidates appear here ranked, each with its gene, ACMG class, call and the reasons behind it.
+          </p>
+        </div>
+      </div>
+      <ul aria-hidden className="space-y-2 opacity-60 [mask-image:linear-gradient(to_bottom,black_35%,transparent)]">
+        {[0, 1, 2].map((i) => (
+          <li key={i} className="wb-card flex items-center gap-3 border-dashed px-3 py-2.5">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-dashed border-[hsl(var(--wb-line-strong))] text-[12px] font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
+            <span className="min-w-0 flex-1 space-y-1.5">
+              <span className="flex items-center gap-2">
+                <span className="h-3 w-16 rounded-full bg-[hsl(var(--wb-pill))]" />
+                <span className="h-[18px] w-20 rounded-full border border-dashed border-[hsl(var(--wb-line-strong))]" />
+                <span className="ml-auto h-[18px] w-24 rounded-full border border-dashed border-[hsl(var(--wb-line-strong))]" />
+              </span>
+              <span className="block h-2.5 w-40 rounded-full bg-[hsl(var(--wb-pill))]" />
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -181,6 +260,9 @@ export default function GaTriagePanel({
   const [data, setData] = useState(null);
   const [query, setQuery] = useState('');
   const [labelFilter, setLabelFilter] = useState('all');
+  const [classFilter, setClassFilter] = useState('all');
+  const [showHow, setShowHow] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState('rank');
   const [expandedKey, setExpandedKey] = useState(null);
   const [focusKey, setFocusKey] = useState(null); // the card that holds keyboard focus (drives the sliding tint)
@@ -305,10 +387,21 @@ export default function GaTriagePanel({
           change: formatChange(row.variant),
           score: numericScore(row.score),
           conflict: row.ga_conflict || row.conflicts || null,
+          cls: classKey(row.ga_acmg_2015 || row.ga_acmg_point),
+          reasons: splitList(row.reasons),
+          limitations: splitList(row.limitations),
+          conflicts: splitList(row.ga_conflict || row.conflicts),
         };
       }),
     [candidates]
   );
+
+  const classCounts = useMemo(() => {
+    const m = new Map();
+    for (const r of rows) if (r.cls) m.set(r.cls, (m.get(r.cls) || 0) + 1);
+    const order = ['pathogenic', 'likely_pathogenic', 'vus', 'likely_benign', 'benign', 'other'];
+    return order.filter((k) => m.has(k)).map((k) => [k, m.get(k)]);
+  }, [rows]);
 
   const labelCounts = useMemo(() => {
     const m = new Map();
@@ -320,6 +413,7 @@ export default function GaTriagePanel({
     const q = query.trim().toLowerCase();
     let out = rows.filter((r) => {
       if (labelFilter !== 'all' && r.label !== labelFilter) return false;
+      if (classFilter !== 'all' && r.cls !== classFilter) return false;
       if (!q) return true;
       return (
         String(r.row.gene || '').toLowerCase().includes(q) ||
@@ -332,7 +426,7 @@ export default function GaTriagePanel({
       out = [...out].sort((a, b) => (b.score ?? -Infinity) - (a.score ?? -Infinity) || a.rank - b.rank);
     }
     return out;
-  }, [rows, query, labelFilter, sortBy]);
+  }, [rows, query, labelFilter, classFilter, sortBy]);
 
   const listShown = ready && visibleRows.length > 0;
   useEffect(() => {
@@ -346,18 +440,25 @@ export default function GaTriagePanel({
   const jobState = running ? 'running' : ready ? 'done' : failed ? 'failed' : 'pending';
   const jobWord = running ? 'Running' : ready ? 'Done' : failed ? 'Failed' : 'Not started';
 
-  const filtersActive = query.trim() !== '' || labelFilter !== 'all';
+  const filtersActive = query.trim() !== '' || labelFilter !== 'all' || classFilter !== 'all';
+  const activeFilterCount = (labelFilter !== 'all' ? 1 : 0) + (classFilter !== 'all' ? 1 : 0);
   const hasRows = ready && candidates.length > 0;
-  const chips = ready ? countParts(data) : [];
+  const dist = ready ? distribution(data) : [];
+  const distTotal = dist.reduce((a, d) => a + d.value, 0);
+  // The distribution legend carries the per-call counts, so the chips only add what it does not.
+  const chips = ready ? countParts(data).filter((c) => dist.length === 0 || c.label === 'reviewed') : [];
 
   // Up and Down move between candidate rows; the rows stay normal tab stops.
   const onListKey = (e) => {
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
     const btns = [...e.currentTarget.querySelectorAll('[data-cand]')];
     const at = btns.indexOf(document.activeElement);
     if (at < 0) return;
     e.preventDefault();
-    const next = e.key === 'ArrowDown' ? Math.min(btns.length - 1, at + 1) : Math.max(0, at - 1);
+    const next =
+      e.key === 'Home' ? 0
+        : e.key === 'End' ? btns.length - 1
+          : e.key === 'ArrowDown' ? Math.min(btns.length - 1, at + 1) : Math.max(0, at - 1);
     btns[next]?.focus();
   };
 
@@ -370,7 +471,7 @@ export default function GaTriagePanel({
             <span aria-hidden className="flex size-7 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]">
               <ListChecks className="size-3.5" />
             </span>
-            <h2 className="truncate text-[14px] font-semibold">Top review candidates</h2>
+            <h2 className="truncate text-[14px] font-semibold">Top candidates</h2>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <button
@@ -405,6 +506,49 @@ export default function GaTriagePanel({
             <span className="text-[13px] text-muted-foreground">Genome Analyst ranking. Decision support only.</span>
           )}
         </div>
+        {ready && dist.length > 0 ? (
+          <div className="space-y-2 pt-0.5">
+            <StackedBar
+              segments={dist}
+              summary={`Calls across ${distTotal.toLocaleString()} variants: ${dist.map((d) => `${d.value} ${d.label}`).join(', ')}`}
+            />
+            <ul className="flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-muted-foreground" aria-label="Calls across all reviewed variants">
+              {dist.map((d) => (
+                <li key={d.key} className="inline-flex items-center gap-1.5 tabular-nums">
+                  <span
+                    aria-hidden
+                    className="size-2 rounded-full"
+                    style={{ background: d.hatch ? `repeating-linear-gradient(135deg, ${d.fill} 0 2px, transparent 2px 4px)` : d.fill, boxShadow: d.hatch ? `inset 0 0 0 1px ${d.fill}` : undefined }}
+                  />
+                  <span className="font-medium text-foreground">{d.value.toLocaleString()}</span> {d.label}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {ready ? (
+          <div className="border-t border-[hsl(var(--wb-line))] pt-2">
+            <button
+              type="button"
+              aria-expanded={showHow}
+              aria-controls="ga-how"
+              onClick={() => setShowHow((v) => !v)}
+              className={cn('-ml-1 inline-flex h-7 items-center gap-1.5 rounded-full px-2 text-[12px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none max-md:h-11', FOCUS)}
+            >
+              <Info aria-hidden className="size-3.5" />
+              Why are these ranked?
+              <Turn open={showHow} deg={180}><ChevronDown aria-hidden className="size-3" /></Turn>
+            </button>
+            <Collapse open={showHow} id="ga-how">
+              <div className="space-y-1.5 pb-0.5 pt-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                <p>
+                  Genome Analyst scores every variant from its consequence, frequency, inheritance, gene-disease evidence and fit to the phenotype, then lists the top candidates. Open a candidate to read its own reasons, cautions and next step.
+                </p>
+                {data?.phenotype ? <p>Phenotype used: <span className="text-foreground">{shortText(data.phenotype, 140)}</span></p> : null}
+              </div>
+            </Collapse>
+          </div>
+        ) : null}
         {!canDownload ? (
           <p id="ga-download-reason" className="text-[12px] text-muted-foreground">
             {running ? 'Download unlocks when triage is done.' : 'Download is available once triage is done.'}
@@ -462,6 +606,7 @@ export default function GaTriagePanel({
                   type="button"
                   aria-pressed={sortBy === id}
                   onClick={() => setSortBy(id)}
+                  aria-label={id === 'score' ? 'Sort by score, high to low' : `Sort by ${text.toLowerCase()}, low to high`}
                   title={id === 'score' ? 'Sort by score, high to low' : `Sort by ${text.toLowerCase()}, low to high`}
                   className={cn(
                     'relative inline-flex h-7 items-center rounded-full border border-transparent px-2.5 text-[12px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none max-md:h-9',
@@ -478,11 +623,48 @@ export default function GaTriagePanel({
                       className="absolute -inset-px border border-[hsl(var(--brand-200))] bg-[hsl(var(--wb-card))]"
                     />
                   ) : null}
-                  <span className="relative">{text}</span>
+                  <span className="relative inline-flex items-center gap-1">
+                    {text}
+                    {sortBy === id ? (id === 'score' ? <ArrowDown aria-hidden className="size-3" /> : <ArrowUp aria-hidden className="size-3" />) : null}
+                  </span>
                 </button>
               ))}
             </div>
           </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              aria-expanded={showFilters}
+              aria-controls="ga-filters"
+              onClick={() => setShowFilters((v) => !v)}
+              className={cn(
+                'inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors duration-150 motion-reduce:transition-none max-md:h-9',
+                activeFilterCount > 0 || showFilters
+                  ? 'border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]'
+                  : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] text-muted-foreground hover:border-[hsl(var(--brand-300))] hover:text-[hsl(var(--brand-700))]',
+                FOCUS
+              )}
+            >
+              <SlidersHorizontal aria-hidden className="size-3" />
+              Filter
+              {activeFilterCount > 0 ? <span className="tabular-nums">{activeFilterCount}</span> : null}
+              <Turn open={showFilters} deg={180}><ChevronDown aria-hidden className="size-3" /></Turn>
+            </button>
+            {activeFilterCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => { setLabelFilter('all'); setClassFilter('all'); }}
+                className={cn('inline-flex h-7 items-center rounded-full px-2.5 text-[12px] font-medium text-muted-foreground hover:text-foreground max-md:h-9', FOCUS)}
+              >
+                Clear
+              </button>
+            ) : null}
+            <span className="ml-auto text-[12px] tabular-nums text-muted-foreground">
+              <CountUp value={visibleRows.length} duration={0.4} /> of {candidates.length}
+            </span>
+          </div>
+          <Collapse open={showFilters} id="ga-filters">
+          <div className="space-y-2 pt-0.5">
           {labelCounts.length > 1 ? (
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by GA call">
               {[['all', 'All', rows.length], ...labelCounts.map(([l, n]) => [l, l, n])].map(([id, text, n]) => {
@@ -520,6 +702,35 @@ export default function GaTriagePanel({
               })}
             </div>
           ) : null}
+          {classCounts.length > 1 ? (
+            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by ACMG class">
+              <span className="pr-0.5 text-[12px] text-muted-foreground">ACMG class</span>
+              {classCounts.map(([k, n]) => {
+                const active = classFilter === k;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setClassFilter(active ? 'all' : k)}
+                    className={cn(
+                      'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px] tabular-nums transition-[background-color,border-color,color] duration-150 motion-reduce:transition-none max-md:h-9',
+                      active
+                        ? 'border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-100))] font-semibold text-[hsl(var(--brand-700))]'
+                        : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] font-medium text-muted-foreground hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))]',
+                      FOCUS
+                    )}
+                  >
+                    <span style={{ color: active ? undefined : CLASS_TONES[k].fg }} className="inline-flex"><ClassGlyph k={k} /></span>
+                    {CLASS_TONES[k].label}
+                    <span>{n}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+          </div>
+          </Collapse>
         </div>
       ) : null}
 
@@ -550,9 +761,7 @@ export default function GaTriagePanel({
               {data?.message || data?.error || 'The ranking stopped before it finished. Refresh to check again.'}
             </Notice>
           ) : (
-            <Notice title="Triage has not run yet">
-              {data?.message || 'It starts after enrichment, once the case has annotated variants.'}
-            </Notice>
+            <GhostPreview message={data?.message || 'It starts after enrichment, once the case has annotated variants.'} />
           )
         ) : candidates.length === 0 ? (
           <Notice title="No top candidates">
@@ -571,6 +780,7 @@ export default function GaTriagePanel({
                 onClick={() => {
                   setQuery('');
                   setLabelFilter('all');
+                  setClassFilter('all');
                 }}
               >
                 <X aria-hidden /> Clear filters
@@ -594,6 +804,8 @@ export default function GaTriagePanel({
                 return (
                   <motion.li
                     key={r.key}
+                    aria-posinset={idx + 1}
+                    aria-setsize={visibleRows.length}
                     layout={reduce ? false : 'position'}
                     initial={reduce ? false : { opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0, transition: { duration: reduce ? 0 : 0.22, ease: [0.22, 1, 0.36, 1], delay: intro.current && !reduce ? Math.min(idx, 12) * 0.03 : 0 } }}
@@ -604,6 +816,7 @@ export default function GaTriagePanel({
                       open ? 'border-[hsl(var(--brand-300))]' : 'hover:border-[hsl(var(--brand-300))]'
                     )}
                   >
+                    <div className="relative">
                     {focusKey === r.key ? <SelectionMarker group="ga-cand" /> : null}
                     <button
                       type="button"
@@ -622,14 +835,6 @@ export default function GaTriagePanel({
                       <span className="min-w-0 flex-1 space-y-1">
                         <span className="flex min-w-0 items-center gap-2">
                           <span className="truncate text-[14px] font-semibold">{r.row.gene || 'Unknown gene'}</span>
-                          {r.conflict ? (
-                            <AlertCircle
-                              className="size-3.5 shrink-0"
-                              style={{ color: 'var(--error)' }}
-                              role="img"
-                              aria-label={`Flag: ${String(r.conflict)}`}
-                            />
-                          ) : null}
                           <span className="ml-auto"><CallPill tone={r.tone} title={r.row.label || undefined}>{r.label}</CallPill></span>
                         </span>
                         <span className="flex min-w-0 items-center justify-between gap-2">
@@ -638,34 +843,82 @@ export default function GaTriagePanel({
                             Score <span className="font-medium text-foreground">{r.score != null ? r.score : '—'}</span>
                           </span>
                         </span>
+                        {r.cls || r.conflict ? (
+                          <span className="flex min-w-0 flex-wrap items-center gap-1.5 pt-0.5">
+                            {r.cls ? <ClassPill k={r.cls} size="sm" title={`ACMG 2015: ${r.row.ga_acmg_2015}`} /> : null}
+                            {r.conflict ? (
+                              <span
+                                className="inline-flex h-[22px] shrink-0 items-center gap-1 rounded-full border px-2 text-[12px] font-medium"
+                                style={{ background: 'var(--error-soft)', color: 'var(--error)', borderColor: 'color-mix(in srgb, var(--error) 24%, transparent)' }}
+                                title={String(r.conflict)}
+                              >
+                                <AlertCircle aria-hidden className="size-3" />
+                                Conflict
+                              </span>
+                            ) : null}
+                          </span>
+                        ) : null}
                       </span>
                       <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] text-muted-foreground">
                         <Turn open={open} deg={180}><ChevronDown className="size-3.5" /></Turn>
                       </span>
                     </button>
+                    </div>
                     <Collapse open={open} id={detailId}>
-                      <div className="border-t border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill)/0.5)] px-4 pb-3.5 pt-3">
-                        <dl className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
-                          <div className="min-w-0 sm:col-span-2">
-                            <dt className="text-[12px] font-medium text-muted-foreground">Variant</dt>
-                            <dd className="mt-0.5 break-all font-mono text-[12px] text-foreground">
-                              {r.change.full || r.row.variant || '—'}
-                            </dd>
+                      <div className="space-y-3 border-t border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill)/0.5)] px-4 pb-3.5 pt-3">
+                        <div className="min-w-0">
+                          <p className="text-[12px] font-medium text-muted-foreground">Variant</p>
+                          <p className="mt-0.5 break-all font-mono text-[12px] text-foreground">{r.change.full || r.row.variant || '—'}</p>
+                        </div>
+                        {r.reasons.length > 0 ? (
+                          <div>
+                            <p className="text-[12px] font-medium text-muted-foreground">Why it ranks here</p>
+                            <ul className="mt-1 space-y-1">
+                              {r.reasons.map((x, i) => (
+                                <li key={i} className="flex items-start gap-2 text-[13px] leading-snug text-foreground">
+                                  <span aria-hidden className="mt-[7px] size-1 shrink-0 rounded-full bg-[hsl(var(--brand-500))]" />
+                                  <span className="min-w-0 break-words">{x}</span>
+                                </li>
+                              ))}
+                            </ul>
                           </div>
+                        ) : null}
+                        {r.conflicts.length > 0 || r.limitations.length > 0 ? (
+                          <div
+                            className="space-y-1 rounded-xl border px-3 py-2"
+                            style={{ background: 'var(--warning-soft)', borderColor: 'color-mix(in srgb, var(--warning) 25%, transparent)' }}
+                          >
+                            <p className="flex items-center gap-1.5 text-[12px] font-medium" style={{ color: 'var(--warning)' }}>
+                              <AlertCircle aria-hidden className="size-3.5" />
+                              Check before relying on this
+                            </p>
+                            <ul className="space-y-0.5">
+                              {r.conflicts.map((x, i) => (
+                                <li key={`c${i}`} className="text-[13px] leading-snug text-foreground"><span className="font-medium">Conflict: </span>{x}</li>
+                              ))}
+                              {r.limitations.map((x, i) => (
+                                <li key={`l${i}`} className="text-[13px] leading-snug text-foreground"><span className="font-medium">Limit: </span>{x}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        <dl className="grid grid-cols-1 gap-x-4 gap-y-2.5 sm:grid-cols-2">
                           <DetailItem label="GA call">{r.row.label || r.label}</DetailItem>
-                          <DetailItem label="Score">{r.score != null ? String(r.score) : null}</DetailItem>
-                          <DetailItem label="ACMG">{r.row.ga_acmg_2015 || r.row.ga_acmg_point || null}</DetailItem>
-                          <DetailItem label="Phenotype match">{r.row.phenotype_match || null}</DetailItem>
-                          {r.conflict ? (
-                            <div
-                              className="min-w-0 rounded-xl border px-3 py-2 sm:col-span-2"
-                              style={{ background: 'var(--error-soft)', borderColor: 'color-mix(in srgb, var(--error) 25%, transparent)' }}
-                            >
-                              <dt className="text-[12px] font-medium" style={{ color: 'var(--error)' }}>Flag</dt>
-                              <dd className="mt-0.5 break-words text-[13px] text-foreground">{String(r.conflict)}</dd>
-                            </div>
-                          ) : null}
+                          <DetailItem label="Confidence">{humanize(r.row.confidence)}</DetailItem>
+                          <DetailItem label="ACMG (GA)">{r.row.ga_acmg_2015 || r.row.ga_acmg_point || null}</DetailItem>
+                          <DetailItem label="ClinVar">{r.row.clinvar || null}</DetailItem>
+                          <DetailItem label="Phenotype match">{humanize(r.row.phenotype_match) || null}</DetailItem>
+                          <DetailItem label="Inheritance">{humanize(r.row.inheritance) || null}</DetailItem>
+                          <DetailItem label="Reportability">{humanize(r.row.reportability) || null}</DetailItem>
+                          <DetailItem label="GenCC">{r.row.gencc || null}</DetailItem>
+                          <DetailItem label="PanelApp">{r.row.panelapp || null}</DetailItem>
                         </dl>
+                        {r.row.recommended_next_step ? (
+                          <div className="rounded-xl border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-50))] px-3 py-2">
+                            <p className="text-[12px] font-medium text-[hsl(var(--brand-700))]">Suggested next step</p>
+                            <p className="mt-0.5 text-[13px] leading-snug text-foreground">{humanize(r.row.recommended_next_step)}</p>
+                          </div>
+                        ) : null}
                       </div>
                     </Collapse>
                   </motion.li>
@@ -682,10 +935,7 @@ export default function GaTriagePanel({
 
       {hasRows ? (
         <div className="flex shrink-0 items-start gap-2 text-[12px] text-muted-foreground">
-          <span className="wb-chip shrink-0 tabular-nums" data-tone={filtersActive ? 'brand' : undefined}>
-            <CountUp value={visibleRows.length} duration={0.4} /> of {candidates.length}
-          </span>
-          <span className="min-w-0 pt-0.5 leading-snug">Primary and strong calls pre-check Include. You still confirm before the PDF.</span>
+          <span className="min-w-0 leading-snug">Primary and strong calls pre-check Include. You still confirm before the PDF.</span>
         </div>
       ) : null}
     </div>

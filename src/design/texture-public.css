@@ -1,0 +1,97 @@
+/* Public surfaces (landing, auth, 404, legal): tinted section bands, hairline cards with a gentle lift,
+   pill chips and the ruler/helix dividers. Uses the brand texture primitive (texture.css) and never
+   restyles it; everything here is a band tone, a card skin or a placement of `tx` blocks. Light and
+   dark both come from the tokens, nothing carries its own colour. */
+
+.pub-scope {
+  /* Band tones. `tint` is the faint teal-gray, `plain` is the workbench canvas. */
+  --pub-tint: color-mix(in srgb, hsl(var(--brand-100)) 52%, hsl(var(--wb-bg)));
+  --pub-tint-deep: color-mix(in srgb, hsl(var(--brand-100)) 80%, hsl(var(--wb-bg)));
+  --pub-plain: hsl(var(--wb-bg));
+  --pub-card: hsl(var(--wb-card));
+  --pub-card-shadow: 0 1px 2px hsl(180 20% 20% / 0.05), 0 6px 18px -10px hsl(180 20% 20% / 0.10);
+  --pub-card-shadow-hover: 0 2px 4px hsl(180 20% 20% / 0.06), 0 14px 28px -14px hsl(180 25% 20% / 0.18);
+}
+.dark .pub-scope {
+  --pub-tint: color-mix(in srgb, hsl(var(--brand-100)) 38%, hsl(var(--wb-bg)));
+  --pub-tint-deep: color-mix(in srgb, hsl(var(--brand-100)) 55%, hsl(var(--wb-bg)));
+  --pub-card: hsl(180 4% 14.5%);
+  --pub-card-shadow: 0 1px 2px hsl(0 0% 0% / 0.3), 0 8px 20px -12px hsl(0 0% 0% / 0.5);
+  --pub-card-shadow-hover: 0 2px 4px hsl(0 0% 0% / 0.35), 0 16px 30px -14px hsl(0 0% 0% / 0.6);
+}
+
+/* ------------------------------------------------------------------ bands */
+.pub-band { position: relative; background-color: var(--pub-plain); }
+.pub-band--tint { background-color: var(--pub-tint); }
+.pub-band--deep { background-color: var(--pub-tint-deep); }
+.pub-band--tint,
+.pub-band--deep { border-block: 1px solid hsl(var(--wb-line)); }
+.pub-band + .pub-band--tint,
+.pub-band--tint + .pub-band { border-top-color: hsl(var(--wb-line)); }
+
+/* Ruler that hangs from the top edge of a band, the way the ticks of a genome ruler hang from its baseline. */
+.pub-rule { height: 28px; transform: scaleY(-1); pointer-events: none; --tx-opacity: 0.5; --tx-opacity-dark: 0.4; --tx-at: 50% 100%; --tx-fade: 60% 140%; }
+.pub-helix { height: 56px; pointer-events: none; --tx-opacity: 0.55; --tx-opacity-dark: 0.4; --tx-fade: 55% 110%; --tx-at: 50% 50%; }
+
+/* The hero: a soft tint that settles into the canvas, with the lattice kept to the visual's side. */
+.pub-hero {
+  background-image: linear-gradient(to bottom, var(--pub-tint) 0%, var(--pub-tint) 55%, var(--pub-plain) 100%);
+  --tx-opacity: 0.9; --tx-opacity-dark: 0.7;
+  --tx-at: 80% 36%; --tx-fade: 58% 85%;
+}
+
+/* ------------------------------------------------------------------ cards */
+.pub-card {
+  background-color: var(--pub-card);
+  border: 1px solid hsl(var(--wb-line));
+  box-shadow: var(--pub-card-shadow);
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .pub-lift { transition: transform 200ms var(--ease-out, ease-out), box-shadow 200ms var(--ease-out, ease-out), border-color 200ms var(--ease-out, ease-out); }
+  .pub-lift:hover { transform: translateY(-2px); border-color: hsl(var(--brand-300)); box-shadow: var(--pub-card-shadow-hover); }
+}
+
+/* Pill-shaped feature chip: a hairline pill that holds a step number or an icon. */
+.pub-pill {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  height: 2rem; padding: 0 0.75rem 0 0.25rem; border-radius: 9999px;
+  border: 1px solid hsl(var(--brand-200)); background-color: hsl(var(--brand-50));
+  color: hsl(var(--brand-700));
+}
+.pub-pill > .pub-pill-dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.5rem; height: 1.5rem; border-radius: 9999px;
+  background-color: hsl(var(--brand-100)); border: 1px solid hsl(var(--brand-200));
+  font-size: 0.8125rem; font-weight: 500; font-variant-numeric: tabular-nums;
+}
+.pub-pill--icon { padding: 0; width: 2.5rem; height: 2.5rem; justify-content: center; background-color: hsl(var(--brand-100)); }
+.pub-lift:hover .pub-pill--icon { background-color: hsl(var(--brand-50)); }
+
+/* Layered sheets behind the hero preview; read as a stack of results, not as content. */
+.pub-sheet {
+  position: absolute; inset: 0; border-radius: 20px; pointer-events: none;
+  border: 1px solid hsl(var(--wb-line)); background-color: var(--pub-card);
+}
+.pub-sheet--1 { transform: translate(10px, 12px); opacity: 0.7; }
+.pub-sheet--2 { transform: translate(20px, 24px); opacity: 0.4; }
+
+/* Genome scene (inline SVG) strokes. */
+.pub-g-line { stroke: hsl(var(--brand-300)); }
+.pub-g-ink  { stroke: hsl(var(--brand-500)); }
+.pub-g-fill { fill: hsl(var(--brand-200)); stroke: hsl(var(--brand-500)); }
+.pub-g-dot  { fill: hsl(var(--brand-500)); }
+.pub-g-dot--ring { fill: hsl(var(--wb-card)); stroke: hsl(var(--brand-500)); }
+
+/* Aside on the auth screens: a tinted panel with the lattice anchored low, away from the copy. */
+.pub-aside {
+  background-color: var(--pub-tint);
+  border-right: 1px solid hsl(var(--wb-line));
+  --tx-opacity: 0.7; --tx-opacity-dark: 0.55;
+  --tx-at: 30% 100%; --tx-fade: 90% 45%;
+}
+
+/* CTA card: the lattice sits on the right edge, the copy and form stay clear. */
+.pub-cta { overflow: hidden; --tx-opacity: 0.8; --tx-opacity-dark: 0.6; --tx-at: 100% 50%; --tx-fade: 42% 90%; }
+
+/* Header: translucent over the page so the band tones show through the hairline. */
+.pub-header { background-color: color-mix(in srgb, hsl(var(--wb-bg)) 88%, transparent); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }

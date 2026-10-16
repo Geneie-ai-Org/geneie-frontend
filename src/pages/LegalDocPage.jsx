@@ -216,8 +216,8 @@ export default function LegalDocPage({ doc }) {
   );
 
   return (
-    <div className="wb-scope min-h-dvh text-foreground">
-      <header className="sticky top-0 z-20 border-b border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-bg))] print:hidden">
+    <div className="wb-scope pub-scope tx tx--lattice min-h-dvh bg-[var(--pub-tint)] text-foreground" style={{ '--tx-at': '50% 0%', '--tx-fade': '70% 360px', '--tx-opacity': 0.8, '--tx-opacity-dark': 0.6 }}>
+      <header className="pub-header sticky top-0 z-20 border-b border-[hsl(var(--wb-line))] print:hidden">
         <div className="mx-auto flex h-14 max-w-[68rem] items-center justify-between gap-4 px-5 sm:px-8">
           <Link to="/" aria-label="Geneie home" className="inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]">
             <BrandLogo className="h-7 w-auto" />
@@ -263,7 +263,7 @@ export default function LegalDocPage({ doc }) {
           )}
         </aside>
 
-        <main className="wb-card wb-rise min-w-0 max-w-[48rem] p-6 sm:p-10 print:max-w-none print:border-0 print:bg-transparent print:p-0" style={{ borderRadius: 20 }}>
+        <main className="wb-card pub-card wb-rise min-w-0 max-w-[48rem] p-6 sm:p-10 print:max-w-none print:border-0 print:bg-transparent print:p-0" style={{ borderRadius: 20 }}>
           <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight sm:text-[2rem]">{active.title}</h1>
 
           {(meta.version || meta.effective) && (

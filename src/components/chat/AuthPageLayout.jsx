@@ -18,8 +18,8 @@ const PILL_LINK =
  * canvas, one column on mobile.
  */
 const AuthPageLayout = ({ children, showHomeLink = false }) => (
-  <div className="wb-scope min-h-dvh font-sans text-foreground lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-    <aside className="hidden flex-col justify-between px-12 py-10 lg:flex xl:px-16">
+  <div className="wb-scope pub-scope min-h-dvh font-sans text-foreground lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+    <aside className="pub-aside tx tx--lattice hidden flex-col justify-between px-12 py-10 lg:flex xl:px-16">
       <Link to="/" aria-label="Geneie home" className="inline-flex w-fit rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]">
         <BrandLogo className="h-9 w-auto" />
       </Link>
@@ -43,13 +43,15 @@ const AuthPageLayout = ({ children, showHomeLink = false }) => (
         </ul>
       </div>
 
+      <div aria-hidden="true" className="pub-helix tx tx--helix" style={{ position: 'absolute', insetInline: 0, bottom: '7rem', '--tx-fade': '50% 120%' }} />
+
       <p className="max-w-md text-xs leading-5 text-[var(--text-tertiary)]">
         Closed beta. Geneie supports research and professional review; it is not a diagnostic device.
       </p>
     </aside>
 
     <div className="flex min-h-dvh flex-col lg:min-h-0">
-      <header className="flex items-center justify-between px-5 py-4 sm:px-8 lg:hidden">
+      <header className="flex items-center justify-between border-b border-[hsl(var(--wb-line))] bg-[var(--pub-tint)] px-5 py-4 sm:px-8 lg:hidden">
         <Link to="/" aria-label="Geneie home" className="inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]">
           <BrandLogo className="h-8 w-auto" />
         </Link>
@@ -71,7 +73,7 @@ const AuthPageLayout = ({ children, showHomeLink = false }) => (
       )}
 
       <main className="flex flex-1 items-start justify-center px-5 pb-10 pt-6 sm:px-8 sm:pt-12 lg:items-center lg:pt-0">
-        <div className="wb-card wb-rise w-full max-w-[26rem] p-6 sm:p-8" style={{ borderRadius: 20 }}>{children}</div>
+        <div className="wb-card pub-card wb-rise w-full max-w-[26rem] p-6 sm:p-8" style={{ borderRadius: 20 }}>{children}</div>
       </main>
 
       <footer className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 px-5 pb-6 text-xs text-[var(--text-tertiary)]">

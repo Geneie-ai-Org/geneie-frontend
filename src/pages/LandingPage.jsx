@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Collapse, Dismissible, StageMark, StateButton, Turn } from '@/components/motion';
 import BrandLogo from '@/components/public/BrandLogo';
 import Reveal from '@/components/public/Reveal';
+import HeroGenome from '@/components/public/HeroGenome';
 import { useBetaSeats } from '@/hooks/useBetaSeats';
 import { joinWaitlist } from '@/services/backendApi';
 import { useSeo } from '@/hooks/useSeo';
@@ -273,8 +274,11 @@ function ProductPreview() {
     { gene: 'STXBP1', variant: 'c.902+1G>A', cls: 'Pathogenic' },
   ];
   return (
-    <figure className="w-full" aria-label="Illustrative example of a Geneie conversation">
-      <div className="wb-card overflow-hidden" style={{ borderRadius: 20 }}>
+    <figure className="relative w-full" aria-label="Illustrative example of a Geneie conversation">
+      <div className="relative">
+        <span aria-hidden="true" className="pub-sheet pub-sheet--2 hidden sm:block" />
+        <span aria-hidden="true" className="pub-sheet pub-sheet--1 hidden sm:block" />
+      <div className="wb-card pub-card relative overflow-hidden" style={{ borderRadius: 20 }}>
         <div className="flex items-center justify-between border-b border-[hsl(var(--wb-line))] px-4 py-2.5">
           <span className="text-xs font-medium text-muted-foreground">Example conversation</span>
           <span className="wb-chip">Synthetic data</span>
@@ -313,9 +317,11 @@ function ProductPreview() {
           </div>
         </div>
       </div>
-      <figcaption className="mt-2 px-1 text-xs text-[var(--text-tertiary)]">
+      </div>
+      <figcaption className="mt-2 px-1 text-xs text-[var(--text-tertiary)] sm:mt-9">
         Illustration only. Not a real case.
       </figcaption>
+      <HeroGenome className="mt-3 hidden h-auto w-full sm:block" />
     </figure>
   );
 }
@@ -334,7 +340,7 @@ function FaqList() {
       return next;
     });
   return (
-    <div className="wb-card divide-y divide-[hsl(var(--wb-line))] overflow-hidden" style={{ borderRadius: 20 }}>
+    <div className="wb-card pub-card divide-y divide-[hsl(var(--wb-line))] overflow-hidden" style={{ borderRadius: 20 }}>
       {FAQS.map((item, i) => {
         const isOpen = open.has(i);
         const btnId = `${base}-q${i}`;
@@ -399,7 +405,7 @@ const LandingPage = () => {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_SCHEMA) }} />
-      <div className="wb-scope min-h-dvh font-sans text-foreground">
+      <div className="wb-scope pub-scope min-h-dvh font-sans text-foreground">
         <a
           href="#main"
           className="sr-only z-50 rounded-full bg-[hsl(var(--wb-card))] px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
@@ -408,7 +414,7 @@ const LandingPage = () => {
         </a>
 
         {/* ------------------------------------------------------------- nav */}
-        <header className="sticky top-0 z-40 border-b border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-bg))]">
+        <header className="pub-header sticky top-0 z-40 border-b border-[hsl(var(--wb-line))]">
           <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-5 sm:px-8">
             <Link to="/" aria-label="Geneie home" className="inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]">
               <BrandLogo className="h-8 w-auto" />
@@ -438,6 +444,7 @@ const LandingPage = () => {
 
         <main id="main">
           {/* ------------------------------------------------------------ hero */}
+          <div className="pub-hero tx tx--lattice">
           <section aria-labelledby="hero-title" className="mx-auto grid max-w-6xl items-center gap-12 px-5 pb-16 pt-14 sm:px-8 sm:pt-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:gap-16 lg:pb-20 lg:pt-20">
             <div>
               <p className="wb-rise wb-chip h-7 px-3 text-[13px] font-medium" data-tone="brand">Clinical genomics, in conversation</p>
@@ -457,8 +464,11 @@ const LandingPage = () => {
             </div>
             <ProductPreview />
           </section>
+          <div aria-hidden="true" className="pub-helix tx tx--helix" />
+          </div>
 
           {/* ---------------------------------------------------- how it works */}
+          <div className="pub-band">
           <section id="how-it-works" aria-labelledby="how-title" className="scroll-mt-14">
             <div className={SECTION}>
               <Reveal>
@@ -467,12 +477,10 @@ const LandingPage = () => {
               </Reveal>
               <ol className="mt-8 grid gap-4 md:grid-cols-3">
                 {STEPS.map((step, i) => (
-                  <Reveal as="li" key={step.title} delay={i * 60} className="wb-card p-5">
-                    <div className="flex items-center gap-3">
-                      <span className="flex size-8 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-sm font-medium tabular-nums text-[hsl(var(--brand-700))]">
-                        {i + 1}
-                      </span>
-                      <step.icon className="h-5 w-5 text-[hsl(var(--brand-500))]" aria-hidden="true" strokeWidth={1.75} />
+                  <Reveal as="li" key={step.title} delay={i * 60} className="wb-card pub-card pub-lift p-5">
+                    <div className="pub-pill">
+                      <span className="pub-pill-dot">{i + 1}</span>
+                      <step.icon className="h-4 w-4 text-[hsl(var(--brand-500))]" aria-hidden="true" strokeWidth={1.75} />
                     </div>
                     <h3 className="mt-4 text-base font-semibold">{step.title}</h3>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">{step.body}</p>
@@ -481,10 +489,13 @@ const LandingPage = () => {
               </ol>
             </div>
           </section>
+          </div>
 
           {/* ------------------------------------------------------ capabilities */}
+          <div className="pub-band pub-band--tint">
+          <div aria-hidden="true" className="pub-rule tx tx--ticks" />
           <section id="capabilities" aria-labelledby="cap-title" className="scroll-mt-14">
-            <div className={SECTION}>
+            <div className={`${SECTION} !pt-8`}>
               <Reveal>
                 <h2 id="cap-title" className={H2}>What you get</h2>
                 <p className="mt-2 max-w-xl text-muted-foreground">
@@ -493,8 +504,8 @@ const LandingPage = () => {
               </Reveal>
               <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {CAPABILITIES.map((c, i) => (
-                  <Reveal as="li" key={c.title} delay={(i % 3) * 60} className="wb-card p-5">
-                    <span className="flex size-9 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]">
+                  <Reveal as="li" key={c.title} delay={(i % 3) * 60} className="wb-card pub-card pub-lift p-5">
+                    <span className="pub-pill pub-pill--icon">
                       <c.icon className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.75} />
                     </span>
                     <h3 className="mt-4 text-base font-semibold">{c.title}</h3>
@@ -504,15 +515,18 @@ const LandingPage = () => {
               </ul>
             </div>
           </section>
+          </div>
 
           {/* ---------------------------------------------------- data handling */}
+          <div className="pub-band">
+          <div aria-hidden="true" className="pub-rule tx tx--ticks" />
           <section aria-labelledby="data-title">
             <Reveal className={`${SECTION} grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16`}>
               <div>
                 <h2 id="data-title" className={H2}>Data handling</h2>
                 <p className="mt-2 text-muted-foreground">What to know before you upload.</p>
               </div>
-              <dl className="wb-card divide-y divide-[hsl(var(--wb-line))] px-5 text-sm" style={{ borderRadius: 20 }}>
+              <dl className="wb-card pub-card divide-y divide-[hsl(var(--wb-line))] px-5 text-sm" style={{ borderRadius: 20 }}>
                 {[
                   ['Closed beta', 'Use de-identified or synthetic data. Identifiable patient data needs a separate written agreement.'],
                   ['Where data lives', 'Application data is stored in AWS Mumbai (ap-south-1) and encrypted in transit.'],
@@ -532,19 +546,25 @@ const LandingPage = () => {
               </dl>
             </Reveal>
           </section>
+          </div>
 
           {/* ------------------------------------------------------------- FAQ */}
+          <div className="pub-band pub-band--tint">
+          <div aria-hidden="true" className="pub-rule tx tx--ticks" />
           <section id="faq" aria-labelledby="faq-title" className="scroll-mt-14">
             <Reveal className={`${SECTION} grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16`}>
               <h2 id="faq-title" className={H2}>Questions</h2>
               <FaqList />
             </Reveal>
           </section>
+          </div>
 
           {/* -------------------------------------------------------- closing CTA */}
+          <div className="pub-band">
+          <div aria-hidden="true" className="pub-rule tx tx--ticks" />
           <section aria-labelledby="cta-title">
-            <div className={SECTION}>
-              <Reveal className="wb-card px-6 py-10 sm:px-10" style={{ borderRadius: 20 }}>
+            <div className={`${SECTION} !pt-8`}>
+              <Reveal className="wb-card pub-card pub-cta tx tx--lattice px-6 py-10 sm:px-10" style={{ borderRadius: 20 }}>
                 <h2 id="cta-title" className="max-w-xl text-2xl font-semibold tracking-tight sm:text-3xl">
                   Try Geneie on your own variant file.
                 </h2>
@@ -554,10 +574,12 @@ const LandingPage = () => {
               </Reveal>
             </div>
           </section>
+          </div>
         </main>
 
         {/* ---------------------------------------------------------- footer */}
-        <footer id="contact" className="border-t border-[hsl(var(--wb-line))]">
+        <footer id="contact" className="pub-band pub-band--deep">
+          <div aria-hidden="true" className="pub-rule tx tx--ticks" />
           <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10 sm:px-8 md:flex-row md:items-start md:justify-between">
             <div className="max-w-xs">
               <BrandLogo className="h-8 w-auto" />

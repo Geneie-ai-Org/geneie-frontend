@@ -9,49 +9,85 @@ function cssVar(name, fallback) {
   return raw || fallback;
 }
 
-/** Prefer brand tokens; fall back to hsl() channels used by shadcn. */
-function brandColor(cssName, hslChannelsFallback, alphaFallback) {
-  const direct = cssVar(cssName, '');
-  if (direct && (direct.startsWith('#') || direct.startsWith('rgb') || direct.startsWith('hsl'))) {
-    return direct;
-  }
-  if (hslChannelsFallback) {
-    return `hsl(${hslChannelsFallback}${alphaFallback ? ` / ${alphaFallback}` : ''})`;
-  }
-  return '#2A9D8F';
+/**
+ * Resolve a CSS colour expression (`hsl(var(--wb-card))`, `var(--error)`) to a concrete `rgb()` string.
+ * MUI parses palette colours itself (contrast text, alpha, lighten) and chokes on the space-separated
+ * `hsl(174 42% 51%)` form and on unresolved var() references, so every token goes through a probe element
+ * and comes back as `rgb(...)`.
+ */
+function resolveColor(expr, fallback) {
+  if (typeof document === 'undefined') return fallback;
+  const probe = document.createElement('span');
+  probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;color:' + fallback;
+  probe.style.color = expr;
+  document.body.appendChild(probe);
+  const out = getComputedStyle(probe).color;
+  probe.remove();
+  return out && out.startsWith('rgb') ? out : fallback;
 }
 
-export function buildGeneieJbrowseConfiguration(isDark) {
-  const primary = brandColor('--accent-teal', cssVar('--primary', '174 42% 51%'));
-  const secondary = brandColor('--accent-teal', cssVar('--chart-2', '174 43% 55%'));
-  const error = brandColor('--error', cssVar('--destructive', '6 74% 73%'));
+const hsl = (token) => `hsl(var(${token}))`;
 
-  // JBrowse overview polygon fills with `palette.tertiary.light`. If `light` is
-  // missing it paints solid black — the wedge seen when zoomed way out.
-  const brand = { main: primary, light: primary, dark: primary };
-  const brandSecondary = { main: secondary, light: secondary, dark: secondary };
-  const brandError = { main: error, light: error, dark: error };
+/**
+ * Map Geneie tokens to the JBrowse 2 MUI theme (light + dark). What each slot paints in the embedded view:
+ *   secondary.main        the frame around the view (EmbeddedViewContainer); it was the teal accent, which
+ *                         read as a tinted border, so it is the neutral pill tone now
+ *   secondary.contrastText  the view title on that frame
+ *   background.paper      the view body, header and mini controls (matches the card tone)
+ *   tertiary              accordion headers in the feature widgets, rubberband selection, overview scalebar
+ *   primary               toolbar and primary buttons
+ * `light`/`dark` stay filled on every colour: the overview polygon paints with `tertiary.light`, and a
+ * missing one renders solid black.
+ */
+export function buildGeneieJbrowseConfiguration(isDark) {
+  const color = (token, fb) => resolveColor(hsl(token), fb);
+  const paper = color('--wb-card', isDark ? '#202121' : '#ffffff');
+  const canvas = color('--wb-bg', isDark ? '#181919' : '#f3f5f5');
+  const frame = color('--wb-pill', isDark ? '#262828' : '#eff1f1');
+  const line = color('--wb-line', isDark ? '#333535' : '#dfe3e3');
+  const ink = color('--foreground', isDark ? '#ebebeb' : '#171717');
+  const inkMuted = color('--muted-foreground', isDark ? '#a1a1a1' : '#6b6b6b');
+  const brandSolid = color('--brand-solid', '#2d6460');
+  const brandMid = color('--brand-500', '#4f9d96');
+  const brandSoft = color('--brand-300', '#a1c9c5');
+  const onBrand = color('--on-brand', isDark ? '#141414' : '#ffffff');
+  const error = resolveColor('var(--error)', '#9f2f2d');
+
+  const tone = (main, light, dark, contrastText) => ({ main, light, dark, contrastText });
+  const primary = tone(brandSolid, brandMid, brandSolid, onBrand);
+  const secondary = tone(frame, frame, line, ink);
+  const tertiary = tone(brandSolid, brandSoft, brandSolid, onBrand);
+  const quaternary = tone(error, error, error, onBrand);
+  // Overview box, ruler labels and selection use `highlight` (stock: mandarin orange).
+  const highlight = tone(brandMid, brandSoft, brandSolid, onBrand);
 
   return {
     theme: {
       palette: {
         mode: isDark ? 'dark' : 'light',
-        primary: brand,
-        secondary: brandSecondary,
-        tertiary: brand,
-        quaternary: brandError,
-        ...(isDark
-          ? {
-              dark: {
-                primary: brand,
-                secondary: brandSecondary,
-              },
-            }
-          : {}),
+        primary,
+        secondary,
+        tertiary,
+        quaternary,
+        highlight,
+        background: { default: canvas, paper },
+        divider: line,
+        text: { primary: ink, secondary: inkMuted },
+        ...(isDark ? { dark: { primary, secondary } } : {}),
       },
       typography: {
         fontSize: 12,
         fontFamily: cssVar('--font-sans', 'Geist Variable, ui-sans-serif, system-ui, sans-serif'),
+      },
+      components: {
+        // The frame is a Paper at elevation 12: drop its heavy shadow, and MUI's dark-mode white overlay
+        // gradient, so the frame is exactly the token tone in both themes. Menus keep their own elevation.
+        MuiPaper: {
+          styleOverrides: {
+            root: { backgroundImage: 'none' },
+            elevation12: { boxShadow: 'none' },
+          },
+        },
       },
     },
   };

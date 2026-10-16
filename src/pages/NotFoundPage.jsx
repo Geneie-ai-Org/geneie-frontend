@@ -54,15 +54,15 @@ export default function NotFoundPage() {
   }, [pathname]);
 
   return (
-    <div className="wb-scope flex min-h-dvh flex-col text-foreground">
+    <div className="wb-scope pub-scope pub-hero tx tx--lattice flex min-h-dvh flex-col text-foreground" style={{ '--tx-at': '50% 42%', '--tx-fade': '50% 60%' }}>
       <header className="px-5 py-4 sm:px-8">
         <Link to="/" aria-label="Geneie home" className="inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]">
           <BrandLogo className="h-8 w-auto" />
         </Link>
       </header>
 
-      <main className="flex flex-1 items-center justify-center px-5 pb-24">
-        <div className="wb-card wb-rise w-full max-w-md p-6 sm:p-8" style={{ borderRadius: 20 }}>
+      <main className="flex flex-1 items-center justify-center px-5 pb-10">
+        <div className="wb-card pub-card wb-rise w-full max-w-md p-6 sm:p-8" style={{ borderRadius: 20 }}>
           {/* A helix with a piece missing; decorative, so hidden from assistive tech. */}
           <pre
             aria-hidden="true"
@@ -91,6 +91,7 @@ export default function NotFoundPage() {
           </div>
         </div>
       </main>
+      <div aria-hidden="true" className="pub-helix tx tx--helix" />
     </div>
   );
 }

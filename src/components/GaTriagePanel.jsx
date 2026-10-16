@@ -597,8 +597,8 @@ export default function GaTriagePanel({
                     layout={reduce ? false : 'position'}
                     initial={reduce ? false : { opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0, transition: { duration: reduce ? 0 : 0.22, ease: [0.22, 1, 0.36, 1], delay: intro.current && !reduce ? Math.min(idx, 12) * 0.03 : 0 } }}
-                    exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.97, transition: { duration: 0.16 } }}
-                    transition={{ layout: { duration: 0.25, ease: [0.22, 1, 0.36, 1] } }}
+                    exit={reduce ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, scale: 0.97, transition: { duration: 0.16 } }}
+                    transition={{ layout: { duration: reduce ? 0 : 0.25, ease: [0.22, 1, 0.36, 1] } }}
                     className={cn(
                       'wb-card relative overflow-hidden transition-colors duration-150 motion-reduce:transition-none',
                       open ? 'border-[hsl(var(--brand-300))]' : 'hover:border-[hsl(var(--brand-300))]'

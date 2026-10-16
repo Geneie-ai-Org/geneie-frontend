@@ -34,7 +34,7 @@ export default function Module1QcSection({ job, variant = 'card' }) {
   const surface = variant === 'panel';
   const sections = (
     <div className={surface ? 'space-y-3' : 'space-y-5'}>
-      {job.hasQc && <Module1QcPanel conversationId={job.conversationId} hasQc={job.hasQc} surface={surface} />}
+      {job.hasQc && <Module1QcPanel conversationId={job.conversationId} hasQc={job.hasQc} surface={surface} runLabel={job.sampleName} />}
 
       {job.hasBam && (
         <Module1IgvPanel
@@ -51,6 +51,7 @@ export default function Module1QcSection({ job, variant = 'card' }) {
         visible
         hideBrowserSnapshots={Boolean(job.hasBam)}
         surface={surface}
+        runLabel={job.sampleName}
       />
     </div>
   );

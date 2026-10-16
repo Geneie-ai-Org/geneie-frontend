@@ -1,8 +1,15 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { fetchModule1QcReport } from '@/services/backendApi';
 import { StageMark } from '@/components/motion';
 import { QcErrorNotice, QcHeading, QcSkeleton, QcStatusPill, qcSurfaceClass } from '@/components/Module1QcPanel';
+import { ViewHereButton, qcReportKind, qcReportName, useQcViewer } from '@/components/Module1QcViewer';
+
+/** "multiqc_report.html" -> "MultiQC report"; an unknown tool keeps its own label. */
+function htmlName(fig) {
+  const kind = qcReportKind(fig.label, fig.name, fig.s3_key);
+  return kind === 'qc' ? (fig.label || fig.name || 'QC report') : qcReportName(kind);
+}
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const fmtInt = (v) => (isNum(v) ? Math.round(v).toLocaleString() : null);
@@ -80,7 +87,7 @@ function MetricGrid({ rows }) {
  *
  * Plain content (no surface of its own): it fills a card section or a workspace tab.
  */
-const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = false, surface = false }) => {
+const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = false, surface = false, runLabel = null }) => {
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState(null);
   const [error, setError] = useState(null);
@@ -110,6 +117,17 @@ const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = 
     };
   }, [conversationId, visible, attempt]);
 
+  const sectionRef = useRef(null);
+  const figId = (f) => f.s3_key || f.name;
+  const { openViewer, dialog } = useQcViewer({
+    // The open report is kept by id, so a refetched report (fresh presigned URL) reaches the frame.
+    resolveUrl: (id) => (Array.isArray(report?.artifacts?.figures) ? report.artifacts.figures : []).find((f) => f?.kind === 'html_report' && figId(f) === id)?.url || null,
+    refetch: retry,
+    loading,
+    error,
+    fallbackFocus: () => sectionRef.current?.querySelector('[role="alert"] button') || sectionRef.current,
+  });
+
   if (!visible) return null;
   if (!loading && !report && !error) return null;
 
@@ -133,7 +151,7 @@ const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = 
   const metricRows = buildQcMetricRows(report?.metrics);
 
   return (
-    <section className={`space-y-3 ${qcSurfaceClass(surface)}`} aria-label="Saved Module 1 QC report" aria-busy={loading || undefined}>
+    <section ref={sectionRef} tabIndex={-1} className={`space-y-3 outline-none ${qcSurfaceClass(surface)}`} aria-label="Saved Module 1 QC report" aria-busy={loading || undefined}>
       <QcHeading
         title="Saved QC report"
         hint="Kept after BAM and QC cleanup. Ask about it in chat any time."
@@ -186,7 +204,7 @@ const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = 
       {htmlFigs.length > 0 && (
         <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
           {htmlFigs.map((fig) => (
-            <li key={fig.s3_key || fig.name} className="min-w-0">
+            <li key={fig.s3_key || fig.name} className="wb-qc-pair flex min-w-0 items-center gap-1.5">
               <a
                 href={fig.url}
                 target="_blank"
@@ -196,10 +214,20 @@ const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = 
                 <span className="truncate">Open {fig.label || fig.name}</span>
                 <ExternalLink className="size-3 shrink-0" aria-hidden />
               </a>
+              <ViewHereButton
+                name={htmlName(fig)}
+                onClick={() => openViewer({
+                  id: figId(fig),
+                  kind: qcReportKind(fig.label, fig.name, fig.s3_key),
+                  name: htmlName(fig),
+                  description: (runLabel || report?.sample_name) ? `Sample ${runLabel || report.sample_name}` : 'Saved with this run',
+                })}
+              />
             </li>
           ))}
         </ul>
       )}
+      {dialog}
     </section>
   );
 };

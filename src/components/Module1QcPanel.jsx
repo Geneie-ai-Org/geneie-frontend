@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Check, ExternalLink, FileText, RotateCw, X } from 'lucide-react';
 import { fetchModule1QcArtifacts } from '@/services/backendApi';
 import { StageMark } from '@/components/motion';
 import { Button } from '@/components/ui/button';
+import { ViewHereButton, qcReportKind, qcReportName, useQcViewer } from '@/components/Module1QcViewer';
 
 function kindLabel(kind) {
   if (kind === 'fastp') return 'fastp';
@@ -82,7 +83,7 @@ export function QcSkeleton({ rows = 1 }) {
  * Primary action opens the HTML report (fastp / MultiQC) in a new tab. Plain content: it
  * draws no surface of its own, so it sits in a card section or a workspace tab alike.
  */
-const Module1QcPanel = ({ conversationId, hasQc, surface = false }) => {
+const Module1QcPanel = ({ conversationId, hasQc, surface = false, runLabel = null }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [payload, setPayload] = useState(null);
@@ -116,15 +117,27 @@ const Module1QcPanel = ({ conversationId, hasQc, surface = false }) => {
     };
   }, [conversationId, hasQc, attempt]);
 
+  const sectionRef = useRef(null);
+  const artifactsNow = Array.isArray(payload?.artifacts) ? payload.artifacts : [];
+  const { openViewer, dialog } = useQcViewer({
+    // The open report is kept by key, so a refetched payload (fresh presigned URL) reaches the frame.
+    resolveUrl: (key) => (payload?.primary?.key === key ? payload.primary.url : artifactsNow.find((a) => a.key === key)?.url) || null,
+    refetch: retry,
+    loading,
+    error,
+    fallbackFocus: () => sectionRef.current?.querySelector('[role="alert"] button') || sectionRef.current,
+  });
+
   if (!hasQc) return null;
 
   const primary = payload?.primary;
+  const sample = runLabel || payload?.sample_name || null;
   const artifacts = Array.isArray(payload?.artifacts) ? payload.artifacts : [];
   const secondary = artifacts.filter((a) => a.key !== primary?.key && a.url);
   const empty = !loading && !error && !primary?.url && artifacts.length === 0;
 
   return (
-    <section className={`space-y-2.5 ${qcSurfaceClass(surface)}`} aria-label="Module 1 quality control reports" aria-busy={loading || undefined}>
+    <section ref={sectionRef} tabIndex={-1} className={`space-y-2.5 outline-none ${qcSurfaceClass(surface)}`} aria-label="Module 1 quality control reports" aria-busy={loading || undefined}>
       <QcHeading
         title="Reports"
         hint="From this run. Available until chat unlocks."
@@ -135,17 +148,28 @@ const Module1QcPanel = ({ conversationId, hasQc, surface = false }) => {
 
       {error && <QcErrorNotice message={error} onRetry={retry} />}
 
-      {!loading && !error && primary?.url && (
-        <a
-          href={primary.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="wb-row wb-rise text-[13px] font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
-        >
-          <FileText className="size-4 shrink-0 text-[hsl(var(--brand-500))]" aria-hidden />
-          <span className="min-w-0 flex-1 truncate">Open {kindLabel(primary.kind)} report</span>
-          <ExternalLink className="wb-chev size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-        </a>
+      {/* Kept mounted while the payload is refetched ("Refresh link" in the viewer), so the "View here" button keeps focus. */}
+      {!error && primary?.url && (
+        <div className="wb-qc-line wb-qc-pair">
+          <a
+            href={primary.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="wb-row wb-rise text-[13px] font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
+          >
+            <FileText className="size-4 shrink-0 text-[hsl(var(--brand-500))]" aria-hidden />
+            <span className="min-w-0 flex-1 truncate">Open {kindLabel(primary.kind)} report</span>
+            <ExternalLink className="wb-chev size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          </a>
+          <ViewHereButton
+            name={qcReportName(qcReportKind(primary.kind, primary.name))}
+            onClick={() => openViewer({
+              id: primary.key,
+              kind: qcReportKind(primary.kind, primary.name),
+              description: sample ? `Sample ${sample}` : 'From this run',
+            })}
+          />
+        </div>
       )}
 
       {empty && (
@@ -171,6 +195,7 @@ const Module1QcPanel = ({ conversationId, hasQc, surface = false }) => {
           ))}
         </ul>
       )}
+      {dialog}
     </section>
   );
 };

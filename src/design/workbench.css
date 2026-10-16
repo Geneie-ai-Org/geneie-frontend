@@ -780,3 +780,24 @@ html.dark .wb-report-paper-wait { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06
 @container (max-width: 559px) {
   .wb-report-state .wb-report-btn-label { display: inline; }
 }
+
+/* ---- QC report viewer ("View here" for Module 1 fastp / MultiQC reports) -------------------------- */
+.wb-qc-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; min-width: 0; }
+.wb-qc-line > .wb-row { flex: 1 1 13.5rem; width: auto; min-width: 0; }
+.wb-qc-view { flex-shrink: 0; height: 28px; }
+.wb-qc-line > .wb-qc-view { height: 44px; padding: 0 0.875rem; font-size: 13px; }
+.wb-qc-pair > a.wb-chip { max-width: 100%; min-width: 0; }
+@media (pointer: coarse) {
+  .wb-qc-pair .wb-chip { min-height: 36px; }
+  .wb-qc-line > .wb-qc-view { min-height: 44px; }
+}
+.wb-qc-note, .wb-qc-hint {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem;
+  padding: 0.5rem 0.75rem; font-size: 12.5px; line-height: 1.25rem;
+  color: hsl(var(--muted-foreground)); background-color: hsl(var(--brand-50));
+}
+.wb-qc-note { border-bottom: 1px solid hsl(var(--wb-line)); }
+.wb-qc-hint { border-top: 1px solid hsl(var(--wb-line)); background-color: transparent; }
+.wb-qc-hint[data-slow] { color: var(--warning); background-color: var(--warning-soft); }
+.wb-qc-hint[data-slow] [data-slot='button'], .wb-qc-note [data-slot='button'] { color: hsl(var(--foreground)); }
+html.dark .wb-qc-note { background-color: hsl(var(--brand-50)); }

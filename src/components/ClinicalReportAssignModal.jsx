@@ -14,39 +14,19 @@ import {
   fetchClinicalReportCandidates,
   generateClinicalReport,
 } from '@/services/backendApi';
-
-const INCLUDE = 'clinical_result';
-const ADDITIONAL = 'additional_finding';
-
-function rowKeyOf(row, index) {
-  return row.row_key || `${row.id || 'row'}__${index}`;
-}
-
-function assignmentsFromSuggestions(rows) {
-  const next = {};
-  rows.forEach((row, index) => {
-    const key = rowKeyOf(row, index);
-    const section = row.suggested_section;
-    if (section === INCLUDE || section === 'clinical_result') {
-      next[key] = INCLUDE;
-    } else if (section === ADDITIONAL || section === 'additional_finding') {
-      next[key] = ADDITIONAL;
-    }
-  });
-  return next;
-}
-
-function whyText(row) {
-  const caveats = Array.isArray(row.pfra_caveats) ? row.pfra_caveats : [];
-  const parts = [];
-  if (row.ga_label) parts.push(row.ga_label);
-  if (row.ga_score != null && row.ga_score !== '') parts.push(`Score ${row.ga_score}`);
-  if (row.phenotype_fit) parts.push(`Phenotype: ${row.phenotype_fit}`);
-  if (caveats.length) parts.push(`Flags: ${caveats.join(' · ')}`);
-  return parts.join('\n') || 'No GA rationale on this row';
-}
+import {
+  ADDITIONAL,
+  INCLUDE,
+  assignmentsFromSuggestions,
+  rowKeyOf,
+  rowLabel,
+  whyText,
+} from '@/lib/clinicalReportAssign';
 
 /**
+ * Legacy modal. The Report workspace tab (workspace/ReportTab.jsx) replaced it; ChatPage no longer mounts it.
+ * Kept working on the same helpers in case something outside the page needs the dialog form.
+ *
  * One review step: GA ranking + Include / Additional + PDF.
  * Primary/Strong pre-check Include. Analyst override always wins.
  */
@@ -177,13 +157,6 @@ export default function ClinicalReportAssignModal({
       setGenerating(false);
     }
   };
-
-  const rowLabel = (row) =>
-    row.display_id ||
-    (row.gene && row.hgvs ? `${row.gene} ${row.hgvs}` : null) ||
-    row.hgvs ||
-    row.gene ||
-    row.id;
 
   const includeCount = selectedIds.clinical.length;
   const additionalCount = selectedIds.additional.length;

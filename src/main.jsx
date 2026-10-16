@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
 import { AuthProvider } from './hooks/useAuth';
 import { ThemeProvider, useTheme } from './hooks/useTheme';
@@ -15,6 +15,8 @@ import './App.css';
 import './design/tokens.css';
 import './design/shell.css';
 import './design/workbench.css';
+import './design/texture.css';
+import './design/texture-public.css';
 
 initAnalytics();
 
@@ -27,6 +29,7 @@ const AdminInfraPage = React.lazy(() => import('./pages/AdminInfraPage'));
 const LegalDocPage = React.lazy(() => import('./pages/LegalDocPage'));
 const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage'));
 const LegalConsentGate = React.lazy(() => import('./components/LegalConsentGate'));
+const SubscriptionReturn = React.lazy(() => import('./components/SubscriptionReturn'));
 
 function ThemedToaster() {
   const { theme } = useTheme();
@@ -104,8 +107,14 @@ root.render(
           <Route path="/legal/privacy" element={<LegalDocPage doc="privacy" />} />
           <Route path="/admin-haha" element={<AdminPage />} />
           <Route path="/admin-haha/infra" element={<AdminInfraPage />} />
-          <Route path="/subscription-success" element={<Navigate to="/app" replace />} />
-          <Route path="/subscription-canceled" element={<Navigate to="/app" replace />} />
+          {/* Checkout return pages. The payment provider redirects to /subscription-*; the /app/ spellings
+              are matched ahead of /app/:conversationId, which would otherwise read them as a conversation id. */}
+          {['/subscription-success', '/app/subscription-success'].map((path) => (
+            <Route key={path} path={path} element={<ProtectedRoute><SubscriptionReturn kind="success" /></ProtectedRoute>} />
+          ))}
+          {['/subscription-canceled', '/app/subscription-canceled'].map((path) => (
+            <Route key={path} path={path} element={<ProtectedRoute><SubscriptionReturn kind="canceled" /></ProtectedRoute>} />
+          ))}
 
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

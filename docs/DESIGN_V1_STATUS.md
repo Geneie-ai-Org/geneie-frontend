@@ -21,12 +21,14 @@ Spec: `docs/DESIGN_V1.md`. Agent brief used for the build: `docs/AGENT_BRIEF.md`
 - Mobile was explicitly deferred.
 
 ## Open items (not done)
-1. **Rename sessions:** pass `onRenameConversation` (wire to the conversation update API) and keep user-set titles.
-2. **Rail status dots:** map a `status` field (running/failed) onto conversation records.
+1. ~~Rename sessions~~ Done: rail rename (double-click, F2 or menu) saves through `PUT /api/conversations/{id}` with
+   `title_source: "user"`; the backend marks `title_user_set` and refuses every automatic title write after that
+   (first-message title, uploaded file name). First-message titles are 3-6 words (`src/lib/conversationTitle.js`).
+2. ~~Rail status dots~~ Done: `annovar_job.status` is mapped to `status` in `ChatPage.mapConversationRecord`.
 3. **Silent failures upstream:** `useModule1Pipeline` closes the FASTQ form on a 403/400; upload services throw
    errors without `status`/`code` (the wizard matches the device message text as a workaround).
 4. **System theme** option (`useTheme` is light/dark only).
-5. **Report tab:** `ClinicalReportAssignModal` is still a modal; a Report tab is the better home.
+5. **Report tab:** done. `workspace/ReportTab.jsx` (tab id `report`) replaces the modal; ChatPage no longer mounts `ClinicalReportAssignModal` (file kept, unused). Same API calls. The backend has no stored report, no assign endpoint and no reviewer concept, so "last generated" is browser memory and picks live in the tab until Generate.
 6. **Copy review:** landing FAQ and data-handling text was rewritten to match `privacy.md`/`terms.md` (HIPAA, GDPR and
    "zero-hallucination" claims removed). `public/llms.txt` still says "HIPAA and GDPR". Needs an owner's read.
 7. **Not seen live:** Pro-only billing states, admin pages against the real backend (checked with mock data),

@@ -22,6 +22,8 @@ import AuthPageLayout from '../components/chat/AuthPageLayout';
 import AnnovarMessageModal from '../components/chat/AnnovarMessageModal';
 import DeviceFrozenOverlay from '../components/DeviceFrozenOverlay';
 import ChatComposer from '../components/chat/ChatComposer';
+import UploadFrame from '../components/chat/UploadFrame';
+import BrandLogo from '../components/public/BrandLogo';
 import SubscriptionManager from '../components/SubscriptionManager';
 import SubscriptionPage from '../components/SubscriptionPage';
 import ConversationSidebar from '../components/ConversationSidebar';
@@ -52,7 +54,7 @@ import { useModule1Capacity } from '@/hooks/useModule1Capacity';
 import { useAutomaticPipelineConductor } from '@/hooks/useAutomaticPipelineConductor';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { getClinicalReportGate } from '@/components/CaseReportDownloadButton';
-import ClinicalReportAssignModal from '@/components/ClinicalReportAssignModal';
+import ReportTab from '@/components/workspace/ReportTab';
 import WorkspacePanel, { useWorkspaceWidth } from '@/components/workspace/WorkspacePanel';
 import PipelineStatusStrip, { derivePipelineStrip } from '@/components/workspace/PipelineStatusStrip';
 import SummaryTab, { deriveSummary } from '@/components/workspace/SummaryTab';
@@ -66,6 +68,7 @@ import { DEFAULT_GUEST_CHAT_LIMIT, fetchGaTriage } from '@/services/backendApi';
 import { formatMeterDetail, meterExhausted, meterFor, meterNearLimit, patchGuestChatUsed } from '@/services/tierLimits';
 import { describeLimitError, isEmailVerificationCode } from '@/services/limitErrors';
 import { useSeo } from '@/hooks/useSeo';
+import { MAX_USER_TITLE, deriveTitle } from '@/lib/conversationTitle';
 
 const ChatPage = () => {
   useSeo({
@@ -81,7 +84,6 @@ const ChatPage = () => {
   // Conversation state
   const [conversations, setConversations] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [clinicalReportOpen, setClinicalReportOpen] = useState(false);
   const autoOpenedReportForConvRef = useRef(null);
   const [currentDocument, setCurrentDocument] = useState(null);
   const [variantData, setVariantData] = useState(null);
@@ -146,6 +148,7 @@ const ChatPage = () => {
    * published as a CSS variable to avoid re-rendering the whole page on every resize. */
   const chatColumnRef = useRef(null);
   const composerDockRef = useRef(null);
+  const homeComposerRef = useRef(null); // the empty-state composer's field, focused by the starter chips
 
   // --- HOOK INTEGRATION ---
   const { userId, isAuthReady, userLoading, userTier, limits: rawLimits, refreshSubscriptionStatus, refreshGuestStatus } = useAuth();
@@ -313,16 +316,45 @@ const ChatPage = () => {
 
   // Keep the local conversation list (drives sidebar + chat header) in sync with the
   // backend `title` field — whether it changed via our own generation or server-side.
-  const applyConversationTitle = useCallback((conversationId, title) => {
+  // `auto` writes (first-message title, file name) never replace a title the user set in the rail.
+  const applyConversationTitle = useCallback((conversationId, title, { auto = false } = {}) => {
     if (!conversationId || !title) return;
     const sid = String(conversationId);
     setConversations((prev) =>
       prev.map((c) =>
         (String(c.id) === sid || String(c.conversation_id) === sid) && c.title !== title
+          && !(auto && c.titleUserSet)
           ? { ...c, title }
           : c
       )
     );
+  }, []);
+
+  // Rail rename: optimistic, rolled back (and re-thrown so the rail can toast) when the save fails.
+  const renameConversation = useCallback(async (conversationId, rawTitle) => {
+    const title = String(rawTitle || '').trim().slice(0, MAX_USER_TITLE).trim();
+    if (!conversationId || !title) return;
+    const sid = String(conversationId);
+    const isTarget = (c) => String(c.id) === sid || String(c.conversation_id) === sid;
+    let before = null;
+    setConversations((prev) =>
+      prev.map((c) => {
+        if (!isTarget(c)) return c;
+        before = before || { title: c.title, titleUserSet: !!c.titleUserSet };
+        return { ...c, title, titleUserSet: true };
+      })
+    );
+    try {
+      await mongodbApi.renameConversation(conversationId, title);
+    } catch (error) {
+      const prior = before;
+      if (prior) {
+        setConversations((prev) =>
+          prev.map((c) => (isTarget(c) && c.title === title ? { ...c, ...prior } : c))
+        );
+      }
+      throw error;
+    }
   }, []);
 
   const updateConversationTitle = useCallback(async (conversationId, firstMessage) => {
@@ -332,11 +364,13 @@ const ChatPage = () => {
     const existing = conversations.find(
       (c) => String(c.id) === String(conversationId) || String(c.conversation_id) === String(conversationId)
     );
+    if (existing?.titleUserSet) return; // the user named this chat; nothing automatic may replace it
     if (existing?.documentName) {
       if (existing.title !== existing.documentName) {
         try {
-          await mongodbApi.updateConversation(conversationId, { title: existing.documentName });
-          applyConversationTitle(conversationId, existing.documentName);
+          if (await mongodbApi.autoTitleConversation(conversationId, existing.documentName, 'file')) {
+            applyConversationTitle(conversationId, existing.documentName, { auto: true });
+          }
         } catch (error) {
           console.error('Error syncing file-name title:', error);
         }
@@ -359,21 +393,25 @@ const ChatPage = () => {
         }),
       });
 
-      let title = firstMessage.slice(0, 50) + (firstMessage.length > 50 ? '...' : '');
+      // 3-6 words, no quotes or trailing punctuation, whatever produced the text (LLM or fallback).
+      let title = deriveTitle(firstMessage);
 
       if (response.ok) {
         const data = await response.json();
-        title = data.title || title;
+        title = deriveTitle(data.title) || title;
       }
+      if (!title) return;
 
-      await mongodbApi.updateConversation(conversationId, { title });
-      applyConversationTitle(conversationId, title);
+      if (await mongodbApi.autoTitleConversation(conversationId, title)) {
+        applyConversationTitle(conversationId, title, { auto: true });
+      }
     } catch (error) {
       console.error('Error updating conversation title:', error);
       try {
-        const fallbackTitle = firstMessage.slice(0, 50) + (firstMessage.length > 50 ? '...' : '');
-        await mongodbApi.updateConversation(conversationId, { title: fallbackTitle });
-        applyConversationTitle(conversationId, fallbackTitle);
+        const fallbackTitle = deriveTitle(firstMessage);
+        if (fallbackTitle && await mongodbApi.autoTitleConversation(conversationId, fallbackTitle)) {
+          applyConversationTitle(conversationId, fallbackTitle, { auto: true });
+        }
       } catch (fallbackError) {
         console.error('Error with fallback title update:', fallbackError);
       }
@@ -558,7 +596,6 @@ const ChatPage = () => {
   });
 
   useEffect(() => {
-    setClinicalReportOpen(false);
     autoOpenedReportForConvRef.current = null;
   }, [activeConversationId]);
 
@@ -584,11 +621,11 @@ const ChatPage = () => {
       setConversations((prev) =>
         prev.map((c) =>
           String(c.id) === String(conversationId) || String(c.conversation_id) === String(conversationId)
-            ? { ...c, documentName: fileName, title: fileName }
+            ? { ...c, documentName: fileName, title: c.titleUserSet ? c.title : fileName }
             : c
         )
       );
-      mongodbApi.updateConversation(conversationId, { title: fileName }).catch((err) => {
+      mongodbApi.autoTitleConversation(conversationId, fileName, 'file').catch((err) => {
         console.warn('[App] Failed to persist file-name title:', err);
       });
     },
@@ -734,6 +771,8 @@ const ChatPage = () => {
     id: conv.conversation_id,
     conversation_id: conv.conversation_id,
     title: conv.title,
+    // True once the user renamed the chat in the rail; no automatic title may replace it.
+    titleUserSet: !!conv.title_user_set,
     createdAt: conv.created_at,
     updatedAt: conv.updated_at,
     documentUrl: conv.document?.s3_url || null,
@@ -946,12 +985,15 @@ const ChatPage = () => {
         if (convData) {
           // Prefer uploaded file name over any LLM-generated conversation summary.
           const fileName = convData.document?.file_name || null;
+          const userNamed = !!convData.title_user_set && !!convData.title;
           if (fileName) {
-            applyConversationTitle(conversationId, fileName);
+            // A title the user typed in the rail outranks the file name.
+            const shownTitle = userNamed ? convData.title : fileName;
+            applyConversationTitle(conversationId, shownTitle);
             setConversations((prev) =>
               prev.map((c) =>
                 String(c.id) === String(conversationId) || String(c.conversation_id) === String(conversationId)
-                  ? { ...c, documentName: fileName, title: fileName }
+                  ? { ...c, documentName: fileName, title: shownTitle, titleUserSet: userNamed || c.titleUserSet }
                   : c
               )
             );
@@ -1122,6 +1164,7 @@ const ChatPage = () => {
 
   const conversationHeaderTitle = useMemo(() => {
     if (userTier === 'guest') return 'Guest session';
+    if (activeConversation?.titleUserSet && activeConversation.title) return activeConversation.title;
     if (activeConversation?.documentName) return activeConversation.documentName;
     if (activeConversation?.title) return activeConversation.title;
     if (isConversationStarted || isCurrentlyActive) return 'New conversation';
@@ -1130,6 +1173,7 @@ const ChatPage = () => {
     userTier,
     activeConversation?.documentName,
     activeConversation?.title,
+    activeConversation?.titleUserSet,
     isConversationStarted,
     isCurrentlyActive,
   ]);
@@ -1147,24 +1191,7 @@ const ChatPage = () => {
     module1.openModule1Form();
   };
 
-  // Escape closes the variant upload modal, same as clicking the backdrop.
-  useEffect(() => {
-    if (!showUploadModal || metadataFormOpen) return;
-    const onKeyDown = (e) => {
-      if (e.key !== 'Escape') return;
-      e.preventDefault();
-      setShowUploadModal(false);
-      setPreSelectedFile(null);
-      if (uploadSessionConversationId === activeConversationId) {
-        toast.info('Upload in progress', {
-          description:
-            'Your file is still uploading. Please wait — chat will resume when processing finishes.',
-        });
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showUploadModal, metadataFormOpen, uploadSessionConversationId, activeConversationId]);
+  // Escape / scrim dismissal of the variant upload frame is handled by UploadFrame (shared Dialog).
 
   useEffect(() => {
     if (!columnInterpretationResult) {
@@ -1311,13 +1338,16 @@ const ChatPage = () => {
     !!variantData &&
     !!activeConversationId;
 
-  // Automatic ready_report: open the one review/report modal once (still confirm before PDF).
+  // Automatic ready_report: open the Report tab once (still confirm before the PDF).
+  // Sets state directly: openWorkspaceTab is declared below the early returns, so an effect that ran on an
+  // early-return render would hit it before it exists.
   useEffect(() => {
     if (!showAutomaticReportCta || reportGate?.blocked) return;
     if (autoOpenedReportForConvRef.current === activeConversationId) return;
     autoOpenedReportForConvRef.current = activeConversationId;
     setIsVariantSidebarOpen(true);
-    setClinicalReportOpen(true);
+    setOpenTabs((prev) => (prev.includes('report') ? prev : [...prev, 'report']));
+    setWorkspaceTab('report');
   }, [showAutomaticReportCta, reportGate?.blocked, activeConversationId]);
 
   if (!isAuthReady || userLoading) {
@@ -1371,11 +1401,9 @@ const ChatPage = () => {
 
   if (isChatLimitReached && userTier !== 'guest' && limits.redirect === 'subscription') {
     return (
-      <div className="flex flex-col h-screen" style={{ backgroundColor: 'var(--bg-app)' }}>
-        <header className="px-6 py-4 border-b flex justify-start items-center z-10" style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-subtle)' }}>
-          <h1 className="text-lg font-semibold font-brand tracking-tight" style={{ color: 'var(--text-primary)' }}>
-            geneie
-          </h1>
+      <div className="wb-scope flex flex-col h-dvh">
+        <header className="z-10 flex shrink-0 items-center justify-start border-b border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-bg))] px-5 py-3.5 sm:px-8">
+          <BrandLogo className="h-7 w-auto" />
         </header>
         <SubscriptionManager isInputGated={true} />
       </div>
@@ -1535,10 +1563,7 @@ const ChatPage = () => {
         showReportCta={showAutomaticReportCta}
         reportGate={reportGate}
         reportCtaLabel={reportGate.label || 'Review & report'}
-        onGenerateReport={() => {
-          setIsVariantSidebarOpen(true);
-          setClinicalReportOpen(true);
-        }}
+        onGenerateReport={() => openWorkspaceTab('report')}
       />
     ) : null;
 
@@ -1744,6 +1769,10 @@ const ChatPage = () => {
   const shellBothOpen =
     userTier !== 'guest' && isSidebarOpen && isVariantSidebarOpen;
 
+  // Time-aware greeting line for the empty state (local time; plain words, no name lookup).
+  const homeHour = new Date().getHours();
+  const homeGreeting = homeHour < 5 ? 'Working late' : homeHour < 12 ? 'Good morning' : homeHour < 18 ? 'Good afternoon' : 'Good evening';
+
   // --- RENDER CHAT INTERFACE WITH SIDEBAR ---
   return (
     <div
@@ -1762,6 +1791,7 @@ const ChatPage = () => {
             onSelectConversation={navigateToConversation}
             onCreateConversation={createConversation}
             onDeleteConversation={deleteConversation}
+            onRenameConversation={renameConversation}
             isOpen={isSidebarOpen}
             onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
             userTier={userTier}
@@ -1786,7 +1816,7 @@ const ChatPage = () => {
       {isMobile && (
         <div
           className="flex items-center gap-2 px-3 h-12 shrink-0 border-b"
-          style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-app)' }}
+          style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'transparent' }}
         >
           <TooltipProvider>
             <Tooltip>
@@ -1864,12 +1894,26 @@ const ChatPage = () => {
 
           {/* ===== NEW CHAT — centered layout ===== */}
           {!isConversationStarted && !isCurrentlyActive ? (
-            <div className={`flex-1 flex flex-col items-center w-full min-w-0 chat-column-inner ${isMobile ? 'justify-end pb-4' : 'justify-center'}`}>
+            <div className={`chat-home flex-1 min-h-0 min-w-0 w-full flex flex-col items-center overflow-y-auto overflow-x-hidden ${isMobile ? 'justify-end pb-4' : 'justify-center'}`}>
+              {/* Brand texture, behind the greeting only: dot lattice up top, a ruler along the foot. */}
+              <div className="chat-home__lattice tx tx--lattice" aria-hidden="true" />
+              <div className="chat-home__ruler tx tx--ticks" aria-hidden="true" />
+              <div className="chat-column-inner chat-home__inner flex flex-col items-center">
               {/* Branding */}
-              <div className={`flex items-center gap-2.5 w-full justify-center ${isMobile ? 'mb-auto mt-auto' : 'mb-9'}`}>
-                <h2 className={`text-center font-medium tracking-tight ${isMobile ? 'text-[22px]' : 'text-[28px]'}`} style={{ color: 'var(--text-primary)' }}>
+              <div className={`chat-home__greeting flex w-full flex-col items-center text-center ${isMobile ? 'mb-auto mt-auto pb-5' : 'mb-8'}`}>
+                <div className="chat-home__mark-row" aria-hidden="true">
+                  <div className="chat-home__helix tx tx--helix" />
+                  <span className="chat-home__mark"><span /></span>
+                </div>
+                <p className="chat-home__eyebrow">{homeGreeting}</p>
+                <h2 className={`font-display ${isMobile ? 'text-[26px]' : 'text-[34px]'}`} style={{ color: 'var(--text-primary)' }}>
                   What would you like to ask Geneie?
                 </h2>
+                <p className="chat-home__sub">
+                  {currentDocument
+                    ? 'Ask about the file in this conversation, or add more data.'
+                    : 'Ask in plain language, or add a variants file or sequencing data to work from it.'}
+                </p>
               </div>
 
               {userTier === 'guest' && currentDocument && (
@@ -1896,7 +1940,8 @@ const ChatPage = () => {
               )}
 
               <div className={`w-full ${isMobile ? 'shrink-0' : ''}`}>
-                <ChatComposer {...composerProps} layout="stacked" dropdownSource="new-chat" />
+                <ChatComposer {...composerProps} layout="stacked" dropdownSource="new-chat" textareaRef={homeComposerRef} />
+              </div>
               </div>
             </div>
           ) : (
@@ -2262,7 +2307,7 @@ const ChatPage = () => {
             refreshAfterFilterChange={refreshAfterFilterChange}
             downloadGate={downloadGate}
             chatEligibility={chatEligibility}
-            onClinicalReportOpen={() => setClinicalReportOpen(true)}
+            onClinicalReportOpen={() => openWorkspaceTab('report')}
             gaTriageStatus={gaTriageStatus}
             gaTriageUpdatedAt={gaTriageUpdatedAt}
             onProprietaryFilterClick={(filterType) => runProprietaryFilter(filterType)}
@@ -2320,18 +2365,44 @@ const ChatPage = () => {
                 />
               ),
             },
+            {
+              id: 'report',
+              label: 'Report',
+              icon: FileText,
+              closable: true,
+              hidden: userTier === 'guest' || !activeConversationId || !currentDocument,
+              subtitle: 'Clinical report',
+              content: (
+                <ReportTab
+                  conversationId={activeConversationId}
+                  active={workspaceTab === 'report' && isVariantSidebarOpen}
+                  fileName={currentDocument?.name ?? currentDocument?.file_name}
+                  metaChips={[docMeta.genome, docMeta.sequencingType, docMeta.analysisType].filter(Boolean)}
+                  totalVariants={variantData?.total_variants}
+                  inScope={summary?.inScope}
+                  sampleMetadata={docMeta}
+                  annotation={{
+                    state: isRunningAnnovar
+                      ? 'running'
+                      : String(pipelineSnapshot.annovarJob?.status || '').toLowerCase() === 'failed'
+                        ? 'failed'
+                        : pipelineSnapshot.hasAnnotatedFile || chatEligibility?.requires_annovar === false
+                          ? 'done'
+                          : 'pending',
+                  }}
+                  gaStatus={gaTriageStatus}
+                  gaUpdatedAt={gaTriageUpdatedAt}
+                  reportGate={reportGate}
+                  automaticMode={automaticPipeline.active}
+                  triageAvailable={Boolean(gaTriageStatus)}
+                  onOpenTab={openWorkspaceTab}
+                  onEditSample={() => setIsEditSampleModalOpen(true)}
+                />
+              ),
+            },
           ]}
         />
       </aside>
-
-      {userTier !== 'guest' && activeConversationId ? (
-        <ClinicalReportAssignModal
-          open={clinicalReportOpen}
-          onOpenChange={setClinicalReportOpen}
-          conversationId={activeConversationId}
-          automaticMode={automaticPipeline.active}
-        />
-      ) : null}
 
       {/* Hidden file inputs for dropdown file type selection */}
       <input
@@ -2342,85 +2413,55 @@ const ChatPage = () => {
         className="hidden"
       />
 
-      {/* Upload Modal for Variant Files — file picker; sample metadata opens as its own popup */}
+      {/* Upload frame for variant files: the shared Dialog (Esc, focus trap, scrim). DocumentUpload stays
+        * mounted while the frame is hidden (transfer in flight, or the sample-details wizard open). */}
       {(showUploadModal || uploadSessionConversationId) && (
-        <div
-          className={`fixed inset-0 z-50 ${
-            !showUploadModal && uploadSessionConversationId ? 'pointer-events-none opacity-0' : ''
-          }`}
-          aria-hidden={!showUploadModal && Boolean(uploadSessionConversationId)}
-        >
-          {!metadataFormOpen && showUploadModal && (
-            <div
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-              onClick={() => {
-                setShowUploadModal(false);
-                setPreSelectedFile(null);
-                            if (uploadSessionConversationId === activeConversationId) {
-                  toast.info('Upload in progress', {
-                    description:
-                      'Your file is still uploading. Please wait — chat will resume when processing finishes.',
-                  });
-                }
-              }}
-              aria-hidden="true"
-            />
-          )}
-          <div
-            className={
-              metadataFormOpen
-                ? 'fixed w-px h-px overflow-visible opacity-0 pointer-events-none'
-                : showUploadModal
-                  ? 'relative flex min-h-full items-center justify-center p-4 pointer-events-none'
-                  : 'hidden'
+        <UploadFrame
+          visible={showUploadModal && !metadataFormOpen}
+          onDismiss={() => {
+            setShowUploadModal(false);
+            setPreSelectedFile(null);
+            if (uploadSessionConversationId === activeConversationId) {
+              toast.info('Upload in progress', {
+                description:
+                  'Your file is still uploading. Please wait — chat will resume when processing finishes.',
+              });
             }
-          >
-            <div
-              className="rounded-2xl max-w-lg w-full transition-all pointer-events-auto"
-              style={{
-                backgroundColor: 'var(--bg-surface-raised)',
-                border: '1px solid var(--border-default)',
-                boxShadow: 'var(--shadow-xl)',
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-4 md:p-5">
-                <DocumentUpload
-                  conversationId={uploadSessionConversationId || activeConversationId || 'guest-session'}
-                  userId={userId || 'guest'}
-                  onUploadingChange={handleVariantUploadingChangeWithCleanup}
-                  onUploadProgressChange={handleUploadProgressChange}
-                  onUploadStarted={handleUploadStarted}
-                  onDismissForUpload={() => {
-                    setShowUploadModal(false);
-                    setMetadataFormOpen(false);
-                                  }}
-                  onUploadSuccess={async (doc) => {
-                    await handleDocumentUpload(doc);
-                    if (doc !== null) {
-                      setShowUploadModal(false);
-                      setMetadataFormOpen(false);
-                      setActiveFileTypeTab('tabular');
-                      setPreSelectedFile(null);
-                      setUploadingFileName(null);
-                                      }
-                  }}
-                  existingDocument={currentDocument}
-                  userTier={userTier}
-                  activeFileTypeTab={activeFileTypeTab}
-                  preSelectedFile={preSelectedFile}
-                  onMetadataFormChange={setMetadataFormOpen}
-                  onCancel={() => {
-                    setShowUploadModal(false);
-                    setPreSelectedFile(null);
-                    setMetadataFormOpen(false);
-                    setUploadingFileName(null);
-                                  }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+          }}
+        >
+          <DocumentUpload
+            conversationId={uploadSessionConversationId || activeConversationId || 'guest-session'}
+            userId={userId || 'guest'}
+            onUploadingChange={handleVariantUploadingChangeWithCleanup}
+            onUploadProgressChange={handleUploadProgressChange}
+            onUploadStarted={handleUploadStarted}
+            onDismissForUpload={() => {
+              setShowUploadModal(false);
+              setMetadataFormOpen(false);
+            }}
+            onUploadSuccess={async (doc) => {
+              await handleDocumentUpload(doc);
+              if (doc !== null) {
+                setShowUploadModal(false);
+                setMetadataFormOpen(false);
+                setActiveFileTypeTab('tabular');
+                setPreSelectedFile(null);
+                setUploadingFileName(null);
+              }
+            }}
+            existingDocument={currentDocument}
+            userTier={userTier}
+            activeFileTypeTab={activeFileTypeTab}
+            preSelectedFile={preSelectedFile}
+            onMetadataFormChange={setMetadataFormOpen}
+            onCancel={() => {
+              setShowUploadModal(false);
+              setPreSelectedFile(null);
+              setMetadataFormOpen(false);
+              setUploadingFileName(null);
+            }}
+          />
+        </UploadFrame>
       )}
 
       {/* Module 1 (FASTQ) upload form — independent modal, not part of DocumentUpload's flow */}

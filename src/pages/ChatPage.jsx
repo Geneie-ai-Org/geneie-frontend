@@ -27,6 +27,7 @@ import BrandLogo from '../components/public/BrandLogo';
 import SubscriptionManager from '../components/SubscriptionManager';
 import SubscriptionPage from '../components/SubscriptionPage';
 import ConversationSidebar from '../components/ConversationSidebar';
+import RailResizer from '@/components/chat/RailResizer';
 import DocumentUpload from '../components/DocumentUpload';
 import VariantFilterSidebar from '../components/VariantFilterSidebar';
 import ProfileManagement from '../components/ProfileManagement';
@@ -1799,6 +1800,7 @@ const ChatPage = () => {
             onOpenProfile={() => setShowProfileModal(true)}
           />
         )}
+        {userTier !== 'guest' && isSidebarOpen && !isMobile && <RailResizer />}
       </aside>
 
       {/* Mobile sidebar backdrop */}

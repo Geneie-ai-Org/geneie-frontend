@@ -10,6 +10,11 @@
   grid-template-rows: minmax(0, 1fr);
 }
 
+/* No column easing while a rail is being dragged: it would trail the pointer. */
+html[data-resizing] .chat-app-shell {
+  transition: none;
+}
+
 /* Hairline seams instead of heavy borders; the workspace supplies its own header rule. */
 .chat-shell-left::after,
 .chat-shell-right::before {

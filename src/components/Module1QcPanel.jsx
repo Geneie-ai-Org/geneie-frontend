@@ -51,7 +51,7 @@ export function QcStatusPill({ status, label, className = '' }) {
 /** A failed load: what happened, with the one next action as a pill. */
 export function QcErrorNotice({ message, onRetry, retryLabel = 'Retry' }) {
   return (
-    <div role="alert" className="wb-rise flex items-start justify-between gap-3 rounded-2xl border border-[var(--error)]/40 bg-[var(--error-soft)] p-3">
+    <div role="alert" className="wb-rise flex items-start justify-between gap-3 rounded-2xl border border-[color-mix(in_srgb,var(--error)_18%,transparent)] bg-[color-mix(in_srgb,var(--error)_6%,hsl(var(--wb-card)))] p-3">
       <p className="flex min-w-0 items-start gap-2 text-[13px] text-foreground">
         <StageMark state="failed" size={16} className="mt-0.5 shrink-0" />
         <span className="min-w-0 break-words">{message}</span>

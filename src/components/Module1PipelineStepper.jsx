@@ -13,7 +13,8 @@ import { useRunTimer } from '@/hooks/useRunTimer';
 import { Button } from '@/components/ui/button';
 import { Collapse, HoldButton } from '@/components/motion';
 import Module1QcSection, { module1HasQcArtifacts } from '@/components/Module1QcSection';
-import PipelineJobCard, { ActionButton, BrailleSpinner, splitJobMessage } from '@/components/PipelineJobCard';
+import PipelineJobCard, { ActionButton, BrailleSpinner, JobConsole, splitJobMessage } from '@/components/PipelineJobCard';
+import { formatIstStamp, formatJobDuration } from '@/lib/istTime';
 
 function nodeStatus(groupId, activeGroupId, failed, groupOrder, finishedOk) {
   if (finishedOk) return 'done';
@@ -246,10 +247,32 @@ const Module1PipelineStepper = ({
     : MODULE1_STAGE_GROUPS.map((group) => {
         const st = nodeStatus(group.id, activeGroupId, failed, groupOrder, finishedOk);
         // The "Queued" stage while the job is queued is where it is waiting, not a run in progress.
-        return { id: group.id, label: group.label, status: st === 'running' && queued ? 'queued' : st };
+        const step = { id: group.id, label: group.label, status: st === 'running' && queued ? 'queued' : st };
+        // The stage that broke says why and carries the way forward, so the detail is one tap from the banner.
+        if (st === 'failed' && failed && typeof onStartOver === 'function') {
+          step.reason = statusText;
+          step.note = 'Starting over opens the upload form again.';
+          step.retry = { label: 'Start over', run: onStartOver };
+        }
+        return step;
       });
 
   const showFailureAction = failed && typeof onStartOver === 'function';
+  // Job record for the developer console: only fields the job actually carries, times in IST.
+  const consoleLines = [
+    ['job', job.jobId],
+    ['status', job.status],
+    ['phase', job.phase],
+    ['progress', pct != null ? `${pct}%` : null],
+    ['compute', job.compute],
+    ['queue.lane', job.queueLane],
+    ['queue.position', job.queuePosition != null ? `${job.queuePosition}${job.queueLength != null ? ` of ${job.queueLength}` : ''}` : null],
+    ['started', formatIstStamp(job.startedAt)],
+    ['finished', formatIstStamp(job.completedAt)],
+    ['duration', formatJobDuration(job.durationSeconds != null ? Number(job.durationSeconds) * 1000 : null)],
+    ['failure.code', job.failure?.code],
+    ['failure', failed ? getModule1FailureMessage(job) : null],
+  ];
   const showControls = showQueuePanel || showRunPanel;
 
   // Both branches stay mounted while they trade places (each in its own Collapse), so the confirm's
@@ -373,6 +396,8 @@ const Module1PipelineStepper = ({
       onStepsToggle={() => setStepsOpen((v) => !v)}
       stepsToggleRef={stepsToggleRef}
       stepsLabel="Steps"
+      details={variant === 'panel' ? <JobConsole lines={consoleLines} title="module 1 job, IST" /> : null}
+      detailsLabel="Job details"
     >
       <span className="sr-only" aria-live="polite">{liveAnnouncement}</span>
       {controls}

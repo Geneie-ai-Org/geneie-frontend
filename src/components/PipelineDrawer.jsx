@@ -11,7 +11,8 @@ import {
   module1FinishedSuccessfully,
 } from '@/lib/module1PipelinePhases';
 import Module1QcSection, { module1HasQcArtifacts } from '@/components/Module1QcSection';
-import PipelineJobCard, { ActionButton } from '@/components/PipelineJobCard';
+import PipelineJobCard, { ActionButton, JobConsole } from '@/components/PipelineJobCard';
+import { formatIstStamp, formatIstWhen, formatJobDuration, jobDurationMs } from '@/lib/istTime';
 import { HoldButton } from '@/components/motion';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,6 +21,7 @@ import {
   getPipelineBackgroundActive,
   getPipelineStatusLine,
   getPipelineChipSummary,
+  resolveDisplayStatuses,
 } from '@/lib/variantPipelineSteps';
 import {
   AlertDialog,
@@ -117,6 +119,14 @@ const PipelineDrawer = ({
   };
 
   const steps = computePipelineSteps(pipelineProps);
+  const backgroundActive = getPipelineBackgroundActive(pipelineProps);
+  // Enrichment and indexing are the two async gates the step model doesn't know about,
+  // so they own the wording whenever they're live.
+  const busy = backgroundActive || enrichmentState?.active || indexingState?.active;
+  /* What a person sees per step. The clocks below follow THIS, not the raw status: a step the model
+   * still calls "running" after a later step has failed is shown as done, and must not tick (or report
+   * a time that is only how long this tab has been open). */
+  const display = resolveDisplayStatuses(steps, { busy: Boolean(busy), uploadInProgress });
 
   /* ── Per-step timing ─────────────────────────────────────────────────────────────
    * Server-reported start/finish times where the job has them (annotation, filter,
@@ -145,10 +155,10 @@ const PipelineDrawer = ({
   })();
 
   const stepTimers = {
-    upload: useRunTimer(timerKey('upload'), steps.upload === 'running'),
-    interpret: useRunTimer(timerKey('interpret'), steps.interpret === 'running'),
-    annovar: useRunTimer(timerKey('annovar'), steps.annovar === 'running', jobTiming(annovarJob)),
-    reduce: useRunTimer(timerKey('reduce'), steps.reduce === 'running', jobTiming(reduceJob)),
+    upload: useRunTimer(timerKey('upload'), display.upload === 'running'),
+    interpret: useRunTimer(timerKey('interpret'), display.interpret === 'running'),
+    annovar: useRunTimer(timerKey('annovar'), display.annovar === 'running', jobTiming(annovarJob)),
+    reduce: useRunTimer(timerKey('reduce'), display.reduce === 'running', jobTiming(reduceJob)),
     chat: null,
   };
   /* Enrichment and indexing are the two waits the five-step model doesn't own, and they
@@ -157,7 +167,6 @@ const PipelineDrawer = ({
   const enrichmentTimer = useRunTimer(timerKey('enrichment'), Boolean(enrichmentState?.active));
   const indexingTimer = useRunTimer(timerKey('indexing'), Boolean(indexingState?.active));
 
-  const backgroundActive = getPipelineBackgroundActive(pipelineProps);
   const statusLine = getPipelineStatusLine(pipelineProps, steps);
   const summary = getPipelineChipSummary(steps, hasUploadedFile);
   const chatReady = chatEligibility?.allowed === true;
@@ -173,10 +182,6 @@ const PipelineDrawer = ({
     indexingState?.failed ||
     steps.annovar === 'failed' ||
     steps.reduce === 'failed';
-
-  // Enrichment and indexing are the two async gates the step model doesn't know about,
-  // so they own the wording whenever they're live.
-  const busy = backgroundActive || enrichmentState?.active || indexingState?.active;
 
   /* ── Auto-expand once, then auto-collapse ─────────────────────────────────────
    * A job starting is worth surfacing; a job finishing is worth getting out of the
@@ -287,20 +292,35 @@ const PipelineDrawer = ({
 
   const showAnnotatedBadge = hasAnnotatedFile || vcfAnnotated;
 
-  /* ── Failure: what happened, why, and the next step ───────────────────────────────
+  /* ── Failure: what happened, when, why, and the next step ──────────────────────────
    * Failure outranks the eligibility sentence: a card that says "Failed" must say what failed,
    * not why chat is gated. `onStepAction` already knows how to restart annotation ('annovar') and
    * to open the filters ('reduce'), so Retry reuses it instead of adding a new callback.
+   * Times are the server's own (IST); anything not recorded is simply left out.
    */
+  const failedJob = (() => {
+    if (steps.annovar === 'failed') return annovarJob;
+    if (steps.reduce === 'failed') return exomiserStatus?.status === 'failed' ? exomiserStatus : filterJob;
+    return null;
+  })();
+  const failedWhen = formatIstWhen(failedJob?.failure?.at || failedJob?.completed_at);
+  const failedCode = failedJob?.failure?.code || null;
+  const notRetryable = failedJob?.failure?.retryable === false;
   const failure = (() => {
     // Backend job text can carry infrastructure detail (storage keys, stack traces). As with the
-    // Module 1 failure text, anything that reads like that is replaced by a plain line, and the
-    // curated `message` is read before the raw `error`.
+    // Module 1 failure text, anything that reads like that is withheld, and the curated `message` is
+    // read before the raw `error`. Withheld is said plainly: the service did report something.
     const INFRA = /\b(s3|bucket|key|traceback|exception|errno|ecs|ec2|instance|subprocess|stack)\b/i;
-    const reason = (...candidates) =>
-      candidates
-        .map((c) => String(c || '').trim())
-        .find((c) => c && !/^failed$/i.test(c) && !INFRA.test(c)) || 'The service did not report a reason.';
+    const reason = (...candidates) => {
+      const seen = candidates.map((c) => String(c || '').trim()).filter((c) => c && !/^failed$/i.test(c));
+      const clean = seen.find((c) => !INFRA.test(c));
+      if (clean) return clean;
+      if (seen.length) return 'The service stopped with an internal error. Its technical detail is not shown here.';
+      return 'The service did not report a reason.';
+    };
+    const nextRetry = (fallback) =>
+      notRetryable ? 'The service flagged this as not retryable, so running it again may fail the same way.' : fallback;
+    const at = failedWhen ? ` at ${failedWhen}` : '';
     if (enrichmentState?.failed) {
       return {
         what: 'Enrichment failed.',
@@ -319,22 +339,33 @@ const PipelineDrawer = ({
     }
     if (steps.annovar === 'failed') {
       return {
-        what: 'Annotation failed.',
+        what: `Annotation failed${at}.`,
         why: reason(annovarJob?.message, annovarJob?.error),
-        next: 'Retry to run it again.',
+        next: nextRetry('Retry to run it again.'),
         action: { label: 'Retry annotation', run: () => onStepAction?.('annovar') },
       };
     }
     if (steps.reduce === 'failed') {
       const job = exomiserStatus?.status === 'failed' ? exomiserStatus : filterJob;
       return {
-        what: 'Prioritization failed.',
+        what: `Prioritization failed${at}.`,
         why: reason(sanitizePhenotypeStatusMessage(job?.message, ''), job?.message, job?.error),
-        next: 'Open the filters to try again.',
+        next: nextRetry('Open the filters to try again.'),
         action: { label: 'Choose a filter', run: () => onStepAction?.('reduce') },
       };
     }
     return null;
+  })();
+  // Chips under the failure sentence: only facts the service recorded.
+  const failureChips = (() => {
+    if (!failure || !failedJob) return null;
+    const ran = formatJobDuration(jobDurationMs(failedJob));
+    return [
+      ran ? `Ran ${ran}` : null,
+      failedCode,
+      notRetryable ? 'Not auto-retryable' : null,
+      typeof failedJob?.failure?.attempts === 'number' ? `Attempt ${failedJob.failure.attempts}` : null,
+    ].filter(Boolean);
   })();
 
   /* ── Reads → VCF (FASTQ route) ─────────────────────────────────────────────────── */
@@ -391,7 +422,7 @@ const PipelineDrawer = ({
     status !== 'failed'
       ? sentence
       : failure && !module1Failed
-        ? [failure.why, failure.next].filter(Boolean).map((t) => (/[.!?]$/.test(t) ? t : `${t}.`)).join(' ')
+        ? [failure.why].filter(Boolean).map((t) => (/[.!?]$/.test(t) ? t : `${t}.`)).join(' ')
         : sentence;
   const note = (() => {
     if (module1Pending || module1Failed) return null;
@@ -404,64 +435,111 @@ const PipelineDrawer = ({
     ? (typeof module1Job.progressPercent === 'number' ? module1Job.progressPercent : null)
     : status === 'running' ? progressPct : null;
 
-  /* ── Step list (collapsed by default) ─────────────────────────────────────────── */
+  /* ── Step list: a timeline. Each row folds open to its own detail ───────────────────── */
   const guestFrozen = (id) =>
     isGuest && id === 'reduce' && steps.annovar !== 'done' && steps.annovar !== 'skipped';
   const stepTime = (timer) => {
     const ms = timerMs(timer);
     return ms >= 1000 ? formatDuration(ms) : null;
   };
+  const STEP_ABOUT = {
+    upload: 'Sends the file to Geneie and counts its rows.',
+    interpret: 'Checks the columns and the genome build of the file.',
+    annovar: 'Adds clinical and population annotation to every variant. It unlocks the ACMG and phenotype filters.',
+    reduce: 'Narrows the set with an ACMG, phenotype or manual filter so chat can work on it.',
+    chat: 'Opens the thread to questions about the variants in scope.',
+  };
+  const jobFacts = (job, withFailure) => [
+    ['Started', formatIstStamp(job?.started_at)],
+    ['Finished', formatIstStamp(job?.completed_at)],
+    ['Took', formatJobDuration(jobDurationMs(job))],
+    ...(withFailure && job?.failure
+      ? [
+          ['Failure code', job.failure.code],
+          ['Retryable by the service', job.failure.retryable == null ? null : job.failure.retryable ? 'Yes' : 'No'],
+        ]
+      : []),
+  ];
+  const stepJobs = { annovar: annovarJob, reduce: reduceJob };
   const firstStep = isFastqRoute
     ? {
         id: 'reads',
         label: 'Reads to VCF',
         status: module1Failed ? 'failed' : module1Done ? 'done' : 'running',
         time: stepTime(module1Timer),
+        note: 'Aligns the sequencing reads and calls variants into a VCF.',
       }
     : {
         id: 'upload',
         label: 'Upload',
-        status: steps.upload === 'done' ? 'done' : steps.upload === 'running' ? 'running' : 'pending',
+        status: display.upload,
         time: stepTime(stepTimers.upload),
+        note: STEP_ABOUT.upload,
         onClick: () => handleStepClick('upload'),
-        title: 'View Upload',
+        title: 'View upload',
       };
-  const analysisOrder = ANALYSIS_STEP_DEFS.map((def) => def.id);
-  const laterStepStarted = (id) =>
-    analysisOrder
-      .slice(analysisOrder.indexOf(id) + 1)
-      .some((laterId) => ['done', 'failed', 'running', 'skipped'].includes(steps[laterId]));
   const stepRows = [
     firstStep,
     ...ANALYSIS_STEP_DEFS.map((def) => {
       const frozen = guestFrozen(def.id);
+      const status = frozen ? 'pending' : display[def.id];
+      const job = stepJobs[def.id];
+      const jobShown = job && (status === 'done' || status === 'failed');
+      const isFailedStep = status === 'failed' && !frozen && failure && !enrichmentState?.failed && !indexingState?.failed;
+      const time = frozen
+        ? null
+        : jobShown
+          ? formatJobDuration(jobDurationMs(job)) ?? stepTime(stepTimers[def.id])
+          : stepTime(stepTimers[def.id]);
       const annovarDone = def.id === 'annovar' && steps[def.id] === 'done';
       return {
         id: def.id,
         label: def.label,
-        // One vocabulary (queued, running, done, failed): a step cannot still be running once a
-        // later step has started or failed, and with nothing in flight a stale "running" would sit
-        // beside the next-step button and contradict it, so it reads as the current stop instead.
-        status: frozen
-          ? 'pending'
-          : steps[def.id] === 'running' && laterStepStarted(def.id)
-            ? 'done'
-            : steps[def.id] === 'running' && !busy && !uploadInProgress
-              ? 'waiting'
-              : steps[def.id] === 'skipped'
-                ? 'done'
-                : steps[def.id],
+        status,
         detail: frozen
           ? 'Sign in for full analysis'
           : steps[def.id] === 'skipped'
             ? 'Not needed for this file'
             : undefined,
-        time: frozen ? null : stepTime(stepTimers[def.id]),
+        time,
+        when: jobShown ? formatIstWhen(job.failure?.at || job.completed_at) : null,
+        reason: isFailedStep ? failure.next : null,
+        note: frozen ? null : STEP_ABOUT[def.id],
+        facts: frozen ? null : jobShown ? jobFacts(job, status === 'failed') : null,
+        retry: isFailedStep && failure.action && onStepAction ? { label: failure.action.label, run: failure.action.run } : null,
         onClick: frozen || annovarDone ? undefined : () => handleStepClick(def.id),
-        title: frozen ? 'Sign in for full analysis' : `View ${def.label}`,
+        title: frozen ? 'Sign in for full analysis' : `View ${def.label.toLowerCase()}`,
       };
     }),
   ];
+
+  /* ── Developer console: the job records the service returned, in IST. Only jobs that exist are listed,
+   * and internal text is withheld rather than shown (same rule as the failure sentence). */
+  const consoleLines = (() => {
+    const INFRA = /\b(s3|bucket|key|traceback|exception|errno|ecs|ec2|instance|subprocess|stack)\b/i;
+    const L = [];
+    const add = (heading, job) => {
+      if (!job || (!job.status && !job.phase)) return;
+      const msg = String(job.message || '').trim();
+      L.push({ heading });
+      L.push(['status', job.status]);
+      L.push(['phase', job.phase]);
+      if (job.progress_percent != null) L.push(['progress', `${job.progress_percent}%`]);
+      L.push(['started', formatIstStamp(job.started_at)]);
+      L.push(['finished', formatIstStamp(job.completed_at)]);
+      L.push(['duration', formatJobDuration(jobDurationMs(job))]);
+      if (job.failure) {
+        L.push(['failure.code', job.failure.code]);
+        if (job.failure.retryable != null) L.push(['failure.retryable', String(job.failure.retryable)]);
+        if (job.failure.attempts != null) L.push(['failure.attempts', String(job.failure.attempts)]);
+      }
+      if (msg) L.push(['message', INFRA.test(msg) ? '(withheld: internal detail)' : msg]);
+    };
+    add('annotation', annovarJob);
+    add('filter', filterJob);
+    add('phenotype', exomiserStatus);
+    return L;
+  })();
 
   const activeTimer = module1Pending
     ? module1Timer
@@ -502,7 +580,7 @@ const PipelineDrawer = ({
           onClick={() => setRemoveFileDialogOpen(true)}
           title="Remove variant file"
           aria-label="Remove variant file"
-          className={`wb-iconbtn hover:!border-[color-mix(in_srgb,var(--error)_30%,transparent)] hover:!bg-[var(--error-soft)] hover:!text-[var(--error)] ${ICON_FOCUS} max-md:size-11`}
+          className={`wb-iconbtn !border-transparent !bg-transparent hover:!border-[color-mix(in_srgb,var(--error)_30%,transparent)] hover:!bg-[var(--error-soft)] hover:!text-[var(--error)] ${ICON_FOCUS} max-md:size-11`}
         >
           <Trash2 className="size-3.5" aria-hidden />
         </button>
@@ -527,6 +605,9 @@ const PipelineDrawer = ({
         chips={!isFastqRoute && variantCount != null ? [{ label: `${Number(variantCount).toLocaleString()} variants` }] : null}
         status={status}
         statusTitle={status === 'failed' ? (module1Failed ? 'Reads to VCF failed.' : failure?.what ?? null) : null}
+        failure={status === 'failed' && !module1Failed && failureChips?.length ? { chips: failureChips } : null}
+        details={variant === 'panel' && consoleLines.length ? <JobConsole lines={consoleLines} title="job records, IST" /> : null}
+        detailsLabel="Job details"
         statusText={failedBody}
         pct={progress}
         timer={timerNode}

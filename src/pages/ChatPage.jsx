@@ -1626,6 +1626,21 @@ const ChatPage = () => {
         chatAllowed: chatEligibility?.allowed,
         chatReason: chatEligibility?.requires_annovar ? 'Run annotation to continue' : 'Apply a filter to enable chat',
         nextAction: primaryAction,
+        // The Pipeline tab's inputs, so the Summary rail is built from the same step function.
+        annovarJob: pipelineSnapshot.annovarJob,
+        filterJob: pipelineSnapshot.filterJob,
+        exomiserStatus,
+        isRunningExomiser,
+        isApplyingProprietaryFilter,
+        columnInterpretationResult,
+        chatEligibility,
+        activeProprietaryFilter: conversationFilterState.activeProprietaryFilter,
+        activeVariantFilters: conversationFilterState.activeVariantFilters,
+        s3LineCountStatus: variantData?.s3_line_count_status || chatEligibility?.s3_line_count_status,
+        uploadInProgress: variantUploadInProgress,
+        uploadProgress,
+        categoricalColumns: variantData?.categorical_columns,
+        sampleOnly: variantData?.sample_only_ingest,
       })
     : null;
   const summaryJumps = [
@@ -2300,6 +2315,7 @@ const ChatPage = () => {
             acmgFilterCanApply={acmgFilterCanApply}
             annovarGate={annovarGate}
             acmgExomiserGate={acmgExomiserGate}
+            onRequestUpgrade={onRequestUpgrade}
             isRunningAnnovar={isRunningAnnovar}
             runAnnovar={runAnnovarForCurrentConversation}
             isApplyingProprietaryFilter={isApplyingProprietaryFilter}

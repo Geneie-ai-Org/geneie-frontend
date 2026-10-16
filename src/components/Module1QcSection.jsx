@@ -57,8 +57,10 @@ export default function Module1QcSection({ job, variant = 'card' }) {
 
   if (variant === 'panel') {
     return (
-      <section aria-label="QC and alignment" className="flex h-full min-h-0 flex-col">
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">{sections}</div>
+      // Lives inside the job card, whose own body already pads and scrolls: no second inset, no inner scroller.
+      <section aria-label="QC and alignment" className="min-w-0">
+        <h4 className="wb-card-title mb-2 mt-0 px-0.5">QC and alignment</h4>
+        {sections}
       </section>
     );
   }

@@ -297,3 +297,29 @@ export function getPipelineChipSummary(steps, hasUploadedFile) {
     focusId,
   };
 }
+
+/**
+ * The statuses a person should see, from the raw step statuses. One vocabulary (queued, running, done,
+ * failed): a step cannot still be running once a later step has started or failed, and with nothing in
+ * flight a stale "running" reads as the current stop ("waiting") rather than a spinner that contradicts the
+ * next-step button. A skipped step is finished. Shared by the Pipeline and Summary tabs so they agree.
+ */
+export function resolveDisplayStatuses(steps, { busy = false, uploadInProgress = false } = {}) {
+  const analysis = PIPELINE_STEP_DEFS.map((d) => d.id).filter((id) => id !== 'upload');
+  const laterStarted = (id) =>
+    analysis.slice(analysis.indexOf(id) + 1).some((later) => ['done', 'failed', 'running', 'skipped'].includes(steps[later]));
+  const out = {};
+  for (const { id } of PIPELINE_STEP_DEFS) {
+    const s = steps[id];
+    if (id === 'upload') {
+      out[id] = s === 'done' ? 'done' : s === 'running' ? 'running' : 'pending';
+    } else if (s === 'running' && laterStarted(id)) {
+      out[id] = 'done';
+    } else if (s === 'running' && !busy && !uploadInProgress) {
+      out[id] = 'waiting';
+    } else {
+      out[id] = s === 'skipped' ? 'done' : s;
+    }
+  }
+  return out;
+}

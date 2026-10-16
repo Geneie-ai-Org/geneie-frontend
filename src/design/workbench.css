@@ -540,3 +540,14 @@
 }
 /* Pages outside the chat shell opt in with className="wb-scope" on their root. */
 .wb-scope { background-color: hsl(var(--wb-bg)); }
+
+/* ---- Developer console (job details in the Pipeline tab): dark in both themes, monospace, quiet teal keys ---- */
+.wb-console { background-color: hsl(180 14% 9.5%); border-color: hsl(180 8% 24%); color: hsl(180 12% 88%); }
+.wb-console > figcaption { border-color: hsl(180 8% 20%); }
+.wb-console__title { color: hsl(180 8% 62%); }
+.wb-console__head { color: hsl(180 8% 58%); }
+.wb-console__key { color: hsl(174 32% 66%); }
+.wb-console__val { color: hsl(180 12% 90%); }
+.wb-console [data-slot='button'].wb-console__copy { color: hsl(180 10% 78%); background-color: transparent; border-color: transparent; }
+.wb-console [data-slot='button'].wb-console__copy:hover { background-color: hsl(180 8% 20%); color: hsl(0 0% 100%); }
+.wb-console pre:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: -2px; }

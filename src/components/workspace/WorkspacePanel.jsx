@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { Maximize2, Minimize2, PanelRightClose, Plus, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, PanelRightClose, PanelsTopLeft, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -261,10 +261,19 @@ export default function WorkspacePanel({
     focusTab(current);
   }, [current, shown.length]);
 
-  // Keep the active tab visible when the strip scrolls.
+  // Keep the active tab visible when the strip overflows: when it is clipped or under a fade, glide it to
+  // the middle of the strip (instant under reduced motion). Vertical scroll is never touched.
   useEffect(() => {
-    tabRefs.current[current]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
-  }, [current]);
+    const list = listRef.current;
+    const tab = tabRefs.current[current]?.closest('.wb-tab') || tabRefs.current[current];
+    if (!list || !tab || list.scrollWidth <= list.clientWidth + 2) return;
+    const l = list.getBoundingClientRect();
+    const t = tab.getBoundingClientRect();
+    const pad = 36; // clear of the edge fades and the scroll buttons
+    if (t.left >= l.left + pad && t.right <= l.right - pad) return;
+    const delta = t.left + t.width / 2 - (l.left + l.width / 2);
+    list.scrollBy({ left: delta, behavior: reduceMotion ? 'auto' : 'smooth' });
+  }, [current, shown.length, reduceMotion]);
 
   const onTabKey = (e, idx) => {
     const last = shown.length - 1;
@@ -317,6 +326,23 @@ export default function WorkspacePanel({
     return () => ro.disconnect();
   }, [measureEdges, shown.length]);
 
+  // A mouse wheel over the strip scrolls it sideways (trackpads that already send deltaX are left alone).
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return undefined;
+    const onWheel = (e) => {
+      if (el.scrollWidth <= el.clientWidth + 2 || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+  const nudge = (dir) => {
+    const el = listRef.current;
+    if (el) el.scrollBy({ left: dir * Math.max(120, el.clientWidth * 0.6), behavior: reduceMotion ? 'auto' : 'smooth' });
+  };
+
   // ---- Fade under the toolbar when content has scrolled beneath it -----------------------------
   useEffect(() => {
     const body = bodyRef.current;
@@ -368,7 +394,7 @@ export default function WorkspacePanel({
 
   const edgeMask =
     edge.left || edge.right
-      ? `linear-gradient(to right, ${edge.left ? 'transparent 0, #000 16px' : '#000 0'}, ${edge.right ? '#000 calc(100% - 16px), transparent 100%' : '#000 100%'})`
+      ? `linear-gradient(to right, ${edge.left ? 'transparent 0, #000 34px' : '#000 0'}, ${edge.right ? '#000 calc(100% - 34px), transparent 100%' : '#000 100%'})`
       : undefined;
 
   return (
@@ -403,13 +429,15 @@ export default function WorkspacePanel({
 
       {/* Tab strip */}
       <div className="flex h-12 shrink-0 items-center gap-1.5 pl-3 pr-2.5">
-        <div
+        <div className="relative min-w-0 flex-1">
+        <motion.div
           ref={listRef}
+          layoutScroll
           role="tablist"
           aria-label="Workspace tabs"
           onScroll={measureEdges}
           style={edgeMask ? { maskImage: edgeMask, WebkitMaskImage: edgeMask } : undefined}
-          className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex min-w-0 items-center gap-1.5 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           <Reorder.Group
             as="div"
@@ -494,6 +522,26 @@ export default function WorkspacePanel({
           })}
           </AnimatePresence>
           </Reorder.Group>
+        </motion.div>
+        {/* Mouse-only helpers: keyboard users already move (and scroll) with the arrow keys on the tabs. */}
+        {[['left', -1, ChevronLeft, 'Scroll tabs left'], ['right', 1, ChevronRight, 'Scroll tabs right']].map(([side, dir, Icon, label]) => (
+          <button
+            key={side}
+            type="button"
+            tabIndex={-1}
+            aria-label={label}
+            aria-hidden={!edge[side] || undefined}
+            disabled={!edge[side]}
+            onClick={() => nudge(dir)}
+            className={cn(
+              'ws-nudge absolute top-1/2 z-10 flex size-6 -translate-y-1/2 items-center justify-center rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] text-muted-foreground shadow-[var(--shadow-sm)] transition-[opacity,color,border-color] duration-150 hover:border-[hsl(var(--brand-300))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none',
+              side === 'left' ? 'left-0' : 'right-0',
+              edge[side] ? 'opacity-100' : 'pointer-events-none opacity-0'
+            )}
+          >
+            <Icon className="size-3.5" aria-hidden="true" />
+          </button>
+        ))}
         </div>
 
         {openable.length > 0 ? (
@@ -561,6 +609,34 @@ export default function WorkspacePanel({
       </div>
 
       <div ref={bodyRef} className="relative min-h-0 flex-1">
+        {shown.length === 0 ? (
+          <div className="absolute inset-0 flex items-center justify-center px-6">
+            <div className="wb-card wb-rise tx tx--lattice flex w-full max-w-sm flex-col items-center gap-2 overflow-hidden px-6 pb-6 pt-7 text-center" style={{ '--tx-at': '50% 0%', '--tx-fade': '85% 48%' }}>
+              <span className="flex size-11 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-500))]" aria-hidden="true">
+                <PanelsTopLeft className="size-5" />
+              </span>
+              <h2 className="font-display m-0 mt-1 text-[22px] text-foreground">Nothing open</h2>
+              <p className="m-0 max-w-[26ch] text-[13px] leading-5 text-muted-foreground">
+                {openable.length > 0 ? 'Open a tab to see the file, its filters, the results or the pipeline.' : 'Tabs appear here once you add a file or start a run.'}
+              </p>
+              {openable.length > 0 ? (
+                <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+                  {openable.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => pickTab(t.id)}
+                      className={cn('wb-chip h-8 gap-1.5 px-3 text-[13px] font-medium transition-colors duration-150 hover:!border-[hsl(var(--brand-300))] hover:!bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none', FOCUS)}
+                    >
+                      {t.icon ? <t.icon className="size-3.5 text-muted-foreground" aria-hidden="true" /> : null}
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         {shown.map((t) => (
           <div
             key={t.id}

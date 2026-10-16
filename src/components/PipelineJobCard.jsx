@@ -19,10 +19,10 @@
  * shadow, fixed position or width, so the workspace tab supplies the chrome.
  */
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { AlertCircle, ChevronRight } from 'lucide-react';
+import { ArrowRight, ChevronRight, RotateCcw, Terminal } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '@/lib/utils';
-import { Collapse, CountUp, StageMark, StateButton, Turn } from '@/components/motion';
+import { Collapse, CopyButton, CountUp, StageMark, StateButton, Turn } from '@/components/motion';
 
 // Full-alpha 2px ring (the global one is 45% alpha, under 3:1 on white).
 const FOCUS =
@@ -335,13 +335,69 @@ function ProgressPill({ value, label = 'Run progress', right = null, className }
   );
 }
 
-function TimelineRow({ step, index, last, progress, reserve }) {
+/** Words for the sub-line under a step's label: one vocabulary, never colour alone. */
+const STEP_SUB_WORD = {
+  done: 'Done',
+  skipped: 'Done',
+  running: 'Running',
+  failed: 'Failed',
+  queued: 'Queued',
+  waiting: 'Up next',
+  pending: 'Not started',
+  cancelled: 'Cancelled',
+};
+
+/**
+ * Developer-console block for a job record: monospace, dark in both themes, one `key  value` pair per line,
+ * and a copy button that puts the same plain text on the clipboard. `lines` is [[key, value], ...] or
+ * { heading } separators. Values that are missing are simply not listed: nothing here is invented.
+ */
+export function JobConsole({ lines, title = 'job record', className }) {
+  const rows = (lines || []).filter((l) => l && (l.heading || (l[1] != null && l[1] !== '')));
+  if (!rows.length) return null;
+  const keyW = Math.min(26, Math.max(8, ...rows.filter((r) => !r.heading).map((r) => String(r[0]).length)));
+  const text = rows
+    .map((r) => (r.heading ? `# ${r.heading}` : `${String(r[0]).padEnd(keyW)}  ${r[1]}`))
+    .join('\n');
+  return (
+    <figure className={cn('wb-console m-0 overflow-hidden rounded-xl border', className)} aria-label={`Developer console: ${title}`}>
+      <figcaption className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
+        <span className="wb-console__title font-mono text-[11px] uppercase tracking-[0.08em]">{title}</span>
+        <CopyButton
+          getText={() => text}
+          label="Copy"
+          variant="ghost"
+          className="wb-console__copy h-6 rounded-full px-2 text-[11.5px]"
+          aria-label={`Copy ${title}`}
+        />
+      </figcaption>
+      <pre className="m-0 max-h-64 overflow-auto px-3 py-2.5 font-mono text-[12px] leading-[1.65]" tabIndex={0}>
+        {rows.map((r, i) =>
+          r.heading ? (
+            <span key={i} className="wb-console__head block pt-1.5 first:pt-0">{`# ${r.heading}`}</span>
+          ) : (
+            <span key={i} className="block">
+              <span className="wb-console__key">{String(r[0]).padEnd(keyW)}</span>
+              {'  '}
+              <span className="wb-console__val">{String(r[1])}</span>
+            </span>
+          )
+        )}
+      </pre>
+    </figure>
+  );
+}
+
+function TimelineRow({ step, index, last, progress, reserve, expanded, onToggle }) {
   const done = step.status === 'done' || step.status === 'skipped';
   const current = step.status === 'running' || step.status === 'waiting' || step.status === 'queued';
   const markState = MARK_STATE[step.status] || 'pending';
-  const interactive = typeof step.onClick === 'function';
-  const Row = interactive ? 'button' : 'div';
-  const inner = (
+  const detailId = useId();
+  const facts = (step.facts || []).filter((f) => f && f[1] != null && f[1] !== '');
+  const hasBody = Boolean(step.reason || facts.length || step.note || step.retry || step.onClick);
+  const failed = step.status === 'failed';
+  const sub = [STEP_SUB_WORD[step.status], step.time && !progress ? step.time : null].filter(Boolean).join(' · ');
+  const head = (
     <>
       <span
         aria-hidden
@@ -355,20 +411,17 @@ function TimelineRow({ step, index, last, progress, reserve }) {
       <span className="min-w-0 flex-1">
         <span className="flex items-start gap-2">
           <span className="min-w-0 flex-1">
-            <span
-              className={cn(
-                'block text-[13px] leading-5',
-                step.status === 'pending' || step.status === 'cancelled' ? 'text-muted-foreground' : 'font-medium text-foreground'
-              )}
-            >
+            <span className={cn('block text-[13px] leading-5', step.status === 'pending' || step.status === 'cancelled' ? 'text-muted-foreground' : 'font-medium text-foreground')}>
               {step.label}
+            </span>
+            <span className={cn('block text-xs leading-[18px] tabular-nums', failed ? 'text-[var(--error)]' : 'text-muted-foreground')}>
+              {sub}
+              {step.when ? <span className="text-muted-foreground">{` · ${step.when}`}</span> : null}
             </span>
             {step.detail ? <span className="block text-xs leading-5 text-muted-foreground">{step.detail}</span> : null}
           </span>
-          {step.time && !progress ? <span className="mt-0.5 shrink-0 text-xs tabular-nums text-muted-foreground">{step.time}</span> : null}
-          <StatusPill status={step.status} className="shrink-0" />
-          {interactive ? (
-            <ChevronRight className="mt-[3px] size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          {hasBody ? (
+            <Turn open={expanded} className="mt-[3px] shrink-0 text-muted-foreground"><ChevronRight className="size-3.5" aria-hidden /></Turn>
           ) : reserve ? (
             <span className="size-3.5 shrink-0" aria-hidden />
           ) : null}
@@ -381,12 +434,12 @@ function TimelineRow({ step, index, last, progress, reserve }) {
   );
   const rowClass = cn(
     'flex w-full items-start gap-3 rounded-xl border px-2.5 py-2.5 text-left transition-colors duration-150 motion-reduce:transition-none',
-    current ? 'border-[hsl(var(--brand-100))] bg-[hsl(var(--brand-50))]' : 'border-transparent',
-    interactive && 'hover:border-[hsl(var(--brand-200))] hover:bg-[hsl(var(--brand-50))]',
+    current ? 'border-[hsl(var(--brand-100))] bg-[hsl(var(--brand-50))]' : failed ? 'border-[color-mix(in_srgb,var(--error)_16%,transparent)]' : 'border-transparent',
+    hasBody && 'hover:border-[hsl(var(--brand-200))] hover:bg-[hsl(var(--brand-50))]',
     FOCUS
   );
   return (
-    <li className="relative mb-1 last:mb-0">
+    <li className="relative mb-1 last:mb-0" data-step={step.id} data-status={step.status}>
       {!last ? (
         <span aria-hidden className="absolute -bottom-3 left-[21px] top-[38px] w-0.5 overflow-hidden rounded-full bg-[hsl(var(--wb-line-strong))]">
           {/* The teal line fills down once the step above settles, after its check has drawn. */}
@@ -396,13 +449,51 @@ function TimelineRow({ step, index, last, progress, reserve }) {
           />
         </span>
       ) : null}
-      {interactive ? (
-        <Row type="button" onClick={step.onClick} disabled={step.disabled} title={step.title} className={cn(rowClass, 'disabled:cursor-default disabled:opacity-60')}>
-          {inner}
-        </Row>
+      {hasBody ? (
+        <button type="button" onClick={onToggle} aria-expanded={expanded} aria-controls={detailId} data-step-toggle={step.id} className={rowClass}>
+          {head}
+        </button>
       ) : (
-        <Row className={rowClass}>{inner}</Row>
+        <div className={rowClass}>{head}</div>
       )}
+      {hasBody ? (
+        <Collapse open={expanded} id={detailId}>
+          <div className="ml-[46px] mr-2 space-y-2.5 pb-2.5 pt-0.5">
+            {step.reason ? (
+              <p className={cn('m-0 text-[13px] leading-5', failed ? 'text-foreground' : 'text-[var(--text-secondary)]')}>{step.reason}</p>
+            ) : null}
+            {step.note ? <p className="m-0 text-xs leading-5 text-muted-foreground">{step.note}</p> : null}
+            {facts.length ? (
+              <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs leading-5">
+                {facts.map(([k, v]) => (
+                  <React.Fragment key={k}>
+                    <dt className="text-muted-foreground">{k}</dt>
+                    <dd className="m-0 min-w-0 break-words tabular-nums text-foreground">{v}</dd>
+                  </React.Fragment>
+                ))}
+              </dl>
+            ) : null}
+            {step.retry || step.onClick ? (
+              <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                {step.retry ? (
+                  <ActionButton labels={{ idle: step.retry.label }} icon={RotateCcw} onClick={step.retry.run} variant="outline" size="sm" className="max-sm:h-11" />
+                ) : null}
+                {step.onClick ? (
+                  <button
+                    type="button"
+                    onClick={step.onClick}
+                    disabled={step.disabled}
+                    className={cn('inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-xs font-medium text-[hsl(var(--brand-700))] transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] disabled:opacity-50 motion-reduce:transition-none', FOCUS)}
+                  >
+                    {step.title || `Open ${step.label}`}
+                    <ArrowRight className="size-3" aria-hidden />
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </Collapse>
+      ) : null}
     </li>
   );
 }
@@ -430,6 +521,7 @@ function PanelBody({
   headerExtra,
   chips,
   action,
+  failure,
   details,
   detailsLabel,
   detailsDefaultOpen,
@@ -451,9 +543,17 @@ function PanelBody({
   const hasVisibleKids = kids.some((k) => !String(k?.props?.className || '').includes('sr-only'));
   const engineTone = engine?.tone || (engine?.warn ? 'warn' : null);
 
+  // Which step details are open. A failed step opens by itself (and again if a new one fails); the rest stay folded.
+  const failedId = hasSteps ? steps.find((s) => s.status === 'failed')?.id ?? null : null;
+  const [open, setOpen] = useState(() => (failedId ? [failedId] : []));
+  useEffect(() => {
+    if (failedId) setOpen((o) => (o.includes(failedId) ? o : [...o, failedId]));
+  }, [failedId]);
+  const toggle = (id) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]));
+
   return (
     <div>
-      <header className="flex items-start gap-3 px-4 pb-3 pt-4">
+      <header className="tx tx--lattice relative flex items-start gap-3 rounded-t-[15px] bg-gradient-to-b from-[hsl(var(--brand-50))] to-transparent px-4 pb-3 pt-4" style={{ '--tx-at': '92% 0%', '--tx-fade': '70% 140%' }}>
         {icon ? (
           <span
             className="flex size-9 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] [&>svg]:!size-4 [&>svg]:!text-[hsl(var(--brand-500))]"
@@ -466,13 +566,13 @@ function PanelBody({
           <h3
             ref={hasSteps ? undefined : stepsToggleRef}
             tabIndex={hasSteps ? undefined : -1}
-            className="m-0 truncate text-[15px] font-medium leading-6 text-foreground outline-none"
+            className="font-display m-0 truncate text-[22px] leading-[1.2] text-foreground outline-none"
             title={typeof title === 'string' ? title : undefined}
           >
             {title}
           </h3>
           {engine?.label || (chips && chips.length) ? (
-            <div className="mt-1 flex flex-wrap gap-1.5">
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
               {engine?.label ? (
                 <span
                   className="wb-chip"
@@ -504,16 +604,23 @@ function PanelBody({
             'mx-4 mb-4 rounded-2xl border px-3.5 py-3',
             failed && 'wb-rise',
             failed
-              ? 'border-[color-mix(in_srgb,var(--error)_22%,transparent)] bg-[var(--error-soft)]'
+              ? 'border-[color-mix(in_srgb,var(--error)_18%,transparent)] bg-[color-mix(in_srgb,var(--error)_6%,hsl(var(--wb-card)))]'
               : 'border-[hsl(var(--brand-100))] bg-[hsl(var(--brand-50))]'
           )}
         >
           {failed ? (
             <div className="flex items-start gap-2.5" role="alert">
-              <AlertCircle className="mt-0.5 size-4 shrink-0 text-[var(--error)]" aria-hidden />
+              <span aria-hidden="true" className="mt-px flex size-5 shrink-0 items-center justify-center"><StageMark state="failed" size={20} /></span>
               <div className="min-w-0 flex-1">
-                <p className="m-0 text-[13px] font-medium leading-5 text-foreground">{lead.lead}</p>
-                {lead.rest ? <p className="m-0 mt-0.5 text-xs leading-5 text-[var(--text-secondary)]">{lead.rest}</p> : null}
+                <p className="m-0 text-[13.5px] font-medium leading-5 text-foreground">{lead.lead}</p>
+                {lead.rest ? <p className="m-0 mt-0.5 text-[13px] leading-5 text-[var(--text-secondary)]">{lead.rest}</p> : null}
+                {failure?.chips?.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {failure.chips.map((c) => (
+                      <span key={c} className={cn('wb-chip tabular-nums', /code|PIPELINE|[A-Z]{3,}_/.test(c) && 'font-mono text-[11.5px]')}>{c}</span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : (
@@ -554,7 +661,9 @@ function PanelBody({
                 step={step}
                 index={i}
                 last={i === steps.length - 1}
-                reserve={steps.some((x) => typeof x.onClick === 'function')}
+                reserve={steps.some((x) => x.reason || x.note || x.retry || x.onClick || (x.facts && x.facts.length))}
+                expanded={open.includes(step.id)}
+                onToggle={() => toggle(step.id)}
                 progress={
                   inline && i === runIdx ? (
                     <ProgressPill value={showProgress ? pct : null} right={timer} />
@@ -566,6 +675,13 @@ function PanelBody({
         </section>
       ) : null}
 
+      {kids.length > 0 ? (
+        hasVisibleKids ? (
+          <div className="space-y-3 border-t border-[hsl(var(--wb-line))] px-4 py-3">{kids}</div>
+        ) : (
+          kids
+        )
+      ) : null}
       {details ? (
         <div className="border-t border-[hsl(var(--wb-line))] px-4 py-2.5">
           <button
@@ -579,6 +695,7 @@ function PanelBody({
             )}
           >
             <Turn open={detailsOpen}><ChevronRight className="size-3.5" aria-hidden /></Turn>
+            <Terminal className="size-3.5" aria-hidden />
             {detailsLabel}
           </button>
           <Collapse open={detailsOpen} id={detailsId}>
@@ -587,13 +704,6 @@ function PanelBody({
         </div>
       ) : null}
 
-      {kids.length > 0 ? (
-        hasVisibleKids ? (
-          <div className="space-y-3 border-t border-[hsl(var(--wb-line))] px-4 py-3">{kids}</div>
-        ) : (
-          kids
-        )
-      ) : null}
     </div>
   );
 }
@@ -619,6 +729,8 @@ export default function PipelineJobCard({
   action = null,
   /** panel only: what the failure card leads with (what happened); `statusText` is then the why and next step. */
   statusTitle = null,
+  /** panel only: { chips: string[] } facts shown under a failure (stage, duration, code). */
+  failure = null,
   /** panel only: secondary content (logs, activity) behind a collapsible "Details" pill. */
   details = null,
   detailsLabel = 'Details',
@@ -722,9 +834,10 @@ export default function PipelineJobCard({
           headerExtra={headerExtra}
           chips={chips}
           action={action}
+          failure={failure}
           details={details}
           detailsLabel={detailsLabel}
-          detailsDefaultOpen={detailsDefaultOpen || status === 'failed'}
+          detailsDefaultOpen={detailsDefaultOpen}
           children={children}
         />
       </section>

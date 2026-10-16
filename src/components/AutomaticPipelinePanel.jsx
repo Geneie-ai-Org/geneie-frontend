@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { FileText, Sparkles } from 'lucide-react';
-import PipelineJobCard from '@/components/PipelineJobCard';
+import PipelineJobCard, { JobConsole } from '@/components/PipelineJobCard';
+import { formatIstStamp } from '@/lib/istTime';
 import { Button } from '@/components/ui/button';
 
 function formatEventTime(at) {
@@ -49,7 +50,13 @@ export default function AutomaticPipelinePanel({
 
   const isPanel = variant === 'panel';
   // In the workspace tab the checklist is always on view and the event log sits behind "Details".
-  const timeline = (isPanel || stepsOpen) && events.length > 0 ? (
+  const consoleTimeline = isPanel && events.length > 0 ? (
+    <JobConsole
+      title="automatic pipeline events, IST"
+      lines={[...events].reverse().map((ev) => [formatIstStamp(ev.at) || 'time not recorded', ev.message])}
+    />
+  ) : null;
+  const timeline = !isPanel && stepsOpen && events.length > 0 ? (
     <div>
       {isPanel ? null : <h4 className="mb-1 text-[12px] font-medium text-muted-foreground">Timeline</h4>}
       <ul className="m-0 list-none space-y-1.5 p-0">
@@ -91,8 +98,9 @@ export default function AutomaticPipelinePanel({
       stepsOpen={stepsOpen}
       onStepsToggle={() => setStepsOpen((v) => !v)}
       stepsLabel="Activity"
-      details={isPanel ? timeline : null}
+      details={consoleTimeline}
       detailsLabel="Event log"
+      detailsDefaultOpen={phase === 'failed'}
     >
       {isPanel ? null : timeline}
       {phase === 'failed' && !isPanel ? (

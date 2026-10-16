@@ -394,7 +394,8 @@ function TimelineRow({ step, index, last, progress, reserve, expanded, onToggle 
   const markState = MARK_STATE[step.status] || 'pending';
   const detailId = useId();
   const facts = (step.facts || []).filter((f) => f && f[1] != null && f[1] !== '');
-  const hasBody = Boolean(step.reason || facts.length || step.note || step.retry || step.onClick);
+  const hasBody = Boolean(step.reason || facts.length || step.note);
+  const hasAction = Boolean(step.retry || step.onClick);
   const failed = step.status === 'failed';
   const sub = [STEP_SUB_WORD[step.status], step.time && !progress ? step.time : null].filter(Boolean).join(' · ');
   const head = (
@@ -420,11 +421,6 @@ function TimelineRow({ step, index, last, progress, reserve, expanded, onToggle 
             </span>
             {step.detail ? <span className="block text-xs leading-5 text-muted-foreground">{step.detail}</span> : null}
           </span>
-          {hasBody ? (
-            <Turn open={expanded} className="mt-[3px] shrink-0 text-muted-foreground"><ChevronRight className="size-3.5" aria-hidden /></Turn>
-          ) : reserve ? (
-            <span className="size-3.5 shrink-0" aria-hidden />
-          ) : null}
         </span>
         <Collapse open={Boolean(progress)}>
           <span className="block pt-2.5">{progress}</span>
@@ -433,7 +429,7 @@ function TimelineRow({ step, index, last, progress, reserve, expanded, onToggle 
     </>
   );
   const rowClass = cn(
-    'flex w-full items-start gap-3 rounded-xl border px-2.5 py-2.5 text-left transition-colors duration-150 motion-reduce:transition-none',
+    'flex w-full items-start gap-2 rounded-xl border px-2.5 py-2.5 text-left transition-colors duration-150 motion-reduce:transition-none',
     current ? 'border-[hsl(var(--brand-100))] bg-[hsl(var(--brand-50))]' : failed ? 'border-[color-mix(in_srgb,var(--error)_16%,transparent)]' : 'border-transparent',
     hasBody && 'hover:border-[hsl(var(--brand-200))] hover:bg-[hsl(var(--brand-50))]',
     FOCUS
@@ -449,35 +445,47 @@ function TimelineRow({ step, index, last, progress, reserve, expanded, onToggle 
           />
         </span>
       ) : null}
-      {hasBody ? (
-        <button type="button" onClick={onToggle} aria-expanded={expanded} aria-controls={detailId} data-step-toggle={step.id} className={rowClass}>
-          {head}
-        </button>
-      ) : (
-        <div className={rowClass}>{head}</div>
-      )}
+      <div className={rowClass}>
+        {hasBody ? (
+          <button type="button" onClick={onToggle} aria-expanded={expanded} aria-controls={detailId} data-step-toggle={step.id} className={cn('flex min-w-0 flex-1 items-start gap-3 rounded-lg bg-transparent p-0 text-left', FOCUS)}>
+            {head}
+          </button>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-start gap-3">{head}</div>
+        )}
+        {/* The action lives on the row, so it is there without opening anything. */}
+        {hasAction ? (
+          <span className="flex shrink-0 items-center gap-1.5 self-start pt-px">
+            {step.retry ? (
+              <ActionButton labels={{ idle: step.retry.label }} icon={RotateCcw} onClick={step.retry.run} variant="outline" size="sm" className="max-sm:h-11" />
+            ) : null}
+            {step.onClick ? (
+              <button
+                type="button"
+                onClick={step.onClick}
+                disabled={step.disabled}
+                aria-label={step.title || `Open ${step.label}`}
+                title={step.title || `Open ${step.label}`}
+                className={cn('inline-flex h-7 [@media(pointer:coarse)]:h-10 items-center gap-1 rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-50))] px-2.5 [@media(pointer:coarse)]:px-3.5 text-xs font-medium text-[hsl(var(--brand-700))] transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] disabled:opacity-50 motion-reduce:transition-none', FOCUS)}
+              >
+                View
+                <ArrowRight className="size-3" aria-hidden />
+              </button>
+            ) : null}
+          </span>
+        ) : null}
+        {/* Always the last thing on the row, so the chevrons line up whether or not a row has an action. */}
+        {hasBody ? (
+          <button type="button" tabIndex={-1} aria-hidden onClick={onToggle} className="mt-[3px] flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground">
+            <Turn open={expanded}><ChevronRight className="size-3.5" aria-hidden /></Turn>
+          </button>
+        ) : reserve ? (
+          <span className="mt-[3px] size-4 shrink-0" aria-hidden />
+        ) : null}
+      </div>
       {hasBody ? (
         <Collapse open={expanded} id={detailId}>
           <div className="ml-[46px] mr-2 space-y-2.5 pb-2.5 pt-0.5">
-            {/* Actions first: the thing to do is the first thing under the step, not buried under the facts. */}
-            {step.retry || step.onClick ? (
-              <div className="flex flex-wrap items-center gap-2">
-                {step.retry ? (
-                  <ActionButton labels={{ idle: step.retry.label }} icon={RotateCcw} onClick={step.retry.run} variant="outline" size="sm" className="max-sm:h-11" />
-                ) : null}
-                {step.onClick ? (
-                  <button
-                    type="button"
-                    onClick={step.onClick}
-                    disabled={step.disabled}
-                    className={cn('inline-flex h-7 [@media(pointer:coarse)]:h-10 items-center gap-1 rounded-full px-2.5 [@media(pointer:coarse)]:px-3.5 text-xs font-medium text-[hsl(var(--brand-700))] transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] disabled:opacity-50 motion-reduce:transition-none', FOCUS)}
-                  >
-                    {step.title || `Open ${step.label}`}
-                    <ArrowRight className="size-3" aria-hidden />
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
             {step.reason ? (
               <p className={cn('m-0 text-[13px] leading-5', failed ? 'text-foreground' : 'text-[var(--text-secondary)]')}>{step.reason}</p>
             ) : null}
@@ -544,17 +552,15 @@ function PanelBody({
   const hasVisibleKids = kids.some((k) => !String(k?.props?.className || '').includes('sr-only'));
   const engineTone = engine?.tone || (engine?.warn ? 'warn' : null);
 
-  // Step details are open by default (the actions and times are what people come here for); the person
-  // folds the ones they don't want. A step that fails opens again by itself, even if it was folded.
+  // Step details stay folded (the action is on the row itself); a failed step opens by itself, and again if a new one fails.
   const failedId = hasSteps ? steps.find((s) => s.status === 'failed')?.id ?? null : null;
-  const [folded, setFolded] = useState([]);
+  const [open, setOpen] = useState(() => (failedId ? [failedId] : []));
   useEffect(() => {
-    if (failedId) setFolded((f) => (f.includes(failedId) ? f.filter((x) => x !== failedId) : f));
+    if (failedId) setOpen((o) => (o.includes(failedId) ? o : [...o, failedId]));
   }, [failedId]);
-  const open = hasSteps ? steps.map((s) => s.id).filter((id) => !folded.includes(id)) : [];
-  const toggle = (id) => setFolded((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]));
-  const bodyIds = hasSteps ? steps.filter((s) => s.reason || s.note || s.retry || s.onClick || (s.facts && s.facts.length)).map((s) => s.id) : [];
-  const allOpen = bodyIds.length > 0 && bodyIds.every((id) => !folded.includes(id));
+  const toggle = (id) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]));
+  const bodyIds = hasSteps ? steps.filter((s) => s.reason || s.note || (s.facts && s.facts.length)).map((s) => s.id) : [];
+  const allOpen = bodyIds.length > 0 && bodyIds.every((id) => open.includes(id));
 
   return (
     <div>
@@ -659,7 +665,7 @@ function PanelBody({
               {bodyIds.length > 1 ? (
                 <button
                   type="button"
-                  onClick={() => setFolded(allOpen ? bodyIds : [])}
+                  onClick={() => setOpen(allOpen ? [] : bodyIds)}
                   className={cn('inline-flex h-6 [@media(pointer:coarse)]:h-9 items-center rounded-full px-2.5 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none', FOCUS)}
                 >
                   {allOpen ? 'Collapse all' : 'Expand all'}
@@ -677,7 +683,7 @@ function PanelBody({
                 step={step}
                 index={i}
                 last={i === steps.length - 1}
-                reserve={steps.some((x) => x.reason || x.note || x.retry || x.onClick || (x.facts && x.facts.length))}
+                reserve={steps.some((x) => x.reason || x.note || (x.facts && x.facts.length))}
                 expanded={open.includes(step.id)}
                 onToggle={() => toggle(step.id)}
                 progress={

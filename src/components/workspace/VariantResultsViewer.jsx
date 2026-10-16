@@ -1,13 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, animate, motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import {
   AlertCircle,
-  ArrowDown,
   ArrowUp,
-  Check,
   ChevronsUpDown,
   Columns3,
-  Copy,
   Download,
   Rows2,
   Rows3,
@@ -24,6 +22,7 @@ import { exportVariants, getAuthHeaders, parseApiErrorDetail } from '@/services/
 import { apiUrl } from '@/config/api';
 import { readTsvStream } from '@/lib/tsvStream';
 import { cn } from '@/lib/utils';
+import { ChipList, CopyButton, CountUp, PopIn, SPRING, Turn } from '@/components/workspace/motion';
 
 const MAX_ROWS = 500;
 const COLS_KEY = 'geneie-results-cols-v1';
@@ -132,9 +131,9 @@ function TableSkeleton({ rowH }) {
       </div>
       {Array.from({ length: 14 }, (_, i) => (
         <div key={i} className="flex items-center border-b border-[hsl(var(--wb-line)/0.6)]" style={{ height: rowH }}>
-          <span style={{ width: GUTTER_W }} className="flex shrink-0 justify-end px-2"><span className="h-2.5 w-4 rounded-full bg-[hsl(var(--brand-100))]" /></span>
-          <span className="px-3"><span className="block h-2.5 animate-pulse rounded-full bg-[hsl(var(--brand-100))] motion-reduce:animate-none" style={{ width: 56 + ((i * 29) % 40) }} /></span>
-          <span className="px-3"><span className="block h-2.5 animate-pulse rounded-full bg-[hsl(var(--brand-100))] motion-reduce:animate-none" style={{ width: 96 + ((i * 53) % 90) }} /></span>
+          <span style={{ width: GUTTER_W }} className="flex shrink-0 justify-end px-2"><span className="wb-shimmer h-2.5 w-4 rounded-full" /></span>
+          <span className="px-3"><span className="wb-shimmer block h-2.5 rounded-full" style={{ width: 56 + ((i * 29) % 40) }} /></span>
+          <span className="px-3"><span className="wb-shimmer block h-2.5 rounded-full" style={{ width: 96 + ((i * 53) % 90) }} /></span>
         </div>
       ))}
     </div>
@@ -159,6 +158,19 @@ function RemovableChip({ children, removeLabel, onRemove }) {
   );
 }
 
+/** Column checkbox with a small spring tick when it flips. */
+function TickBox({ checked, onChange }) {
+  const ref = useRef(null);
+  const first = useRef(true);
+  const reduce = useReducedMotion();
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    if (reduce || !ref.current) return;
+    animate(ref.current, { scale: [0.7, 1] }, SPRING);
+  }, [checked, reduce]);
+  return <span ref={ref} className="inline-flex"><Checkbox checked={checked} onCheckedChange={onChange} /></span>;
+}
+
 const PILL_FIELD =
   'h-8 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-8 pr-8 text-[13px] text-foreground outline-none transition-colors duration-150 placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none';
 
@@ -171,20 +183,22 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
   const [density, setDensity] = useState(readStoredDensity);
   const [selected, setSelected] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [intro, setIntro] = useState(true); // the first rows fade in once per load
+  const [mk, setMk] = useState(null); // selection marker box: { top, h, show, snap }
   const [downloading, setDownloading] = useState(false);
   const [colQuery, setColQuery] = useState('');
   const [scroll, setScroll] = useState({ x: false, y: false });
-  const copyTimer = useRef(null);
   const scrollerRef = useRef(null);
+  const wrapRef = useRef(null);
+  const tbodyRef = useRef(null);
+  const reduce = useReducedMotion();
   const rowH = ROW_H[density];
-
-  useEffect(() => () => clearTimeout(copyTimer.current), []);
 
   useEffect(() => {
     if (!conversationId) return undefined;
     const ctrl = new AbortController();
     setState({ status: 'loading' });
+    setIntro(true);
     setSelected(null);
     setDetailOpen(false);
     (async () => {
@@ -205,6 +219,12 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
     })();
     return () => ctrl.abort();
   }, [conversationId, refreshKey, attempt]);
+
+  useEffect(() => {
+    if (state.status !== 'ready') return undefined;
+    const t = setTimeout(() => setIntro(false), 900);
+    return () => clearTimeout(t);
+  }, [state.status]);
 
   const { header = [], rows = [] } = state;
   const visibleCols = useMemo(() => {
@@ -253,6 +273,24 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
     return out;
   }, [rows, query, sort, colIdx, visibleCols, numeric]);
 
+  // One marker for the whole table: measure the selected row and let the marker glide there.
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    const tr = selected != null && wrap ? wrap.querySelector(`tr[data-n="${selected}"]`) : null;
+    if (!tr) { setMk((m) => (m && m.show ? { ...m, show: false } : m)); return; }
+    const top = Math.round(tr.getBoundingClientRect().top - wrap.getBoundingClientRect().top);
+    const h = tr.offsetHeight;
+    setMk((m) => (m && m.show && m.top === top && m.h === h ? m : { top, h, show: true, snap: !m?.show }));
+  }, [selected, view, rowH, state.status, tableWidth]);
+
+  // Row height changes are instant (table rows cannot tween); a short dip softens the switch.
+  const firstDensity = useRef(true);
+  useEffect(() => {
+    if (firstDensity.current) { firstDensity.current = false; return; }
+    if (reduce || !tbodyRef.current) return;
+    animate(tbodyRef.current, { opacity: [0.35, 1] }, { duration: 0.22, ease: 'easeOut' });
+  }, [density, reduce]);
+
   const toggleCol = (name) => {
     const next = visibleCols.includes(name) ? visibleCols.filter((c) => c !== name) : header.filter((h) => visibleCols.includes(h) || h === name);
     if (!next.length) return;
@@ -270,18 +308,7 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
   const cycleSort = (col) =>
     setSort((s) => (s?.col !== col ? { col, dir: 'asc' } : s.dir === 'asc' ? { col, dir: 'desc' } : null));
 
-  const copyTsv = useCallback(async () => {
-    const lines = [visibleCols.join('\t'), ...view.map(({ r }) => colIdx.map((i) => r[i] ?? '').join('\t'))];
-    try {
-      await navigator.clipboard.writeText(lines.join('\n'));
-      setCopied(true);
-      toast.success(`Copied ${view.length.toLocaleString()} ${view.length === 1 ? 'row' : 'rows'} as TSV`, { duration: 3000 });
-      clearTimeout(copyTimer.current);
-      copyTimer.current = setTimeout(() => setCopied(false), 1800);
-    } catch {
-      toast.error('Could not copy. Allow clipboard access for this site and try again.', { duration: 5000 });
-    }
-  }, [visibleCols, view, colIdx]);
+  const getTsv = () => [visibleCols.join('\t'), ...view.map(({ r }) => colIdx.map((i) => r[i] ?? '').join('\t'))].join('\n');
 
   const downloadAll = useCallback(async () => {
     if (!conversationId || downloading) return;
@@ -378,10 +405,19 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
   const total = filteredCount ?? state.rowCount ?? null;
   const isTruncated = settled && (state.truncated || (total != null && total > rows.length));
   const searching = query.trim().length > 0;
+  const nShown = rows.length.toLocaleString();
   const countChip = loading ? 'Loading variants'
     : state.streaming ? `Loading ${rows.length.toLocaleString()} rows`
     : isTruncated ? `Showing first ${rows.length.toLocaleString()}${total != null ? ` of ${total.toLocaleString()}` : ''}`
     : `${rows.length.toLocaleString()} ${rows.length === 1 ? 'row' : 'rows'}`;
+
+  // The count chip as [text before, rolling number, text after] so the number can count up while streaming.
+  const countBits = loading ? ['Loading variants', null, '']
+    : state.streaming ? ['Loading ', rows.length, ' rows']
+    : isTruncated ? ['Showing first ', rows.length, total != null ? ` of ${total.toLocaleString()}` : '']
+    : ['', rows.length, rows.length === 1 ? ' row' : ' rows'];
+  const riseStyle = (i) => (reduce ? undefined : { animation: 'wb-rise 220ms var(--ease-out) backwards', animationDelay: `${Math.min(i, 10) * 18 + 60}ms` });
+  const colRiseStyle = (i) => (reduce ? undefined : { animation: 'wb-rise 200ms var(--ease-out) backwards', animationDelay: `${Math.min(i, 12) * 20}ms` });
 
   const th = cn(
     'sticky top-0 z-10 border-b border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] px-3 text-left text-[12px] font-medium text-[hsl(var(--brand-700))] transition-shadow duration-150 motion-reduce:transition-none',
@@ -399,14 +435,14 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
   const colSearch = colQuery.trim().toLowerCase();
   const popCols = colSearch ? header.filter((h) => h.toLowerCase().includes(colSearch)) : header;
 
-  const detailRow = (name) => {
+  const detailRow = (name, order = 0) => {
     const i = header.indexOf(name);
     const value = selRow.r[i] || '';
     const isMono = MONO_RE.test(name);
     return (
       <div key={name} className="contents">
-        <dt className="truncate pt-px font-[family-name:var(--font-mono)] text-[12px] text-muted-foreground" title={name}>{name}</dt>
-        <dd className={cn('min-w-0 [overflow-wrap:anywhere] text-[13px]', value ? 'text-foreground' : 'text-muted-foreground', isMono && 'font-[family-name:var(--font-mono)] text-[12px]')}>
+        <dt style={riseStyle(order)} className="truncate pt-px font-[family-name:var(--font-mono)] text-[12px] text-muted-foreground" title={name}>{name}</dt>
+        <dd style={riseStyle(order)} className={cn('min-w-0 [overflow-wrap:anywhere] text-[13px]', value ? 'text-foreground' : 'text-muted-foreground', isMono && 'font-[family-name:var(--font-mono)] text-[12px]')}>
           {value || '—'}
         </dd>
       </div>
@@ -478,9 +514,9 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
               </label>
             )}
             <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
-              {popCols.map((h) => (
-                <label key={h} className="flex h-8 cursor-pointer items-center gap-2 rounded-full px-2 text-[13px] transition-colors duration-150 hover:bg-[hsl(var(--brand-100))]">
-                  <Checkbox checked={visibleCols.includes(h)} onCheckedChange={() => toggleCol(h)} />
+              {popCols.map((h, i) => (
+                <label key={h} style={colRiseStyle(i)} className="flex h-8 cursor-pointer items-center gap-2 rounded-full px-2 text-[13px] transition-colors duration-150 hover:bg-[hsl(var(--brand-100))]">
+                  <TickBox checked={visibleCols.includes(h)} onChange={() => toggleCol(h)} />
                   <span className="truncate font-[family-name:var(--font-mono)] text-[12px]">{h}</span>
                 </label>
               ))}
@@ -488,10 +524,7 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
             </div>
           </PopoverContent>
         </Popover>
-        <Button variant="outline" onClick={copyTsv} disabled={!view.length} title="Copy visible rows as TSV" aria-label="Copy visible rows as TSV">
-          {copied ? <Check aria-hidden className="text-[hsl(var(--brand-500))]" /> : <Copy aria-hidden />}
-          {copied ? 'Copied' : 'Copy'}
-        </Button>
+        <CopyButton getText={getTsv} label="Copy" copiedLabel="Copied" disabled={!view.length} title="Copy visible rows as TSV" aria-label="Copy visible rows as TSV" />
         <Button
           variant="outline"
           size="icon"
@@ -505,25 +538,38 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
         </Button>
       </div>
 
-      {/* Live chip row: what you are looking at right now. */}
-      <div className="flex shrink-0 flex-wrap items-center gap-1.5" role="status">
-        <span className="wb-chip" data-tone={isTruncated ? 'brand' : undefined}>
-          {(loading || state.streaming) && <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-[hsl(var(--brand-500))] motion-reduce:animate-none" />}
-          <span className="tabular-nums">{countChip}</span>
-        </span>
-        {sort && (
-          <RemovableChip removeLabel={`Remove sort by ${sort.col}`} onRemove={() => setSort(null)}>
-            <span className="inline-flex items-center gap-1">
-              {sort.dir === 'asc' ? <ArrowUp aria-hidden className="size-3 shrink-0" /> : <ArrowDown aria-hidden className="size-3 shrink-0" />}
-              <span className="truncate">Sorted by {sort.col}, {sort.dir === 'asc' ? 'ascending' : 'descending'}</span>
+      {/* Live chip row: what you are looking at right now. Chips spring in and out. */}
+      <div className="relative flex shrink-0 flex-wrap items-center gap-1.5" role="status">
+        <ChipList>
+          <PopIn key="count" className="inline-flex max-w-full min-w-0">
+            <span className="wb-chip" data-tone={isTruncated ? 'brand' : undefined}>
+              {(loading || state.streaming) && <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-[hsl(var(--brand-500))] motion-reduce:animate-none" />}
+              <span className="sr-only">{countChip}</span>
+              <span aria-hidden className="tabular-nums">
+                {countBits[0]}
+                {countBits[1] != null ? <CountUp value={countBits[1]} duration={0.5} /> : null}
+                {countBits[2]}
+              </span>
             </span>
-          </RemovableChip>
-        )}
-        {searching && !loading && (
-          <RemovableChip removeLabel={`Remove search ${query.trim()}`} onRemove={() => setQuery('')}>
-            <span className="tabular-nums">{view.length.toLocaleString()} {view.length === 1 ? 'match' : 'matches'} for “{query.trim()}”</span>
-          </RemovableChip>
-        )}
+          </PopIn>
+          {sort ? (
+            <PopIn key="sort" className="inline-flex max-w-full min-w-0">
+              <RemovableChip removeLabel={`Remove sort by ${sort.col}`} onRemove={() => setSort(null)}>
+                <span className="inline-flex items-center gap-1">
+                  <Turn open={sort.dir === 'desc'} deg={180} className="shrink-0"><ArrowUp aria-hidden className="size-3" /></Turn>
+                  <span className="truncate">Sorted by {sort.col}, {sort.dir === 'asc' ? 'ascending' : 'descending'}</span>
+                </span>
+              </RemovableChip>
+            </PopIn>
+          ) : null}
+          {searching && !loading ? (
+            <PopIn key="search" className="inline-flex max-w-full min-w-0">
+              <RemovableChip removeLabel={`Remove search ${query.trim()}`} onRemove={() => setQuery('')}>
+                <span className="tabular-nums">{view.length.toLocaleString()} {view.length === 1 ? 'match' : 'matches'} for “{query.trim()}”</span>
+              </RemovableChip>
+            </PopIn>
+          ) : null}
+        </ChipList>
         {isTruncated && onOpenFilters && (
           <Button variant="outline" size="xs" onClick={onOpenFilters} className="ml-auto h-6 px-2.5 text-[12px]">
             <SlidersHorizontal aria-hidden /> Open filters
@@ -547,8 +593,32 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
           {loading ? (
             <TableSkeleton rowH={rowH} />
           ) : (
+            <div ref={wrapRef} className="relative" style={{ width: tableWidth, minWidth: '100%' }}>
+            {/* The selection marker: a tint over the row and a bar on the left edge (pinned while scrolling sideways). */}
+            {mk ? (
+              <>
+                <motion.span
+                  aria-hidden
+                  data-marker="tint"
+                  initial={false}
+                  animate={{ y: mk.top, height: mk.h, opacity: mk.show ? 1 : 0 }}
+                  transition={{ y: mk.snap || reduce ? { duration: 0 } : SPRING, height: mk.snap || reduce ? { duration: 0 } : SPRING, opacity: { duration: reduce ? 0 : 0.15 } }}
+                  className="pointer-events-none absolute left-0 top-0 z-[6] w-full bg-[hsl(var(--brand-500)/0.12)]"
+                />
+                <div className="sticky left-0 z-[6] h-0 w-0">
+                  <motion.span
+                    aria-hidden
+                    data-marker="bar"
+                    initial={false}
+                    animate={{ y: mk.top + 6, height: Math.max(0, mk.h - 12), opacity: mk.show ? 1 : 0 }}
+                    transition={{ y: mk.snap || reduce ? { duration: 0 } : SPRING, height: mk.snap || reduce ? { duration: 0 } : SPRING, opacity: { duration: reduce ? 0 : 0.15 } }}
+                    className="pointer-events-none absolute left-0 top-0 w-[3px] rounded-full bg-[hsl(var(--brand-500))]"
+                  />
+                </div>
+              </>
+            ) : null}
             <table
-              style={{ width: tableWidth, minWidth: '100%', tableLayout: 'fixed' }}
+              style={{ width: '100%', tableLayout: 'fixed' }}
               className="border-separate border-spacing-0 text-[13px]"
             >
               <colgroup>
@@ -577,7 +647,7 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
                         >
                           <span className="truncate">{c}</span>
                           {on
-                            ? (sort.dir === 'asc' ? <ArrowUp aria-hidden className="size-3 shrink-0" /> : <ArrowDown aria-hidden className="size-3 shrink-0" />)
+                            ? <Turn open={sort.dir === 'desc'} deg={180} className="shrink-0"><ArrowUp aria-hidden className="size-3" /></Turn>
                             : <ChevronsUpDown aria-hidden className="size-3 shrink-0 opacity-0 transition-opacity duration-150 group-hover/th:opacity-50 motion-reduce:transition-none" />}
                         </button>
                       </th>
@@ -585,10 +655,11 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
                   })}
                 </tr>
               </thead>
-              <tbody>
+              <tbody ref={tbodyRef}>
                 {view.map(({ r, n }) => {
                   const on = selected === n;
-                  const bg = on ? 'bg-[hsl(var(--wb-row-sel))]' : 'bg-[hsl(var(--wb-card))] group-hover:bg-[hsl(var(--wb-row-hover))]';
+                  const bg = on ? 'bg-[hsl(var(--wb-card))]' : 'bg-[hsl(var(--wb-card))] group-hover:bg-[hsl(var(--wb-row-hover))]';
+                  const rowIntro = intro && !reduce && n <= 14 ? { animation: 'wb-fade 240ms var(--ease-out) backwards', animationDelay: `${(n - 1) * 25}ms` } : null;
                   const line = 'border-b border-[hsl(var(--wb-line)/0.7)]';
                   return (
                     <tr
@@ -596,10 +667,10 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
                       data-n={n}
                       aria-current={on ? 'true' : undefined}
                       onClick={() => { if (on && detailOpen) setDetailOpen(false); else { setSelected(n); setDetailOpen(true); } }}
-                      style={{ height: rowH }}
+                      style={{ height: rowH, ...rowIntro }}
                       className="group cursor-default"
                     >
-                      <td style={{ height: rowH }} className={cn(gutter, line, bg, on && 'font-semibold text-[hsl(var(--brand-700))] shadow-[inset_3px_0_0_hsl(var(--brand-500))]')}>{n}</td>
+                      <td style={{ height: rowH }} className={cn(gutter, line, bg, on && 'font-semibold text-[hsl(var(--brand-700))]')}>{n}</td>
                       {colIdx.map((i, k) => (
                         <td
                           key={i}
@@ -623,6 +694,7 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
                 })}
               </tbody>
             </table>
+            </div>
           )}
           {!loading && !view.length && searching && (
             <div className="flex flex-col items-center gap-2 px-3 py-10 text-center">
@@ -650,47 +722,68 @@ export default function VariantResultsViewer({ conversationId, filteredCount = n
                 title={label}
                 onClick={() => chooseDensity(id)}
                 className={cn(
-                  'inline-flex size-6 items-center justify-center rounded-full border border-transparent text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none',
-                  density === id && 'border-[hsl(var(--brand-200))] bg-[hsl(var(--wb-card))] text-[hsl(var(--brand-700))]',
+                  'relative inline-flex size-6 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none',
+                  density === id && 'text-[hsl(var(--brand-700))]',
                   FOCUS
                 )}
               >
-                <Icon aria-hidden className="size-3.5" />
+                {density === id ? (
+                  <motion.span
+                    layoutId="results-density-thumb"
+                    aria-hidden
+                    transition={reduce ? { duration: 0 } : SPRING}
+                    style={{ borderRadius: 9999 }}
+                    className="absolute inset-0 border border-[hsl(var(--brand-200))] bg-[hsl(var(--wb-card))]"
+                  />
+                ) : null}
+                <Icon aria-hidden className="relative size-3.5" />
               </button>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Docked detail: every column of the selected row, including the ones the table hides. */}
-      {showDetail && (
-        <section
-          aria-label={`Row ${selRow.n} details`}
-          onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); setDetailOpen(false); scrollerRef.current?.focus(); } }}
-          className="wb-card flex max-h-[42%] shrink-0 flex-col"
-        >
-          <div className="flex items-center gap-2 px-3 pb-1.5 pt-2.5">
-            <span className="wb-chip tabular-nums" data-tone="brand">Row {selRow.n.toLocaleString()}</span>
-            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{selRow.r[colIdx[0]] || ''}</span>
-            <button
-              type="button"
-              onClick={() => { setDetailOpen(false); scrollerRef.current?.focus(); }}
-              aria-label="Close row details"
-              title="Close row details"
-              className={cn('wb-iconbtn !size-7', FOCUS)}
+      {/* Docked detail: every column of the selected row, including the ones the table hides. It slides up in place. */}
+      <AnimatePresence initial={false}>
+        {showDetail ? (
+          <motion.div
+            key="detail"
+            initial={reduce ? false : { height: 0, opacity: 0, marginTop: -10 }}
+            animate={{ height: 'auto', opacity: 1, marginTop: 0 }}
+            exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0, marginTop: -10 }}
+            transition={{ duration: reduce ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+            style={{ overflow: 'hidden' }}
+            className="flex max-h-[42%] shrink-0 flex-col"
+          >
+            <section
+              aria-label={`Row ${selRow.n} details`}
+              onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); setDetailOpen(false); scrollerRef.current?.focus(); } }}
+              className="wb-card flex min-h-0 flex-col"
             >
-              <X aria-hidden className="size-3.5" />
-            </button>
-          </div>
-          <dl className="grid min-h-0 grid-cols-[9rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 overflow-y-auto px-3 pb-3 pt-1">
-            {visibleCols.map(detailRow)}
-            {hiddenCols.length > 0 && (
-              <div className="col-span-2 mt-1 border-t border-[hsl(var(--wb-line))] pt-2 text-[12px] font-medium text-muted-foreground">Other columns in the file</div>
-            )}
-            {hiddenCols.map(detailRow)}
-          </dl>
-        </section>
-      )}
+              <div className="flex items-center gap-2 px-3 pb-1.5 pt-2.5">
+                <span className="wb-chip tabular-nums" data-tone="brand">Row {selRow.n.toLocaleString()}</span>
+                <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{selRow.r[colIdx[0]] || ''}</span>
+                <button
+                  type="button"
+                  onClick={() => { setDetailOpen(false); scrollerRef.current?.focus(); }}
+                  aria-label="Close row details"
+                  title="Close row details"
+                  className={cn('wb-iconbtn !size-7', FOCUS)}
+                >
+                  <X aria-hidden className="size-3.5" />
+                </button>
+              </div>
+              <dl className="grid min-h-0 grid-cols-[9rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 overflow-y-auto px-3 pb-3 pt-1">
+                {visibleCols.map((name, i) => detailRow(name, i))}
+                {hiddenCols.length > 0 && (
+                  <div style={riseStyle(visibleCols.length)} className="col-span-2 mt-1 border-t border-[hsl(var(--wb-line))] pt-2 text-[12px] font-medium text-muted-foreground">Other columns in the file</div>
+                )}
+                {hiddenCols.map((name, i) => detailRow(name, visibleCols.length + 1 + i))}
+              </dl>
+            </section>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </Frame>
   );
 }

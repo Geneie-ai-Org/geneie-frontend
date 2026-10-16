@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   AlertCircle,
   Check,
   ChevronDown,
   Download,
   ListChecks,
-  Loader2,
   RefreshCw,
   Search,
   SearchX,
@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { downloadGaTriageArtifact, fetchGaTriage } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
+import { Collapse, CountUp, SelectionMarker, SPRING, StateButton, Turn } from '@/components/workspace/motion';
 
 // Full-alpha 2px ring (the global one is 45% alpha, under 3:1 on white).
 const FOCUS = 'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--ring))]';
@@ -83,13 +84,13 @@ function countParts(data) {
   const counts = data?.ga_label_counts && typeof data.ga_label_counts === 'object' ? data.ga_label_counts : {};
   const reviewed = data?.variant_count;
   const parts = [];
-  if (reviewed != null) parts.push(`${Number(reviewed).toLocaleString()} reviewed`);
+  if (reviewed != null) parts.push({ n: Number(reviewed), label: 'reviewed' });
   const pick = (needle, label) => {
     const n = Object.entries(counts).reduce((acc, [k, v]) => {
       if (String(k).toLowerCase().includes(needle)) return acc + Number(v || 0);
       return acc;
     }, 0);
-    if (n) parts.push(`${n.toLocaleString()} ${label}`);
+    if (n) parts.push({ n, label });
   };
   pick('primary', 'primary');
   pick('strong clinical', 'strong');
@@ -182,6 +183,10 @@ export default function GaTriagePanel({
   const [labelFilter, setLabelFilter] = useState('all');
   const [sortBy, setSortBy] = useState('rank');
   const [expandedKey, setExpandedKey] = useState(null);
+  const [focusKey, setFocusKey] = useState(null); // the card that holds keyboard focus (drives the sliding tint)
+  const [justDownloaded, setJustDownloaded] = useState(false);
+  const reduce = useReducedMotion();
+  const intro = useRef(true); // cards rise with a stagger on first load only
   // Boolean dep only — parent often replaces `variantData` with a new object each
   // pipeline tick; object identity in the effect deps cancelled the in-flight timer
   // and left the button stuck on "GA triage running…".
@@ -259,12 +264,19 @@ export default function GaTriagePanel({
     };
   }, [conversationId, isGuest, hasVariantData, refreshKey]);
 
+  useEffect(() => {
+    if (!justDownloaded) return undefined;
+    const t = setTimeout(() => setJustDownloaded(false), 1800);
+    return () => clearTimeout(t);
+  }, [justDownloaded]);
+
   const handleDownload = async () => {
     if (!conversationId || downloading) return;
     setDownloading(true);
     setError(null);
     try {
       await downloadGaTriageArtifact(conversationId, 'tsv');
+      setJustDownloaded(true);
     } catch (err) {
       setError(err.message || 'Download failed');
     } finally {
@@ -322,6 +334,13 @@ export default function GaTriagePanel({
     return out;
   }, [rows, query, labelFilter, sortBy]);
 
+  const listShown = ready && visibleRows.length > 0;
+  useEffect(() => {
+    if (!listShown) return undefined;
+    const t = setTimeout(() => { intro.current = false; }, 900);
+    return () => clearTimeout(t);
+  }, [listShown]);
+
   if (isGuest || !conversationId || !variantData) return null;
 
   const jobState = running ? 'running' : ready ? 'done' : failed ? 'failed' : 'pending';
@@ -362,27 +381,26 @@ export default function GaTriagePanel({
               title="Refresh triage"
               className={cn('wb-iconbtn disabled:opacity-60 max-md:size-11', FOCUS)}
             >
-              {loading ? <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden /> : <RefreshCw className="size-3.5" aria-hidden />}
+              <RefreshCw className={cn('size-3.5', loading && 'animate-spin motion-reduce:animate-none')} aria-hidden />
             </button>
-            <Button
-              type="button"
+            <StateButton
               size="sm"
+              state={downloading ? 'running' : justDownloaded ? 'done' : 'idle'}
+              labels={{ idle: 'Download TSV', running: 'Preparing…', done: 'Downloaded' }}
+              icon={Download}
               onClick={handleDownload}
-              disabled={!canDownload || downloading}
+              disabled={!canDownload}
               aria-describedby={!canDownload ? 'ga-download-reason' : undefined}
               className="h-8 max-md:h-11"
-            >
-              {downloading ? <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden /> : <Download aria-hidden />}
-              {downloading ? 'Preparing…' : 'Download TSV'}
-            </Button>
+            />
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="wb-status" data-state={jobState}>{jobWord}</span>
           {ready && chips.length ? (
-            chips.map((c) => <span key={c} className="wb-chip tabular-nums">{c}</span>)
+            chips.map((c) => <span key={c.label} className="wb-chip tabular-nums"><CountUp value={c.n} startAt={0} />{' '}{c.label}</span>)
           ) : ready ? (
-            <span className="wb-chip tabular-nums">{candidates.length} shown</span>
+            <span className="wb-chip tabular-nums"><CountUp value={candidates.length} startAt={0} /> shown</span>
           ) : (
             <span className="text-[13px] text-muted-foreground">Genome Analyst ranking. Decision support only.</span>
           )}
@@ -446,12 +464,21 @@ export default function GaTriagePanel({
                   onClick={() => setSortBy(id)}
                   title={id === 'score' ? 'Sort by score, high to low' : `Sort by ${text.toLowerCase()}, low to high`}
                   className={cn(
-                    'inline-flex h-7 items-center rounded-full border border-transparent px-2.5 text-[12px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none max-md:h-9',
-                    sortBy === id && 'border-[hsl(var(--brand-200))] bg-[hsl(var(--wb-card))] text-[hsl(var(--brand-700))]',
+                    'relative inline-flex h-7 items-center rounded-full border border-transparent px-2.5 text-[12px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none max-md:h-9',
+                    sortBy === id && 'text-[hsl(var(--brand-700))]',
                     FOCUS
                   )}
                 >
-                  {text}
+                  {sortBy === id ? (
+                    <motion.span
+                      layoutId="ga-sort-thumb"
+                      aria-hidden
+                      transition={reduce ? { duration: 0 } : SPRING}
+                      style={{ borderRadius: 9999 }}
+                      className="absolute -inset-px border border-[hsl(var(--brand-200))] bg-[hsl(var(--wb-card))]"
+                    />
+                  ) : null}
+                  <span className="relative">{text}</span>
                 </button>
               ))}
             </div>
@@ -467,16 +494,27 @@ export default function GaTriagePanel({
                     aria-pressed={active}
                     onClick={() => setLabelFilter(id)}
                     className={cn(
-                      'inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[12px] tabular-nums transition-colors duration-150 motion-reduce:transition-none max-md:h-9',
+                      'relative inline-flex h-7 items-center rounded-full border px-3 text-[12px] tabular-nums transition-colors duration-150 motion-reduce:transition-none max-md:h-9',
                       active
-                        ? 'border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-100))] font-semibold text-[hsl(var(--brand-700))]'
+                        ? 'border-transparent font-semibold text-[hsl(var(--brand-700))]'
                         : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] font-medium text-muted-foreground hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))]',
                       FOCUS
                     )}
                   >
-                    {active ? <Check aria-hidden className="size-3" /> : null}
-                    {text}
-                    <span className={active ? 'text-[hsl(var(--brand-700))]' : 'text-muted-foreground'}>{n}</span>
+                    {active ? (
+                      <motion.span
+                        layoutId="ga-filter-pill"
+                        aria-hidden
+                        transition={reduce ? { duration: 0 } : SPRING}
+                        style={{ borderRadius: 9999 }}
+                        className="absolute -inset-px border border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-100))]"
+                      />
+                    ) : null}
+                    <span className="relative inline-flex items-center gap-1.5">
+                      {active ? <Check aria-hidden className="size-3" /> : null}
+                      {text}
+                      <span className={active ? 'text-[hsl(var(--brand-700))]' : 'text-muted-foreground'}>{n}</span>
+                    </span>
                   </button>
                 );
               })}
@@ -486,7 +524,7 @@ export default function GaTriagePanel({
       ) : null}
 
       {/* Body: the only scroll region. */}
-      <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-1">
+      <motion.div layoutScroll className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-1">
         {loading && !data ? (
           <div role="status" aria-label="Loading triage" aria-busy="true"><CardSkeleton rows={6} /></div>
         ) : !ready ? (
@@ -542,96 +580,110 @@ export default function GaTriagePanel({
             Try a different gene, variant or GA call.
           </Notice>
         ) : (
-          <ul aria-label={`Top review candidates, ${visibleRows.length} shown`} onKeyDown={onListKey} className="space-y-2">
-            {visibleRows.map((r) => {
-              const open = expandedKey === r.key;
-              const detailId = `ga-detail-${r.rank}`;
-              return (
-                <li
-                  key={r.key}
-                  className={cn(
-                    'wb-card overflow-hidden transition-colors duration-150 motion-reduce:transition-none',
-                    open ? 'border-[hsl(var(--brand-300))]' : 'hover:border-[hsl(var(--brand-300))]'
-                  )}
-                >
-                  <button
-                    type="button"
-                    data-cand
-                    aria-expanded={open}
-                    aria-controls={detailId}
-                    onClick={() => setExpandedKey(open ? null : r.key)}
-                    className={cn('flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-[hsl(var(--wb-row-hover))] motion-reduce:transition-none max-md:min-h-11', open && 'bg-[hsl(var(--wb-row-hover))]', FOCUS, 'focus-visible:-outline-offset-2')}
+          <ul
+            aria-label={`Top review candidates, ${visibleRows.length} shown`}
+            onKeyDown={onListKey}
+            onFocus={(e) => { const k = e.target?.dataset?.cand; if (k) setFocusKey(k); }}
+            onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setFocusKey(null); }}
+            className="relative flex flex-col gap-2"
+          >
+            <AnimatePresence mode="popLayout">
+              {visibleRows.map((r, idx) => {
+                const open = expandedKey === r.key;
+                const detailId = `ga-detail-${r.rank}`;
+                return (
+                  <motion.li
+                    key={r.key}
+                    layout={reduce ? false : 'position'}
+                    initial={reduce ? false : { opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0, transition: { duration: reduce ? 0 : 0.22, ease: [0.22, 1, 0.36, 1], delay: intro.current && !reduce ? Math.min(idx, 12) * 0.03 : 0 } }}
+                    exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.97, transition: { duration: 0.16 } }}
+                    transition={{ layout: { duration: 0.25, ease: [0.22, 1, 0.36, 1] } }}
+                    className={cn(
+                      'wb-card relative overflow-hidden transition-colors duration-150 motion-reduce:transition-none',
+                      open ? 'border-[hsl(var(--brand-300))]' : 'hover:border-[hsl(var(--brand-300))]'
+                    )}
                   >
-                    <span
-                      className="flex size-7 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-pill))] text-[12px] font-semibold tabular-nums text-foreground"
-                      title={`GA rank ${r.rank}`}
+                    {focusKey === r.key ? <SelectionMarker group="ga-cand" /> : null}
+                    <button
+                      type="button"
+                      data-cand={r.key}
+                      aria-expanded={open}
+                      aria-controls={detailId}
+                      onClick={() => setExpandedKey(open ? null : r.key)}
+                      className={cn('relative z-[2] flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-[hsl(var(--wb-row-hover))] motion-reduce:transition-none max-md:min-h-11', FOCUS, 'focus-visible:-outline-offset-2')}
                     >
-                      {r.rank}
-                    </span>
-                    <span className="min-w-0 flex-1 space-y-1">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="truncate text-[14px] font-semibold">{r.row.gene || 'Unknown gene'}</span>
-                        {r.conflict ? (
-                          <AlertCircle
-                            className="size-3.5 shrink-0"
-                            style={{ color: 'var(--error)' }}
-                            role="img"
-                            aria-label={`Flag: ${String(r.conflict)}`}
-                          />
-                        ) : null}
-                        <span className="ml-auto"><CallPill tone={r.tone} title={r.row.label || undefined}>{r.label}</CallPill></span>
+                      <span
+                        className="flex size-7 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-pill))] text-[12px] font-semibold tabular-nums text-foreground"
+                        title={`GA rank ${r.rank}`}
+                      >
+                        {r.rank}
                       </span>
-                      <span className="flex min-w-0 items-center justify-between gap-2">
-                        <span className="truncate font-mono text-[12px] text-muted-foreground" title={r.change.full || undefined}>{r.change.primary}</span>
-                        <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">
-                          Score <span className="font-medium text-foreground">{r.score != null ? r.score : '—'}</span>
+                      <span className="min-w-0 flex-1 space-y-1">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="truncate text-[14px] font-semibold">{r.row.gene || 'Unknown gene'}</span>
+                          {r.conflict ? (
+                            <AlertCircle
+                              className="size-3.5 shrink-0"
+                              style={{ color: 'var(--error)' }}
+                              role="img"
+                              aria-label={`Flag: ${String(r.conflict)}`}
+                            />
+                          ) : null}
+                          <span className="ml-auto"><CallPill tone={r.tone} title={r.row.label || undefined}>{r.label}</CallPill></span>
+                        </span>
+                        <span className="flex min-w-0 items-center justify-between gap-2">
+                          <span className="truncate font-mono text-[12px] text-muted-foreground" title={r.change.full || undefined}>{r.change.primary}</span>
+                          <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">
+                            Score <span className="font-medium text-foreground">{r.score != null ? r.score : '—'}</span>
+                          </span>
                         </span>
                       </span>
-                    </span>
-                    <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] text-muted-foreground">
-                      <ChevronDown className={cn('size-3.5 transition-transform duration-150 motion-reduce:transition-none', open && 'rotate-180')} />
-                    </span>
-                  </button>
-                  {open ? (
-                    <div id={detailId} className="border-t border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill)/0.5)] px-4 pb-3.5 pt-3">
-                      <dl className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
-                        <div className="min-w-0 sm:col-span-2">
-                          <dt className="text-[12px] font-medium text-muted-foreground">Variant</dt>
-                          <dd className="mt-0.5 break-all font-mono text-[12px] text-foreground">
-                            {r.change.full || r.row.variant || '—'}
-                          </dd>
-                        </div>
-                        <DetailItem label="GA call">{r.row.label || r.label}</DetailItem>
-                        <DetailItem label="Score">{r.score != null ? String(r.score) : null}</DetailItem>
-                        <DetailItem label="ACMG">{r.row.ga_acmg_2015 || r.row.ga_acmg_point || null}</DetailItem>
-                        <DetailItem label="Phenotype match">{r.row.phenotype_match || null}</DetailItem>
-                        {r.conflict ? (
-                          <div
-                            className="min-w-0 rounded-xl border px-3 py-2 sm:col-span-2"
-                            style={{ background: 'var(--error-soft)', borderColor: 'color-mix(in srgb, var(--error) 25%, transparent)' }}
-                          >
-                            <dt className="text-[12px] font-medium" style={{ color: 'var(--error)' }}>Flag</dt>
-                            <dd className="mt-0.5 break-words text-[13px] text-foreground">{String(r.conflict)}</dd>
+                      <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] text-muted-foreground">
+                        <Turn open={open} deg={180}><ChevronDown className="size-3.5" /></Turn>
+                      </span>
+                    </button>
+                    <Collapse open={open} id={detailId}>
+                      <div className="border-t border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill)/0.5)] px-4 pb-3.5 pt-3">
+                        <dl className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+                          <div className="min-w-0 sm:col-span-2">
+                            <dt className="text-[12px] font-medium text-muted-foreground">Variant</dt>
+                            <dd className="mt-0.5 break-all font-mono text-[12px] text-foreground">
+                              {r.change.full || r.row.variant || '—'}
+                            </dd>
                           </div>
-                        ) : null}
-                      </dl>
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
+                          <DetailItem label="GA call">{r.row.label || r.label}</DetailItem>
+                          <DetailItem label="Score">{r.score != null ? String(r.score) : null}</DetailItem>
+                          <DetailItem label="ACMG">{r.row.ga_acmg_2015 || r.row.ga_acmg_point || null}</DetailItem>
+                          <DetailItem label="Phenotype match">{r.row.phenotype_match || null}</DetailItem>
+                          {r.conflict ? (
+                            <div
+                              className="min-w-0 rounded-xl border px-3 py-2 sm:col-span-2"
+                              style={{ background: 'var(--error-soft)', borderColor: 'color-mix(in srgb, var(--error) 25%, transparent)' }}
+                            >
+                              <dt className="text-[12px] font-medium" style={{ color: 'var(--error)' }}>Flag</dt>
+                              <dd className="mt-0.5 break-words text-[13px] text-foreground">{String(r.conflict)}</dd>
+                            </div>
+                          ) : null}
+                        </dl>
+                      </div>
+                    </Collapse>
+                  </motion.li>
+                );
+              })}
+            </AnimatePresence>
           </ul>
         )}
 
         {ready && data?.clinical_use_note ? (
           <p className="px-2 pb-1 pt-3 text-[12px] leading-relaxed text-muted-foreground">{data.clinical_use_note}</p>
         ) : null}
-      </div>
+      </motion.div>
 
       {hasRows ? (
         <div className="flex shrink-0 items-start gap-2 text-[12px] text-muted-foreground">
           <span className="wb-chip shrink-0 tabular-nums" data-tone={filtersActive ? 'brand' : undefined}>
-            {visibleRows.length} of {candidates.length}
+            <CountUp value={visibleRows.length} duration={0.4} /> of {candidates.length}
           </span>
           <span className="min-w-0 pt-0.5 leading-snug">Primary and strong calls pre-check Include. You still confirm before the PDF.</span>
         </div>

@@ -1,7 +1,13 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Download, RefreshCw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { StateButton } from '@/components/workspace/motion';
+import { useDoneFlash } from '@/hooks/useDoneFlash';
 import { getExportEligibility, exportVariants } from '@/services/backendApi';
+
+/** Status dot for the working states: a small pulse, never a spinner beside a label that says otherwise. */
+function WorkingDot() {
+  return <span aria-hidden className="inline-block size-1.5 shrink-0 animate-pulse rounded-full bg-[var(--info)] motion-reduce:animate-none" />;
+}
 
 /**
  * Download of the current working set.
@@ -31,6 +37,9 @@ export default function ExportVariantsButton({
   const [error, setError] = useState(null);
 
   const gateBlocked = downloadGate?.blocked === true;
+
+  // After a download that finished without an error the label reads "Downloaded" for a moment.
+  const { done: downloaded } = useDoneFlash(isExporting, { ok: !error });
 
   // Read through refs: the parent passes a new `onReconcileUiCount` on every render, and as a
   // dependency it re-created checkEligibility each time — re-fetching eligibility on every
@@ -168,37 +177,30 @@ export default function ExportVariantsButton({
 
   return (
     <div className="space-y-1">
-      <Button
-        type="button"
+      <StateButton
+        state={isExporting ? 'running' : downloaded ? 'done' : 'idle'}
+        labels={{ idle: label, running: 'Preparing download…', done: 'Downloaded' }}
+        icon={working ? WorkingDot : countMismatch ? RefreshCw : Download}
         variant="outline"
         size="sm"
         onClick={countMismatch ? checkEligibility : handleExport}
-        disabled={!interactive}
+        disabled={!interactive && !isExporting}
         title={title}
         aria-busy={isExporting || undefined}
-        className={`h-9 max-md:h-11 w-full min-w-0 justify-start gap-1.5 px-3.5 text-[13px] tabular-nums disabled:opacity-100 ${
+        className={`h-9 max-md:h-11 w-full min-w-0 justify-start gap-1.5 px-3.5 text-[13px] tabular-nums disabled:opacity-100 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate ${
           countMismatch ? '!border-[var(--error)] !text-[var(--error)]' : interactive ? '' : 'text-muted-foreground'
         }`}
-      >
-        {working ? (
-          <span aria-hidden className="inline-block size-1.5 shrink-0 animate-pulse rounded-full bg-[var(--info)] motion-reduce:animate-none" />
-        ) : countMismatch ? (
-          <RefreshCw aria-hidden />
-        ) : (
-          <Download aria-hidden />
-        )}
-        <span className="truncate">{label}</span>
-      </Button>
+      />
       {subLine && (
         <p
           role="status"
-          className={`px-1 text-[12px] leading-snug ${countMismatch ? 'text-[var(--error)]' : 'text-muted-foreground'}`}
+          className={`wb-rise px-1 text-[12px] leading-snug ${countMismatch ? 'text-[var(--error)]' : 'text-muted-foreground'}`}
         >
           {subLine}
         </p>
       )}
       {error && (
-        <p role="alert" className="flex flex-wrap items-center gap-x-2 px-1 text-[12px] leading-snug text-[var(--error)]">
+        <p role="alert" className="wb-rise flex flex-wrap items-center gap-x-2 px-1 text-[12px] leading-snug text-[var(--error)]">
           <span>{error}</span>
           <button
             type="button"

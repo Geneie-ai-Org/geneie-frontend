@@ -18,9 +18,11 @@
  * (`h-full min-h-0 flex flex-col`), scrolls its own body and draws no border, radius,
  * shadow, fixed position or width, so the workspace tab supplies the chrome.
  */
-import React, { useId, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { AlertCircle, ChevronRight } from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '@/lib/utils';
+import { Collapse, CountUp, StageMark, StateButton, Turn } from '@/components/workspace/motion';
 
 // Full-alpha 2px ring (the global one is 45% alpha, under 3:1 on white).
 const FOCUS =
@@ -42,12 +44,63 @@ const PILL_STATE = {
   pending: ['pending', 'Not started'],
 };
 
+/**
+ * Returns `wb-pop` once `value` has changed after mount, so a pill springs in when its state flips
+ * but does not replay on first paint or on unrelated re-renders.
+ */
+export function usePopOnChange(value) {
+  const first = useRef(value);
+  const changed = useRef(false);
+  if (value !== first.current) changed.current = true;
+  return changed.current ? 'wb-pop' : '';
+}
+
 export function StatusPill({ status, className }) {
   const [state, word] = PILL_STATE[status] || PILL_STATE.pending;
+  const pop = usePopOnChange(`${state}|${word}`);
   return (
-    <span className={cn('wb-status', className)} data-state={state}>
+    <span key={`${state}|${word}`} className={cn('wb-status', pop, className)} data-state={state}>
       {word}
     </span>
+  );
+}
+
+/** Cycles through `frames` every `ms`; holds the first frame under reduced motion. */
+function useFrames(frames, ms) {
+  const reduce = useReducedMotion();
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (reduce) return undefined;
+    const t = setInterval(() => setI((n) => (n + 1) % frames.length), ms);
+    return () => clearInterval(t);
+  }, [frames, ms, reduce]);
+  return frames[reduce ? 0 : i];
+}
+
+const BRAILLE = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+/** A quiet braille-dot spinner for long raw-sequencing runs. Plain text, hidden from screen readers. */
+export function BrailleSpinner({ className }) {
+  const frame = useFrames(BRAILLE, 80);
+  return (
+    <span aria-hidden="true" className={cn('inline-block w-[1ch] select-none font-mono text-[hsl(var(--brand-500))]', className)}>
+      {frame}
+    </span>
+  );
+}
+
+/**
+ * Action button for the pipeline cards: the shared StateButton morph (idle, running, done) with an
+ * optional single pulse so a Retry draws the eye once when the failure card rises in.
+ */
+export function ActionButton({ pulse = false, ...rest }) {
+  const reduce = useReducedMotion();
+  const btn = <StateButton {...rest} />;
+  if (!pulse || reduce) return btn;
+  return (
+    <motion.span className="inline-flex" initial={{ scale: 1 }} animate={{ scale: [1, 1.07, 1] }} transition={{ delay: 0.55, duration: 0.5, ease: 'easeInOut' }}>
+      {btn}
+    </motion.span>
   );
 }
 
@@ -116,7 +169,7 @@ export function ThinProgress({ value, label = 'Progress', className }) {
       className={cn('h-1 w-full overflow-hidden rounded-full bg-muted', className)}
     >
       <div
-        className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out motion-reduce:transition-none"
+        className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out motion-reduce:transition-none"
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -234,15 +287,24 @@ export function splitJobMessage(message) {
 }
 
 
-const NODE_CLASS = {
-  done: 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]',
-  skipped: 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]',
-  running: 'border-transparent bg-[var(--info-soft)] text-[var(--info)]',
-  failed: 'border-transparent bg-[var(--error-soft)] text-[var(--error)]',
-  queued: 'border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill))] text-foreground',
-  waiting: 'border-[hsl(var(--brand-300))] bg-[hsl(var(--wb-card))] text-[hsl(var(--brand-700))]',
-  pending: 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] text-muted-foreground',
-  cancelled: 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] text-muted-foreground',
+/** Step status -> the StageMark state (dashed ring, spinning arc, drawn check, drawn cross). */
+const MARK_STATE = {
+  done: 'done',
+  skipped: 'done',
+  running: 'running',
+  failed: 'failed',
+  queued: 'pending',
+  waiting: 'pending',
+  pending: 'pending',
+  cancelled: 'pending',
+};
+
+/** The soft disc behind the mark; it fades between states so a step settling reads as one motion. */
+const NODE_SURFACE = {
+  done: 'bg-[hsl(var(--brand-100))]',
+  running: 'bg-[var(--info-soft)]',
+  failed: 'bg-[var(--error-soft)]',
+  pending: 'bg-transparent',
 };
 
 /** Slim teal pill track with the number beside it. `value` null draws nothing. */
@@ -261,9 +323,11 @@ function ProgressPill({ value, label = 'Run progress', right = null, className }
             aria-valuemax={100}
             aria-valuenow={pct}
           >
-            <div className="wb-fill transition-[width] duration-300 ease-out motion-reduce:transition-none" style={{ width: `${pct}%` }} />
+            <div className="wb-fill" style={{ width: `${pct}%` }} />
           </div>
-          <span className="w-9 shrink-0 text-right text-xs font-medium tabular-nums text-[hsl(var(--brand-700))]">{pct}%</span>
+          <span className="w-9 shrink-0 text-right text-xs font-medium tabular-nums text-[hsl(var(--brand-700))]">
+            <CountUp value={pct} duration={0.5} />%
+          </span>
         </div>
       ) : null}
       {right ? <p className="m-0 text-xs tabular-nums text-muted-foreground">{right}</p> : null}
@@ -274,6 +338,7 @@ function ProgressPill({ value, label = 'Run progress', right = null, className }
 function TimelineRow({ step, index, last, progress, reserve }) {
   const done = step.status === 'done' || step.status === 'skipped';
   const current = step.status === 'running' || step.status === 'waiting' || step.status === 'queued';
+  const markState = MARK_STATE[step.status] || 'pending';
   const interactive = typeof step.onClick === 'function';
   const Row = interactive ? 'button' : 'div';
   const inner = (
@@ -281,11 +346,11 @@ function TimelineRow({ step, index, last, progress, reserve }) {
       <span
         aria-hidden
         className={cn(
-          'relative z-10 mt-px flex size-6 shrink-0 items-center justify-center rounded-full border text-[12px] font-medium tabular-nums',
-          NODE_CLASS[step.status] || NODE_CLASS.pending
+          'relative z-10 mt-px flex size-6 shrink-0 items-center justify-center rounded-full transition-colors duration-300 motion-reduce:transition-none',
+          NODE_SURFACE[markState]
         )}
       >
-        {index + 1}
+        <StageMark state={markState} size={24} />
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-start gap-2">
@@ -308,7 +373,9 @@ function TimelineRow({ step, index, last, progress, reserve }) {
             <span className="size-3.5 shrink-0" aria-hidden />
           ) : null}
         </span>
-        {progress ? <span className="mt-2.5 block">{progress}</span> : null}
+        <Collapse open={Boolean(progress)}>
+          <span className="block pt-2.5">{progress}</span>
+        </Collapse>
       </span>
     </>
   );
@@ -321,13 +388,13 @@ function TimelineRow({ step, index, last, progress, reserve }) {
   return (
     <li className="relative mb-1 last:mb-0">
       {!last ? (
-        <span
-          aria-hidden
-          className={cn(
-            'absolute -bottom-3 left-[21px] top-[38px] w-0.5 rounded-full',
-            done ? 'bg-[hsl(var(--brand-300))]' : 'bg-[hsl(var(--wb-line-strong))]'
-          )}
-        />
+        <span aria-hidden className="absolute -bottom-3 left-[21px] top-[38px] w-0.5 overflow-hidden rounded-full bg-[hsl(var(--wb-line-strong))]">
+          {/* The teal line fills down once the step above settles, after its check has drawn. */}
+          <span
+            className="block h-full w-full origin-top bg-[hsl(var(--brand-500))] transition-transform duration-500 ease-out motion-reduce:transition-none"
+            style={{ transform: `scaleY(${done ? 1 : 0})`, transitionDelay: done ? '320ms' : '0ms' }}
+          />
+        </span>
       ) : null}
       {interactive ? (
         <Row type="button" onClick={step.onClick} disabled={step.disabled} title={step.title} className={cn(rowClass, 'disabled:cursor-default disabled:opacity-60')}>
@@ -432,8 +499,10 @@ function PanelBody({
 
       {hasStatusBlock ? (
         <div
+          key={failed ? 'failed' : 'ok'}
           className={cn(
             'mx-4 mb-4 rounded-2xl border px-3.5 py-3',
+            failed && 'wb-rise',
             failed
               ? 'border-[color-mix(in_srgb,var(--error)_22%,transparent)] bg-[var(--error-soft)]'
               : 'border-[hsl(var(--brand-100))] bg-[hsl(var(--brand-50))]'
@@ -456,7 +525,7 @@ function PanelBody({
                 </div>
               ) : null}
               {statusText ? (
-                <p className="m-0 text-[13px] leading-5 text-foreground" aria-live="polite">
+                <p key={String(statusText)} className="wb-fade m-0 text-[13px] leading-5 text-foreground" aria-live="polite">
                   {statusText}
                 </p>
               ) : null}
@@ -509,14 +578,12 @@ function PanelBody({
               FOCUS
             )}
           >
-            <ChevronRight className={cn('size-3.5 transition-transform duration-150 motion-reduce:transition-none', detailsOpen && 'rotate-90')} aria-hidden />
+            <Turn open={detailsOpen}><ChevronRight className="size-3.5" aria-hidden /></Turn>
             {detailsLabel}
           </button>
-          {detailsOpen ? (
-            <div id={detailsId} className="pb-1 pt-2">
-              {details}
-            </div>
-          ) : null}
+          <Collapse open={detailsOpen} id={detailsId}>
+            <div className="pb-1 pt-2">{details}</div>
+          </Collapse>
         </div>
       ) : null}
 
@@ -597,7 +664,7 @@ export default function PipelineJobCard({
           {showProgress ? (
             <>
               <ThinProgress value={pct} label="Run progress" className="flex-1" />
-              <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">{Math.round(pct)}%</span>
+              <span className="shrink-0 text-2xs tabular-nums text-muted-foreground"><CountUp value={Math.round(pct)} duration={0.5} />%</span>
             </>
           ) : (
             <span className="flex-1" />
@@ -618,20 +685,17 @@ export default function PipelineJobCard({
             aria-controls={stepsId}
             className="-mx-1.5 inline-flex min-h-8 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55"
           >
-            <ChevronRight
-              className={cn('h-3.5 w-3.5 transition-transform duration-150 motion-reduce:transition-none', stepsOpen && 'rotate-90')}
-              aria-hidden
-            />
+            <Turn open={Boolean(stepsOpen)}><ChevronRight className="h-3.5 w-3.5" aria-hidden /></Turn>
             {stepsOpen ? `Hide ${stepsLabel.toLowerCase()}` : `${stepsLabel}`}
             <span className="font-normal tabular-nums">
               {doneCount} of {steps.length}
             </span>
           </button>
-          {stepsOpen ? (
-            <div id={stepsId} className="mt-1">
+          <Collapse open={Boolean(stepsOpen)} id={stepsId}>
+            <div className="mt-1">
               <StepList steps={steps} />
             </div>
-          ) : null}
+          </Collapse>
         </div>
       ) : null}
 

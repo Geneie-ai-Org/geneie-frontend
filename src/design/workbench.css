@@ -269,3 +269,17 @@
 /* Resize handle: a slim grip that grows on hover and while dragging. */
 .wb-grip { transition: top 180ms var(--ease-out), bottom 180ms var(--ease-out), background-color 150ms var(--ease-out); }
 @media (prefers-reduced-motion: reduce) { .wb-spin-inline { animation-duration: 1.6s; } .wb-draw-lucide path { animation: none; stroke-dashoffset: 0; } }
+
+/* Skeleton shimmer: a soft highlight sweeps across the placeholder bars. */
+.wb-shimmer {
+  background-image: linear-gradient(90deg, hsl(var(--brand-100)) 0%, hsl(var(--brand-50)) 50%, hsl(var(--brand-100)) 100%);
+  background-size: 200% 100%;
+  animation: wb-shimmer 1.6s linear infinite;
+}
+@keyframes wb-shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .wb-shimmer { animation: none; } }
+
+/* Checkbox tick: the check springs in (one small overshoot) when a box is ticked. */
+@keyframes wb-tick { 0% { opacity: 0; transform: scale(0.2); } 60% { opacity: 1; transform: scale(1.18); } 100% { opacity: 1; transform: scale(1); } }
+.wb-spring-check [data-slot='checkbox-indicator'] svg { animation: wb-tick 260ms var(--ease-out) both; }
+@media (prefers-reduced-motion: reduce) { .wb-spring-check [data-slot='checkbox-indicator'] svg { animation: none; } }

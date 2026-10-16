@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useId } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { X, RotateCcw, Upload, Trash2, Info, Search, PencilLine, ChevronRight, Check, Lock, Plus, Tags } from 'lucide-react';
+import { X, RotateCcw, Upload, Trash2, Info, Search, PencilLine, ChevronRight, Check, Lock, Plus, Tags, ListFilter, Play } from 'lucide-react';
 import { getDeviceId } from '@/lib/deviceId';
 import { doc, getDoc } from 'firebase/firestore';
 import { optionalIdToken } from '@/lib/safeAuth';
@@ -34,7 +34,8 @@ import { toast } from 'sonner';
 import { apiErrorDetailToMessage as sharedApiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
 import { groupColumns, OTHER_GROUP } from '@/lib/variantColumnGroups';
 import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
-import { CountUp } from '@/components/workspace/motion';
+import { CountUp, Collapse, Turn, ChipList, PopIn, SelectionMarker, StateButton, Dismissible, undoToast, SPRING } from '@/components/workspace/motion';
+import { useDoneFlash } from '@/hooks/useDoneFlash';
 import { sampleHasPhenotype } from '@/components/PhenotypeInputPanel';
 import {
   PHENOTYPE_FILTER_DISPLAY_NAME,
@@ -251,7 +252,7 @@ function InlineNotice({ tone = 'warning', title, children, action = null, role }
   return (
     <div
       role={role}
-      className={`rounded-2xl px-3.5 py-3 text-[13px] leading-snug text-foreground ${TONE_SOFT[tone] || TONE_SOFT.muted}`}
+      className={`wb-rise rounded-2xl px-3.5 py-3 text-[13px] leading-snug text-foreground ${TONE_SOFT[tone] || TONE_SOFT.muted}`}
     >
       {title && (
         <p className={`flex items-start gap-2 font-medium ${TONE_TEXT[tone] || ''}`}>
@@ -328,7 +329,7 @@ const safeId = (name) => String(name).replace(/[^a-zA-Z0-9_-]/g, '_');
 const BOOLISH = /^(true|false|yes|no|y|n|t|f|0|1)$/i;
 
 const FIELD_CLASS =
-  'h-9 max-md:h-11 w-full min-w-0 rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3.5 text-[13px] md:text-[13px] tabular-nums text-foreground placeholder:text-muted-foreground outline-none transition-colors hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)] disabled:cursor-not-allowed disabled:opacity-50';
+  'h-9 max-md:h-11 w-full min-w-0 rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3.5 text-[13px] md:text-[13px] tabular-nums text-foreground placeholder:text-muted-foreground outline-none transition-[color,background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)] disabled:cursor-not-allowed disabled:opacity-50';
 
 const TEXTAREA_CLASS =
   'w-full resize-none rounded-2xl border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3.5 py-2 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)]';
@@ -338,8 +339,17 @@ const MINI_ICON_BTN =
   'inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:opacity-50 max-md:size-9';
 
 /** Dual-handle range slider + min/max fields for numeric column filters. */
-function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinChange, onMaxChange, disabled, onEnterApply = null }) {
+function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinChange, onMaxChange, disabled, onEnterApply = null, flashKey = 0 }) {
   const uid = useId();
+  const reduceMotion = useReducedMotion();
+  // A quick-pick changes both fields at once: ring them in teal for a moment so the change reads.
+  const [flashing, setFlashing] = useState(false);
+  useEffect(() => {
+    if (!flashKey) return undefined;
+    setFlashing(true);
+    const t = setTimeout(() => setFlashing(false), 650);
+    return () => clearTimeout(t);
+  }, [flashKey]);
   const trackRef = useRef(null);
   const [dragging, setDragging] = useState(null);
   const dragRef = useRef(null);
@@ -527,10 +537,13 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
   const minInputValue = minDraft !== null ? minDraft : currentMin != null ? String(currentMin) : '';
   const maxInputValue = maxDraft !== null ? maxDraft : currentMax != null ? String(currentMax) : '';
 
+  // The thumb grows while it is dragged. The scale lives in the inline transform (which already
+  // centres the thumb), so it is not overridden by the centring translate.
   const thumbClass = (active) =>
-    `absolute size-[18px] rounded-full border-2 border-[hsl(var(--brand-500))] bg-[hsl(var(--wb-card))] outline-none transition-transform focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.45)] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--brand-50))] motion-reduce:transition-none ${
-      active ? 'z-20 scale-110' : 'z-10'
+    `absolute size-[18px] rounded-full border-2 border-[hsl(var(--brand-500))] bg-[hsl(var(--wb-card))] outline-none transition-[transform,box-shadow] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.45)] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--brand-50))] motion-reduce:transition-none ${
+      active ? 'z-20 shadow-[0_0_0_5px_hsl(var(--brand-500)/0.18)]' : 'z-10'
     }`;
+  const thumbTransform = (active) => (active && !reduceMotion ? 'translate(-50%, -50%) scale(1.25)' : 'translate(-50%, -50%)');
 
   return (
     <div className="space-y-2 select-none">
@@ -573,7 +586,7 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
                 aria-label={f.aria}
                 aria-invalid={f.error ? true : undefined}
                 aria-describedby={f.error ? `${errId} ${uid}-range` : `${uid}-range`}
-                className={`${FIELD_CLASS} select-text ${f.error ? 'border-[var(--error)]' : ''}`}
+                className={`${FIELD_CLASS} select-text ${f.error ? 'border-[var(--error)]' : ''} ${flashing && !f.error ? '!border-[hsl(var(--brand-500))] ring-2 ring-[hsl(var(--brand-500)/0.45)]' : ''}`}
               />
               {f.error && (
                 <p id={errId} role="alert" className="mt-1 text-[12px] leading-snug text-[var(--error)]">
@@ -607,7 +620,7 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
           onPointerDown={(e) => onThumbDown('low', e)}
           onKeyDown={(e) => onThumbKeyDown('low', e)}
           className={thumbClass(dragging === 'low')}
-          style={{ left: `${loPct}%`, top: '50%', transform: 'translate(-50%, -50%)', touchAction: 'none' }}
+          style={{ left: `${loPct}%`, top: '50%', transform: thumbTransform(dragging === 'low'), touchAction: 'none' }}
         />
         <button
           type="button"
@@ -621,7 +634,7 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
           onPointerDown={(e) => onThumbDown('high', e)}
           onKeyDown={(e) => onThumbKeyDown('high', e)}
           className={thumbClass(dragging === 'high')}
-          style={{ left: `${hiPct}%`, top: '50%', transform: 'translate(-50%, -50%)', touchAction: 'none' }}
+          style={{ left: `${hiPct}%`, top: '50%', transform: thumbTransform(dragging === 'high'), touchAction: 'none' }}
         />
       </div>
       <p id={`${uid}-range`} className="text-[12px] text-muted-foreground tabular-nums">
@@ -636,6 +649,8 @@ const CATEGORY_RENDER_CAP = 200;
 /** Searchable multi-select; two-value yes/no style columns become Any / A / B. */
 function CategoricalEditor({ values, selected, disabled, onChange }) {
   const [query, setQuery] = useState('');
+  const segId = useId();
+  const reduceMotion = useReducedMotion();
   const all = Array.isArray(values) ? values : [];
   const nonEmpty = all.filter((v) => String(v) !== 'Empty');
   const isBoolean =
@@ -659,13 +674,34 @@ function CategoricalEditor({ values, selected, disabled, onChange }) {
               aria-checked={active}
               disabled={disabled}
               onClick={() => onChange(opt.value === null ? [] : [opt.value])}
-              className={`h-7 max-md:h-10 flex-1 rounded-full border px-2 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`relative h-7 max-md:h-10 flex-1 rounded-full border border-transparent px-2 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:cursor-not-allowed disabled:opacity-50 ${
                 active
-                  ? 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]'
-                  : 'border-transparent text-muted-foreground hover:bg-[hsl(var(--brand-50))] hover:text-foreground'
+                  ? 'text-[hsl(var(--brand-700))]'
+                  : 'text-muted-foreground hover:bg-[hsl(var(--brand-50))] hover:text-foreground'
               }`}
             >
-              {opt.label}
+              {active && (
+                <motion.span
+                  aria-hidden="true"
+                  layoutId={`${segId}-seg`}
+                  transition={reduceMotion ? { duration: 0 } : SPRING}
+                  className="pointer-events-none absolute -inset-px rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))]"
+                />
+              )}
+              <span className="relative inline-flex items-center justify-center gap-1">
+                {active && (
+                  <motion.span
+                    aria-hidden="true"
+                    className="inline-flex"
+                    initial={reduceMotion ? false : { opacity: 0, scale: 0.2 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 700, damping: 22 }}
+                  >
+                    <Check className="size-3.5" strokeWidth={2.4} />
+                  </motion.span>
+                )}
+                {opt.label}
+              </span>
             </button>
           );
         })}
@@ -743,6 +779,7 @@ function CategoricalEditor({ values, selected, disabled, onChange }) {
                     checked={selected.includes(value)}
                     onCheckedChange={(checked) => toggle(value, checked === true)}
                     disabled={disabled}
+                    className="wb-spring-check"
                   />
                   <span className="min-w-0 flex-1 truncate" title={String(value)}>
                     {String(value) === 'Empty' ? 'Empty' : String(value)}
@@ -777,6 +814,7 @@ function ColumnFilterEditor({
   onClear,
   onEnterApply = null,
 }) {
+  const [flashKey, setFlashKey] = useState(0);
   if (notFilterableReason) {
     return (
       <p className="text-[13px] text-muted-foreground">
@@ -815,6 +853,7 @@ function ColumnFilterEditor({
                 onClick={() => {
                   onNumericChange('Min', p.min);
                   onNumericChange('Max', p.max);
+                  setFlashKey((k) => k + 1);
                 }}
                 disabled={disabled}
                 className="h-7 max-md:h-10 rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3 text-[12px] font-medium text-muted-foreground outline-none transition-colors hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:cursor-not-allowed disabled:opacity-50"
@@ -834,6 +873,7 @@ function ColumnFilterEditor({
           onMinChange={(v) => onNumericChange('Min', v)}
           onMaxChange={(v) => onNumericChange('Max', v)}
           onEnterApply={onEnterApply}
+          flashKey={flashKey}
         />
       </div>
     );
@@ -2075,6 +2115,22 @@ const VariantFilterSidebar = ({
     setPendingTabSwitch(null);
   };
 
+  // Buttons morph idle -> running -> done from the busy flags that already exist. Done shows for
+  // ~1.8s after a run that visibly worked; a failed run (outcome never appears) shows nothing.
+  const { done: applyDone } = useDoneFlash(isApplying, { armed: hasUnappliedFilterChanges, ok: !hasUnappliedFilterChanges });
+  const { done: acmgApplyDone, armedRun: acmgApplying } = useDoneFlash(isApplyingProprietaryFilter, {
+    armed: activeProprietaryFilter == null,
+    ok: activeProprietaryFilter === 'filter_1',
+  });
+  const exoStatusLc = (exomiserStatus?.status || '').toLowerCase();
+  const exoBusyNow =
+    exoStatusLc !== 'failed' && exoStatusLc !== 'error' && (isRunningExomiser || (!!exoStatusLc && exoStatusLc !== 'completed'));
+  const { done: exoRunDone } = useDoneFlash(exoBusyNow, {
+    armed: activeProprietaryFilter !== 'filter_3',
+    ok: activeProprietaryFilter === 'filter_3',
+  });
+  const { done: annotateDone } = useDoneFlash(isRunningAnnovar, { armed: !acmgFilterCanApply, ok: !!acmgFilterCanApply });
+
   // Plain content for the workspace "Variants" tab. The workspace supplies the header and close
   // button; `isOpen` / `onToggle` are still accepted so existing callers keep working, and only an
   // explicit `isOpen={false}` hides the content.
@@ -2186,6 +2242,20 @@ const VariantFilterSidebar = ({
     Object.keys(appliedNormalized).filter((k) => !(k in pendingFilterPayload)).length;
   const filteredOutCount = Math.max(0, displayTotalVariants - underConsiderationCount);
 
+  /** Chip X and "Clear this filter": clear one column's draft, with an Undo that puts back exactly what it held. */
+  const removeColumnFilter = (colName) => {
+    const prevNumeric = filters[colName] ? { currentMin: filters[colName].currentMin ?? null, currentMax: filters[colName].currentMax ?? null } : null;
+    const prevValues = categoricalFilters[colName] ? [...categoricalFilters[colName]] : null;
+    clearColumnFilter(colName);
+    undoToast('Filter removed', () => {
+      if (prevNumeric) {
+        setFilters((prev) => (prev[colName] ? { ...prev, [colName]: { ...prev[colName], ...prevNumeric } } : prev));
+      }
+      if (prevValues) {
+        setCategoricalFilters((prev) => ({ ...prev, [colName]: prevValues }));
+      }
+    });
+  };
   const clearColumnFilter = (colName) => {
     if (filters[colName]) {
       setFilters((prev) => ({
@@ -2202,8 +2272,24 @@ const VariantFilterSidebar = ({
   };
   const clearAllFilters = () => {
     if (hasAppliedManualFilters || activeProprietaryFilter) {
+      // Applied filters are reset on the server; putting them back would be a new apply, so no Undo here.
       resetFilters();
       return;
+    }
+    // Draft-only: every selection is local, so Undo can restore all of them.
+    const prevNumeric = {};
+    for (const param in filters) prevNumeric[param] = { currentMin: filters[param].currentMin ?? null, currentMax: filters[param].currentMax ?? null };
+    const prevCategorical = {};
+    for (const param in categoricalFilters) prevCategorical[param] = [...(categoricalFilters[param] || [])];
+    if (Object.keys(pendingFilterPayload).length > 0) {
+      undoToast('Filters cleared', () => {
+        setFilters((prev) => {
+          const next = { ...prev };
+          for (const param in prevNumeric) if (next[param]) next[param] = { ...next[param], ...prevNumeric[param] };
+          return next;
+        });
+        setCategoricalFilters((prev) => ({ ...prev, ...prevCategorical }));
+      });
     }
     setFilters((prev) => {
       const next = { ...prev };
@@ -2332,13 +2418,15 @@ const VariantFilterSidebar = ({
           aria-expanded={isExpanded}
           aria-controls={`filter-col-${safeId(colName)}`}
           onClick={() => setOpenFilterPopup(isExpanded ? null : colName)}
-          className={`flex min-h-9 w-full items-center gap-2 rounded-full border px-3.5 py-1 text-left text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:min-h-11 ${
+          className={`group/row relative flex min-h-9 w-full items-center gap-2 rounded-full border px-3.5 py-1 text-left text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:min-h-11 ${
             isExpanded
-              ? 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))]'
+              ? 'border-[hsl(var(--brand-200))]'
               : 'border-transparent hover:border-[hsl(var(--brand-200))] hover:bg-[hsl(var(--brand-50))]'
           }`}
         >
-          <span className="min-w-0 flex-1">
+          {/* Only one editor is open at a time, so one tint glides to whichever row is open. */}
+          {isExpanded && <SelectionMarker group="filter-row" bar={false} />}
+          <span className="relative min-w-0 flex-1">
             <span className={`block truncate ${reason ? 'text-muted-foreground' : 'text-foreground'} ${summary || isExpanded ? 'font-medium' : ''}`}>{colName}</span>
             {showGroup && groupOfColumn[colName] && (
               <span className="block truncate text-[12px] text-muted-foreground">{groupOfColumn[colName]}</span>
@@ -2346,7 +2434,7 @@ const VariantFilterSidebar = ({
           </span>
           {summary ? (
             <span
-              className={`inline-flex h-6 max-w-[9rem] shrink-0 items-center truncate rounded-full border px-2.5 text-[12px] font-medium tabular-nums ${
+              className={`relative inline-flex h-6 max-w-[9rem] shrink-0 items-center truncate rounded-full border px-2.5 text-[12px] font-medium tabular-nums ${
                 isPending
                   ? 'border-dashed border-[var(--warning)] bg-[hsl(var(--wb-card))] text-foreground'
                   : 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]'
@@ -2356,14 +2444,16 @@ const VariantFilterSidebar = ({
               {summary}
             </span>
           ) : reason ? (
-            <span className="shrink-0 text-[12px] text-muted-foreground">Not filterable</span>
+            <span className="relative shrink-0 text-[12px] text-muted-foreground">Not filterable</span>
           ) : rowHint ? (
-            <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">{rowHint}</span>
+            <span className="relative shrink-0 text-[12px] tabular-nums text-muted-foreground">{rowHint}</span>
           ) : null}
-          <ChevronRight className={`size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${isExpanded ? 'rotate-90' : ''}`} aria-hidden />
+          <Turn open={isExpanded} className="relative shrink-0">
+            <ChevronRight className={`wb-chev size-3.5 text-muted-foreground ${isExpanded ? '' : 'group-hover/row:translate-x-0.5 group-hover/row:text-[hsl(var(--brand-700))]'}`} aria-hidden />
+          </Turn>
         </button>
-        {isExpanded && (
-          <div id={`filter-col-${safeId(colName)}`} className="mx-1 mb-1.5 mt-1 rounded-2xl border border-[hsl(var(--brand-100))] bg-[hsl(var(--brand-50))] p-3">
+        <Collapse open={isExpanded} id={`filter-col-${safeId(colName)}`}>
+          <div className="mx-1 mb-1.5 mt-1 rounded-2xl border border-[hsl(var(--brand-100))] bg-[hsl(var(--brand-50))] p-3">
             <ColumnFilterEditor
               colName={colName}
               notFilterableReason={reason}
@@ -2375,11 +2465,11 @@ const VariantFilterSidebar = ({
               hasFilter={!!summary}
               onNumericChange={(type, value) => handleFilterChange(colName, type, value)}
               onCategoricalChange={(values) => setCategoricalSelection(colName, values)}
-              onClear={() => clearColumnFilter(colName)}
+              onClear={() => removeColumnFilter(colName)}
               onEnterApply={requestApply}
             />
           </div>
-        )}
+        </Collapse>
       </div>
     );
   };
@@ -2431,18 +2521,18 @@ const VariantFilterSidebar = ({
   const ringBrand = 'focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]';
   const pillBtn = 'h-8 max-md:h-11 text-[13px]';
   const canRunAnnotation = !isGuest && typeof runAnnovar === 'function';
+  const annotateState = isRunningAnnovar ? 'running' : annotateDone ? 'done' : 'idle';
   const runAnnotationButton = canRunAnnotation ? (
-    <Button
-      type="button"
+    <StateButton
+      state={annotateState}
+      labels={{ idle: 'Run annotation', running: 'Running annotation…', done: 'Annotated' }}
+      icon={Tags}
       variant="outline"
       size="sm"
       onClick={handleRunAnnovarFromGarden}
-      disabled={isRunningAnnovar || annovarQuotaBlocked || pipelineBusy}
-      className={pillBtn}
-    >
-      <Tags aria-hidden />
-      {isRunningAnnovar ? 'Running annotation…' : 'Run annotation'}
-    </Button>
+      disabled={annovarQuotaBlocked || pipelineBusy}
+      className={`${pillBtn} ${annotateState !== 'idle' ? 'disabled:opacity-100' : ''}`}
+    />
   ) : null;
 
   // Where a blocked Phenotype reason can be fixed in one click, when the host gave us a handler.
@@ -2481,70 +2571,72 @@ const VariantFilterSidebar = ({
 
   /** Mode-specific primary action for the sticky footer. */
   const renderPrimaryAction = () => {
+    // A finished run keeps `disabled:opacity-100` so the check does not look greyed out.
+    const settled = (state) => (state !== 'idle' ? 'disabled:opacity-100' : '');
     if (filterMode === 'manual') {
+      const state = isApplying ? 'running' : applyDone ? 'done' : 'idle';
       return (
-        <Button
-          type="button"
+        <StateButton
+          state={state}
+          labels={{ idle: 'Apply', running: 'Applying…', done: 'Applied' }}
+          icon={ListFilter}
           onClick={applyFilters}
-          disabled={isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges}
+          disabled={isManualFiltersDisabled || !hasUnappliedFilterChanges}
           aria-describedby="filter-apply-status"
-          className="h-9 flex-1 max-md:h-11"
-        >
-          {isApplying ? 'Applying…' : 'Apply'}
-        </Button>
+          className={`h-9 flex-1 max-md:h-11 ${settled(state)}`}
+        />
       );
     }
     if (filterMode === 'acmg') {
-      return activeProprietaryFilter === 'filter_1' ? (
-        <Button
-          type="button"
+      // For a moment after a successful apply the primary pill shows the check, then becomes Remove.
+      // `acmgApplying`: the apply is still finishing (the filter is set, previews are loading), so it must
+      // not read as "Removing…".
+      return activeProprietaryFilter === 'filter_1' && !acmgApplyDone && !acmgApplying ? (
+        <StateButton
+          state={isApplyingProprietaryFilter ? 'running' : 'idle'}
+          labels={{ idle: 'Remove ACMG filter', running: 'Removing…' }}
+          icon={X}
           variant="outline"
           onClick={() => handleApplyProprietaryFilter('filter_1')}
-          disabled={isApplyingProprietaryFilter}
           aria-describedby="filter-apply-status"
-          className="h-9 flex-1 !text-[var(--error)] max-md:h-11"
-        >
-          {isApplyingProprietaryFilter ? 'Removing…' : 'Remove ACMG filter'}
-        </Button>
+          className={`h-9 flex-1 !text-[var(--error)] max-md:h-11 ${settled(isApplyingProprietaryFilter ? 'running' : 'idle')}`}
+        />
       ) : (
-        <Button
-          type="button"
+        <StateButton
+          state={isApplyingProprietaryFilter ? 'running' : acmgApplyDone ? 'done' : 'idle'}
+          labels={{ idle: 'Apply ACMG filter', running: 'Applying…', done: 'Applied' }}
+          icon={ListFilter}
           onClick={() => handleApplyProprietaryFilter('filter_1')}
-          disabled={!acmgFilterCanApply || isApplyingProprietaryFilter}
+          disabled={!acmgFilterCanApply || acmgApplyDone}
           aria-describedby="filter-apply-status"
-          className="h-9 flex-1 max-md:h-11"
-        >
-          {isApplyingProprietaryFilter ? 'Applying…' : 'Apply ACMG filter'}
-        </Button>
+          className={`h-9 flex-1 max-md:h-11 ${settled(isApplyingProprietaryFilter ? 'running' : acmgApplyDone ? 'done' : 'idle')}`}
+        />
       );
     }
-    return exoIsActive ? (
-      <Button
-        type="button"
+    return exoIsActive && !exoRunDone ? (
+      <StateButton
+        state={isApplyingProprietaryFilter ? 'running' : 'idle'}
+        labels={{ idle: `Remove ${PHENOTYPE_FILTER_DISPLAY_NAME}`, running: 'Removing…' }}
+        icon={X}
         variant="outline"
         onClick={() => handleApplyProprietaryFilter('filter_3')}
-        disabled={isApplyingProprietaryFilter}
         aria-describedby="filter-apply-status"
-        className="h-9 flex-1 !text-[var(--error)] max-md:h-11"
-      >
-        {isApplyingProprietaryFilter ? 'Removing…' : `Remove ${PHENOTYPE_FILTER_DISPLAY_NAME}`}
-      </Button>
+        className={`h-9 flex-1 !text-[var(--error)] max-md:h-11 ${settled(isApplyingProprietaryFilter ? 'running' : 'idle')}`}
+      />
     ) : (
-      <Button
-        type="button"
+      <StateButton
+        state={exoRunning ? 'running' : exoRunDone ? 'done' : 'idle'}
+        labels={{
+          idle: exoFailed ? <>Retry <PhenotypeAiLabel variant="inline" /></> : <>Run <PhenotypeAiLabel variant="inline" /></>,
+          running: 'Running…',
+          done: 'Done',
+        }}
+        icon={Play}
         onClick={() => runExomiser && runExomiser()}
-        disabled={phenotypeMissing || !exoCanRun || exoRunning || !runExomiser || acmgQuotaBlocked}
+        disabled={exoRunDone || phenotypeMissing || !exoCanRun || !runExomiser || acmgQuotaBlocked}
         aria-describedby="filter-apply-status"
-        className="h-9 flex-1 max-md:h-11"
-      >
-        {exoRunning ? (
-          'Running…'
-        ) : exoFailed ? (
-          <>Retry <PhenotypeAiLabel variant="inline" /></>
-        ) : (
-          <>Run <PhenotypeAiLabel variant="inline" /></>
-        )}
-      </Button>
+        className={`h-9 flex-1 max-md:h-11 ${settled(exoRunning ? 'running' : exoRunDone ? 'done' : 'idle')}`}
+      />
     );
   };
 
@@ -2681,22 +2773,26 @@ const VariantFilterSidebar = ({
               </div>
             )}
 
-            {hasActiveManualFilters &&
-              filterWorkingSetCount != null &&
-              filteredCount === 1 &&
-              filterWorkingSetCount === 1 &&
-              fileTotalVariants > 100 && (
-                <div className="mt-3">
-                  <InlineNotice tone="warning" title="Only 1 variant is loaded" role="status">
-                    Press Reset, then apply ACMG or your first filter again to reload a larger working set.
-                  </InlineNotice>
-                </div>
-              )}
+            <Dismissible
+              show={
+                !!hasActiveManualFilters &&
+                filterWorkingSetCount != null &&
+                filteredCount === 1 &&
+                filterWorkingSetCount === 1 &&
+                fileTotalVariants > 100
+              }
+            >
+              <div className="mt-3">
+                <InlineNotice tone="warning" title="Only 1 variant is loaded" role="status">
+                  Press Reset, then apply ACMG or your first filter again to reload a larger working set.
+                </InlineNotice>
+              </div>
+            </Dismissible>
 
             {/* Active filters: removable pills with one Reset all */}
             <div className="mt-3.5 border-t border-[hsl(var(--wb-line))] pt-3">
               <CardHeader title="Active filters" count={hasAnyChip ? (filterChips.length + (proprietaryChipLabel ? 1 : 0)) : null}>
-                {!hasAnyChip && <span className="text-[12px] text-muted-foreground">None yet</span>}
+                {!hasAnyChip && <span className="wb-fade text-[12px] text-muted-foreground">None yet</span>}
                 {hasAnyChip && (
                   <Button
                     type="button"
@@ -2704,17 +2800,21 @@ const VariantFilterSidebar = ({
                     size="sm"
                     onClick={clearAllFilters}
                     disabled={isApplying}
-                    className="h-7 px-3 text-[12px] max-md:h-11"
+                    className="wb-pop h-7 px-3 text-[12px] max-md:h-11"
                   >
                     <RotateCcw aria-hidden />
                     Reset all
                   </Button>
                 )}
               </CardHeader>
-              {hasAnyChip ? (
-                <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label="Active filters">
+              {/* The row stays mounted so the last chip can shrink out and the empty state can settle in. */}
+              <div className={`relative flex flex-wrap items-center gap-1.5 ${hasAnyChip ? 'mt-2' : ''}`} role="group" aria-label="Active filters">
+                <ChipList>
                   {proprietaryChipLabel && (
-                    <span className="inline-flex h-7 max-w-full items-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] pl-3 pr-1 text-[13px] font-medium text-[hsl(var(--brand-700))]">
+                    <PopIn
+                      key="__proprietary"
+                      className="inline-flex h-7 max-w-full items-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] pl-3 pr-1 text-[13px] font-medium text-[hsl(var(--brand-700))]"
+                    >
                       <span className="truncate">{proprietaryChipLabel}</span>
                       <button
                         type="button"
@@ -2725,12 +2825,12 @@ const VariantFilterSidebar = ({
                       >
                         <X className="size-3" aria-hidden />
                       </button>
-                    </span>
+                    </PopIn>
                   )}
                   {filterChips.map((chip) => (
-                    <span
+                    <PopIn
                       key={chip.col}
-                      className={`inline-flex h-7 max-w-full items-center rounded-full border pl-3 pr-1 text-[13px] ${
+                      className={`inline-flex h-7 max-w-full items-center rounded-full border pl-3 pr-1 text-[13px] transition-colors duration-200 ${
                         chip.pending
                           ? 'border-dashed border-[var(--warning)] bg-[hsl(var(--wb-card))] text-foreground'
                           : 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]'
@@ -2744,17 +2844,17 @@ const VariantFilterSidebar = ({
                       </span>
                       <button
                         type="button"
-                        onClick={() => clearColumnFilter(chip.col)}
+                        onClick={() => removeColumnFilter(chip.col)}
                         disabled={isManualFiltersDisabled}
                         aria-label={`Remove ${chip.col} filter`}
                         className={`ml-1 ${MINI_ICON_BTN} !size-5 hover:!bg-[hsl(var(--brand-200))]`}
                       >
                         <X className="size-3" aria-hidden />
                       </button>
-                    </span>
+                    </PopIn>
                   ))}
-                </div>
-              ) : null}
+                </ChipList>
+              </div>
             </div>
 
             {/* The chat-eligibility sentence lives here once. Download and report controls below only
@@ -2762,7 +2862,7 @@ const VariantFilterSidebar = ({
             {chatEligibility?.allowed !== true && chatEligibility?.message && (
               <p
                 id="variant-eligibility-note"
-                className="mt-3 flex items-start gap-2 rounded-2xl bg-[hsl(var(--brand-50))] px-3.5 py-2.5 text-[12px] leading-snug text-muted-foreground"
+                className="wb-rise mt-3 flex items-start gap-2 rounded-2xl bg-[hsl(var(--brand-50))] px-3.5 py-2.5 text-[12px] leading-snug text-muted-foreground"
               >
                 <StatusDot tone="info" className="mt-[7px]" />
                 <span>{chatEligibility.message}</span>
@@ -2834,7 +2934,7 @@ const VariantFilterSidebar = ({
         >
           {/* What this mode does and whether it is ready */}
           {!(filterMode === 'manual' && modeStatus.word === 'Ready') && (
-          <section className="wb-card p-4" aria-label="About this filter mode">
+          <section key={filterMode} className="wb-card wb-fade p-4" aria-label="About this filter mode">
             <div className="flex items-start justify-between gap-3">
               <p className="min-w-0 text-[13px] leading-snug text-muted-foreground">{modeBlurb}</p>
               <StatusPill tone={modeStatus.tone}>{modeStatus.word}</StatusPill>
@@ -2871,7 +2971,7 @@ const VariantFilterSidebar = ({
                 </InlineNotice>
               </div>
             )}
-            {filterMode === 'acmg' && modeStatus.word === 'Blocked' && (
+            <Dismissible show={filterMode === 'acmg' && modeStatus.word === 'Blocked'}>
               <div className="mt-3">
                 <InlineNotice
                   tone="warning"
@@ -2886,13 +2986,13 @@ const VariantFilterSidebar = ({
                   The ACMG filter and manual filters cannot run together.
                 </InlineNotice>
               </div>
-            )}
+            </Dismissible>
             {filterMode === 'acmg' && proprietaryFilterPreviews?.filter_1?.preview_pending && activeProprietaryFilter !== 'filter_1' && (
               <p className="mt-2 text-[12px] text-muted-foreground">The match count appears after you apply.</p>
             )}
 
             {/* Phenotype */}
-            {filterMode === 'exomiser' && phenotypeMissing && (
+            <Dismissible show={filterMode === 'exomiser' && phenotypeMissing}>
               <div className="mt-3">
                 <InlineNotice
                   tone="warning"
@@ -2909,7 +3009,7 @@ const VariantFilterSidebar = ({
                   Everything else on this page works without one.
                 </InlineNotice>
               </div>
-            )}
+            </Dismissible>
             {filterMode === 'exomiser' && !phenotypeMissing && (
               <div className="space-y-3 empty:hidden">
                 {exoRunning && (
@@ -2985,9 +3085,11 @@ const VariantFilterSidebar = ({
                         setGardenApplyMissingColumns([]);
                       }
                     }}
-                    className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-[13px] outline-none transition-colors hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
+                    className="group/row flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-[13px] outline-none transition-colors hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
                   >
-                    <ChevronRight className={`size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${isGardenExpanded ? 'rotate-90' : ''}`} aria-hidden />
+                    <Turn open={isGardenExpanded} className="shrink-0">
+                      <ChevronRight className={`wb-chev size-3.5 text-muted-foreground ${isGardenExpanded ? '' : 'group-hover/row:translate-x-0.5 group-hover/row:text-[hsl(var(--brand-700))]'}`} aria-hidden />
+                    </Turn>
                     <span className="font-medium">Saved filters</span>
                     <span className="wb-tab-badge text-muted-foreground">{savedFilterPresets.length}</span>
                     {selectedPreset && (
@@ -2997,8 +3099,8 @@ const VariantFilterSidebar = ({
                       </span>
                     )}
                   </button>
-                  {isGardenExpanded && (
-                    <div id="filter-saved-panel" className="space-y-2.5 border-t border-[hsl(var(--wb-line))] p-3">
+                  <Collapse open={isGardenExpanded} id="filter-saved-panel">
+                    <div className="space-y-2.5 border-t border-[hsl(var(--wb-line))] p-3">
                       <p className="px-1 text-[12px] leading-snug text-muted-foreground">
                         Save the manual filters you have set and apply them to any variant file later.
                       </p>
@@ -3110,17 +3212,16 @@ const VariantFilterSidebar = ({
                                       tone="warning"
                                       title={`Missing columns: ${gardenApplyMissingColumns.join(', ')}`}
                                       action={
-                                        <Button
-                                          type="button"
+                                        <StateButton
+                                          state={annotateState}
+                                          labels={{ idle: 'Run annotation', running: 'Running annotation…', done: 'Annotated' }}
+                                          icon={Tags}
                                           size="sm"
                                           variant="outline"
                                           onClick={handleRunAnnovarFromGarden}
-                                          disabled={isRunningAnnovar || annovarQuotaBlocked}
-                                          className="max-md:h-11"
-                                        >
-                                          <Tags aria-hidden />
-                                          {isRunningAnnovar ? 'Running annotation…' : 'Run annotation'}
-                                        </Button>
+                                          disabled={annovarQuotaBlocked}
+                                          className={`max-md:h-11 ${annotateState !== 'idle' ? 'disabled:opacity-100' : ''}`}
+                                        />
                                       }
                                     >
                                       {annovarQuotaBlocked
@@ -3135,7 +3236,7 @@ const VariantFilterSidebar = ({
                         </ul>
                       )}
 
-                      {!isGardenSaveFormOpen ? (
+                      {!isGardenSaveFormOpen && (
                         <Button
                           type="button"
                           variant="outline"
@@ -3146,12 +3247,13 @@ const VariantFilterSidebar = ({
                             setGardenNotesInput('');
                           }}
                           disabled={!canSavePreset || isManualFiltersDisabled}
-                          className="w-full max-md:h-11"
+                          className="wb-fade w-full max-md:h-11"
                         >
                           <Plus aria-hidden />
                           Save current filters
                         </Button>
-                      ) : (
+                      )}
+                      <Collapse open={isGardenSaveFormOpen}>
                         <div className="space-y-2.5 rounded-2xl border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-50))] p-3">
                           <label className="block">
                             <span className="mb-1 block pl-1 text-[12px] font-medium text-muted-foreground">Name</span>
@@ -3193,9 +3295,9 @@ const VariantFilterSidebar = ({
                             </Button>
                           </div>
                         </div>
-                      )}
+                      </Collapse>
                     </div>
-                  )}
+                  </Collapse>
                 </section>
               )}
 
@@ -3257,9 +3359,11 @@ const VariantFilterSidebar = ({
                         aria-expanded={isGroupOpen}
                         aria-controls={`filter-group-${groupIndex}`}
                         onClick={() => setExpandedGroups((prev) => ({ ...prev, [groupName]: !isGroupOpen }))}
-                        className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-[13px] outline-none transition-colors hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
+                        className="group/row flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-[13px] outline-none transition-colors hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
                       >
-                        <ChevronRight className={`size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${isGroupOpen ? 'rotate-90' : ''}`} aria-hidden />
+                        <Turn open={isGroupOpen} className="shrink-0">
+                          <ChevronRight className={`wb-chev size-3.5 text-muted-foreground ${isGroupOpen ? '' : 'group-hover/row:translate-x-0.5 group-hover/row:text-[hsl(var(--brand-700))]'}`} aria-hidden />
+                        </Turn>
                         <span className="min-w-0 truncate font-medium">{groupName}</span>
                         <span className="wb-tab-badge text-muted-foreground">{cols.length}</span>
                         {activeInGroup > 0 && (
@@ -3268,11 +3372,11 @@ const VariantFilterSidebar = ({
                           </span>
                         )}
                       </button>
-                      {isGroupOpen && (
-                        <div id={`filter-group-${groupIndex}`} className="space-y-0.5 border-t border-[hsl(var(--wb-line))] p-1.5">
+                      <Collapse open={isGroupOpen} id={`filter-group-${groupIndex}`}>
+                        <div className="space-y-0.5 border-t border-[hsl(var(--wb-line))] p-1.5">
                           {cols.map((c) => renderColumnRow(c))}
                         </div>
-                      )}
+                      </Collapse>
                     </section>
                   );
                 })
@@ -3301,10 +3405,15 @@ const VariantFilterSidebar = ({
           )}
           {/* Idle and success states are spoken to assistive tech but not repeated visually: the count
             * above already shows the result. Anything that needs attention is written out. */}
-          <p className={footerQuiet ? 'sr-only' : 'flex items-start gap-1.5 text-[12px] leading-snug text-muted-foreground'}>
-            {!footerQuiet && <StatusDot tone={footerStatus.tone} pulse={footerStatus.pulse} className="mt-[5px]" />}
-            <span>{footerStatus.text}</span>
-          </p>
+          {footerQuiet && <p className="sr-only">{footerStatus.text}</p>}
+          {/* The attention line slides open and shut. The footer is anchored to the bottom, so the
+            * buttons stay where they are while the count above glides up. */}
+          <Collapse open={!footerQuiet}>
+            <p className="flex items-start gap-1.5 pt-0.5 text-[12px] leading-snug text-muted-foreground">
+              <StatusDot tone={footerStatus.tone} pulse={footerStatus.pulse} className="mt-[5px]" />
+              <span>{footerStatus.text}</span>
+            </p>
+          </Collapse>
         </div>
 
         <div className="flex gap-2">

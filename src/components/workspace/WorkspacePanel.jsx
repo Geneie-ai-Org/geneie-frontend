@@ -3,7 +3,7 @@ import { Maximize2, Minimize2, PanelRightClose, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, Reorder, motion, useReducedMotion } from 'motion/react';
 
 /**
  * Right-hand workbench. Everything that is not the conversation opens here as a tab: a Summary,
@@ -86,25 +86,23 @@ export function useWorkspaceWidth(expanded = false) {
 
 function IconButton({ label, onClick, children }) {
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={onClick}
-              aria-label={label}
-              className="wb-iconbtn focus-visible:ring-[hsl(var(--ring))]"
-            >
-              {children}
-            </Button>
-          }
-        />
-        <TooltipContent>{label}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onClick}
+            aria-label={label}
+            className="wb-iconbtn focus-visible:ring-[hsl(var(--ring))]"
+          >
+            {children}
+          </Button>
+        }
+      />
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -127,6 +125,7 @@ export default function WorkspacePanel({
   onActiveChange,
   onOpenTab,
   onCloseTab,
+  onReorderTabs,
   onClose,
   width,
   onWidthChange,
@@ -270,6 +269,15 @@ export default function WorkspacePanel({
   const onTabKey = (e, idx) => {
     const last = shown.length - 1;
     let to = null;
+    if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && onReorderTabs && shown[idx].closable !== false) {
+      const j = e.key === 'ArrowLeft' ? idx - 1 : idx + 1;
+      if (j < 0 || j > last || shown[j].closable === false) return;
+      e.preventDefault();
+      const ids = shown.map((t) => t.id);
+      [ids[idx], ids[j]] = [ids[j], ids[idx]];
+      onReorderTabs(ids);
+      return;
+    }
     if (e.key === 'ArrowRight') to = idx === last ? 0 : idx + 1;
     else if (e.key === 'ArrowLeft') to = idx === 0 ? last : idx - 1;
     else if (e.key === 'Home') to = 0;
@@ -364,6 +372,7 @@ export default function WorkspacePanel({
       : undefined;
 
   return (
+    <TooltipProvider delay={500} closeDelay={0} timeout={600}>
     <div ref={rootRef} className={cn('relative flex h-full min-h-0 flex-col', className)}>
       <style>{MOTION_CSS}</style>
       {!expanded && (
@@ -387,7 +396,7 @@ export default function WorkspacePanel({
         >
           <span
             aria-hidden="true"
-            className="absolute inset-y-0 left-0 w-0.5 bg-transparent transition-colors duration-150 group-hover/handle:bg-foreground/25 group-focus-visible/handle:bg-[hsl(var(--ring))] motion-reduce:transition-none"
+            className="wb-grip absolute left-0 top-[44%] bottom-[44%] w-1 rounded-full bg-[hsl(var(--wb-line-strong))] group-hover/handle:top-[34%] group-hover/handle:bottom-[34%] group-hover/handle:bg-[hsl(var(--brand-500))] group-focus-visible/handle:top-[34%] group-focus-visible/handle:bottom-[34%] group-focus-visible/handle:bg-[hsl(var(--ring))] group-active/handle:top-[26%] group-active/handle:bottom-[26%] group-active/handle:bg-[hsl(var(--brand-500))]"
           />
         </div>
       )}
@@ -402,13 +411,27 @@ export default function WorkspacePanel({
           style={edgeMask ? { maskImage: edgeMask, WebkitMaskImage: edgeMask } : undefined}
           className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
+          <Reorder.Group
+            as="div"
+            axis="x"
+            values={shown.map((t) => t.id)}
+            onReorder={(ids) => {
+              const pinned = ids.filter((id) => byId.get(id)?.closable === false);
+              onReorderTabs?.([...pinned, ...ids.filter((id) => !pinned.includes(id))]);
+            }}
+            className="flex items-center gap-1.5"
+          >
           <AnimatePresence initial={false} mode="popLayout">
           {shown.map((t, idx) => {
             const selected = t.id === current;
             return (
-              <motion.div
+              <Reorder.Item
+                as="div"
                 key={t.id}
-                layout={reduceMotion ? false : 'position'}
+                value={t.id}
+                drag={onReorderTabs && t.closable !== false && !reduceMotion ? 'x' : false}
+                dragMomentum={false}
+                whileDrag={{ scale: 1.05, zIndex: 20, boxShadow: '0 6px 18px -6px rgb(0 0 0 / 0.25)' }}
                 initial={reduceMotion ? false : { opacity: 0, scale: 0.86 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.86 }}
@@ -466,10 +489,11 @@ export default function WorkspacePanel({
                     <X className="size-3" aria-hidden="true" />
                   </button>
                 ) : null}
-              </motion.div>
+              </Reorder.Item>
             );
           })}
           </AnimatePresence>
+          </Reorder.Group>
         </div>
 
         {openable.length > 0 ? (
@@ -560,5 +584,6 @@ export default function WorkspacePanel({
         />
       </div>
     </div>
+    </TooltipProvider>
   );
 }

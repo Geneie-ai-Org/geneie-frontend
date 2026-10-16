@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Dna, Loader2 } from 'lucide-react';
+import { ArrowRight, Dna, DoorOpen, RotateCcw } from 'lucide-react';
 import {
   MODULE1_STAGE_GROUPS,
   getModule1FailureMessage,
@@ -11,8 +11,9 @@ import { MODULE1_CPU_TYPICAL_MIN, formatMinutesRange } from '@/components/Module
 import RunTimer from '@/components/ui/RunTimer';
 import { useRunTimer } from '@/hooks/useRunTimer';
 import { Button } from '@/components/ui/button';
+import { Collapse, HoldButton } from '@/components/workspace/motion';
 import Module1QcSection, { module1HasQcArtifacts } from '@/components/Module1QcSection';
-import PipelineJobCard, { splitJobMessage } from '@/components/PipelineJobCard';
+import PipelineJobCard, { ActionButton, BrailleSpinner, splitJobMessage } from '@/components/PipelineJobCard';
 
 function nodeStatus(groupId, activeGroupId, failed, groupOrder, finishedOk) {
   if (finishedOk) return 'done';
@@ -185,13 +186,17 @@ const Module1PipelineStepper = ({
   const showPct = pct != null && status === 'running' && !cancelling;
   const timerMs = timer.running ? timer.elapsedMs : timer.durationMs;
   const timerNode = !cancelled && !cancelling && timerMs != null && timerMs >= 1000 ? (
-    <RunTimer
-      running={timer.running}
-      elapsedMs={timer.elapsedMs}
-      durationMs={timer.durationMs}
-      startMs={timer.startMs}
-      prefix={timer.running ? 'Elapsed ' : 'Took '}
-    />
+    <span className="inline-flex items-center gap-1.5">
+      {/* A quiet braille spinner beside the clock while the raw-sequencing run is live. */}
+      {running ? <BrailleSpinner /> : null}
+      <RunTimer
+        running={timer.running}
+        elapsedMs={timer.elapsedMs}
+        durationMs={timer.durationMs}
+        startMs={timer.startMs}
+        prefix={timer.running ? 'Elapsed ' : 'Took '}
+      />
+    </span>
   ) : null;
 
   // Controls appear only when the backend says they apply, so older backends show none.
@@ -247,13 +252,16 @@ const Module1PipelineStepper = ({
   const showFailureAction = failed && typeof onStartOver === 'function';
   const showControls = showQueuePanel || showRunPanel;
 
+  // Both branches stay mounted while they trade places (each in its own Collapse), so the confirm's
+  // safe button and the Leave/Stop trigger exist by the time the focus effect looks for them. The
+  // small padding keeps the focus rings from being clipped by the collapsing container.
   const controls = showControls ? (
-    <div className="space-y-2.5">
-      {confirmCopy ? (
+    <div>
+      <Collapse open={Boolean(confirmCopy)} className="-mx-1 px-1">
         <div
           role="group"
           aria-labelledby="module1-confirm-question"
-          className="rounded-2xl border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill))] p-3"
+          className="my-1 rounded-2xl border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill))] p-3"
           onKeyDown={(e) => {
             if (e.key === 'Escape' && !busy) {
               e.stopPropagation();
@@ -262,7 +270,7 @@ const Module1PipelineStepper = ({
           }}
         >
           <p id="module1-confirm-question" className="m-0 text-[13px] leading-5 text-foreground">
-            {confirmCopy.question}
+            {confirmCopy?.question}
           </p>
           <div className="mt-2.5 flex flex-wrap items-center justify-end gap-2">
             <Button
@@ -274,23 +282,30 @@ const Module1PipelineStepper = ({
               disabled={busy === 'cancel'}
               className="max-sm:h-11"
             >
-              {confirmCopy.keep}
+              {confirmCopy?.keep}
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="destructive"
-              onClick={runCancel}
-              disabled={busy === 'cancel'}
-              className="max-sm:h-11"
-            >
-              {busy === 'cancel' && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
-              {confirmCopy.confirm}
-            </Button>
+            {activeConfirm === 'stop' ? (
+              // Stopping a run throws its progress away, so the confirm is press-and-hold.
+              <HoldButton tone="danger" doneLabel="Stopping" onConfirm={runCancel} disabled={busy === 'cancel'} className="max-sm:h-11">
+                Hold to stop run
+              </HoldButton>
+            ) : (
+              <ActionButton
+                state={busy === 'cancel' ? 'running' : 'idle'}
+                labels={{ idle: confirmCopy?.confirm, running: confirmCopy?.confirm }}
+                icon={DoorOpen}
+                variant="destructive"
+                size="sm"
+                onClick={runCancel}
+                disabled={busy === 'cancel'}
+                className="max-sm:h-11"
+              />
+            )}
           </div>
         </div>
-      ) : (
-        <>
+      </Collapse>
+      <Collapse open={!confirmCopy} className="-mx-1 px-1">
+        <div className="space-y-2.5 py-1">
           {showQueuePanel && (
             <p className="m-0 text-xs leading-5 text-muted-foreground">
               Your place is kept if you close this tab. We&apos;ll notify you when it starts and when it finishes.
@@ -304,17 +319,16 @@ const Module1PipelineStepper = ({
                 </span>
               )}
               {canSwitch && (
-                <Button
-                  type="button"
+                <ActionButton
+                  state={busy === 'switch' ? 'running' : 'idle'}
+                  labels={{ idle: lane === 'cpu' ? 'Wait for GPU instead' : 'Switch to CPU now', running: lane === 'cpu' ? 'Wait for GPU instead' : 'Switch to CPU now' }}
+                  icon={ArrowRight}
                   variant="outline"
                   size="sm"
                   onClick={() => runSwitch(lane === 'cpu' ? 'gpu' : 'cpu')}
                   disabled={Boolean(busy)}
                   className="max-sm:h-11"
-                >
-                  {busy === 'switch' && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
-                  {lane === 'cpu' ? 'Wait for GPU instead' : 'Switch to CPU now'}
-                </Button>
+                />
               )}
               {canCancel && (
                 <Button
@@ -331,8 +345,8 @@ const Module1PipelineStepper = ({
               )}
             </div>
           )}
-        </>
-      )}
+        </div>
+      </Collapse>
     </div>
   ) : null;
 
@@ -348,9 +362,7 @@ const Module1PipelineStepper = ({
       statusText={statusText}
       action={
         showFailureAction ? (
-          <Button type="button" onClick={onStartOver} className="max-sm:h-11">
-            Start over
-          </Button>
+          <ActionButton labels={{ idle: 'Start over' }} icon={RotateCcw} onClick={onStartOver} pulse className="max-sm:h-11" />
         ) : null
       }
       pct={showPct ? pct : null}

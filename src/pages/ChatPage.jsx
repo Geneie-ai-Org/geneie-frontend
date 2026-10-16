@@ -2156,6 +2156,7 @@ const ChatPage = () => {
           onActiveChange={setWorkspaceTab}
           onOpenTab={openWorkspaceTab}
           onCloseTab={closeWorkspaceTab}
+          onReorderTabs={(ids) => setOpenTabs((prev) => [...ids, ...prev.filter((x) => !ids.includes(x))])}
           onClose={() => setIsVariantSidebarOpen(false)}
           persistKey={activeConversationId || undefined}
           onRestore={({ openIds, activeId }) => {

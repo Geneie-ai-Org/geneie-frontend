@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useId } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { CheckCircle2, AlertCircle, ArrowRight, ChevronRight, ClipboardCheck, FileText, Info, Trash2, Filter, Stethoscope, Tags, X } from 'lucide-react';
+import { usePopOnChange } from '@/components/PipelineJobCard';
+import { Collapse, CountUp, HoldButton, StateButton, Turn } from '@/components/workspace/motion';
 import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
 import { formatAcmgPhenotypeMeterLabel } from '@/lib/filterDisplayNames';
 import { Button } from '@/components/ui/button';
@@ -62,9 +65,12 @@ const TONE_STATE = { success: 'done', error: 'failed', info: 'pending', neutral:
 /** Status as a word plus a small dot, in the shared pill shape. */
 function Chip({ tone = 'neutral', children }) {
   const state = TONE_STATE[tone];
+  const sig = `${tone}|${typeof children === 'string' ? children : ''}`;
+  const pop = usePopOnChange(sig);
   return (
     <span
-      className="wb-status max-w-full shrink-0"
+      key={sig}
+      className={`wb-status max-w-full shrink-0 ${pop}`}
       data-state={state}
       style={tone === 'warning' ? { background: C.warningSoft, color: C.warning, borderColor: 'transparent' } : undefined}
     >
@@ -86,6 +92,22 @@ function Notice({ tone = 'info', icon: Icon = Info, children }) {
       <div className="min-w-0">{children}</div>
     </div>
   );
+}
+
+/** False on the first paint, true a frame later: lets bars and counters play from empty on open. */
+function useSettled() {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setOn(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  return on;
+}
+
+/** Counter that rolls up from zero the first time it shows, then follows its value. */
+function RollUp({ value }) {
+  const settled = useSettled();
+  return <CountUp value={settled ? value : 0} />;
 }
 
 /** Found/missing counts for one step's column groups: only what the step needs counts as missing. */
@@ -117,6 +139,7 @@ function summarizeStep(step) {
 
 /** One column per row: the role we need, the column it was matched to in the file (a mono pill), and a status pill. */
 function ColumnRow({ role, matched, tone = 'success', word, note }) {
+  const reduce = useReducedMotion();
   return (
     <li className="flex min-h-10 items-center gap-2 border-t px-3 py-1.5 text-[13px] first:border-t-0 max-md:min-h-11" style={{ borderColor: LINE }}>
       <span className="min-w-0 flex-1 truncate" style={{ color: C.text }} title={note || role}>
@@ -124,13 +147,18 @@ function ColumnRow({ role, matched, tone = 'success', word, note }) {
       </span>
       {matched ? (
         <>
-          {matched !== role ? <ArrowRight className="size-3 shrink-0" style={{ color: C.textDim }} aria-hidden /> : null}
-          <span
-            className="wb-chip max-w-[42%] shrink font-mono text-[12px]"
-            title={`Column in your file: ${matched}`}
+          {/* The mapping slides in from the left when a column gets matched. */}
+          <motion.span
+            className="flex min-w-0 max-w-[48%] shrink items-center gap-2"
+            initial={reduce ? false : { opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           >
-            <span className="truncate">{matched}</span>
-          </span>
+            {matched !== role ? <ArrowRight className="size-3 shrink-0" style={{ color: C.textDim }} aria-hidden /> : null}
+            <span className="wb-chip min-w-0 shrink font-mono text-[12px]" title={`Column in your file: ${matched}`}>
+              <span className="truncate">{matched}</span>
+            </span>
+          </motion.span>
         </>
       ) : null}
       <span className="wb-status shrink-0" data-state={TONE_STATE[tone] || 'pending'}>
@@ -153,21 +181,19 @@ function ColumnGroup({ label, found, missing, open, onToggle, children }) {
           onClick={onToggle}
           className={`flex min-h-10 w-full items-center gap-2 bg-[hsl(var(--wb-pill))] px-3 py-1.5 text-left text-[13px] font-medium transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] motion-reduce:transition-none max-md:min-h-11 ${FOCUS} focus-visible:-outline-offset-2`}
         >
-          <ChevronRight
-            className={`size-3.5 shrink-0 transition-transform duration-150 motion-reduce:transition-none ${open ? 'rotate-90' : ''}`}
-            style={{ color: C.textDim }}
-            aria-hidden
-          />
+          <Turn open={open} className="shrink-0">
+            <ChevronRight className="size-3.5" style={{ color: C.textDim }} aria-hidden />
+          </Turn>
           <span className="min-w-0 flex-1 truncate" style={{ color: C.text }}>{label}</span>
           <span className="wb-status shrink-0 tabular-nums" data-state="done">{found} found</span>
           {missing > 0 ? <span className="wb-status shrink-0 tabular-nums" data-state="failed">{missing} missing</span> : null}
         </button>
       </h4>
-      {open ? (
-        <ul id={panelId} className="m-0 list-none border-t p-0" style={{ borderColor: LINE }}>
+      <Collapse open={open} id={panelId}>
+        <ul className="m-0 list-none border-t p-0" style={{ borderColor: LINE }}>
           {children}
         </ul>
-      ) : null}
+      </Collapse>
     </section>
   );
 }
@@ -209,6 +235,10 @@ const ColumnInterpretationResults = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // Explicit remove-file confirmation only
   const [showAnnovarConfirm, setShowAnnovarConfirm] = useState(false); // Confirm Annotation when all columns present
   const [openGroups, setOpenGroups] = useState({}); // sectionKey -> open (unset = open only when something is missing)
+  const settled = useSettled(); // bars start empty on open and glide to their value
+  const reduceMotion = useReducedMotion();
+  // Direction of travel between steps (1 = forward). Only recomputed when the step actually changes.
+  const stepNav = useRef({ step: initialStep ?? (hasAnnotatedFile ? 2 : 1), dir: 1 });
 
   // Close on ESC (modal mode only). A nested confirm takes precedence over closing the whole view.
   useEffect(() => {
@@ -606,6 +636,10 @@ const ColumnInterpretationResults = ({
 
   // Always start on Step 1 — users walk through the pipeline in order via Next/Prev.
   const selectedStep = expandedStep ?? 1;
+  if (stepNav.current.step !== selectedStep) {
+    stepNav.current = { step: selectedStep, dir: selectedStep > stepNav.current.step ? 1 : -1 };
+  }
+  const stepDir = stepNav.current.dir;
   const selectedStepData = stepperSteps.find((s) => s.n === selectedStep);
   const canGoBack = selectedStep > 1;
   const canGoForward = selectedStep < stepperSteps.length;
@@ -671,13 +705,13 @@ const ColumnInterpretationResults = ({
       <div className="mt-4 rounded-xl bg-[hsl(var(--brand-50))] px-3.5 py-3">
         <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
           <span className="text-[28px] font-medium leading-none tabular-nums tracking-tight text-[hsl(var(--brand-700))]">
-            {columnTotals.found.toLocaleString()}
+            <RollUp value={columnTotals.found} />
           </span>
           <span className="text-[13px]" style={{ color: C.textMuted }}>
             {columnTotals.found === 1 ? 'column' : 'columns'} recognised
             {columnTotals.missing > 0 ? (
               <>
-                , <span className="font-medium tabular-nums" style={{ color: C.error }}>{columnTotals.missing.toLocaleString()}</span> need a look
+                , <span className="font-medium tabular-nums" style={{ color: C.error }}><RollUp value={columnTotals.missing} /></span> need a look
               </>
             ) : null}
           </span>
@@ -691,7 +725,7 @@ const ColumnInterpretationResults = ({
             aria-valuemax={totalColumns}
             aria-valuenow={columnTotals.found}
           >
-            <div className="wb-fill" style={{ width: `${Math.max(foundPct, 2)}%` }} />
+            <div className="wb-fill" style={{ width: `${settled ? Math.max(foundPct, 2) : 0}%` }} />
           </div>
         ) : null}
         <p className="m-0 mt-2 text-xs tabular-nums" style={{ color: C.textMuted }}>
@@ -811,7 +845,7 @@ const ColumnInterpretationResults = ({
                 <span
                   className="wb-fill block"
                   style={{
-                    width: `${s.progress}%`,
+                    width: `${settled ? s.progress : 0}%`,
                     background: s.status === 'failed' ? C.error : undefined,
                   }}
                 />
@@ -821,6 +855,21 @@ const ColumnInterpretationResults = ({
         })}
       </div>
 
+      {/* Step detail and its actions travel together: they slide 8px in the direction of travel. */}
+      <AnimatePresence mode="wait" initial={false} custom={stepDir}>
+        <motion.div
+          key={selectedStep}
+          custom={stepDir}
+          className="space-y-3"
+          variants={{
+            enter: (d) => ({ opacity: 0, x: reduceMotion ? 0 : d * 8 }),
+            center: { opacity: 1, x: 0, transition: { duration: reduceMotion ? 0 : 0.18, ease: [0.22, 1, 0.36, 1] } },
+            exit: (d) => ({ opacity: 0, x: reduceMotion ? 0 : d * -8, transition: { duration: reduceMotion ? 0 : 0.12, ease: [0.4, 0, 1, 1] } }),
+          }}
+          initial="enter"
+          animate="center"
+          exit="exit"
+        >
       {/* Selected step detail */}
       {selectedStepData && (
         <div
@@ -891,15 +940,15 @@ const ColumnInterpretationResults = ({
                     )}
                   </div>
                   {!isVcfFile && onConvertToVcf && (
-                    <Button
-                      type="button"
+                    <StateButton
+                      state={isConvertingToVcf ? 'running' : 'idle'}
+                      labels={{ idle: 'Convert file to VCF', running: 'Converting' }}
+                      icon={FileText}
                       variant="outline"
                       onClick={() => onConvertToVcf()}
                       disabled={isConvertingToVcf || backgroundJobActive}
                       className="max-md:h-11"
-                    >
-                      {isConvertingToVcf ? 'Converting…' : 'Convert file to VCF'}
-                    </Button>
+                    />
                   )}
                 </>
               )}
@@ -940,8 +989,10 @@ const ColumnInterpretationResults = ({
                           : null;
                 return (
                   <div className="max-w-xs space-y-1">
-                    <Button
-                      type="button"
+                    <StateButton
+                      state={isRunningAnnovar ? 'running' : annovarAlreadyRun ? 'done' : 'idle'}
+                      labels={{ idle: 'Run annotation', running: 'Running annotation', done: 'Annotation done' }}
+                      icon={Tags}
                       variant={annovarActionable && !nextIsPrimary ? 'default' : 'outline'}
                       onClick={
                         annovarActionable
@@ -952,12 +1003,9 @@ const ColumnInterpretationResults = ({
                             }
                           : undefined
                       }
-                      disabled={!annovarActionable}
+                      disabled={!annovarActionable && !isRunningAnnovar}
                       className="max-md:h-11"
-                    >
-                      <Tags aria-hidden />
-                      {annovarAlreadyRun ? 'Annotation done' : 'Run annotation'}
-                    </Button>
+                    />
                     {reason && (
                       <p className="text-xs" style={{ color: genomeMismatch || annovarQuotaBlocked ? C.error : C.textMuted }}>
                         {reason}
@@ -984,16 +1032,16 @@ const ColumnInterpretationResults = ({
           {selectedStep === 3 && (
             <>
               <div className="max-w-xs space-y-1">
-                <Button
-                  type="button"
+                <StateButton
+                  state={isApplyingProprietaryFilter ? 'running' : acmgFilterActive ? 'done' : 'idle'}
+                  labels={{ idle: 'ACMG', running: 'Applying', done: 'ACMG applied' }}
+                  icon={Filter}
                   variant="outline"
                   onClick={() => onProprietaryFilterClick?.('filter_1')}
                   disabled={!acmgFilterCanApply || isApplyingProprietaryFilter || acmgFilterActive}
                   className="max-md:h-11"
                   style={acmgFilterActive ? { borderColor: 'hsl(var(--brand-300))', background: 'hsl(var(--brand-100))', color: 'hsl(var(--brand-700))' } : undefined}
-                >
-                  {isApplyingProprietaryFilter ? 'Applying…' : acmgFilterActive ? 'ACMG applied' : 'ACMG'}
-                </Button>
+                />
                 {/* Quota and readiness are different problems, so they get different copy. */}
                 {!acmgFilterCanApply && !acmgFilterActive && step1?.passed && !acmgQuotaBlocked && (
                   <p className="text-xs" style={{ color: C.textMuted }}>
@@ -1045,6 +1093,8 @@ const ColumnInterpretationResults = ({
           )}
         </div>
       </div>
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 
@@ -1095,9 +1145,9 @@ const ColumnInterpretationResults = ({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep file</AlertDialogCancel>
-            <Button type="button" variant="destructive" onClick={handleConfirmDelete}>
-              <Trash2 aria-hidden /> Remove file
-            </Button>
+            <HoldButton tone="danger" icon={Trash2} doneLabel="Removing" onConfirm={handleConfirmDelete}>
+              Hold to delete file
+            </HoldButton>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

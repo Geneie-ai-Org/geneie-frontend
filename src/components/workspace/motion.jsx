@@ -11,9 +11,10 @@ import { Button } from '@/components/ui/button';
  */
 
 /** A number that rolls to its new value (variants in scope after a filter, etc.). */
-export function CountUp({ value, duration = 0.7, className }) {
+export function CountUp({ value, startAt, duration = 0.7, className }) {
   const reduce = useReducedMotion();
-  const [shown, setShown] = useState(Number.isFinite(Number(value)) ? Number(value) : 0);
+  const start = Number.isFinite(Number(startAt)) ? Number(startAt) : value;
+  const [shown, setShown] = useState(Number.isFinite(Number(start)) ? Number(start) : 0);
   const from = useRef(shown);
   useEffect(() => {
     const to = Number(value);
@@ -142,7 +143,7 @@ export function SelectionMarker({ group = 'sel', bar = true, tint = true }) {
   const t = reduce ? { duration: 0 } : SPRING;
   return (
     <>
-      {tint ? <motion.span aria-hidden="true" layoutId={`${group}-bg`} transition={t} className="pointer-events-none absolute inset-0 rounded-[inherit] bg-[var(--wb-row-sel,hsl(var(--brand-100)))]" /> : null}
+      {tint ? <motion.span aria-hidden="true" layoutId={`${group}-bg`} transition={t} className="pointer-events-none absolute inset-0 rounded-[inherit] bg-[hsl(var(--wb-row-sel,var(--brand-100)))]" /> : null}
       {bar ? <motion.span aria-hidden="true" layoutId={`${group}-bar`} transition={t} className="pointer-events-none absolute inset-y-1.5 left-0 z-[1] w-[3px] rounded-full bg-[hsl(var(--brand-500))]" /> : null}
     </>
   );

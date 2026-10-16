@@ -1,8 +1,8 @@
 import React from 'react';
-import { ChevronRight, FileText } from 'lucide-react';
+import { ArrowRight, ChevronRight, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { CountUp, StageMark } from './motion';
+import { CountUp, StageMark, StateButton } from './motion';
 
 // Full-alpha 2px ring (the global one is 45% alpha, under 3:1 on white).
 const FOCUS = 'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--ring))]';
@@ -160,9 +160,16 @@ export default function SummaryTab({ summary, jumps = [], emptyAction, className
         ) : null}
 
         {nextAction ? (
-          <Button type="button" onClick={nextAction.onClick} className="mt-4 w-full" size="lg">
-            {nextAction.label}
-          </Button>
+          // Same props as before: the label cross-fades when the next step changes, and the button
+          // shows the running morph while a stage is in flight.
+          <StateButton
+            state={stages.some((s) => s.state === 'running') ? 'running' : 'idle'}
+            labels={{ idle: nextAction.label, running: nextAction.label }}
+            icon={ArrowRight}
+            onClick={nextAction.onClick}
+            className="mt-4 w-full"
+            size="lg"
+          />
         ) : null}
       </section>
 

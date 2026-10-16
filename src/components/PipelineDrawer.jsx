@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Dna, FileText, Pencil, Trash2 } from 'lucide-react';
+import { ArrowRight, Dna, FileText, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { PHENOTYPE_RUNNING_MESSAGE, sanitizePhenotypeStatusMessage } from '@/lib/filterDisplayNames';
 import RunTimer from '@/components/ui/RunTimer';
 import { useRunTimer } from '@/hooks/useRunTimer';
@@ -11,7 +11,8 @@ import {
   module1FinishedSuccessfully,
 } from '@/lib/module1PipelinePhases';
 import Module1QcSection, { module1HasQcArtifacts } from '@/components/Module1QcSection';
-import PipelineJobCard from '@/components/PipelineJobCard';
+import PipelineJobCard, { ActionButton } from '@/components/PipelineJobCard';
+import { HoldButton } from '@/components/workspace/motion';
 import { Button } from '@/components/ui/button';
 import {
   PIPELINE_STEP_DEFS,
@@ -22,7 +23,6 @@ import {
 } from '@/lib/variantPipelineSteps';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -533,17 +533,22 @@ const PipelineDrawer = ({
         note={note}
         action={
           nextAction ? (
-            <Button type="button" onClick={nextAction.onClick} className="max-sm:h-11">
-              {nextAction.label}
-            </Button>
+            <ActionButton
+              labels={{ idle: nextAction.label }}
+              icon={ArrowRight}
+              onClick={nextAction.onClick}
+              className="max-sm:h-11"
+            />
           ) : module1Failed && onModule1StartOver ? (
-            <Button type="button" onClick={onModule1StartOver} className="max-sm:h-11">
-              Start over
-            </Button>
+            <ActionButton labels={{ idle: 'Start over' }} icon={RotateCcw} onClick={onModule1StartOver} pulse className="max-sm:h-11" />
           ) : status === 'failed' && failure?.action && onStepAction ? (
-            <Button type="button" onClick={failure.action.run} className="max-sm:h-11">
-              {failure.action.label}
-            </Button>
+            <ActionButton
+              labels={{ idle: failure.action.label }}
+              icon={/^retry/i.test(failure.action.label) ? RotateCcw : ArrowRight}
+              onClick={failure.action.run}
+              pulse
+              className="max-sm:h-11"
+            />
           ) : null
         }
         steps={stepRows}
@@ -594,15 +599,19 @@ const PipelineDrawer = ({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep file</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
+            {/* Still a confirmation dialog; the destructive choice is now press-and-hold. */}
+            <HoldButton
+              tone="danger"
+              icon={Trash2}
+              doneLabel="Removing"
+              onConfirm={() => {
                 setRemoveFileDialogOpen(false);
                 onRemoveFile?.();
               }}
+              className="max-sm:h-11"
             >
-              Remove file
-            </AlertDialogAction>
+              Hold to delete file
+            </HoldButton>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

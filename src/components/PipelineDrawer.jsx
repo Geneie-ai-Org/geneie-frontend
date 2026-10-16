@@ -34,6 +34,9 @@ import {
 /** Variant-file steps that follow the upload; `upload` is the first row of a VCF run. */
 const ANALYSIS_STEP_DEFS = PIPELINE_STEP_DEFS.filter((def) => def.id !== 'upload');
 
+const ICON_FOCUS =
+  'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--ring))]';
+
 function timerMs(timer) {
   if (!timer) return 0;
   return (timer.running ? timer.elapsedMs : timer.durationMs) ?? 0;
@@ -383,6 +386,13 @@ const PipelineDrawer = ({
     if (nextAction?.label) return `Next step: ${nextAction.label.charAt(0).toLowerCase()}${nextAction.label.slice(1)}.`;
     return stateText;
   })();
+  // In the failure card the first line says what failed; this is the why and the next step.
+  const failedBody =
+    status !== 'failed'
+      ? sentence
+      : failure && !module1Failed
+        ? [failure.why, failure.next].filter(Boolean).map((t) => (/[.!?]$/.test(t) ? t : `${t}.`)).join(' ')
+        : sentence;
   const note = (() => {
     if (module1Pending || module1Failed) return null;
     if (status === 'running' || status === 'failed') return null;
@@ -474,38 +484,34 @@ const PipelineDrawer = ({
   const title = (isFastqRoute ? module1Job.sampleName : null) || displayName;
 
   const iconButtons = hasUploadedFile && ((!isGuest && onEditSampleInfo) || onRemoveFile) ? (
-    <span className="flex items-center gap-1">
+    <>
       {!isGuest && onEditSampleInfo && (
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          size="icon-xs"
           onClick={onEditSampleInfo}
           title="Edit sample info"
           aria-label="Edit sample info"
-          className="text-muted-foreground max-md:size-11"
+          className={`wb-iconbtn ${ICON_FOCUS} max-md:size-11`}
         >
-          <Pencil aria-hidden />
-        </Button>
+          <Pencil className="size-3.5" aria-hidden />
+        </button>
       )}
       {onRemoveFile && (
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          size="icon-xs"
           onClick={() => setRemoveFileDialogOpen(true)}
           title="Remove variant file"
           aria-label="Remove variant file"
-          className="text-muted-foreground hover:text-[var(--error)] max-md:size-11"
+          className={`wb-iconbtn hover:!border-[color-mix(in_srgb,var(--error)_30%,transparent)] hover:!bg-[var(--error-soft)] hover:!text-[var(--error)] ${ICON_FOCUS} max-md:size-11`}
         >
-          <Trash2 aria-hidden />
-        </Button>
+          <Trash2 className="size-3.5" aria-hidden />
+        </button>
       )}
-    </span>
+    </>
   ) : null;
 
   return (
-    <div className={variant === 'panel' ? 'h-full min-h-0' : 'pipeline-drawer'} aria-label="Analysis pipeline">
+    <div className={variant === 'panel' ? 'min-w-0' : 'pipeline-drawer'} aria-label="Analysis pipeline">
       <PipelineJobCard
         variant={variant === 'panel' ? 'panel' : 'flat'}
         ariaLabel="Analysis pipeline"
@@ -517,19 +523,25 @@ const PipelineDrawer = ({
             <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
           )
         }
-        engine={showAnnotatedBadge ? { label: 'Annotated' } : null}
+        engine={showAnnotatedBadge ? { label: 'Annotated', tone: 'brand' } : null}
+        chips={!isFastqRoute && variantCount != null ? [{ label: `${Number(variantCount).toLocaleString()} variants` }] : null}
         status={status}
-        statusText={sentence}
+        statusTitle={status === 'failed' ? (module1Failed ? 'Reads to VCF failed.' : failure?.what ?? null) : null}
+        statusText={failedBody}
         pct={progress}
         timer={timerNode}
         note={note}
         action={
           nextAction ? (
-            <Button type="button" variant="outline" size="sm" onClick={nextAction.onClick} className="max-sm:h-11">
+            <Button type="button" onClick={nextAction.onClick} className="max-sm:h-11">
               {nextAction.label}
             </Button>
+          ) : module1Failed && onModule1StartOver ? (
+            <Button type="button" onClick={onModule1StartOver} className="max-sm:h-11">
+              Start over
+            </Button>
           ) : status === 'failed' && failure?.action && onStepAction ? (
-            <Button type="button" variant="outline" size="sm" onClick={failure.action.run} className="max-sm:h-11">
+            <Button type="button" onClick={failure.action.run} className="max-sm:h-11">
               {failure.action.label}
             </Button>
           ) : null
@@ -540,17 +552,9 @@ const PipelineDrawer = ({
         stepsLabel="Steps"
         headerExtra={iconButtons}
       >
-        {module1Failed && onModule1StartOver && (
-          <div className="flex justify-end">
-            <Button type="button" variant="outline" size="sm" onClick={onModule1StartOver} className="max-sm:h-11">
-              Start over
-            </Button>
-          </div>
-        )}
-
         {guestPipelineCta?.message && (
-          <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="min-w-0 text-xs leading-relaxed text-[var(--text-secondary)]">{guestPipelineCta.message}</p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="m-0 min-w-0 text-xs leading-5 text-[var(--text-secondary)]">{guestPipelineCta.message}</p>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               {guestPipelineCta.action && (
                 <Button type="button" variant="outline" size="sm" onClick={guestPipelineCta.action.onClick} className="max-sm:h-11">

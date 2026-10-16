@@ -1,19 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
-  ArrowDown,
-  ArrowUp,
-  ChevronRight,
+  Check,
+  ChevronDown,
   Download,
   ListChecks,
   Loader2,
   RefreshCw,
   Search,
+  SearchX,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { downloadGaTriageArtifact, fetchGaTriage } from '@/services/backendApi';
+import { cn } from '@/lib/utils';
+
+// Full-alpha 2px ring (the global one is 45% alpha, under 3:1 on white).
+const FOCUS = 'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--ring))]';
 
 function shortText(val, max = 80) {
   const s = String(val || '').trim();
@@ -58,34 +61,29 @@ const TONES = {
   info: { bg: 'var(--info-soft)', fg: 'var(--info)' },
   warning: { bg: 'var(--warning-soft)', fg: 'var(--warning)' },
   error: { bg: 'var(--error-soft)', fg: 'var(--error)' },
-  neutral: { bg: 'var(--segment-track)', fg: 'var(--text-secondary)' },
+  neutral: { bg: 'hsl(var(--wb-pill))', fg: 'hsl(var(--muted-foreground))' },
 };
 
-function StatusChip({ tone = 'neutral', children, title, dot = true, pulse = false }) {
+/** A call pill: a dot plus the word, tinted by meaning. */
+function CallPill({ tone = 'neutral', children, title }) {
   const t = TONES[tone] || TONES.neutral;
   return (
     <span
       title={title || undefined}
-      className="inline-flex h-5 max-w-full shrink-0 items-center gap-1.5 rounded-full px-2 text-[12px] font-medium"
-      style={{ background: t.bg, color: t.fg }}
+      className="inline-flex h-[22px] max-w-full shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-medium"
+      style={{ background: t.bg, color: t.fg, borderColor: `color-mix(in srgb, ${t.fg} 22%, transparent)` }}
     >
-      {dot ? (
-        <span
-          aria-hidden
-          className={`size-1.5 shrink-0 rounded-full ${pulse ? 'motion-safe:animate-pulse' : ''}`}
-          style={{ background: t.fg }}
-        />
-      ) : null}
+      <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: t.fg }} />
       <span className="truncate">{children}</span>
     </span>
   );
 }
 
-function countLine(data) {
+function countParts(data) {
   const counts = data?.ga_label_counts && typeof data.ga_label_counts === 'object' ? data.ga_label_counts : {};
   const reviewed = data?.variant_count;
   const parts = [];
-  if (reviewed != null) parts.push(`${Number(reviewed).toLocaleString()} variants reviewed`);
+  if (reviewed != null) parts.push(`${Number(reviewed).toLocaleString()} reviewed`);
   const pick = (needle, label) => {
     const n = Object.entries(counts).reduce((acc, [k, v]) => {
       if (String(k).toLowerCase().includes(needle)) return acc + Number(v || 0);
@@ -96,9 +94,9 @@ function countLine(data) {
   pick('primary', 'primary');
   pick('strong clinical', 'strong');
   pick('follow-up', 'follow-up');
-  pick('vus', 'VUS/weak');
+  pick('vus', 'VUS or weak');
   pick('not causative', 'not causative');
-  return parts.join(' · ');
+  return parts;
 }
 
 function numericScore(v) {
@@ -106,20 +104,63 @@ function numericScore(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Column headers are the sort controls. Rank and gene read low to high, score reads high to low. */
-const SORT_DIRECTION = { rank: 'ascending', gene: 'ascending', score: 'descending' };
+/** Rank and gene read low to high, score reads high to low. */
+const SORTS = [
+  ['rank', 'Rank'],
+  ['gene', 'Gene'],
+  ['score', 'Score'],
+];
 
 function DetailItem({ label, children, mono = false }) {
   if (children == null || children === '' || children === '—') return null;
   return (
     <div className="min-w-0">
       <dt className="text-[12px] font-medium text-muted-foreground">{label}</dt>
-      <dd className={`mt-0.5 break-words text-[13px] text-foreground ${mono ? 'font-mono' : ''}`}>
-        {children}
-      </dd>
+      <dd className={cn('mt-0.5 break-words text-[13px] text-foreground', mono && 'font-mono')}>{children}</dd>
     </div>
   );
 }
+
+function Notice({ icon: Icon = ListChecks, tone = 'brand', title, children, action }) {
+  return (
+    <div className="wb-card mx-auto flex w-full flex-col items-center gap-2 px-6 py-10 text-center">
+      <span
+        aria-hidden
+        className={cn(
+          'mb-1 flex size-11 items-center justify-center rounded-full border',
+          tone === 'error'
+            ? 'border-[color-mix(in_srgb,var(--error)_22%,transparent)] bg-[var(--error-soft)] text-[var(--error)]'
+            : 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]'
+        )}
+      >
+        <Icon className="size-5" />
+      </span>
+      <p className="text-[15px] font-medium text-foreground">{title}</p>
+      <p className="max-w-xs text-[13px] leading-5 text-muted-foreground">{children}</p>
+      {action ? <div className="mt-1.5">{action}</div> : null}
+    </div>
+  );
+}
+
+function CardSkeleton({ rows = 5 }) {
+  return (
+    <ul className="space-y-2" aria-hidden>
+      {Array.from({ length: rows }, (_, i) => (
+        <li key={i} className="wb-card flex items-center gap-3 px-3.5 py-3">
+          <span className="size-7 shrink-0 animate-pulse rounded-full bg-[hsl(var(--brand-100))] motion-reduce:animate-none" />
+          <span className="flex-1 space-y-2">
+            <span className="block h-3 w-24 animate-pulse rounded-full bg-[hsl(var(--brand-100))] motion-reduce:animate-none" />
+            <span className="block h-2.5 w-40 animate-pulse rounded-full bg-[hsl(var(--brand-100))] motion-reduce:animate-none" />
+          </span>
+          <span className="h-5 w-24 animate-pulse rounded-full bg-[hsl(var(--brand-100))] motion-reduce:animate-none" />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const PILL_FIELD =
+  'h-8 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-8 pr-8 text-[13px] text-foreground outline-none transition-colors duration-150 placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none max-md:h-11 max-md:text-base';
 
 /**
  * Genome Analyst triage list. Plain workspace content: it fills its parent, scrolls its own
@@ -283,119 +324,141 @@ export default function GaTriagePanel({
 
   if (isGuest || !conversationId || !variantData) return null;
 
-  const statusChip = running ? (
-    <StatusChip tone="info" pulse>Running</StatusChip>
-  ) : ready ? (
-    <StatusChip tone="success">Done</StatusChip>
-  ) : failed ? (
-    <StatusChip tone="error">Failed</StatusChip>
-  ) : (
-    <StatusChip tone="neutral">Not started</StatusChip>
-  );
+  const jobState = running ? 'running' : ready ? 'done' : failed ? 'failed' : 'pending';
+  const jobWord = running ? 'Running' : ready ? 'Done' : failed ? 'Failed' : 'Not started';
 
   const filtersActive = query.trim() !== '' || labelFilter !== 'all';
   const hasRows = ready && candidates.length > 0;
+  const chips = ready ? countParts(data) : [];
 
-  const renderSortHeader = (id, label, className = '') => {
-    const active = sortBy === id;
-    const Arrow = SORT_DIRECTION[id] === 'descending' ? ArrowDown : ArrowUp;
-    return (
-      <th key={id} scope="col" aria-sort={active ? SORT_DIRECTION[id] : 'none'} className={`h-8 px-2 font-medium ${className}`}>
-        <button
-          type="button"
-          onClick={() => setSortBy(id)}
-          title={`Sort by ${label.toLowerCase()}`}
-          className={`inline-flex h-6 items-center gap-1 rounded px-1 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55 ${
-            active ? 'text-foreground' : ''
-          }`}
-        >
-          {label}
-          {active ? <Arrow className="size-3" aria-hidden /> : null}
-        </button>
-      </th>
-    );
+  // Up and Down move between candidate rows; the rows stay normal tab stops.
+  const onListKey = (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const btns = [...e.currentTarget.querySelectorAll('[data-cand]')];
+    const at = btns.indexOf(document.activeElement);
+    if (at < 0) return;
+    e.preventDefault();
+    const next = e.key === 'ArrowDown' ? Math.min(btns.length - 1, at + 1) : Math.max(0, at - 1);
+    btns[next]?.focus();
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
-      {/* Summary header: title and status, counts, one primary action top right. */}
-      <div className="shrink-0 space-y-1.5 border-b border-border px-4 pb-3 pt-3">
+    <div className="flex h-full min-h-0 flex-col gap-2.5 px-4 pb-4 pt-1 text-foreground">
+      {/* Summary card: title, job status, counts, and the one primary action. */}
+      <section className="wb-card shrink-0 space-y-2.5 px-3.5 py-3" aria-label="Triage summary">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <ListChecks className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-            <h2 className="truncate text-[13px] font-semibold">Top review candidates</h2>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span aria-hidden className="flex size-7 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]">
+              <ListChecks className="size-3.5" />
+            </span>
+            <h2 className="truncate text-[14px] font-semibold">Top review candidates</h2>
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
               type="button"
-              variant="ghost"
-              size="icon-sm"
               onClick={() => load()}
               disabled={loading}
               aria-label="Refresh triage"
               title="Refresh triage"
-              className="text-muted-foreground max-md:size-11"
+              className={cn('wb-iconbtn disabled:opacity-60 max-md:size-11', FOCUS)}
             >
-              {loading ? <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden /> : <RefreshCw aria-hidden />}
-            </Button>
+              {loading ? <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden /> : <RefreshCw className="size-3.5" aria-hidden />}
+            </button>
             <Button
               type="button"
               size="sm"
               onClick={handleDownload}
               disabled={!canDownload || downloading}
               aria-describedby={!canDownload ? 'ga-download-reason' : undefined}
-              className="max-md:h-11"
+              className="h-8 max-md:h-11"
             >
               {downloading ? <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden /> : <Download aria-hidden />}
               {downloading ? 'Preparing…' : 'Download TSV'}
             </Button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          {statusChip}
-          <p className="min-w-0 text-[13px] tabular-nums text-muted-foreground">
-            {ready
-              ? countLine(data) || `${candidates.length} shown`
-              : 'Genome Analyst ranking. Decision support only.'}
-          </p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="wb-status" data-state={jobState}>{jobWord}</span>
+          {ready && chips.length ? (
+            chips.map((c) => <span key={c} className="wb-chip tabular-nums">{c}</span>)
+          ) : ready ? (
+            <span className="wb-chip tabular-nums">{candidates.length} shown</span>
+          ) : (
+            <span className="text-[13px] text-muted-foreground">Genome Analyst ranking. Decision support only.</span>
+          )}
         </div>
         {!canDownload ? (
           <p id="ga-download-reason" className="text-[12px] text-muted-foreground">
             {running ? 'Download unlocks when triage is done.' : 'Download is available once triage is done.'}
           </p>
         ) : null}
-      </div>
+      </section>
 
-      {/* Search and call filter */}
+      {error ? (
+        <div
+          role="alert"
+          className="flex shrink-0 items-start gap-2.5 rounded-2xl border px-3.5 py-3 text-[13px]"
+          style={{ background: 'var(--error-soft)', borderColor: 'color-mix(in srgb, var(--error) 28%, transparent)' }}
+        >
+          <AlertCircle className="mt-0.5 size-4 shrink-0" style={{ color: 'var(--error)' }} aria-hidden />
+          <span className="min-w-0 flex-1 text-foreground">
+            <span className="font-medium">{String(error).replace(/[.\s]+$/, '')}.</span>{' '}
+            <span className="text-muted-foreground">Check your connection, then retry.</span>
+          </span>
+          <Button type="button" variant="outline" size="xs" onClick={() => load()} className="h-6 shrink-0 px-2.5 max-md:h-9">
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
+      {/* Search, sort and call filters, only once there is a list to work on. */}
       {hasRows ? (
-        <div className="shrink-0 space-y-2 border-b border-border px-4 py-2">
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-              aria-hidden
-            />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={`Search ${candidates.length} candidates by gene or variant`}
-              aria-label="Search candidates by gene or variant"
-              className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-8 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 max-md:h-11 max-md:text-base"
-            />
-            {query ? (
-              <button
-                type="button"
-                onClick={() => setQuery('')}
-                aria-label="Clear search"
-                className="absolute right-1 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55 max-md:size-10"
-              >
-                <X className="size-3.5" aria-hidden />
-              </button>
-            ) : null}
+        <div className="shrink-0 space-y-2">
+          <div className="flex items-center gap-1.5">
+            <label className="relative flex min-w-0 flex-1 items-center">
+              <Search aria-hidden className="pointer-events-none absolute left-3 size-3.5 text-muted-foreground" />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape' && query) { e.preventDefault(); e.stopPropagation(); setQuery(''); } }}
+                placeholder={`Search ${candidates.length} candidates`}
+                aria-label="Search candidates by gene or variant"
+                className={cn(PILL_FIELD, '[&::-webkit-search-cancel-button]:hidden')}
+              />
+              {query ? (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  aria-label="Clear search"
+                  className={cn('absolute right-1.5 inline-flex size-5 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none max-md:size-8', FOCUS)}
+                >
+                  <X aria-hidden className="size-3" />
+                </button>
+              ) : null}
+            </label>
+            <div role="group" aria-label="Sort candidates" className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill))] p-0.5 max-md:p-1">
+              {SORTS.map(([id, text]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={sortBy === id}
+                  onClick={() => setSortBy(id)}
+                  title={id === 'score' ? 'Sort by score, high to low' : `Sort by ${text.toLowerCase()}, low to high`}
+                  className={cn(
+                    'inline-flex h-7 items-center rounded-full border border-transparent px-2.5 text-[12px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none max-md:h-9',
+                    sortBy === id && 'border-[hsl(var(--brand-200))] bg-[hsl(var(--wb-card))] text-[hsl(var(--brand-700))]',
+                    FOCUS
+                  )}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
           </div>
           {labelCounts.length > 1 ? (
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by GA call">
-              {[['all', `All ${rows.length}`], ...labelCounts.map(([l, n]) => [l, `${l} ${n}`])].map(([id, text]) => {
+              {[['all', 'All', rows.length], ...labelCounts.map(([l, n]) => [l, l, n])].map(([id, text, n]) => {
                 const active = labelFilter === id;
                 return (
                   <button
@@ -403,13 +466,17 @@ export default function GaTriagePanel({
                     type="button"
                     aria-pressed={active}
                     onClick={() => setLabelFilter(id)}
-                    className={`inline-flex h-6 items-center rounded-full border px-2.5 text-[12px] font-medium tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/55 max-md:min-h-11 max-md:px-3 ${
+                    className={cn(
+                      'inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[12px] tabular-nums transition-colors duration-150 motion-reduce:transition-none max-md:h-9',
                       active
-                        ? 'border-[hsl(var(--signal))] bg-[var(--accent-teal-soft)] text-foreground'
-                        : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
-                    }`}
+                        ? 'border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-100))] font-semibold text-[hsl(var(--brand-700))]'
+                        : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] font-medium text-muted-foreground hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))]',
+                      FOCUS
+                    )}
                   >
+                    {active ? <Check aria-hidden className="size-3" /> : null}
                     {text}
+                    <span className={active ? 'text-[hsl(var(--brand-700))]' : 'text-muted-foreground'}>{n}</span>
                   </button>
                 );
               })}
@@ -418,85 +485,51 @@ export default function GaTriagePanel({
         </div>
       ) : null}
 
-      {/* Body. scroll-pt keeps a focused row clear of the sticky column header. */}
-      <div className="min-h-0 flex-1 scroll-pt-9 overflow-y-auto">
-        {error ? (
-          <div
-            role="alert"
-            className="m-4 flex items-start gap-2 rounded-md border px-3 py-2 text-[13px]"
-            style={{
-              background: 'var(--error-soft)',
-              borderColor: 'color-mix(in srgb, var(--error) 30%, transparent)',
-            }}
-          >
-            <AlertCircle className="mt-0.5 size-3.5 shrink-0" style={{ color: 'var(--error)' }} aria-hidden />
-            <span className="min-w-0 flex-1 text-foreground">
-              <span className="font-medium">{error}.</span>{' '}
-              <span className="text-muted-foreground">Check your connection, then retry.</span>
-            </span>
-            <Button type="button" variant="outline" size="xs" onClick={() => load()} className="shrink-0 max-md:h-9">
-              Retry
-            </Button>
-          </div>
-        ) : null}
-
+      {/* Body: the only scroll region. */}
+      <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-1">
         {loading && !data ? (
-          <div className="space-y-1 p-4" role="status" aria-label="Loading triage" aria-busy="true">
-            {[0, 1, 2, 3, 4, 5].map((i) => (
-              <Skeleton key={i} className="h-9 w-full" />
-            ))}
-          </div>
+          <div role="status" aria-label="Loading triage" aria-busy="true"><CardSkeleton rows={6} /></div>
         ) : !ready ? (
           running ? (
-            // A multi-minute job is a state, not a spinner: rows that will be filled in, plus one status line.
-            <div role="status" aria-busy="true" className="px-4 py-4">
-              <p className="mb-3 text-[13px] text-muted-foreground">
+            // A multi-minute job is a state, not a spinner: cards that will be filled in, plus one status line.
+            <div role="status" aria-busy="true" className="space-y-3">
+              <p className="px-1 text-[13px] text-muted-foreground">
                 {data?.message || 'Triage is running. This list fills in by itself when it is done.'}
               </p>
-              <div className="space-y-1">
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className="h-9 w-full" />
-                ))}
-              </div>
+              <CardSkeleton rows={4} />
             </div>
-          ) : (
-            <div className="mx-auto flex max-w-sm flex-col items-center px-6 py-12 text-center">
-              {failed ? (
-                <AlertCircle className="mb-3 size-5" style={{ color: 'var(--error)' }} aria-hidden />
-              ) : (
-                <ListChecks className="mb-3 size-5 text-muted-foreground" aria-hidden />
-              )}
-              <p className="text-[15px] font-medium">{failed ? 'Triage failed' : 'Triage has not run yet'}</p>
-              <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-                {data?.message ||
-                  (failed
-                    ? data?.error || 'The ranking stopped before it finished. Refresh to check again.'
-                    : 'It starts after enrichment, once the case has annotated variants.')}
-              </p>
-              {failed ? (
-                <Button type="button" variant="outline" size="sm" className="mt-3 max-md:h-11" onClick={() => load()} disabled={loading}>
+          ) : failed ? (
+            <Notice
+              icon={AlertCircle}
+              tone="error"
+              title="Triage failed"
+              action={(
+                <Button type="button" variant="outline" size="sm" className="max-md:h-11" onClick={() => load()} disabled={loading}>
                   <RefreshCw aria-hidden /> Check again
                 </Button>
-              ) : null}
-            </div>
+              )}
+            >
+              {data?.message || data?.error || 'The ranking stopped before it finished. Refresh to check again.'}
+            </Notice>
+          ) : (
+            <Notice title="Triage has not run yet">
+              {data?.message || 'It starts after enrichment, once the case has annotated variants.'}
+            </Notice>
           )
         ) : candidates.length === 0 ? (
-          <div className="mx-auto max-w-sm px-6 py-12 text-center">
-            <p className="text-[15px] font-medium">No top candidates</p>
-            <p className="mt-1 text-[13px] text-muted-foreground">
-              {data?.message || 'Triage finished without any candidates to review.'}
-            </p>
-          </div>
+          <Notice title="No top candidates">
+            {data?.message || 'Triage finished without any candidates to review.'}
+          </Notice>
         ) : visibleRows.length === 0 ? (
-          <div className="mx-auto max-w-sm px-6 py-12 text-center">
-            <p className="text-[15px] font-medium">No candidates match</p>
-            <p className="mt-1 text-[13px] text-muted-foreground">Try a different gene, variant or GA call.</p>
-            {filtersActive ? (
+          <Notice
+            icon={SearchX}
+            title="No candidates match"
+            action={filtersActive ? (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="mt-3 max-md:h-11"
+                className="max-md:h-11"
                 onClick={() => {
                   setQuery('');
                   setLabelFilter('all');
@@ -505,114 +538,102 @@ export default function GaTriagePanel({
                 <X aria-hidden /> Clear filters
               </Button>
             ) : null}
-          </div>
+          >
+            Try a different gene, variant or GA call.
+          </Notice>
         ) : (
-          <table className="w-full table-fixed border-collapse text-[13px]">
-            <caption className="sr-only">Top review candidates, {visibleRows.length} shown</caption>
-            <colgroup>
-              <col className="w-[3.25rem]" />
-              <col className="w-[5.75rem]" />
-              <col />
-              <col className="w-36" />
-              <col className="w-12" />
-            </colgroup>
-            <thead className="sticky top-0 z-20 bg-background text-[12px] text-muted-foreground shadow-[0_1px_0_hsl(var(--border))]">
-              <tr>
-                {renderSortHeader('rank', 'Rank', 'pl-3 text-right')}
-                {renderSortHeader('gene', 'Gene', 'text-left')}
-                <th scope="col" className="h-8 px-2 text-left font-medium">Change</th>
-                <th scope="col" className="h-8 px-2 text-left font-medium">GA call</th>
-                {renderSortHeader('score', 'Score', 'pr-2 text-right')}
-              </tr>
-            </thead>
-            <tbody>
-              {visibleRows.map((r) => {
-                const open = expandedKey === r.key;
-                const detailId = `ga-detail-${r.rank}`;
-                const toggle = () => setExpandedKey(open ? null : r.key);
-                return (
-                  <React.Fragment key={r.key}>
-                    <tr
-                      onClick={toggle}
-                      className={`h-9 cursor-pointer border-b border-[var(--border-subtle)] transition-colors hover:bg-muted max-md:h-11 ${
-                        open ? 'bg-[var(--bg-surface-sunken)]' : ''
-                      }`}
+          <ul aria-label={`Top review candidates, ${visibleRows.length} shown`} onKeyDown={onListKey} className="space-y-2">
+            {visibleRows.map((r) => {
+              const open = expandedKey === r.key;
+              const detailId = `ga-detail-${r.rank}`;
+              return (
+                <li
+                  key={r.key}
+                  className={cn(
+                    'wb-card overflow-hidden transition-colors duration-150 motion-reduce:transition-none',
+                    open ? 'border-[hsl(var(--brand-300))]' : 'hover:border-[hsl(var(--brand-300))]'
+                  )}
+                >
+                  <button
+                    type="button"
+                    data-cand
+                    aria-expanded={open}
+                    aria-controls={detailId}
+                    onClick={() => setExpandedKey(open ? null : r.key)}
+                    className={cn('flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-[hsl(var(--wb-row-hover))] motion-reduce:transition-none max-md:min-h-11', open && 'bg-[hsl(var(--wb-row-hover))]', FOCUS, 'focus-visible:-outline-offset-2')}
+                  >
+                    <span
+                      className="flex size-7 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-pill))] text-[12px] font-semibold tabular-nums text-foreground"
+                      title={`GA rank ${r.rank}`}
                     >
-                      <td className="pl-3 pr-2 text-right text-[12px] tabular-nums text-muted-foreground">{r.rank}</td>
-                      <td className="px-2">
-                        <button
-                          type="button"
-                          aria-expanded={open}
-                          aria-controls={detailId}
-                          className="flex h-8 w-full min-w-0 items-center gap-1 rounded text-left font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/55"
-                        >
-                          <ChevronRight
-                            aria-hidden
-                            className={`size-3.5 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none ${open ? 'rotate-90' : ''}`}
+                      {r.rank}
+                    </span>
+                    <span className="min-w-0 flex-1 space-y-1">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate text-[14px] font-semibold">{r.row.gene || 'Unknown gene'}</span>
+                        {r.conflict ? (
+                          <AlertCircle
+                            className="size-3.5 shrink-0"
+                            style={{ color: 'var(--error)' }}
+                            role="img"
+                            aria-label={`Flag: ${String(r.conflict)}`}
                           />
-                          <span className="truncate">{r.row.gene || 'Unknown gene'}</span>
-                          {r.conflict ? (
-                            <AlertCircle
-                              className="size-3.5 shrink-0"
-                              style={{ color: 'var(--error)' }}
-                              role="img"
-                              aria-label={`Flag: ${String(r.conflict)}`}
-                            />
-                          ) : null}
-                        </button>
-                      </td>
-                      <td className="truncate px-2 font-mono text-[12px] text-muted-foreground" title={r.change.full || undefined}>
-                        {r.change.primary}
-                      </td>
-                      <td className="px-2">
-                        <StatusChip tone={r.tone} title={r.row.label || undefined}>
-                          {r.label}
-                        </StatusChip>
-                      </td>
-                      <td className="pl-1 pr-3 text-right tabular-nums text-foreground">
-                        {r.score != null ? r.score : '—'}
-                      </td>
-                    </tr>
-                    {open ? (
-                      <tr id={detailId} className="border-b border-[var(--border-subtle)]" style={{ background: 'var(--bg-surface-sunken)' }}>
-                        <td colSpan={5} className="px-4 pb-3 pl-[3.25rem] pt-1">
-                          <dl className="grid grid-cols-1 gap-x-4 gap-y-2.5 sm:grid-cols-2">
-                            <div className="min-w-0 sm:col-span-2">
-                              <dt className="text-[12px] font-medium text-muted-foreground">Variant</dt>
-                              <dd className="mt-0.5 break-all font-mono text-[12px] text-foreground">
-                                {r.change.full || r.row.variant || '—'}
-                              </dd>
-                            </div>
-                            <DetailItem label="GA call">{r.row.label || r.label}</DetailItem>
-                            <DetailItem label="Score">{r.score != null ? String(r.score) : null}</DetailItem>
-                            <DetailItem label="ACMG">{r.row.ga_acmg_2015 || r.row.ga_acmg_point || null}</DetailItem>
-                            <DetailItem label="Phenotype match">{r.row.phenotype_match || null}</DetailItem>
-                            {r.conflict ? (
-                              <div className="min-w-0 sm:col-span-2">
-                                <dt className="text-[12px] font-medium" style={{ color: 'var(--error)' }}>Flag</dt>
-                                <dd className="mt-0.5 break-words text-[13px] text-foreground">{String(r.conflict)}</dd>
-                              </div>
-                            ) : null}
-                          </dl>
-                        </td>
-                      </tr>
-                    ) : null}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                        ) : null}
+                        <span className="ml-auto"><CallPill tone={r.tone} title={r.row.label || undefined}>{r.label}</CallPill></span>
+                      </span>
+                      <span className="flex min-w-0 items-center justify-between gap-2">
+                        <span className="truncate font-mono text-[12px] text-muted-foreground" title={r.change.full || undefined}>{r.change.primary}</span>
+                        <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">
+                          Score <span className="font-medium text-foreground">{r.score != null ? r.score : '—'}</span>
+                        </span>
+                      </span>
+                    </span>
+                    <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] text-muted-foreground">
+                      <ChevronDown className={cn('size-3.5 transition-transform duration-150 motion-reduce:transition-none', open && 'rotate-180')} />
+                    </span>
+                  </button>
+                  {open ? (
+                    <div id={detailId} className="border-t border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill)/0.5)] px-4 pb-3.5 pt-3">
+                      <dl className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+                        <div className="min-w-0 sm:col-span-2">
+                          <dt className="text-[12px] font-medium text-muted-foreground">Variant</dt>
+                          <dd className="mt-0.5 break-all font-mono text-[12px] text-foreground">
+                            {r.change.full || r.row.variant || '—'}
+                          </dd>
+                        </div>
+                        <DetailItem label="GA call">{r.row.label || r.label}</DetailItem>
+                        <DetailItem label="Score">{r.score != null ? String(r.score) : null}</DetailItem>
+                        <DetailItem label="ACMG">{r.row.ga_acmg_2015 || r.row.ga_acmg_point || null}</DetailItem>
+                        <DetailItem label="Phenotype match">{r.row.phenotype_match || null}</DetailItem>
+                        {r.conflict ? (
+                          <div
+                            className="min-w-0 rounded-xl border px-3 py-2 sm:col-span-2"
+                            style={{ background: 'var(--error-soft)', borderColor: 'color-mix(in srgb, var(--error) 25%, transparent)' }}
+                          >
+                            <dt className="text-[12px] font-medium" style={{ color: 'var(--error)' }}>Flag</dt>
+                            <dd className="mt-0.5 break-words text-[13px] text-foreground">{String(r.conflict)}</dd>
+                          </div>
+                        ) : null}
+                      </dl>
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
         )}
 
         {ready && data?.clinical_use_note ? (
-          <p className="px-4 py-3 text-[12px] leading-relaxed text-muted-foreground">{data.clinical_use_note}</p>
+          <p className="px-2 pb-1 pt-3 text-[12px] leading-relaxed text-muted-foreground">{data.clinical_use_note}</p>
         ) : null}
       </div>
 
       {hasRows ? (
-        <div className="shrink-0 border-t border-border px-4 py-2 text-[12px] tabular-nums text-muted-foreground">
-          Showing {visibleRows.length} of {candidates.length}. Primary and strong calls pre-check Include;
-          you still confirm before the PDF.
+        <div className="flex shrink-0 items-start gap-2 text-[12px] text-muted-foreground">
+          <span className="wb-chip shrink-0 tabular-nums" data-tone={filtersActive ? 'brand' : undefined}>
+            {visibleRows.length} of {candidates.length}
+          </span>
+          <span className="min-w-0 pt-0.5 leading-snug">Primary and strong calls pre-check Include. You still confirm before the PDF.</span>
         </div>
       ) : null}
     </div>

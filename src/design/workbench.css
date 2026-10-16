@@ -208,3 +208,57 @@
 /* Progress: slim pill track, teal fill. */
 .wb-track { height: 6px; border-radius: 9999px; background-color: hsl(var(--brand-100)); overflow: hidden; }
 .wb-fill { height: 100%; border-radius: 9999px; background-color: hsl(var(--brand-500)); }
+
+/* ---- Added by the Pipeline / File check tabs: the "queued" state of the shared status pill ----------
+ * Same silhouette as the other states: neutral fill, solid dot (the "pending" dot is hollow). */
+.wb-status[data-state='queued'] { background-color: hsl(var(--wb-pill)); border-color: hsl(var(--wb-line)); color: hsl(var(--foreground)); }
+
+/* ---- Table rows (Results, Triage): hover and selected tints that stay visible in light and dark ---- */
+.chat-shell-right { --wb-row-hover: var(--brand-50); --wb-row-sel: var(--brand-100); }
+.dark .chat-shell-right { --wb-row-hover: 177 16% 15.5%; --wb-row-sel: 177 18% 20%; }
+
+/* ---- Interaction layer ------------------------------------------------------------------------ */
+
+/* Sliding selection pill (tabs and segmented switches): the pill is its own element so it can glide. */
+.wb-tab--slide { position: relative; }
+.wb-tab--slide[data-selected='true'] { background-color: transparent; border-color: transparent; }
+.wb-tab--slide:hover:not([data-selected='true']) { background-color: hsl(var(--wb-card)); }
+.wb-tab-pill {
+  position: absolute;
+  inset: -1px;
+  border-radius: 9999px;
+  background-color: hsl(var(--brand-100));
+  border: 1px solid hsl(var(--brand-200));
+  pointer-events: none;
+}
+
+/* Press feedback on every pill button in the panel. */
+.chat-shell-right [data-slot='button']:active:not(:disabled) { transform: scale(0.97); }
+.wb-row:hover .wb-chev { transform: translateX(2px); color: hsl(var(--brand-700)); }
+.wb-chev { transition: transform 150ms var(--ease-out), color 150ms var(--ease-out); }
+
+/* Things that appear (chips, rows, menu items) ease in rather than snap. */
+@keyframes wb-pop { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: none; } }
+@keyframes wb-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes wb-fade { from { opacity: 0; } to { opacity: 1; } }
+.wb-pop { animation: wb-pop 180ms var(--ease-out) both; }
+.wb-rise { animation: wb-rise 260ms var(--ease-out) both; }
+.wb-fade { animation: wb-fade 220ms var(--ease-out) both; }
+
+/* Stage marks. */
+@keyframes wb-spin { to { transform: rotate(360deg); } }
+.wb-spin { transform-origin: 12px 12px; animation: wb-spin 900ms linear infinite; }
+.wb-draw { stroke-dasharray: 60; stroke-dashoffset: 60; animation: wb-draw 420ms var(--ease-out) forwards; }
+.wb-draw-check { stroke-dasharray: 24; stroke-dashoffset: 24; animation-delay: 160ms; animation-duration: 300ms; }
+@keyframes wb-draw { to { stroke-dashoffset: 0; } }
+
+/* Progress fills glide to their new width. */
+.wb-fill { transition: width 600ms var(--ease-out); }
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-pop, .wb-rise, .wb-fade { animation: none; }
+  .wb-spin { animation: none; }
+  .wb-draw { animation: none; stroke-dashoffset: 0; }
+  .wb-fill, .wb-chev { transition: none; }
+  .chat-shell-right [data-slot='button']:active:not(:disabled) { transform: none; }
+}

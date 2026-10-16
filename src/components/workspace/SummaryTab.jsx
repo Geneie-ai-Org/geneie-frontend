@@ -2,6 +2,7 @@ import React from 'react';
 import { ChevronRight, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { CountUp, StageMark } from './motion';
 
 // Full-alpha 2px ring (the global one is 45% alpha, under 3:1 on white).
 const FOCUS = 'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--ring))]';
@@ -80,21 +81,10 @@ export function deriveSummary({
   };
 }
 
-function Stage({ stage, index }) {
+function Stage({ stage }) {
   return (
     <li className="flex items-start gap-3 py-2.5">
-      <span
-        aria-hidden="true"
-        className={cn(
-          'mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border text-[12px] font-medium tabular-nums',
-          stage.state === 'done' && 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]',
-          stage.state === 'running' && 'border-transparent bg-[var(--info-soft)] text-[var(--info)]',
-          stage.state === 'failed' && 'border-transparent bg-[var(--error-soft)] text-[var(--error)]',
-          stage.state === 'pending' && 'border-[hsl(var(--wb-line-strong))] text-muted-foreground'
-        )}
-      >
-        {index + 1}
-      </span>
+      <span className="mt-px flex size-6 shrink-0 items-center justify-center"><StageMark state={stage.state} /></span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
           <span className={cn('text-[13px] font-medium', stage.state === 'pending' ? 'text-muted-foreground' : 'text-foreground')}>{stage.label}</span>
@@ -114,7 +104,7 @@ function JumpRow({ title, meta, onClick, disabled }) {
         {meta ? <span className="block truncate text-xs tabular-nums text-muted-foreground">{meta}</span> : null}
       </span>
       <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--wb-pill))] text-muted-foreground" aria-hidden="true">
-        <ChevronRight className="size-3.5" />
+        <ChevronRight className="wb-chev size-3.5" />
       </span>
     </button>
   );
@@ -140,7 +130,7 @@ export default function SummaryTab({ summary, jumps = [], emptyAction, className
   const chips = meta ? meta.split(' · ') : [];
   return (
     <div className={cn('h-full min-h-0 space-y-3 overflow-y-auto px-4 pb-6 pt-1', className)}>
-      <section className="wb-card p-4" aria-label="File">
+      <section className="wb-card wb-rise p-4" aria-label="File">
         <div className="flex items-start gap-3">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-500))]" aria-hidden="true">
             <FileText className="size-4" />
@@ -158,7 +148,7 @@ export default function SummaryTab({ summary, jumps = [], emptyAction, className
         {inScope != null ? (
           <div className="mt-4 rounded-xl bg-[hsl(var(--brand-50))] px-3.5 py-3">
             <div className="flex items-baseline gap-1.5">
-              <span className="text-[28px] font-medium leading-none tabular-nums tracking-tight text-[hsl(var(--brand-700))]">{nf(inScope)}</span>
+              <span className="text-[28px] font-medium leading-none tabular-nums tracking-tight text-[hsl(var(--brand-700))]"><CountUp value={inScope} /></span>
               <span className="text-[13px] text-muted-foreground">{total != null ? `of ${nf(total)} variants in scope` : 'variants in scope'}</span>
             </div>
             {pct != null && pct < 100 ? (
@@ -176,17 +166,17 @@ export default function SummaryTab({ summary, jumps = [], emptyAction, className
         ) : null}
       </section>
 
-      <section className="wb-card px-4 py-3" aria-label="Progress">
+      <section className="wb-card wb-rise px-4 py-3" style={{ animationDelay: '60ms' }} aria-label="Progress">
         <h3 className="wb-card-title mb-1">Progress</h3>
         <ol className="divide-y divide-[hsl(var(--wb-line))]">
-          {stages.map((s, i) => (
-            <Stage key={s.id} stage={s} index={i} />
+          {stages.map((s) => (
+            <Stage key={s.id} stage={s} />
           ))}
         </ol>
       </section>
 
       {jumps.length > 0 ? (
-        <section aria-label="Open">
+        <section className="wb-rise" style={{ animationDelay: '120ms' }} aria-label="Open">
           <h3 className="wb-card-title mb-2 px-1">Open</h3>
           <ul className="space-y-2">
             {jumps.map((j) => (

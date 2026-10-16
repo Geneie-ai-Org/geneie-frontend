@@ -69,7 +69,7 @@ const CONFIRM_COPY = {
 
 /** Secondary destructive: outline with error-coloured text. Filled red appears only inside the confirm. */
 const DESTRUCTIVE_OUTLINE =
-  'text-[var(--error)] hover:bg-[var(--error-soft)] hover:text-[var(--error)] border-[var(--border-strong)]';
+  '!text-[var(--error)] hover:!bg-[var(--error-soft)] hover:!text-[var(--error)] hover:!border-[color-mix(in_srgb,var(--error)_35%,transparent)]';
 
 /**
  * The Module 1 (FASTQ) long-running job as one compact job card, driven by the 9-phase Module 1
@@ -163,11 +163,8 @@ const Module1PipelineStepper = ({
   if (cancelled) statusText = 'You can start again from the upload button.';
   else if (cancelling) statusText = 'Stopping your run…';
   else if (failed) {
-    // What happened (stage), why (curated message), next step (Start over below).
-    const stage = MODULE1_STAGE_GROUPS.find((g) => g.id === activeGroupId);
-    const STAGE_NOUN = { staging: 'staging', aligning: 'alignment', calling: 'variant calling' };
-    const lead = stage && STAGE_NOUN[stage.id] ? `Failed during ${STAGE_NOUN[stage.id]}. ` : '';
-    statusText = `${lead}${getModule1FailureMessage(job)}`;
+    // What happened (stage, as the card's lead), why (curated message), next step (Start over below).
+    statusText = getModule1FailureMessage(job);
   }
   else if (finishedOk) {
     statusText = (job.message || 'Module 1 complete — VCF is in this conversation.').replace(
@@ -177,6 +174,13 @@ const Module1PipelineStepper = ({
   } else if (queueLine) statusText = queueLine;
   else statusText = getModule1PhaseMessage(job.phase, split.sentence || undefined);
   const note = !cancelled && !cancelling && !failed && !finishedOk ? split.note : '';
+  // Failure card: the stage that broke is the lead, the curated message is the why, Start over is the next step.
+  const failTitle = (() => {
+    if (!failed) return null;
+    const stage = MODULE1_STAGE_GROUPS.find((g) => g.id === activeGroupId);
+    const noun = { staging: 'staging', aligning: 'alignment', calling: 'variant calling' }[stage?.id];
+    return noun ? `Failed during ${noun}.` : 'The run failed.';
+  })();
 
   const showPct = pct != null && status === 'running' && !cancelling;
   const timerMs = timer.running ? timer.elapsedMs : timer.durationMs;
@@ -237,18 +241,19 @@ const Module1PipelineStepper = ({
     : MODULE1_STAGE_GROUPS.map((group) => {
         const st = nodeStatus(group.id, activeGroupId, failed, groupOrder, finishedOk);
         // The "Queued" stage while the job is queued is where it is waiting, not a run in progress.
-        return { id: group.id, label: group.label, status: st === 'running' && queued ? 'waiting' : st };
+        return { id: group.id, label: group.label, status: st === 'running' && queued ? 'queued' : st };
       });
 
   const showFailureAction = failed && typeof onStartOver === 'function';
-  const showControls = showFailureAction || showQueuePanel || showRunPanel;
+  const showControls = showQueuePanel || showRunPanel;
 
   const controls = showControls ? (
-    <div className="space-y-2.5 border-t border-border pt-3">
+    <div className="space-y-2.5">
       {confirmCopy ? (
         <div
           role="group"
           aria-labelledby="module1-confirm-question"
+          className="rounded-2xl border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill))] p-3"
           onKeyDown={(e) => {
             if (e.key === 'Escape' && !busy) {
               e.stopPropagation();
@@ -256,7 +261,7 @@ const Module1PipelineStepper = ({
             }
           }}
         >
-          <p id="module1-confirm-question" className="text-xs text-foreground">
+          <p id="module1-confirm-question" className="m-0 text-[13px] leading-5 text-foreground">
             {confirmCopy.question}
           </p>
           <div className="mt-2.5 flex flex-wrap items-center justify-end gap-2">
@@ -287,21 +292,16 @@ const Module1PipelineStepper = ({
       ) : (
         <>
           {showQueuePanel && (
-            <p className="text-[12px] text-muted-foreground">
+            <p className="m-0 text-xs leading-5 text-muted-foreground">
               Your place is kept if you close this tab. We&apos;ll notify you when it starts and when it finishes.
             </p>
           )}
-          {(canSwitch || canCancel || showFailureAction) && (
+          {(canSwitch || canCancel) && (
             <div className="flex flex-wrap items-center justify-end gap-2">
               {canSwitch && lane !== 'cpu' && (
-                <span className="mr-auto text-[12px] text-muted-foreground">
+                <span className="w-full text-xs leading-5 text-muted-foreground">
                   CPU starts now and takes about {cpuText}.
                 </span>
-              )}
-              {showFailureAction && (
-                <Button type="button" variant="outline" size="sm" onClick={onStartOver} className="max-sm:h-11">
-                  Start over
-                </Button>
               )}
               {canSwitch && (
                 <Button
@@ -344,7 +344,15 @@ const Module1PipelineStepper = ({
       icon={<Dna className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />}
       engine={chip}
       status={status}
+      statusTitle={failTitle}
       statusText={statusText}
+      action={
+        showFailureAction ? (
+          <Button type="button" onClick={onStartOver} className="max-sm:h-11">
+            Start over
+          </Button>
+        ) : null
+      }
       pct={showPct ? pct : null}
       timer={timerNode}
       note={note}

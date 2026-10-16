@@ -47,10 +47,12 @@ export default function AutomaticPipelinePanel({
     if (phase === 'failed') setStepsOpen(true);
   }, [phase]);
 
-  const timeline = stepsOpen && events.length > 0 ? (
+  const isPanel = variant === 'panel';
+  // In the workspace tab the checklist is always on view and the event log sits behind "Details".
+  const timeline = (isPanel || stepsOpen) && events.length > 0 ? (
     <div>
-      <h4 className="mb-1 text-[12px] font-medium text-muted-foreground">Timeline</h4>
-      <ul className="m-0 list-none space-y-1 p-0">
+      {isPanel ? null : <h4 className="mb-1 text-[12px] font-medium text-muted-foreground">Timeline</h4>}
+      <ul className="m-0 list-none space-y-1.5 p-0">
         {[...events].reverse().map((ev) => (
           <li key={ev.id} className="flex gap-2 text-[12px]">
             <span className="w-[5.5rem] shrink-0 text-right tabular-nums text-muted-foreground">{formatEventTime(ev.at)}</span>
@@ -77,22 +79,29 @@ export default function AutomaticPipelinePanel({
       ariaLabel="Automatic pipeline"
       title="Automatic pipeline"
       icon={<Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />}
-      engine={{ label: 'Early access' }}
+      engine={{ label: 'Early access', tone: 'brand' }}
       status={status}
-      statusText={message || 'Automatic pipeline'}
+      statusTitle={isPanel && phase === 'failed' ? message || 'Automatic paused.' : null}
+      statusText={
+        isPanel && phase === 'failed'
+          ? 'Fix the step marked Failed, or switch the case to Manual to continue yourself.'
+          : message || 'Automatic pipeline'
+      }
       steps={stepRows}
       stepsOpen={stepsOpen}
       onStepsToggle={() => setStepsOpen((v) => !v)}
       stepsLabel="Activity"
+      details={isPanel ? timeline : null}
+      detailsLabel="Event log"
     >
-      {timeline}
-      {phase === 'failed' ? (
+      {isPanel ? null : timeline}
+      {phase === 'failed' && !isPanel ? (
         <p className="m-0 text-xs text-[var(--error)]" role="alert">
           Automatic paused at the step marked Failed. Fix that step, or switch the case to Manual to continue yourself.
         </p>
       ) : null}
       {showReportCta ? (
-        <div className="flex items-center justify-end border-t border-border pt-3">
+        <div className={isPanel ? 'flex items-center justify-end' : 'flex items-center justify-end border-t border-border pt-3'}>
           <Button
             type="button"
             variant={reportBlocked || status !== 'done' ? 'outline' : 'default'}

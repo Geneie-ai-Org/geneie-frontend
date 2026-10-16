@@ -3,6 +3,7 @@ import { Maximize2, Minimize2, PanelRightClose, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 
 /**
  * Right-hand workbench. Everything that is not the conversation opens here as a tab: a Summary,
@@ -136,6 +137,7 @@ export default function WorkspacePanel({
   className,
 }) {
   const uid = useId();
+  const reduceMotion = useReducedMotion();
   const [menuOpen, setMenuOpen] = useState(false);
   const rootRef = useRef(null);
   const menuRef = useRef(null);
@@ -400,15 +402,28 @@ export default function WorkspacePanel({
           style={edgeMask ? { maskImage: edgeMask, WebkitMaskImage: edgeMask } : undefined}
           className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
+          <AnimatePresence initial={false} mode="popLayout">
           {shown.map((t, idx) => {
             const selected = t.id === current;
             return (
-              <div
+              <motion.div
                 key={t.id}
+                layout={reduceMotion ? false : 'position'}
+                initial={reduceMotion ? false : { opacity: 0, scale: 0.86 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.86 }}
+                transition={{ type: 'spring', stiffness: 520, damping: 38 }}
                 role="presentation"
                 data-selected={selected}
-                className="wb-tab group/tab relative shrink-0 text-[13px] font-medium leading-tight"
+                className="wb-tab wb-tab--slide group/tab relative shrink-0 text-[13px] font-medium leading-tight"
               >
+                {selected ? (
+                  <motion.span
+                    layoutId={`${uid}-tab-pill`}
+                    className="wb-tab-pill"
+                    transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 40 }}
+                  />
+                ) : null}
                 <button
                   ref={(el) => { if (el) tabRefs.current[t.id] = el; else delete tabRefs.current[t.id]; }}
                   type="button"
@@ -423,8 +438,8 @@ export default function WorkspacePanel({
                   onMouseEnter={titleIfTruncated}
                   onFocus={titleIfTruncated}
                   className={cn(
-                    'flex h-7 max-w-[168px] items-center gap-1.5 rounded-full pl-3',
-                    t.closable ? 'pr-8' : 'pr-3',
+                    'relative flex h-7 max-w-[168px] items-center gap-1.5 rounded-full pl-2.5',
+                    t.closable ? 'pr-7' : 'pr-2.5',
                     FOCUS
                   )}
                 >
@@ -451,9 +466,10 @@ export default function WorkspacePanel({
                     <X className="size-3" aria-hidden="true" />
                   </button>
                 ) : null}
-              </div>
+              </motion.div>
             );
           })}
+          </AnimatePresence>
         </div>
 
         {openable.length > 0 ? (
@@ -471,7 +487,7 @@ export default function WorkspacePanel({
                 FOCUS
               )}
             >
-              <Plus className="size-4" aria-hidden="true" />
+              <Plus className={cn('size-4 transition-transform duration-200 ease-out motion-reduce:transition-none', menuOpen && 'rotate-45')} aria-hidden="true" />
             </button>
             {menuOpen ? (
               <div
@@ -481,14 +497,15 @@ export default function WorkspacePanel({
                 onKeyDown={onMenuKey}
                 className="absolute right-0 top-full z-30 mt-1 w-56 origin-top-right overflow-hidden rounded-2xl border border-[hsl(var(--wb-line))] bg-popover p-1.5 shadow-[var(--shadow-md)] ws-menu-in"
               >
-                {openable.map((t) => (
+                {openable.map((t, mi) => (
                   <button
                     key={t.id}
+                    style={{ animationDelay: `${mi * 30}ms` }}
                     type="button"
                     role="menuitem"
                     tabIndex={-1}
                     onClick={() => pickTab(t.id)}
-                    className="flex h-9 w-full items-center gap-2.5 rounded-full px-3 text-left text-[13px] text-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:bg-[hsl(var(--brand-50))] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none"
+                    className="wb-fade flex h-9 w-full items-center gap-2.5 rounded-full px-3 text-left text-[13px] text-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:bg-[hsl(var(--brand-50))] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none"
                   >
                     {t.icon ? <t.icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <span className="size-4 shrink-0" />}
                     <span className="flex-1 truncate">{t.label}</span>

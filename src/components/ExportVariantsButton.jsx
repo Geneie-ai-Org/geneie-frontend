@@ -170,15 +170,15 @@ export default function ExportVariantsButton({
     <div className="space-y-1">
       <Button
         type="button"
-        variant="link"
+        variant="outline"
         size="sm"
         onClick={countMismatch ? checkEligibility : handleExport}
         disabled={!interactive}
         title={title}
         aria-busy={isExporting || undefined}
-        className={`h-8 max-md:h-11 w-full min-w-0 justify-start gap-1.5 px-1 text-[13px] tabular-nums ${
-          countMismatch ? 'text-[var(--error)]' : interactive ? 'text-primary' : 'text-muted-foreground'
-        } disabled:opacity-100`}
+        className={`h-9 max-md:h-11 w-full min-w-0 justify-start gap-1.5 px-3.5 text-[13px] tabular-nums disabled:opacity-100 ${
+          countMismatch ? '!border-[var(--error)] !text-[var(--error)]' : interactive ? '' : 'text-muted-foreground'
+        }`}
       >
         {working ? (
           <span aria-hidden className="inline-block size-1.5 shrink-0 animate-pulse rounded-full bg-[var(--info)] motion-reduce:animate-none" />

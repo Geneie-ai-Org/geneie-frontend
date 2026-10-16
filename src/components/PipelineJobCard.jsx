@@ -18,9 +18,38 @@
  * (`h-full min-h-0 flex flex-col`), scrolls its own body and draws no border, radius,
  * shadow, fixed position or width, so the workspace tab supplies the chrome.
  */
-import React, { useId } from 'react';
-import { ChevronRight } from 'lucide-react';
+import React, { useId, useState } from 'react';
+import { AlertCircle, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// Full-alpha 2px ring (the global one is 45% alpha, under 3:1 on white).
+const FOCUS =
+  'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--ring))]';
+
+/**
+ * Workbench look (variant="panel"): one white card holding a file header, a status block, a vertical
+ * timeline of steps and, last, controls / QC. One status vocabulary through `StatusPill`:
+ * queued, running, done, failed, and "Not started" for anything that has not begun.
+ */
+const PILL_STATE = {
+  queued: ['queued', 'Queued'],
+  running: ['running', 'Running'],
+  done: ['done', 'Done'],
+  skipped: ['done', 'Done'],
+  failed: ['failed', 'Failed'],
+  cancelled: ['pending', 'Cancelled'],
+  waiting: ['pending', 'Not started'],
+  pending: ['pending', 'Not started'],
+};
+
+export function StatusPill({ status, className }) {
+  const [state, word] = PILL_STATE[status] || PILL_STATE.pending;
+  return (
+    <span className={cn('wb-status', className)} data-state={state}>
+      {word}
+    </span>
+  );
+}
 
 export const STATUS_WORDS = {
   queued: 'Queued',
@@ -204,6 +233,304 @@ export function splitJobMessage(message) {
   return { sentence: sentenceParts.join(' '), note };
 }
 
+
+const NODE_CLASS = {
+  done: 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]',
+  skipped: 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]',
+  running: 'border-transparent bg-[var(--info-soft)] text-[var(--info)]',
+  failed: 'border-transparent bg-[var(--error-soft)] text-[var(--error)]',
+  queued: 'border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill))] text-foreground',
+  waiting: 'border-[hsl(var(--brand-300))] bg-[hsl(var(--wb-card))] text-[hsl(var(--brand-700))]',
+  pending: 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] text-muted-foreground',
+  cancelled: 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] text-muted-foreground',
+};
+
+/** Slim teal pill track with the number beside it. `value` null draws nothing. */
+function ProgressPill({ value, label = 'Run progress', right = null, className }) {
+  if (value == null && !right) return null;
+  const pct = value == null ? null : Math.max(0, Math.min(100, Math.round(value)));
+  return (
+    <div className={cn('space-y-1.5', className)}>
+      {pct != null ? (
+        <div className="flex items-center gap-3">
+          <div
+            className="wb-track flex-1"
+            role="progressbar"
+            aria-label={label}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={pct}
+          >
+            <div className="wb-fill transition-[width] duration-300 ease-out motion-reduce:transition-none" style={{ width: `${pct}%` }} />
+          </div>
+          <span className="w-9 shrink-0 text-right text-xs font-medium tabular-nums text-[hsl(var(--brand-700))]">{pct}%</span>
+        </div>
+      ) : null}
+      {right ? <p className="m-0 text-xs tabular-nums text-muted-foreground">{right}</p> : null}
+    </div>
+  );
+}
+
+function TimelineRow({ step, index, last, progress, reserve }) {
+  const done = step.status === 'done' || step.status === 'skipped';
+  const current = step.status === 'running' || step.status === 'waiting' || step.status === 'queued';
+  const interactive = typeof step.onClick === 'function';
+  const Row = interactive ? 'button' : 'div';
+  const inner = (
+    <>
+      <span
+        aria-hidden
+        className={cn(
+          'relative z-10 mt-px flex size-6 shrink-0 items-center justify-center rounded-full border text-[12px] font-medium tabular-nums',
+          NODE_CLASS[step.status] || NODE_CLASS.pending
+        )}
+      >
+        {index + 1}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-start gap-2">
+          <span className="min-w-0 flex-1">
+            <span
+              className={cn(
+                'block text-[13px] leading-5',
+                step.status === 'pending' || step.status === 'cancelled' ? 'text-muted-foreground' : 'font-medium text-foreground'
+              )}
+            >
+              {step.label}
+            </span>
+            {step.detail ? <span className="block text-xs leading-5 text-muted-foreground">{step.detail}</span> : null}
+          </span>
+          {step.time && !progress ? <span className="mt-0.5 shrink-0 text-xs tabular-nums text-muted-foreground">{step.time}</span> : null}
+          <StatusPill status={step.status} className="shrink-0" />
+          {interactive ? (
+            <ChevronRight className="mt-[3px] size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          ) : reserve ? (
+            <span className="size-3.5 shrink-0" aria-hidden />
+          ) : null}
+        </span>
+        {progress ? <span className="mt-2.5 block">{progress}</span> : null}
+      </span>
+    </>
+  );
+  const rowClass = cn(
+    'flex w-full items-start gap-3 rounded-xl border px-2.5 py-2.5 text-left transition-colors duration-150 motion-reduce:transition-none',
+    current ? 'border-[hsl(var(--brand-100))] bg-[hsl(var(--brand-50))]' : 'border-transparent',
+    interactive && 'hover:border-[hsl(var(--brand-200))] hover:bg-[hsl(var(--brand-50))]',
+    FOCUS
+  );
+  return (
+    <li className="relative mb-1 last:mb-0">
+      {!last ? (
+        <span
+          aria-hidden
+          className={cn(
+            'absolute -bottom-3 left-[21px] top-[38px] w-0.5 rounded-full',
+            done ? 'bg-[hsl(var(--brand-300))]' : 'bg-[hsl(var(--wb-line-strong))]'
+          )}
+        />
+      ) : null}
+      {interactive ? (
+        <Row type="button" onClick={step.onClick} disabled={step.disabled} title={step.title} className={cn(rowClass, 'disabled:cursor-default disabled:opacity-60')}>
+          {inner}
+        </Row>
+      ) : (
+        <Row className={rowClass}>{inner}</Row>
+      )}
+    </li>
+  );
+}
+
+/** First sentence as a lead line; the rest as a plain sentence under it. */
+function splitLead(text) {
+  const t = String(text || '').trim();
+  const m = t.match(/^(.+?[.!?])\s+(.*)$/s);
+  return m ? { lead: m[1], rest: m[2] } : { lead: t, rest: '' };
+}
+
+function PanelBody({
+  title,
+  icon,
+  engine,
+  status,
+  statusTitle,
+  statusText,
+  pct,
+  timer,
+  note,
+  steps,
+  stepsToggleRef,
+  stepsLabel,
+  headerExtra,
+  chips,
+  action,
+  details,
+  detailsLabel,
+  detailsDefaultOpen,
+  children,
+}) {
+  const detailsId = useId();
+  const [detailsOpen, setDetailsOpen] = useState(Boolean(detailsDefaultOpen));
+  const hasSteps = Array.isArray(steps) && steps.length > 0;
+  const doneCount = hasSteps ? steps.filter((s) => s.status === 'done' || s.status === 'skipped').length : 0;
+  const failed = status === 'failed';
+  const showProgress = pct != null && (status === 'running' || status === 'queued');
+  // The running step carries the progress pill and the clock, so the live work sits on the step it belongs to.
+  const runIdx = hasSteps ? steps.findIndex((s) => s.status === 'running') : -1;
+  const inline = runIdx >= 0 && (showProgress || timer);
+  const lead = failed ? (statusTitle ? { lead: statusTitle, rest: statusText } : splitLead(statusText)) : null;
+  const hasStatusBlock = Boolean(statusText || action || status);
+  const kids = React.Children.toArray(children);
+  // Screen-reader-only live regions are children too, but they must not draw an empty footer.
+  const hasVisibleKids = kids.some((k) => !String(k?.props?.className || '').includes('sr-only'));
+  const engineTone = engine?.tone || (engine?.warn ? 'warn' : null);
+
+  return (
+    <div>
+      <header className="flex items-start gap-3 px-4 pb-3 pt-4">
+        {icon ? (
+          <span
+            className="flex size-9 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] [&>svg]:!size-4 [&>svg]:!text-[hsl(var(--brand-500))]"
+            aria-hidden="true"
+          >
+            {icon}
+          </span>
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <h3
+            ref={hasSteps ? undefined : stepsToggleRef}
+            tabIndex={hasSteps ? undefined : -1}
+            className="m-0 truncate text-[15px] font-medium leading-6 text-foreground outline-none"
+            title={typeof title === 'string' ? title : undefined}
+          >
+            {title}
+          </h3>
+          {engine?.label || (chips && chips.length) ? (
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {engine?.label ? (
+                <span
+                  className="wb-chip"
+                  data-tone={engineTone === 'brand' ? 'brand' : undefined}
+                  style={
+                    engineTone === 'warn'
+                      ? { background: 'var(--warning-soft)', color: 'var(--warning)', borderColor: 'transparent' }
+                      : undefined
+                  }
+                >
+                  {engine.label}
+                </span>
+              ) : null}
+              {(chips || []).map((c) => (
+                <span key={c.label} className="wb-chip tabular-nums" data-tone={c.tone === 'brand' ? 'brand' : undefined}>
+                  {c.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        {headerExtra ? <span className="flex shrink-0 items-center gap-1.5">{headerExtra}</span> : null}
+      </header>
+
+      {hasStatusBlock ? (
+        <div
+          className={cn(
+            'mx-4 mb-4 rounded-2xl border px-3.5 py-3',
+            failed
+              ? 'border-[color-mix(in_srgb,var(--error)_22%,transparent)] bg-[var(--error-soft)]'
+              : 'border-[hsl(var(--brand-100))] bg-[hsl(var(--brand-50))]'
+          )}
+        >
+          {failed ? (
+            <div className="flex items-start gap-2.5" role="alert">
+              <AlertCircle className="mt-0.5 size-4 shrink-0 text-[var(--error)]" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="m-0 text-[13px] font-medium leading-5 text-foreground">{lead.lead}</p>
+                {lead.rest ? <p className="m-0 mt-0.5 text-xs leading-5 text-[var(--text-secondary)]">{lead.rest}</p> : null}
+              </div>
+            </div>
+          ) : (
+            <>
+              {(status && (!hasSteps || status === 'done')) || (timer && !inline) ? (
+                <div className="mb-2 flex items-center gap-2">
+                  {status && (!hasSteps || status === 'done') ? <StatusPill status={status} /> : null}
+                  {timer && !inline ? <span className="ml-auto text-xs tabular-nums text-muted-foreground">{timer}</span> : null}
+                </div>
+              ) : null}
+              {statusText ? (
+                <p className="m-0 text-[13px] leading-5 text-foreground" aria-live="polite">
+                  {statusText}
+                </p>
+              ) : null}
+              {showProgress && !inline ? <ProgressPill value={pct} className="mt-3" /> : null}
+            </>
+          )}
+          {note && !failed ? <p className="m-0 mt-2 text-xs leading-5 text-muted-foreground">{note}</p> : null}
+          {action ? <div className="mt-3 flex justify-end">{action}</div> : null}
+        </div>
+      ) : null}
+
+      {hasSteps ? (
+        <section className="border-t border-[hsl(var(--wb-line))] px-2.5 pb-3 pt-3" aria-label={stepsLabel}>
+          <div className="mb-1.5 flex items-center gap-2 px-2.5">
+            <h4 ref={stepsToggleRef} tabIndex={-1} className="wb-card-title m-0 outline-none">
+              {stepsLabel}
+            </h4>
+            <span className="wb-chip tabular-nums">
+              {doneCount} of {steps.length} done
+            </span>
+          </div>
+          <ol className="m-0 list-none p-0">
+            {steps.map((step, i) => (
+              <TimelineRow
+                key={step.id}
+                step={step}
+                index={i}
+                last={i === steps.length - 1}
+                reserve={steps.some((x) => typeof x.onClick === 'function')}
+                progress={
+                  inline && i === runIdx ? (
+                    <ProgressPill value={showProgress ? pct : null} right={timer} />
+                  ) : null
+                }
+              />
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
+      {details ? (
+        <div className="border-t border-[hsl(var(--wb-line))] px-4 py-2.5">
+          <button
+            type="button"
+            onClick={() => setDetailsOpen((v) => !v)}
+            aria-expanded={detailsOpen}
+            aria-controls={detailsId}
+            className={cn(
+              '-ml-2 inline-flex h-8 items-center gap-1.5 rounded-full border border-transparent px-2.5 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:border-[hsl(var(--wb-line))] hover:bg-[hsl(var(--wb-pill))] hover:text-foreground motion-reduce:transition-none',
+              FOCUS
+            )}
+          >
+            <ChevronRight className={cn('size-3.5 transition-transform duration-150 motion-reduce:transition-none', detailsOpen && 'rotate-90')} aria-hidden />
+            {detailsLabel}
+          </button>
+          {detailsOpen ? (
+            <div id={detailsId} className="pb-1 pt-2">
+              {details}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {kids.length > 0 ? (
+        hasVisibleKids ? (
+          <div className="space-y-3 border-t border-[hsl(var(--wb-line))] px-4 py-3">{kids}</div>
+        ) : (
+          kids
+        )
+      ) : null}
+    </div>
+  );
+}
+
 export default function PipelineJobCard({
   variant = 'card',
   title,
@@ -220,7 +547,15 @@ export default function PipelineJobCard({
   stepsToggleRef,
   stepsLabel = 'Steps',
   headerExtra = null,
+  /** panel only: extra header chips, [{ label, tone?: 'brand' }]. */
+  chips = null,
   action = null,
+  /** panel only: what the failure card leads with (what happened); `statusText` is then the why and next step. */
+  statusTitle = null,
+  /** panel only: secondary content (logs, activity) behind a collapsible "Details" pill. */
+  details = null,
+  detailsLabel = 'Details',
+  detailsDefaultOpen = false,
   children = null,
   className,
   ariaLabel,
@@ -251,7 +586,7 @@ export default function PipelineJobCard({
       {statusText || action ? (
         <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
           <p className="min-w-[12rem] flex-1 text-xs leading-relaxed text-[var(--text-secondary)]" aria-live="polite">
-            {statusText}
+            {statusTitle ? `${statusTitle} ` : ''}{statusText}
           </p>
           {action ? <div className="shrink-0">{action}</div> : null}
         </div>
@@ -306,8 +641,28 @@ export default function PipelineJobCard({
 
   if (isPanel) {
     return (
-      <section aria-label={ariaLabel} className={cn('flex h-full min-h-0 flex-col', className)}>
-        <div className="min-h-0 flex-1 overflow-y-auto">{body}</div>
+      <section aria-label={ariaLabel} className={cn('wb-card mx-1 min-w-0 shrink-0', className)}>
+        <PanelBody
+          title={title}
+          icon={icon}
+          engine={engine}
+          status={status}
+          statusTitle={statusTitle}
+          statusText={statusText}
+          pct={pct}
+          timer={timer}
+          note={note}
+          steps={steps}
+          stepsToggleRef={stepsToggleRef}
+          stepsLabel={stepsLabel}
+          headerExtra={headerExtra}
+          chips={chips}
+          action={action}
+          details={details}
+          detailsLabel={detailsLabel}
+          detailsDefaultOpen={detailsDefaultOpen || status === 'failed'}
+          children={children}
+        />
       </section>
     );
   }

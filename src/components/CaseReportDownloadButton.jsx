@@ -145,7 +145,7 @@ export default function CaseReportDownloadButton({
         }}
         disabled={blocked}
         title={title}
-        className="h-8 w-full text-[13px] max-md:h-11"
+        className="h-9 w-full justify-start gap-1.5 px-3.5 text-[13px] max-md:h-11"
       >
         <FileText aria-hidden />
         <span className="min-w-0 truncate">{label}</span>

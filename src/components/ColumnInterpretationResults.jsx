@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useId } from 'react';
-import { CheckCircle2, AlertCircle, ChevronRight, FileText, Info, Minus, Trash2, Filter, Stethoscope, Tags, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, ArrowRight, ChevronRight, ClipboardCheck, FileText, Info, Trash2, Filter, Stethoscope, Tags, X } from 'lucide-react';
 import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
 import { formatAcmgPhenotypeMeterLabel } from '@/lib/filterDisplayNames';
 import { Button } from '@/components/ui/button';
@@ -42,6 +42,12 @@ const C = {
 // browser drops it. Mix with transparent instead.
 const tint = (color, pct) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
 
+// Full-alpha 2px ring (the global one is 45% alpha, under 3:1 on white).
+const FOCUS =
+  'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--ring))]';
+
+const LINE = 'hsl(var(--wb-line))';
+
 const CHIP_TONES = {
   success: [C.successSoft, C.success],
   info: [C.infoSoft, C.info],
@@ -50,30 +56,33 @@ const CHIP_TONES = {
   neutral: [C.track, C.textMuted],
 };
 
-/** Status as a word plus a small dot. */
+// Tone -> the shared status-pill state (done = brand teal, failed = red, pending = neutral).
+const TONE_STATE = { success: 'done', error: 'failed', info: 'pending', neutral: 'pending' };
+
+/** Status as a word plus a small dot, in the shared pill shape. */
 function Chip({ tone = 'neutral', children }) {
-  const [bg, fg] = CHIP_TONES[tone] || CHIP_TONES.neutral;
+  const state = TONE_STATE[tone];
   return (
     <span
-      className="inline-flex h-5 max-w-full shrink-0 items-center gap-1.5 rounded-full px-2 text-[12px] font-medium"
-      style={{ background: bg, color: fg }}
+      className="wb-status max-w-full shrink-0"
+      data-state={state}
+      style={tone === 'warning' ? { background: C.warningSoft, color: C.warning, borderColor: 'transparent' } : undefined}
     >
-      <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: fg }} />
       <span className="truncate">{children}</span>
     </span>
   );
 }
 
-/** Inline notice: flat soft status fill, readable foreground text. */
+/** Inline notice: a soft status card with a hairline in the status colour and readable text. */
 function Notice({ tone = 'info', icon: Icon = Info, children }) {
   const [bg, fg] = CHIP_TONES[tone] || CHIP_TONES.info;
   return (
     <div
       role={tone === 'error' ? 'alert' : 'status'}
-      className="flex items-start gap-2 rounded-lg px-3 py-2 text-xs leading-relaxed"
-      style={{ background: bg, color: C.text }}
+      className="flex items-start gap-2.5 rounded-2xl border px-3.5 py-3 text-[13px] leading-5"
+      style={{ background: bg, color: C.text, borderColor: tint(fg, 22) }}
     >
-      <Icon className="mt-0.5 size-3.5 shrink-0" style={{ color: fg }} aria-hidden />
+      <Icon className="mt-0.5 size-4 shrink-0" style={{ color: fg }} aria-hidden />
       <div className="min-w-0">{children}</div>
     </div>
   );
@@ -106,40 +115,43 @@ function summarizeStep(step) {
   return { found, missing };
 }
 
-/** One column, one 32px row: status icon, the role we need, the file's column, and a status word. */
+/** One column per row: the role we need, the column it was matched to in the file (a mono pill), and a status pill. */
 function ColumnRow({ role, matched, tone = 'success', word, note }) {
-  const Icon = tone === 'success' ? CheckCircle2 : tone === 'error' ? AlertCircle : Minus;
-  const color = tone === 'success' ? C.success : tone === 'error' ? C.error : C.textMuted;
   return (
-    <li className="flex h-8 items-center gap-2 border-b border-[var(--border-subtle)] px-4 text-[13px] sm:px-6 max-md:min-h-11">
-      <Icon className="size-3.5 shrink-0" style={{ color }} aria-hidden />
+    <li className="flex min-h-10 items-center gap-2 border-t px-3 py-1.5 text-[13px] first:border-t-0 max-md:min-h-11" style={{ borderColor: LINE }}>
       <span className="min-w-0 flex-1 truncate" style={{ color: C.text }} title={note || role}>
         {role}
       </span>
       {matched ? (
-        <span className="max-w-[40%] shrink-0 truncate font-mono text-[12px]" style={{ color: C.textMuted }} title={`Column in your file: ${matched}`}>
-          {matched}
-        </span>
+        <>
+          {matched !== role ? <ArrowRight className="size-3 shrink-0" style={{ color: C.textDim }} aria-hidden /> : null}
+          <span
+            className="wb-chip max-w-[42%] shrink font-mono text-[12px]"
+            title={`Column in your file: ${matched}`}
+          >
+            <span className="truncate">{matched}</span>
+          </span>
+        </>
       ) : null}
-      <span className="w-16 shrink-0 text-right text-[12px]" style={{ color }}>
+      <span className="wb-status shrink-0" data-state={TONE_STATE[tone] || 'pending'}>
         {word}
       </span>
     </li>
   );
 }
 
-/** Disclosure group with a sticky 32px header carrying the found / missing counts. */
+/** Disclosure group: a pill-cornered block whose header carries the found / missing counts. */
 function ColumnGroup({ label, found, missing, open, onToggle, children }) {
   const panelId = useId();
   return (
-    <section>
-      <h4 className="sticky top-0 z-10 m-0 border-b border-[var(--border-subtle)] bg-background">
+    <section className="overflow-hidden rounded-2xl border" style={{ borderColor: LINE }}>
+      <h4 className="m-0">
         <button
           type="button"
           aria-expanded={open}
           aria-controls={panelId}
           onClick={onToggle}
-          className="flex h-8 w-full items-center gap-2 px-4 text-left text-[12px] font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/55 sm:px-6 max-md:min-h-11"
+          className={`flex min-h-10 w-full items-center gap-2 bg-[hsl(var(--wb-pill))] px-3 py-1.5 text-left text-[13px] font-medium transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] motion-reduce:transition-none max-md:min-h-11 ${FOCUS} focus-visible:-outline-offset-2`}
         >
           <ChevronRight
             className={`size-3.5 shrink-0 transition-transform duration-150 motion-reduce:transition-none ${open ? 'rotate-90' : ''}`}
@@ -147,18 +159,12 @@ function ColumnGroup({ label, found, missing, open, onToggle, children }) {
             aria-hidden
           />
           <span className="min-w-0 flex-1 truncate" style={{ color: C.text }}>{label}</span>
-          <span className="shrink-0 tabular-nums" style={{ color: C.textMuted }}>
-            <span style={{ color: C.success }}>{found} found</span>
-            {missing > 0 ? (
-              <>
-                {' '}&middot; <span style={{ color: C.error }}>{missing} missing</span>
-              </>
-            ) : null}
-          </span>
+          <span className="wb-status shrink-0 tabular-nums" data-state="done">{found} found</span>
+          {missing > 0 ? <span className="wb-status shrink-0 tabular-nums" data-state="failed">{missing} missing</span> : null}
         </button>
       </h4>
       {open ? (
-        <ul id={panelId} className="m-0 list-none p-0">
+        <ul id={panelId} className="m-0 list-none border-t p-0" style={{ borderColor: LINE }}>
           {children}
         </ul>
       ) : null}
@@ -219,7 +225,20 @@ const ColumnInterpretationResults = ({
   const backgroundJobActive = isRunningAnnovar || isApplyingProprietaryFilter;
   const genomeMismatch = interpretationResult?.genome_build_check?.status === 'mismatch';
 
-  if (!interpretationResult) return null;
+  if (!interpretationResult) {
+    // Modal mode renders nothing without a result; the workspace tab explains itself instead.
+    return embedded ? (
+      <div className="flex h-full min-h-0 flex-col items-center justify-center gap-1.5 px-8 text-center text-foreground">
+        <span className="mb-1 flex size-10 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-500))]" aria-hidden="true">
+          <ClipboardCheck className="size-5" />
+        </span>
+        <p className="text-[15px] font-medium">No file check yet</p>
+        <p className="max-w-xs text-[13px] leading-5" style={{ color: C.textMuted }}>
+          Geneie checks the columns of a variants file as soon as you add one. The result appears here.
+        </p>
+      </div>
+    ) : null;
+  }
 
   const { step1, step2, step3, overall_status, recommendations } = interpretationResult;
   const annovarQuotaBlocked = annovarGate?.allowed === false;
@@ -373,8 +392,8 @@ const ColumnInterpretationResults = ({
   // Short status line shown under each stepper node.
   const getStepSubtitle = (status) => {
     if (status === 'passed') return 'Complete';
-    if (status === 'pending') return 'Pending';
-    if (status === 'partial') return 'Partially met';
+    if (status === 'pending') return 'Not started';
+    if (status === 'partial') return 'Partly met';
     return 'Needs columns';
   };
 
@@ -468,7 +487,7 @@ const ColumnInterpretationResults = ({
       const required = stepData.required_columns || {};
       const columnsNoValidValues = stepData.columns_no_valid_values || [];
       return (
-        <div className="-mx-4 sm:-mx-6">
+        <div className="space-y-2">
           {renderColumnGroup(`step1_required`, 'Required columns', required, columnsNoValidValues)}
         </div>
       );
@@ -488,7 +507,7 @@ const ColumnInterpretationResults = ({
 
       return (
         <div className="space-y-3 text-sm">
-          <div className="-mx-4 sm:-mx-6">
+          <div className="space-y-2">
           {renderColumnGroup(`step2_required`, 'Required columns', required, columnsNoValidValues)}
           {renderColumnGroup(`step2_pathogenicity`, 'Pathogenicity predictors (at least 2 required)', pathogenicity_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 2 })}
           </div>
@@ -520,7 +539,7 @@ const ColumnInterpretationResults = ({
 
       return (
         <div className="space-y-3 text-sm">
-          <div className="-mx-4 sm:-mx-6">
+          <div className="space-y-2">
           {renderColumnGroup(`step3_required`, 'Required columns', required, columnsNoValidValues)}
           {renderColumnGroup(`step3_genotype`, 'Sample genotype (any one required)', sample_genotype_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 1 })}
           {renderColumnGroup(`step3_pathscore`, 'Pathogenicity scores (any one required)', pathogenicity_score_group, columnsNoValidValues, { missingLabel: 'Not found', minFound: 1 })}
@@ -626,6 +645,62 @@ const ColumnInterpretationResults = ({
     document.getElementById(`file-step-tab-${next}`)?.focus();
   };
 
+  const totalColumns = columnTotals.found + columnTotals.missing;
+  const foundPct = totalColumns > 0 ? Math.round((columnTotals.found / totalColumns) * 100) : 0;
+  const summaryCard = (
+    <section className="wb-card p-4" aria-labelledby="file-analysis-title">
+      <div className="flex items-start gap-3">
+        <span
+          className="flex size-9 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-500))]"
+          aria-hidden="true"
+        >
+          <ClipboardCheck className="size-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 id="file-analysis-title" className="m-0 text-[15px] font-medium leading-6" style={{ color: C.text }}>
+            File check
+          </h2>
+          <p className="m-0 mt-0.5 text-[13px] leading-5" style={{ color: C.textMuted }}>
+            {overall_status === 'passed' ? 'Your file is ready for analysis.' : 'Some features may be limited.'}
+          </p>
+        </div>
+        <Chip tone={overall_status === 'passed' ? 'success' : 'warning'}>
+          {overall_status === 'passed' ? 'Ready' : 'Limited'}
+        </Chip>
+      </div>
+      <div className="mt-4 rounded-xl bg-[hsl(var(--brand-50))] px-3.5 py-3">
+        <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+          <span className="text-[28px] font-medium leading-none tabular-nums tracking-tight text-[hsl(var(--brand-700))]">
+            {columnTotals.found.toLocaleString()}
+          </span>
+          <span className="text-[13px]" style={{ color: C.textMuted }}>
+            {columnTotals.found === 1 ? 'column' : 'columns'} recognised
+            {columnTotals.missing > 0 ? (
+              <>
+                , <span className="font-medium tabular-nums" style={{ color: C.error }}>{columnTotals.missing.toLocaleString()}</span> need a look
+              </>
+            ) : null}
+          </span>
+        </div>
+        {totalColumns > 0 ? (
+          <div
+            className="wb-track mt-3"
+            role="progressbar"
+            aria-label="Columns recognised"
+            aria-valuemin={0}
+            aria-valuemax={totalColumns}
+            aria-valuenow={columnTotals.found}
+          >
+            <div className="wb-fill" style={{ width: `${Math.max(foundPct, 2)}%` }} />
+          </div>
+        ) : null}
+        <p className="m-0 mt-2 text-xs tabular-nums" style={{ color: C.textMuted }}>
+          Across {stepperSteps.length} steps
+        </p>
+      </div>
+    </section>
+  );
+
   const header = (
     <div className="flex-shrink-0 border-b border-border px-4 pb-3 pt-4 sm:px-6">
       <div className="flex items-start justify-between gap-3">
@@ -667,7 +742,9 @@ const ColumnInterpretationResults = ({
   );
 
   const content = (
-    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
+    <div className={`min-h-0 flex-1 space-y-3 overflow-y-auto ${embedded ? 'px-4 pb-4 pt-1' : 'px-4 py-4 sm:px-6'}`}>
+      {embedded && summaryCard}
+
       {backgroundJobActive && (
         <Notice tone="info" icon={Info}>
           {isRunningAnnovar
@@ -691,7 +768,7 @@ const ColumnInterpretationResults = ({
         </Notice>
       )}
       {gbc?.status === 'match' && (
-        <p className="flex items-center gap-1.5 text-xs" style={{ color: C.textMuted }}>
+        <p className="m-0 flex items-center gap-1.5 px-1 text-xs" style={{ color: C.textMuted }}>
           <CheckCircle2 className="size-3.5" style={{ color: C.success }} aria-hidden />
           Genome build verified: {(gbc.declared || '').toUpperCase()}
         </p>
@@ -702,7 +779,7 @@ const ColumnInterpretationResults = ({
         </Notice>
       )}
 
-      {/* Steps */}
+      {/* Steps: three pill cards, one per stage. */}
       <div role="tablist" aria-label="Analysis steps" aria-orientation="horizontal" onKeyDown={onStepTabKeyDown} className="grid grid-cols-3 gap-2">
         {stepperSteps.map((s) => {
           const isSel = s.n === selectedStep;
@@ -717,29 +794,25 @@ const ColumnInterpretationResults = ({
               aria-controls="file-step-panel"
               tabIndex={isSel ? 0 : -1}
               onClick={() => setExpandedStep(s.n)}
-              className="flex min-w-0 flex-col items-start gap-1.5 rounded-lg border px-2.5 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/55 max-md:min-h-11"
-              style={{
-                borderColor: isSel ? 'hsl(var(--primary))' : C.border,
-                background: isSel ? C.tealSoft : 'transparent',
-              }}
+              className={`flex min-w-0 flex-col items-start gap-2 rounded-2xl border p-3 text-left transition-colors duration-150 motion-reduce:transition-none max-md:min-h-11 ${FOCUS} ${
+                isSel
+                  ? 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))]'
+                  : 'border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))]'
+              }`}
             >
-              <span className="text-[12px] tabular-nums" style={{ color: C.textMuted }}>
+              <span className="text-xs tabular-nums" style={{ color: isSel ? 'hsl(var(--brand-700))' : C.textMuted }}>
                 Step {s.n}
               </span>
-              <span className="text-[13px] font-medium leading-tight" style={{ color: C.text }}>
+              <span className="text-[13px] font-medium leading-snug" style={{ color: C.text }}>
                 {s.name}
               </span>
               <Chip tone={tone}>{getStepSubtitle(s.status)}</Chip>
-              <span
-                aria-hidden
-                className="block h-1 w-full overflow-hidden rounded-full"
-                style={{ background: C.track }}
-              >
+              <span aria-hidden className="wb-track w-full" style={isSel ? { background: 'hsl(var(--wb-card))' } : undefined}>
                 <span
-                  className="block h-full rounded-full"
+                  className="wb-fill block"
                   style={{
                     width: `${s.progress}%`,
-                    background: s.status === 'passed' ? C.success : s.status === 'failed' ? C.error : C.teal,
+                    background: s.status === 'failed' ? C.error : undefined,
                   }}
                 />
               </span>
@@ -755,13 +828,23 @@ const ColumnInterpretationResults = ({
           id="file-step-panel"
           aria-labelledby={`file-step-tab-${selectedStepData.n}`}
           tabIndex={0}
-          className="space-y-3 border-t border-border pt-4 outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className={`wb-card space-y-3 p-4 ${FOCUS}`}
         >
-          <h3 className="text-[13px] font-semibold" style={{ color: C.text }}>
-            {selectedStepData.name}
-          </h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="m-0 text-[13px] font-medium" style={{ color: C.text }}>
+              {selectedStepData.name}
+            </h3>
+            {(() => {
+              const t = summarizeStep(selectedStepData.data);
+              return t.found + t.missing > 0 ? (
+                <span className="shrink-0 text-xs tabular-nums" style={{ color: C.textMuted }}>
+                  {t.found} found{t.missing > 0 ? `, ${t.missing} missing` : ''}
+                </span>
+              ) : null;
+            })()}
+          </div>
           {renderStepDetails(selectedStepData.n, selectedStepData.data) || (
-            <p className="text-xs" style={{ color: C.textMuted }}>
+            <p className="m-0 text-xs" style={{ color: C.textMuted }}>
               No column details available for this step yet.
             </p>
           )}
@@ -777,8 +860,8 @@ const ColumnInterpretationResults = ({
       )}
 
       {/* Actions for this step. Reasons are plain text under the button, never hover-only. */}
-      <div className="space-y-2 border-t border-border pt-4">
-        <p className="text-xs font-medium" style={{ color: C.textMuted }}>
+      <div className="wb-card space-y-3 p-4">
+        <p className="wb-card-title m-0">
           {selectedStep === 1 ? 'Review' : selectedStep === 2 ? 'Annotate' : 'Apply filters'}
         </p>
         <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
@@ -907,7 +990,7 @@ const ColumnInterpretationResults = ({
                   onClick={() => onProprietaryFilterClick?.('filter_1')}
                   disabled={!acmgFilterCanApply || isApplyingProprietaryFilter || acmgFilterActive}
                   className="max-md:h-11"
-                  style={acmgFilterActive ? { borderColor: 'hsl(var(--primary))', background: C.tealSoft } : undefined}
+                  style={acmgFilterActive ? { borderColor: 'hsl(var(--brand-300))', background: 'hsl(var(--brand-100))', color: 'hsl(var(--brand-700))' } : undefined}
                 >
                   {isApplyingProprietaryFilter ? 'Applying…' : acmgFilterActive ? 'ACMG applied' : 'ACMG'}
                 </Button>
@@ -966,7 +1049,10 @@ const ColumnInterpretationResults = ({
   );
 
   const footer = (
-    <div className="flex flex-shrink-0 items-center justify-between gap-3 border-t border-border bg-background px-4 py-3 sm:px-6">
+    <div
+      className={`flex flex-shrink-0 items-center justify-between gap-3 border-t px-4 py-3 ${embedded ? '' : 'bg-background sm:px-6'}`}
+      style={{ borderColor: LINE }}
+    >
       <Button
         type="button"
         variant="outline"
@@ -976,6 +1062,9 @@ const ColumnInterpretationResults = ({
       >
         Previous
       </Button>
+      <span className="text-xs tabular-nums" style={{ color: C.textMuted }} aria-live="polite">
+        Step {selectedStep} of {stepperSteps.length}
+      </span>
       {canGoForward ? (
         <Button
           type="button"
@@ -1040,8 +1129,7 @@ const ColumnInterpretationResults = ({
 
       {embedded ? (
         // Workspace mode: plain content that fills the panel the lead mounts it in.
-        <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
-          {header}
+        <div className="flex h-full min-h-0 flex-col text-foreground">
           {content}
           {footer}
         </div>

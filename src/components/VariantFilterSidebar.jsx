@@ -34,6 +34,7 @@ import { toast } from 'sonner';
 import { apiErrorDetailToMessage as sharedApiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
 import { groupColumns, OTHER_GROUP } from '@/lib/variantColumnGroups';
 import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
+import { CountUp } from '@/components/workspace/motion';
 import { sampleHasPhenotype } from '@/components/PhenotypeInputPanel';
 import {
   PHENOTYPE_FILTER_DISPLAY_NAME,
@@ -232,16 +233,47 @@ function StatusDot({ tone = 'muted', pulse = false, className = '' }) {
   );
 }
 
-/** Flat, hairline-free notice: soft status fill, normal text colour, coloured title. */
+/** Status as a pill: dot plus word, never colour alone. Reuses the shared `.wb-status` states. */
+const PILL_STATE = { success: 'done', info: 'running', error: 'failed', muted: 'pending', warning: 'pending' };
+function StatusPill({ tone = 'muted', children, className = '' }) {
+  const warn = tone === 'warning'
+    ? '!border-transparent !bg-[var(--warning-soft)] !text-[var(--warning)] before:!border-0 before:!bg-[currentColor]'
+    : '';
+  return (
+    <span data-state={PILL_STATE[tone] || 'pending'} className={`wb-status ${warn} ${className}`}>
+      {children}
+    </span>
+  );
+}
+
+/** Soft notice with a status fill, a plain-words title and the one next action as a pill button. */
 function InlineNotice({ tone = 'warning', title, children, action = null, role }) {
   return (
     <div
       role={role}
-      className={`rounded-md px-3 py-2.5 text-[13px] leading-snug text-foreground ${TONE_SOFT[tone] || TONE_SOFT.muted}`}
+      className={`rounded-2xl px-3.5 py-3 text-[13px] leading-snug text-foreground ${TONE_SOFT[tone] || TONE_SOFT.muted}`}
     >
-      {title && <p className={`font-medium ${TONE_TEXT[tone] || ''}`}>{title}</p>}
-      {children && <div className={`${title ? 'mt-0.5' : ''} text-muted-foreground`}>{children}</div>}
-      {action && <div className="mt-1.5">{action}</div>}
+      {title && (
+        <p className={`flex items-start gap-2 font-medium ${TONE_TEXT[tone] || ''}`}>
+          <StatusDot tone={tone} className="mt-[7px]" />
+          <span>{title}</span>
+        </p>
+      )}
+      {children && <div className={`${title ? 'mt-1 pl-3.5' : ''} text-muted-foreground`}>{children}</div>}
+      {action && <div className={`mt-2.5 ${title ? 'pl-3.5' : ''}`}>{action}</div>}
+    </div>
+  );
+}
+
+/** Group header used above a set of controls: a muted title with an optional right-hand slot. */
+function CardHeader({ title, count = null, children = null }) {
+  return (
+    <div className="flex min-h-6 items-center justify-between gap-2">
+      <h3 className="wb-card-title flex items-center gap-1.5">
+        {title}
+        {count != null && <span className="tabular-nums">{count}</span>}
+      </h3>
+      {children}
     </div>
   );
 }
@@ -296,7 +328,14 @@ const safeId = (name) => String(name).replace(/[^a-zA-Z0-9_-]/g, '_');
 const BOOLISH = /^(true|false|yes|no|y|n|t|f|0|1)$/i;
 
 const FIELD_CLASS =
-  'h-8 max-md:h-11 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[13px] md:text-[13px] tabular-nums text-foreground placeholder:text-muted-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50';
+  'h-9 max-md:h-11 w-full min-w-0 rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3.5 text-[13px] md:text-[13px] tabular-nums text-foreground placeholder:text-muted-foreground outline-none transition-colors hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)] disabled:cursor-not-allowed disabled:opacity-50';
+
+const TEXTAREA_CLASS =
+  'w-full resize-none rounded-2xl border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3.5 py-2 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)]';
+
+/** Small round icon-only control inside a field or chip (clear, remove). */
+const MINI_ICON_BTN =
+  'inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:opacity-50 max-md:size-9';
 
 /** Dual-handle range slider + min/max fields for numeric column filters. */
 function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinChange, onMaxChange, disabled, onEnterApply = null }) {
@@ -489,7 +528,7 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
   const maxInputValue = maxDraft !== null ? maxDraft : currentMax != null ? String(currentMax) : '';
 
   const thumbClass = (active) =>
-    `absolute size-4 rounded-full border-2 border-background bg-primary shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-1 focus-visible:ring-offset-background ${
+    `absolute size-[18px] rounded-full border-2 border-[hsl(var(--brand-500))] bg-[hsl(var(--wb-card))] outline-none transition-transform focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.45)] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--brand-50))] motion-reduce:transition-none ${
       active ? 'z-20 scale-110' : 'z-10'
     }`;
 
@@ -504,7 +543,7 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
           const errId = `${inputId}-error`;
           return (
             <div key={f.which} className="min-w-0">
-              <label htmlFor={inputId} className="mb-1 block text-[12px] text-muted-foreground">{f.label}</label>
+              <label htmlFor={inputId} className="mb-1 block pl-1 text-[12px] font-medium text-muted-foreground">{f.label}</label>
               <input
                 id={inputId}
                 type="text"
@@ -551,9 +590,9 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
         onPointerDown={onTrackPointerDown}
         role="presentation"
       >
-        <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-muted" />
+        <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[hsl(var(--brand-200))]" />
         <div
-          className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-primary"
+          className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[hsl(var(--brand-500))]"
           style={{ left: `${loPct}%`, width: `${Math.max(hiPct - loPct, 0)}%` }}
         />
         <button
@@ -609,7 +648,7 @@ function CategoricalEditor({ values, selected, disabled, onChange }) {
     const options = [{ key: '__any', label: 'Any', value: null }, ...nonEmpty.map((v) => ({ key: String(v), label: String(v), value: v }))];
     const current = selected.length === 0 ? '__any' : String(selected[0]);
     return (
-      <div role="radiogroup" aria-label="Value" className="inline-flex w-full rounded-md bg-muted p-0.5">
+      <div role="radiogroup" aria-label="Value" className="inline-flex w-full gap-0.5 rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] p-0.5">
         {options.map((opt) => {
           const active = current === opt.key;
           return (
@@ -620,8 +659,10 @@ function CategoricalEditor({ values, selected, disabled, onChange }) {
               aria-checked={active}
               disabled={disabled}
               onClick={() => onChange(opt.value === null ? [] : [opt.value])}
-              className={`h-7 max-md:h-10 flex-1 rounded px-2 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 ${
-                active ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              className={`h-7 max-md:h-10 flex-1 rounded-full border px-2 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:cursor-not-allowed disabled:opacity-50 ${
+                active
+                  ? 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]'
+                  : 'border-transparent text-muted-foreground hover:bg-[hsl(var(--brand-50))] hover:text-foreground'
               }`}
             >
               {opt.label}
@@ -653,21 +694,23 @@ function CategoricalEditor({ values, selected, disabled, onChange }) {
     <div className="space-y-2">
       {all.length > 8 && (
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={`Search ${all.length.toLocaleString()} values`}
             aria-label="Search values"
-            className={`${FIELD_CLASS} pl-7 pr-8`}
+            spellCheck={false}
+            autoComplete="off"
+            className={`${FIELD_CLASS} pl-8 pr-8`}
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery('')}
               aria-label="Clear value search"
-              className="absolute right-1 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 max-md:size-10"
+              className={`absolute right-1.5 top-1/2 -translate-y-1/2 ${MINI_ICON_BTN}`}
             >
               <X className="size-3.5" aria-hidden />
             </button>
@@ -679,21 +722,21 @@ function CategoricalEditor({ values, selected, disabled, onChange }) {
           {selected.length.toLocaleString()} selected of {all.length.toLocaleString()} values
         </span>
         {selected.length > 0 && !disabled && (
-          <button type="button" onClick={() => onChange([])} className="rounded text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/60">
-            Clear
+          <button type="button" onClick={() => onChange([])} className="rounded-full px-2 py-0.5 font-medium text-[hsl(var(--brand-700))] outline-none transition-colors hover:bg-[hsl(var(--brand-100))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]">
+            Clear selection
           </button>
         )}
       </div>
-      <div className="max-h-56 overflow-y-auto rounded-md border border-border bg-background">
+      <div className="max-h-56 overflow-y-auto rounded-2xl border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))]">
         {shown.length === 0 ? (
           <p className="px-3 py-4 text-center text-[13px] text-muted-foreground">No values match &ldquo;{query}&rdquo;</p>
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className="divide-y divide-[hsl(var(--wb-line))]">
             {shown.map((value) => (
               <li key={String(value)}>
                 <label
                   className={`flex items-center gap-2 px-2.5 py-1.5 max-md:min-h-11 text-[13px] ${
-                    disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-muted'
+                    disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-[hsl(var(--brand-50))]'
                   }`}
                 >
                   <Checkbox
@@ -774,7 +817,7 @@ function ColumnFilterEditor({
                   onNumericChange('Max', p.max);
                 }}
                 disabled={disabled}
-                className="h-7 max-md:h-10 rounded-full border border-border bg-background px-2.5 text-[12px] font-medium text-muted-foreground outline-none transition-colors hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-7 max-md:h-10 rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] px-3 text-[12px] font-medium text-muted-foreground outline-none transition-colors hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {p.label}
               </button>
@@ -814,7 +857,7 @@ function ColumnFilterEditor({
           <button
             type="button"
             onClick={onClear}
-            className="inline-flex items-center gap-1 rounded text-[12px] font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 max-md:min-h-11"
+            className="inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[12px] font-medium text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:min-h-11"
           >
             <RotateCcw className="size-3" aria-hidden />
             Clear this filter
@@ -2045,9 +2088,11 @@ const VariantFilterSidebar = ({
     (!variantData.categorical_columns || Object.keys(variantData.categorical_columns).length === 0)
   )) {
     return (
-      <div className="variant-filter-sidebar flex h-full min-h-0 w-full min-w-0 flex-col bg-background">
-        <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-10 text-center">
-          <Upload className="mb-3 size-8 text-muted-foreground" aria-hidden />
+      <div className="variant-filter-sidebar flex h-full min-h-0 w-full min-w-0 flex-col overflow-y-auto px-4 py-4">
+        <div className="wb-card flex flex-col items-center justify-center px-6 py-10 text-center">
+          <span className="mb-3 inline-flex size-12 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]">
+            <Upload className="size-5" aria-hidden />
+          </span>
           <h3 className="text-base font-semibold text-foreground">No variant file yet</h3>
           <p className="mb-5 mt-1 max-w-xs text-[13px] leading-snug text-muted-foreground">
             Upload a TSV, CSV or VCF variant file to filter, review and download variants here.
@@ -2281,26 +2326,30 @@ const VariantFilterSidebar = ({
           ? `${categoricalValuesFor(colName).length.toLocaleString()} values`
           : null;
     return (
-      <div key={colName} className={isExpanded ? 'bg-muted/50' : undefined}>
+      <div key={colName}>
         <button
           type="button"
           aria-expanded={isExpanded}
           aria-controls={`filter-col-${safeId(colName)}`}
           onClick={() => setOpenFilterPopup(isExpanded ? null : colName)}
-          className="flex w-full items-center gap-2 py-1.5 pl-9 pr-4 text-left text-[13px] outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60 max-md:min-h-11"
+          className={`flex min-h-9 w-full items-center gap-2 rounded-full border px-3.5 py-1 text-left text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:min-h-11 ${
+            isExpanded
+              ? 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))]'
+              : 'border-transparent hover:border-[hsl(var(--brand-200))] hover:bg-[hsl(var(--brand-50))]'
+          }`}
         >
           <span className="min-w-0 flex-1">
-            <span className={`block truncate ${reason ? 'text-muted-foreground' : 'text-foreground'}`}>{colName}</span>
+            <span className={`block truncate ${reason ? 'text-muted-foreground' : 'text-foreground'} ${summary || isExpanded ? 'font-medium' : ''}`}>{colName}</span>
             {showGroup && groupOfColumn[colName] && (
               <span className="block truncate text-[12px] text-muted-foreground">{groupOfColumn[colName]}</span>
             )}
           </span>
           {summary ? (
             <span
-              className={`inline-flex h-5 max-w-[9rem] shrink-0 items-center gap-1 truncate rounded-full px-2 text-[12px] font-medium tabular-nums ${
+              className={`inline-flex h-6 max-w-[9rem] shrink-0 items-center truncate rounded-full border px-2.5 text-[12px] font-medium tabular-nums ${
                 isPending
-                  ? 'border border-dashed border-[var(--warning)] text-foreground'
-                  : 'bg-primary/10 text-primary'
+                  ? 'border-dashed border-[var(--warning)] bg-[hsl(var(--wb-card))] text-foreground'
+                  : 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]'
               }`}
               title={isPending ? `${summary} (not applied yet)` : summary}
             >
@@ -2311,9 +2360,10 @@ const VariantFilterSidebar = ({
           ) : rowHint ? (
             <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">{rowHint}</span>
           ) : null}
+          <ChevronRight className={`size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${isExpanded ? 'rotate-90' : ''}`} aria-hidden />
         </button>
         {isExpanded && (
-          <div id={`filter-col-${safeId(colName)}`} className="pb-3 pl-9 pr-4 pt-1">
+          <div id={`filter-col-${safeId(colName)}`} className="mx-1 mb-1.5 mt-1 rounded-2xl border border-[hsl(var(--brand-100))] bg-[hsl(var(--brand-50))] p-3">
             <ColumnFilterEditor
               colName={colName}
               notFilterableReason={reason}
@@ -2338,26 +2388,33 @@ const VariantFilterSidebar = ({
   const canSavePreset = hasAppliedManualFilters || Object.keys(pendingFilterPayload).length > 0;
 
   const TABS = [
-    { key: 'manual', label: 'Manual', filterKey: null },
-    { key: 'acmg', label: 'ACMG', filterKey: 'filter_1' },
-    { key: 'exomiser', label: PHENOTYPE_FILTER_DISPLAY_NAME, filterKey: 'filter_3', usePhenotypeAi: true, locked: phenotypeMissing },
+    { key: 'manual', label: 'Manual', filterKey: null, badge: manualFilterCount > 0 ? String(manualFilterCount) : null, badgeLabel: `${manualFilterCount} applied` },
+    { key: 'acmg', label: 'ACMG', filterKey: 'filter_1', badge: activeProprietaryFilter === 'filter_1' ? 'On' : null, badgeLabel: 'active' },
+    { key: 'exomiser', label: PHENOTYPE_FILTER_DISPLAY_NAME, filterKey: 'filter_3', usePhenotypeAi: true, locked: phenotypeMissing, badge: exoIsActive ? 'On' : null, badgeLabel: 'active' },
   ];
   const activeTabIndex = TABS.findIndex((t) => t.key === filterMode);
   const focusTab = (i) => {
     const el = document.getElementById(`filter-tab-${TABS[i].key}`);
     if (el) el.focus();
   };
+  // Roving focus steps from the tab that has focus, not from the selected one, so repeated arrow
+  // presses keep moving.
+  const focusedTabIndex = () => {
+    const i = TABS.findIndex((t) => document.activeElement?.id === `filter-tab-${t.key}`);
+    return i >= 0 ? i : activeTabIndex;
+  };
   const onTablistKeyDown = (e) => {
+    const cur = focusedTabIndex();
     switch (e.key) {
       case 'ArrowRight':
       case 'ArrowDown':
         e.preventDefault();
-        focusTab((activeTabIndex + 1) % TABS.length);
+        focusTab((cur + 1) % TABS.length);
         break;
       case 'ArrowLeft':
       case 'ArrowUp':
         e.preventDefault();
-        focusTab((activeTabIndex - 1 + TABS.length) % TABS.length);
+        focusTab((cur - 1 + TABS.length) % TABS.length);
         break;
       case 'Home':
         e.preventDefault();
@@ -2371,10 +2428,150 @@ const VariantFilterSidebar = ({
     }
   };
 
-  const proprietaryBtnBase = 'w-full max-md:h-11';
+  const ringBrand = 'focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]';
+  const pillBtn = 'h-8 max-md:h-11 text-[13px]';
+  const canRunAnnotation = !isGuest && typeof runAnnovar === 'function';
+  const runAnnotationButton = canRunAnnotation ? (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={handleRunAnnovarFromGarden}
+      disabled={isRunningAnnovar || annovarQuotaBlocked || pipelineBusy}
+      className={pillBtn}
+    >
+      <Tags aria-hidden />
+      {isRunningAnnovar ? 'Running annotation…' : 'Run annotation'}
+    </Button>
+  ) : null;
+
+  // Where a blocked Phenotype reason can be fixed in one click, when the host gave us a handler.
+  const reasonAction = (reason) => {
+    if (reason === 'annovar_required') return runAnnotationButton;
+    if ((reason === 'phenotype_required' || reason === 'hpo_selection_required') && onEditSampleInfo) {
+      return (
+        <Button type="button" variant="outline" size="sm" onClick={onEditSampleInfo} className={pillBtn}>
+          <PencilLine aria-hidden />
+          Edit sample info
+        </Button>
+      );
+    }
+    if (reason === 'manual_filter_active' || reason === 'manual_filters_active') {
+      return (
+        <Button type="button" variant="outline" size="sm" onClick={resetFilters} disabled={isApplying} className={pillBtn}>
+          <RotateCcw aria-hidden />
+          Reset manual filters
+        </Button>
+      );
+    }
+    if (reason === 'proprietary_filter_active') {
+      return (
+        <Button type="button" variant="outline" size="sm" onClick={handleRemoveProprietaryFilter} disabled={isApplyingProprietaryFilter || pipelineBusy} className={pillBtn}>
+          <X aria-hidden />
+          Remove active filter
+        </Button>
+      );
+    }
+    return null;
+  };
+
+  const scopePct = displayTotalVariants > 0
+    ? Math.max(0, Math.min(100, (underConsiderationCount / displayTotalVariants) * 100))
+    : 0;
+
+  /** Mode-specific primary action for the sticky footer. */
+  const renderPrimaryAction = () => {
+    if (filterMode === 'manual') {
+      return (
+        <Button
+          type="button"
+          onClick={applyFilters}
+          disabled={isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges}
+          aria-describedby="filter-apply-status"
+          className="h-9 flex-1 max-md:h-11"
+        >
+          {isApplying ? 'Applying…' : 'Apply'}
+        </Button>
+      );
+    }
+    if (filterMode === 'acmg') {
+      return activeProprietaryFilter === 'filter_1' ? (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => handleApplyProprietaryFilter('filter_1')}
+          disabled={isApplyingProprietaryFilter}
+          aria-describedby="filter-apply-status"
+          className="h-9 flex-1 !text-[var(--error)] max-md:h-11"
+        >
+          {isApplyingProprietaryFilter ? 'Removing…' : 'Remove ACMG filter'}
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          onClick={() => handleApplyProprietaryFilter('filter_1')}
+          disabled={!acmgFilterCanApply || isApplyingProprietaryFilter}
+          aria-describedby="filter-apply-status"
+          className="h-9 flex-1 max-md:h-11"
+        >
+          {isApplyingProprietaryFilter ? 'Applying…' : 'Apply ACMG filter'}
+        </Button>
+      );
+    }
+    return exoIsActive ? (
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => handleApplyProprietaryFilter('filter_3')}
+        disabled={isApplyingProprietaryFilter}
+        aria-describedby="filter-apply-status"
+        className="h-9 flex-1 !text-[var(--error)] max-md:h-11"
+      >
+        {isApplyingProprietaryFilter ? 'Removing…' : `Remove ${PHENOTYPE_FILTER_DISPLAY_NAME}`}
+      </Button>
+    ) : (
+      <Button
+        type="button"
+        onClick={() => runExomiser && runExomiser()}
+        disabled={phenotypeMissing || !exoCanRun || exoRunning || !runExomiser || acmgQuotaBlocked}
+        aria-describedby="filter-apply-status"
+        className="h-9 flex-1 max-md:h-11"
+      >
+        {exoRunning ? (
+          'Running…'
+        ) : exoFailed ? (
+          <>Retry <PhenotypeAiLabel variant="inline" /></>
+        ) : (
+          <>Run <PhenotypeAiLabel variant="inline" /></>
+        )}
+      </Button>
+    );
+  };
+
+  /** The one short line under the count in the footer: what the primary button will do, or why it is off. */
+  const footerStatus = (() => {
+    if (filterMode === 'manual') {
+      if (isManualFiltersDisabled) return { tone: 'warning', text: 'Apply is off while a pipeline job runs.' };
+      if (hasUnappliedFilterChanges) {
+        return {
+          tone: 'warning',
+          text: `${unappliedCount > 0 ? `${unappliedCount} unapplied change${unappliedCount === 1 ? '' : 's'}` : 'Unapplied changes'}. Press Apply to update the count.`,
+        };
+      }
+      if (hasAppliedManualFilters) return { tone: 'success', text: 'Filters applied. Change a filter to enable Apply.' };
+      return { tone: 'muted', text: 'Choose a column filter to enable Apply.' };
+    }
+    if (modeStatus.word === 'Active') return { tone: 'success', text: 'Applied. Remove it to see all variants again.' };
+    if (modeStatus.word === 'Running') return { tone: 'info', text: 'Running. The count updates when it finishes.', pulse: true };
+    if (modeStatus.word === 'Ready') return { tone: 'muted', text: 'Ready. Apply it to update the count.' };
+    if (modeStatus.word === 'Checking') return { tone: 'muted', text: 'Checking eligibility…' };
+    return { tone: modeStatus.tone, text: `${modeStatus.word}. See the note above.` };
+  })();
+
+  const footerQuiet = footerStatus.tone === 'muted' || footerStatus.tone === 'success';
 
   return (
-    <div className="variant-filter-sidebar flex h-full min-h-0 w-full min-w-0 flex-col bg-background text-foreground [&.variant-filter-sidebar]:bg-background [&_input::placeholder]:!text-muted-foreground [&_textarea::placeholder]:!text-muted-foreground">
+    <div className="variant-filter-sidebar flex h-full min-h-0 w-full min-w-0 flex-col text-foreground [&_input::placeholder]:!text-muted-foreground [&_textarea::placeholder]:!text-muted-foreground">
       {/* Confirmation dialogs (short, focused) */}
       <AlertDialog open={removeFileDialogOpen} onOpenChange={setRemoveFileDialogOpen}>
         <AlertDialogContent>
@@ -2413,14 +2610,14 @@ const VariantFilterSidebar = ({
       </AlertDialog>
 
       {/* ---------------- Scrolling body ---------------- */}
-      <div className="min-h-0 flex-1 scroll-py-3 overflow-y-auto overscroll-contain">
-        {/* Summary: how many variants remain, and what is filtering them */}
+      <div className="min-h-0 flex-1 scroll-py-3 space-y-3 overflow-y-auto overscroll-contain px-4 pb-4 pt-3">
+        {/* Scope: how many variants remain, and the filters doing it */}
         {fileTotalVariants > 0 && (
-          <section aria-label="Filter summary" className="border-b border-border px-4 pb-3 pt-4">
+          <section aria-label="Filter summary" className="wb-card p-4">
             <div className="flex items-start justify-between gap-2">
               <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 tabular-nums">
                 <span className="text-[28px] font-semibold leading-none text-foreground">
-                  {underConsiderationCount.toLocaleString()}
+                  <CountUp value={underConsiderationCount} />
                 </span>
                 <span className="text-[13px] text-muted-foreground">
                   of {displayTotalVariants.toLocaleString()} variants in scope
@@ -2428,14 +2625,12 @@ const VariantFilterSidebar = ({
               </p>
               <div className="flex shrink-0 items-center gap-1.5">
                 {filteredOutCount > 0 && (
-                  <span className="text-[12px] text-muted-foreground tabular-nums">
-                    {filteredOutCount.toLocaleString()} filtered out
-                  </span>
+                  <span className="wb-chip tabular-nums">{filteredOutCount.toLocaleString()} filtered out</span>
                 )}
                 {variantData?.sample_only_ingest && (
                   <Popover>
                     <PopoverTrigger
-                      className="inline-flex size-6 items-center justify-center rounded text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 max-md:size-11"
+                      className="wb-iconbtn outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:size-11"
                       aria-label="About this file"
                     >
                       <Info className="size-3.5" />
@@ -2471,17 +2666,19 @@ const VariantFilterSidebar = ({
                 )}
               </div>
             </div>
-            {/* The bar is decorative to the eye and a real progressbar to assistive tech; the sentence
-              * beside the count is its text equivalent. */}
+            {/* A real progressbar for assistive tech; the sentence beside the count is its text equivalent. */}
             {displayTotalVariants > 0 && (
-              <Progress
-                className="mt-3"
-                value={Math.max(0, Math.min(displayTotalVariants, underConsiderationCount))}
-                min={0}
-                max={displayTotalVariants}
-                valueText={`${underConsiderationCount.toLocaleString()} of ${displayTotalVariants.toLocaleString()} variants in scope`}
+              <div
+                role="progressbar"
                 aria-label="Variants in scope after filters"
-              />
+                aria-valuemin={0}
+                aria-valuemax={displayTotalVariants}
+                aria-valuenow={Math.max(0, Math.min(displayTotalVariants, underConsiderationCount))}
+                aria-valuetext={`${underConsiderationCount.toLocaleString()} of ${displayTotalVariants.toLocaleString()} variants in scope`}
+                className="wb-track mt-3"
+              >
+                <div className="wb-fill transition-[width] duration-300 ease-out motion-reduce:transition-none" style={{ width: `${scopePct}%` }} />
+              </div>
             )}
 
             {hasActiveManualFilters &&
@@ -2496,75 +2693,88 @@ const VariantFilterSidebar = ({
                 </div>
               )}
 
-            {hasAnyChip && (
-              <div className="mt-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="Active filters">
-                {proprietaryChipLabel && (
-                  <span className="inline-flex h-6 max-w-full items-center rounded-full bg-primary/10 pl-2.5 text-[13px] font-medium text-primary">
-                    <span className="truncate">{proprietaryChipLabel}</span>
-                    <button
-                      type="button"
-                      onClick={removeProprietaryChip}
-                      disabled={isApplyingProprietaryFilter || pipelineBusy}
-                      aria-label={`Remove ${proprietaryChipLabel}`}
-                      className="inline-flex size-6 shrink-0 items-center justify-center rounded-full outline-none hover:bg-primary/15 focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50 max-md:size-8"
-                    >
-                      <X className="size-3" aria-hidden />
-                    </button>
-                  </span>
-                )}
-                {filterChips.map((chip) => (
-                  <span
-                    key={chip.col}
-                    className={`inline-flex h-6 max-w-full items-center rounded-full pl-2.5 text-[13px] ${
-                      chip.pending
-                        ? 'border border-dashed border-[var(--warning)] text-foreground'
-                        : 'bg-primary/10 text-primary'
-                    }`}
-                    title={chip.pending ? `${chip.col}: ${chip.label} (not applied yet)` : `${chip.col}: ${chip.label}`}
+            {/* Active filters: removable pills with one Reset all */}
+            <div className="mt-3.5 border-t border-[hsl(var(--wb-line))] pt-3">
+              <CardHeader title="Active filters" count={hasAnyChip ? (filterChips.length + (proprietaryChipLabel ? 1 : 0)) : null}>
+                {!hasAnyChip && <span className="text-[12px] text-muted-foreground">None yet</span>}
+                {hasAnyChip && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={clearAllFilters}
+                    disabled={isApplying}
+                    className="h-7 px-3 text-[12px] max-md:h-11"
                   >
-                    <span className="truncate">
-                      <span className="font-medium">{chip.col}</span>
-                      <span className="tabular-nums"> {chip.label}</span>
-                      {chip.pending && <span className="sr-only"> (not applied yet)</span>}
+                    <RotateCcw aria-hidden />
+                    Reset all
+                  </Button>
+                )}
+              </CardHeader>
+              {hasAnyChip ? (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label="Active filters">
+                  {proprietaryChipLabel && (
+                    <span className="inline-flex h-7 max-w-full items-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] pl-3 pr-1 text-[13px] font-medium text-[hsl(var(--brand-700))]">
+                      <span className="truncate">{proprietaryChipLabel}</span>
+                      <button
+                        type="button"
+                        onClick={removeProprietaryChip}
+                        disabled={isApplyingProprietaryFilter || pipelineBusy}
+                        aria-label={`Remove ${proprietaryChipLabel}`}
+                        className={`ml-1 ${MINI_ICON_BTN} !size-5 hover:!bg-[hsl(var(--brand-200))]`}
+                      >
+                        <X className="size-3" aria-hidden />
+                      </button>
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => clearColumnFilter(chip.col)}
-                      disabled={isManualFiltersDisabled}
-                      aria-label={`Remove ${chip.col} filter`}
-                      className={`inline-flex size-6 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50 max-md:size-8 ${
-                        chip.pending ? 'hover:bg-muted' : 'hover:bg-primary/15'
+                  )}
+                  {filterChips.map((chip) => (
+                    <span
+                      key={chip.col}
+                      className={`inline-flex h-7 max-w-full items-center rounded-full border pl-3 pr-1 text-[13px] ${
+                        chip.pending
+                          ? 'border-dashed border-[var(--warning)] bg-[hsl(var(--wb-card))] text-foreground'
+                          : 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]'
                       }`}
+                      title={chip.pending ? `${chip.col}: ${chip.label} (not applied yet)` : `${chip.col}: ${chip.label}`}
                     >
-                      <X className="size-3" aria-hidden />
-                    </button>
-                  </span>
-                ))}
-                <button
-                  type="button"
-                  onClick={clearAllFilters}
-                  disabled={isApplying}
-                  className="inline-flex h-6 items-center rounded px-1.5 text-[13px] font-medium text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50 max-md:min-h-11"
-                >
-                  Clear all
-                </button>
-              </div>
-            )}
+                      <span className="truncate">
+                        <span className="font-medium">{chip.col}</span>
+                        <span className="tabular-nums"> {chip.label}</span>
+                        {chip.pending && <span className="sr-only"> (not applied yet)</span>}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => clearColumnFilter(chip.col)}
+                        disabled={isManualFiltersDisabled}
+                        aria-label={`Remove ${chip.col} filter`}
+                        className={`ml-1 ${MINI_ICON_BTN} !size-5 hover:!bg-[hsl(var(--brand-200))]`}
+                      >
+                        <X className="size-3" aria-hidden />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
             {/* The chat-eligibility sentence lives here once. Download and report controls below only
               * carry short state labels, so the same sentence is never repeated. */}
             {chatEligibility?.allowed !== true && chatEligibility?.message && (
-              <p id="variant-eligibility-note" className="mt-2 text-[13px] leading-snug text-muted-foreground">
-                {chatEligibility.message}
+              <p
+                id="variant-eligibility-note"
+                className="mt-3 flex items-start gap-2 rounded-2xl bg-[hsl(var(--brand-50))] px-3.5 py-2.5 text-[12px] leading-snug text-muted-foreground"
+              >
+                <StatusDot tone="info" className="mt-[7px]" />
+                <span>{chatEligibility.message}</span>
               </p>
             )}
-
           </section>
         )}
 
-        {/* Mode: Manual | ACMG | Phenotype, with what it does and whether it is ready */}
-        <section aria-label="Filter mode" className="border-b border-border px-4 py-3">
+        {/* Mode: Manual | ACMG | Phenotype, as a pill segmented control */}
+        <div>
           <div
-            className="flex w-full items-center gap-0.5 rounded-lg bg-[var(--segment-track)] p-0.5"
+            className="flex w-full items-center gap-0.5 rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-pill))] p-0.5"
             role="tablist"
             aria-label="Filter mode"
             aria-orientation="horizontal"
@@ -2584,503 +2794,541 @@ const VariantFilterSidebar = ({
                   tabIndex={selected ? 0 : -1}
                   onClick={() => handleTabSwitch(t.key)}
                   data-state={selected ? 'active' : 'inactive'}
-                  className={`inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md px-2 text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/60 max-md:h-10 ${
-                    selected
-                      ? 'bg-[var(--segment-thumb)] font-medium text-foreground shadow-[var(--shadow-sm)]'
-                      : 'font-medium text-muted-foreground hover:text-foreground'
+                  data-selected={selected ? 'true' : 'false'}
+                  style={{ height: 30 }}
+                  className={`wb-tab wb-tab--slide min-w-0 flex-1 justify-center gap-1.5 px-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.55)] max-md:!h-11 [&_svg]:!text-current ${
+                    selected ? 'font-semibold' : 'font-medium'
                   }`}
                 >
+                  {selected ? (
+                    <motion.span layoutId="filter-mode-pill" className="wb-tab-pill" transition={{ type: 'spring', stiffness: 520, damping: 40 }} />
+                  ) : null}
+                  <span className="relative inline-flex items-center gap-1.5">
                   {t.usePhenotypeAi ? <PhenotypeAiLabel variant="tab" /> : t.label}
-                  {t.locked && <Lock className="size-3 shrink-0 text-muted-foreground" aria-label="Locked" />}
+                  {t.locked && <Lock className="size-3 shrink-0" aria-label="Locked" />}
+                  {t.badge && (
+                    <span className="wb-tab-badge">
+                      {t.badge}
+                      <span className="sr-only"> {t.badgeLabel}</span>
+                    </span>
+                  )}
+                  </span>
                 </button>
               );
             })}
           </div>
           {/* A locked mode explains itself in words, whichever mode is selected. */}
           {phenotypeMissing && filterMode !== 'exomiser' && (
-            <p id="filter-mode-lock-reason" className="mt-2 flex items-start gap-1.5 text-[12px] leading-snug text-muted-foreground">
-              <Lock className="mt-px size-3 shrink-0" aria-hidden />
-              <span>{PHENOTYPE_FILTER_DISPLAY_NAME} is locked. Add a phenotype description in sample info to unlock it.</span>
+            <p id="filter-mode-lock-reason" className="sr-only">
+              {PHENOTYPE_FILTER_DISPLAY_NAME} is locked. Add a phenotype description in sample info to unlock it.
             </p>
           )}
+        </div>
 
-          <div
-            role="tabpanel"
-            id="filter-tabpanel"
-            aria-labelledby={`filter-tab-${filterMode}`}
-            tabIndex={0}
-            className="mt-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-          >
-            <p className="text-[13px] leading-snug text-muted-foreground">{modeBlurb}</p>
-            {!(filterMode === 'manual' && modeStatus.word === 'Ready') && (
-              <p
-                id={filterMode === 'exomiser' && phenotypeMissing ? 'filter-mode-lock-reason' : undefined}
-                className="mt-1.5 flex items-start gap-1.5 text-[13px] leading-snug"
-                role="status"
-              >
-                <StatusDot tone={modeStatus.tone} pulse={modeStatus.pulse} className="mt-[7px]" />
-                <span>
-                  <span className="font-medium text-foreground">{modeStatus.word}</span>
-                  {modeStatus.detail && <span className="text-muted-foreground">{`. ${modeStatus.detail}`}</span>}
-                </span>
-              </p>
-            )}
-            {filterMode === 'exomiser' && phenotypeMissing && onEditSampleInfo && (
-              <Button type="button" variant="outline" size="sm" onClick={onEditSampleInfo} className="mt-2 max-md:h-11">
-                Add a phenotype in sample info
-              </Button>
-            )}
-          </div>
-        </section>
+        <div
+          role="tabpanel"
+          id="filter-tabpanel"
+          aria-labelledby={`filter-tab-${filterMode}`}
+          tabIndex={0}
+          className="space-y-3 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.4)]"
+        >
+          {/* What this mode does and whether it is ready */}
+          {!(filterMode === 'manual' && modeStatus.word === 'Ready') && (
+          <section className="wb-card p-4" aria-label="About this filter mode">
+            <div className="flex items-start justify-between gap-3">
+              <p className="min-w-0 text-[13px] leading-snug text-muted-foreground">{modeBlurb}</p>
+              <StatusPill tone={modeStatus.tone}>{modeStatus.word}</StatusPill>
+            </div>
 
-        {/* ---- Manual ---- */}
-        {filterMode === 'manual' && allColumns.length > 0 && (
-          <div>
-            {/* Saved filters (the old "Filter Garden"): reusable sets of manual filters */}
-            {!isGuest && (
-              <div className="border-b border-border">
-                <button
-                  type="button"
-                  aria-expanded={isGardenExpanded}
-                  aria-controls="filter-saved-panel"
-                  onClick={() => {
-                    const next = !isGardenExpanded;
-                    setIsGardenExpanded(next);
-                    if (!next) {
-                      setIsGardenSaveFormOpen(false);
-                      setIsEditingGardenEntry(false);
-                      setGardenApplyMissingColumns([]);
-                    }
-                  }}
-                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-[13px] outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60 max-md:min-h-11"
+            {/* Manual: nothing to add while ready. Phenotype locked: the notice below carries the reason. */}
+            {!(filterMode === 'manual' && modeStatus.word === 'Ready') &&
+              !(filterMode === 'exomiser' && (phenotypeMissing || (!exoRunning && !exoFailed && !exoIsActive && !exoCanRun && exoReasons.length > 0))) &&
+              !(filterMode === 'exomiser' && exoFailed && exoFailureDetail) &&
+              !(filterMode === 'acmg' && modeStatus.word === 'Needs annotation') && (
+                <p
+                  id={filterMode === 'exomiser' && phenotypeMissing ? 'filter-mode-lock-reason' : undefined}
+                  className="mt-2 text-[13px] leading-snug text-foreground"
+                  role="status"
                 >
-                  <ChevronRight className={`size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${isGardenExpanded ? 'rotate-90' : ''}`} aria-hidden />
-                  <span className="font-medium">Saved filters</span>
-                  <span className="text-[12px] tabular-nums text-muted-foreground">{savedFilterPresets.length}</span>
-                  {selectedPreset && (
-                    <span className="ml-auto inline-flex h-5 max-w-[10rem] items-center gap-1 truncate rounded-full bg-primary/10 px-2 text-[12px] font-medium text-primary">
-                      <Check className="size-3 shrink-0" aria-hidden />
-                      <span className="truncate">{selectedPreset.name}</span>
-                    </span>
+                  {modeStatus.detail}
+                </p>
+              )}
+
+            {/* ACMG: needs annotation, with the single next action inline */}
+            {filterMode === 'acmg' && modeStatus.word === 'Needs annotation' && (
+              <div className="mt-3">
+                <InlineNotice
+                  tone="warning"
+                  title="This file needs annotation first"
+                  action={runAnnotationButton}
+                  role="status"
+                >
+                  {annovarQuotaBlocked ? (
+                    <span className="text-[var(--error)]">{annovarGate.reason}</span>
+                  ) : (
+                    <>Run annotation, then come back to apply the ACMG filter.{annovarMeterLabel ? ` ${annovarMeterLabel}.` : ''}</>
                   )}
-                </button>
-                {isGardenExpanded && (
-                  <div id="filter-saved-panel" className="space-y-2 px-4 pb-3">
-                    <p className="text-[12px] leading-snug text-muted-foreground">
-                      Save the manual filters you have set and apply them to any variant file later.
-                    </p>
-                    {presetsLoading && savedFilterPresets.length === 0 ? (
-                      <div className="space-y-1" role="status" aria-busy="true" aria-label="Loading saved filters">
-                        <Skeleton className="h-10 w-full" />
-                        <Skeleton className="h-10 w-full" />
-                      </div>
-                    ) : presetsError && savedFilterPresets.length === 0 ? (
-                      <p role="alert" className="flex flex-wrap items-center gap-x-2 rounded-md bg-[var(--error-soft)] px-3 py-2 text-[13px] text-foreground">
-                        <span>Saved filters did not load.</span>
-                        <button
-                          type="button"
-                          onClick={loadSavedFilterPresets}
-                          className="rounded font-medium underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-                        >
-                          Retry
-                        </button>
-                      </p>
-                    ) : savedFilterPresets.length === 0 ? (
-                      <p className="rounded-md bg-muted px-3 py-3 text-center text-[13px] text-muted-foreground">
-                        Nothing saved yet. Set a filter, then save it here.
-                      </p>
-                    ) : (
-                      <ul className="divide-y divide-border rounded-md border border-border">
-                        {savedFilterPresets.map((preset) => {
-                          const isActive = appliedPresetId === preset.id;
-                          const isEditing = isEditingGardenEntry && selectedPresetId === preset.id;
-                          const colCount = (preset.required_columns || []).length;
+                </InlineNotice>
+              </div>
+            )}
+            {filterMode === 'acmg' && modeStatus.word === 'Blocked' && (
+              <div className="mt-3">
+                <InlineNotice
+                  tone="warning"
+                  title="Manual filters are active"
+                  action={
+                    <Button type="button" variant="outline" size="sm" onClick={resetFilters} disabled={isApplying} className={pillBtn}>
+                      <RotateCcw aria-hidden />
+                      Reset manual filters
+                    </Button>
+                  }
+                >
+                  The ACMG filter and manual filters cannot run together.
+                </InlineNotice>
+              </div>
+            )}
+            {filterMode === 'acmg' && proprietaryFilterPreviews?.filter_1?.preview_pending && activeProprietaryFilter !== 'filter_1' && (
+              <p className="mt-2 text-[12px] text-muted-foreground">The match count appears after you apply.</p>
+            )}
+
+            {/* Phenotype */}
+            {filterMode === 'exomiser' && phenotypeMissing && (
+              <div className="mt-3">
+                <InlineNotice
+                  tone="warning"
+                  title="Add a phenotype description to unlock this"
+                  action={
+                    onEditSampleInfo ? (
+                      <Button type="button" variant="outline" size="sm" onClick={onEditSampleInfo} className={pillBtn}>
+                        <PencilLine aria-hidden />
+                        Add a phenotype in sample info
+                      </Button>
+                    ) : null
+                  }
+                >
+                  Everything else on this page works without one.
+                </InlineNotice>
+              </div>
+            )}
+            {filterMode === 'exomiser' && !phenotypeMissing && (
+              <div className="space-y-3 empty:hidden">
+                {exoRunning && (
+                  <div className="mt-3 grid min-h-[40px] rounded-2xl bg-[var(--info-soft)] px-3.5 py-2.5">
+                    <AnimatePresence initial={false}>
+                      <motion.p
+                        key={exoRunningMessage}
+                        className="col-start-1 row-start-1 text-[13px] font-medium text-foreground"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: reduceMotion ? 0 : 0.15, ease: 'easeOut' }}
+                      >
+                        {`${exoRunningMessage.replace(/[.…\s]+$/, '')}…`}
+                      </motion.p>
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                {exoFailed && exoFailureDetail && (
+                  <div className="mt-3">
+                    <InlineNotice tone="error" title={PHENOTYPE_FAILED_TITLE} role="alert">
+                      {exoFailureDetail}
+                    </InlineNotice>
+                  </div>
+                )}
+
+                {!exoRunning && !exoFailed && !exoIsActive && isFetchingExomiserEligibility && !exomiserEligibility && (
+                  <div className="mt-3 space-y-2" role="status" aria-busy="true" aria-label="Checking eligibility">
+                    <Skeleton className="h-4 w-2/3 rounded-full" />
+                    <Skeleton className="h-4 w-1/2 rounded-full" />
+                  </div>
+                )}
+
+                {!exoRunning && !exoFailed && !exoIsActive && !exoCanRun && exoReasons.length > 0 && (
+                  <div className="mt-3">
+                    <InlineNotice tone="warning" title="Cannot run phenotype prioritization yet">
+                      <ul className="space-y-3">
+                        {exoReasons.map((r) => {
+                          const act = reasonAction(r);
                           return (
-                            <li key={preset.id} className={isActive ? 'bg-primary/5' : undefined}>
-                              {isEditing ? (
-                                <div className="space-y-2 p-3">
-                                  <input
-                                    type="text"
-                                    value={gardenNameInput}
-                                    onChange={(e) => setGardenNameInput(e.target.value)}
-                                    autoFocus
-                                    maxLength={80}
-                                    aria-label="Saved filter name"
-                                    className={FIELD_CLASS}
-                                  />
-                                  <textarea
-                                    value={gardenNotesInput}
-                                    onChange={(e) => setGardenNotesInput(e.target.value)}
-                                    rows={2}
-                                    maxLength={500}
-                                    placeholder="Notes"
-                                    aria-label="Notes"
-                                    className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
-                                  />
-                                  <div className="flex gap-2">
-                                    <Button type="button" size="sm" onClick={handleUpdateSelectedGarden} className="max-md:h-11">Save</Button>
-                                    <Button type="button" size="sm" variant="outline" onClick={() => setIsEditingGardenEntry(false)} className="max-md:h-11">Cancel</Button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2 py-2 pl-3 pr-1.5">
-                                  <div className="min-w-0 flex-1">
-                                    <p className="truncate text-[13px] font-medium">{preset.name}</p>
-                                    {preset.notes && <p className="truncate text-[12px] text-muted-foreground">{preset.notes}</p>}
-                                    <p className="text-[12px] text-muted-foreground tabular-nums">
-                                      {colCount} column{colCount === 1 ? '' : 's'}
-                                      {preset.metadata?.genome_build ? ` · ${preset.metadata.genome_build}` : ''}
-                                    </p>
-                                  </div>
-                                  {isActive ? (
-                                    <Button type="button" size="sm" variant="ghost" onClick={resetFilters} disabled={isApplying} className="max-md:h-11" title="Deactivate this saved filter and clear its filters">
-                                      <X aria-hidden /> Deactivate
-                                    </Button>
-                                  ) : (
-                                    <Button type="button" size="sm" variant="outline" onClick={() => handleApplySelectedGarden(preset.id)} disabled={isApplyingPreset || isManualFiltersDisabled} className="max-md:h-11">
-                                      {isApplyingPreset && selectedPresetId === preset.id ? 'Applying…' : 'Apply'}
-                                    </Button>
-                                  )}
-                                  <Button
-                                    type="button"
-                                    size="icon-sm"
-                                    variant="ghost"
-                                    aria-label={`Edit ${preset.name}`}
-                                    className="max-md:size-11"
-                                    onClick={() => {
-                                      setSelectedPresetId(preset.id);
-                                      setIsEditingGardenEntry(true);
-                                      setGardenNameInput(preset.name || '');
-                                      setGardenNotesInput(preset.notes || '');
-                                    }}
-                                  >
-                                    <PencilLine aria-hidden />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="icon-sm"
-                                    variant="ghost"
-                                    aria-label={`Delete ${preset.name}`}
-                                    className="max-md:size-11 hover:text-[var(--error)]"
-                                    onClick={() => handleDeleteSelectedGarden(preset.id)}
-                                  >
-                                    <Trash2 aria-hidden />
-                                  </Button>
-                                </div>
-                              )}
-                              {selectedPresetId === preset.id && gardenApplyMissingColumns.length > 0 && (
-                                <div className="px-3 pb-3">
-                                  <InlineNotice
-                                    tone="warning"
-                                    title={`Missing columns: ${gardenApplyMissingColumns.join(', ')}`}
-                                    action={
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={handleRunAnnovarFromGarden}
-                                        disabled={isRunningAnnovar || annovarQuotaBlocked}
-                                        className="max-md:h-11"
-                                      >
-                                        <Tags aria-hidden />
-                                        {isRunningAnnovar ? 'Running annotation…' : 'Run annotation'}
-                                      </Button>
-                                    }
-                                  >
-                                    {annovarQuotaBlocked
-                                      ? <span className="text-[var(--error)]">{annovarGate.reason}</span>
-                                      : annovarMeterLabel || 'This file has not been annotated with these columns yet.'}
-                                  </InlineNotice>
-                                </div>
-                              )}
+                            <li key={r} className="flex flex-col items-start gap-1.5">
+                              <span>{PHENOTYPE_REASON_LABELS[r] || r}</span>
+                              {act}
                             </li>
                           );
                         })}
                       </ul>
-                    )}
-
-                    {!isGardenSaveFormOpen ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setIsGardenSaveFormOpen(true);
-                          setGardenNameInput('');
-                          setGardenNotesInput('');
-                        }}
-                        disabled={!canSavePreset || isManualFiltersDisabled}
-                        className="w-full max-md:h-11"
-                      >
-                        <Plus aria-hidden />
-                        Save current filters
-                      </Button>
-                    ) : (
-                      <div className="space-y-2 rounded-md border border-border p-3">
-                        <label className="block">
-                          <span className="mb-1 block text-[12px] text-muted-foreground">Name</span>
-                          <input
-                            type="text"
-                            value={gardenNameInput}
-                            onChange={(e) => setGardenNameInput(e.target.value)}
-                            placeholder="For example, Rare and damaging"
-                            autoFocus
-                            maxLength={80}
-                            className={FIELD_CLASS}
-                          />
-                        </label>
-                        <label className="block">
-                          <span className="mb-1 block text-[12px] text-muted-foreground">Notes (optional)</span>
-                          <textarea
-                            value={gardenNotesInput}
-                            onChange={(e) => setGardenNotesInput(e.target.value)}
-                            rows={2}
-                            maxLength={500}
-                            className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-[13px] text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
-                          />
-                        </label>
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={async () => {
-                              await handleSaveCurrentToGarden();
-                              setIsGardenSaveFormOpen(false);
-                            }}
-                            disabled={isSavingPreset || !gardenNameInput.trim()}
-                            className="max-md:h-11"
-                          >
-                            {isSavingPreset ? 'Saving…' : 'Save'}
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" onClick={() => setIsGardenSaveFormOpen(false)} className="max-md:h-11">
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    )}
+                    </InlineNotice>
                   </div>
                 )}
               </div>
             )}
+          </section>
+          )}
 
-            {/* Column search */}
-            <div className="px-4 py-3">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                <input
-                  type="text"
-                  value={columnSearchQuery}
-                  onChange={(e) => setColumnSearchQuery(e.target.value)}
-                  placeholder={`Search ${allColumns.length.toLocaleString()} columns`}
-                  aria-label="Search columns"
-                  className={`${FIELD_CLASS} pl-8 pr-8`}
-                />
-                {columnSearchQuery && (
+          {/* ---- Manual ---- */}
+          {filterMode === 'manual' && allColumns.length > 0 && (
+            <>
+              {/* Saved filters (the old "Filter Garden"): reusable sets of manual filters */}
+              {!isGuest && (
+                <section className="wb-card overflow-hidden" aria-label="Saved filters">
                   <button
                     type="button"
-                    onClick={() => setColumnSearchQuery('')}
-                    aria-label="Clear column search"
-                    className="absolute right-1 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 max-md:size-10"
+                    aria-expanded={isGardenExpanded}
+                    aria-controls="filter-saved-panel"
+                    onClick={() => {
+                      const next = !isGardenExpanded;
+                      setIsGardenExpanded(next);
+                      if (!next) {
+                        setIsGardenSaveFormOpen(false);
+                        setIsEditingGardenEntry(false);
+                        setGardenApplyMissingColumns([]);
+                      }
+                    }}
+                    className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-[13px] outline-none transition-colors hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
                   >
-                    <X className="size-3.5" aria-hidden />
+                    <ChevronRight className={`size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${isGardenExpanded ? 'rotate-90' : ''}`} aria-hidden />
+                    <span className="font-medium">Saved filters</span>
+                    <span className="wb-tab-badge text-muted-foreground">{savedFilterPresets.length}</span>
+                    {selectedPreset && (
+                      <span className="wb-chip ml-auto max-w-[10rem]" data-tone="brand">
+                        <Check className="size-3 shrink-0" aria-hidden />
+                        <span className="truncate">{selectedPreset.name}</span>
+                      </span>
+                    )}
                   </button>
-                )}
-              </div>
-            </div>
+                  {isGardenExpanded && (
+                    <div id="filter-saved-panel" className="space-y-2.5 border-t border-[hsl(var(--wb-line))] p-3">
+                      <p className="px-1 text-[12px] leading-snug text-muted-foreground">
+                        Save the manual filters you have set and apply them to any variant file later.
+                      </p>
+                      {presetsLoading && savedFilterPresets.length === 0 ? (
+                        <div className="space-y-1.5" role="status" aria-busy="true" aria-label="Loading saved filters">
+                          <Skeleton className="h-12 w-full rounded-2xl" />
+                          <Skeleton className="h-12 w-full rounded-2xl" />
+                        </div>
+                      ) : presetsError && savedFilterPresets.length === 0 ? (
+                        <p role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl bg-[var(--error-soft)] px-3.5 py-2.5 text-[13px] text-foreground">
+                          <span>Saved filters did not load.</span>
+                          <Button type="button" variant="outline" size="sm" onClick={loadSavedFilterPresets} className="h-7 text-[12px]">
+                            Retry
+                          </Button>
+                        </p>
+                      ) : savedFilterPresets.length === 0 ? (
+                        <p className="rounded-2xl bg-[hsl(var(--wb-pill))] px-3.5 py-3 text-center text-[13px] text-muted-foreground">
+                          Nothing saved yet. Set a filter, then save it here.
+                        </p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {savedFilterPresets.map((preset) => {
+                            const isActive = appliedPresetId === preset.id;
+                            const isEditing = isEditingGardenEntry && selectedPresetId === preset.id;
+                            const colCount = (preset.required_columns || []).length;
+                            return (
+                              <li
+                                key={preset.id}
+                                className={`rounded-2xl border ${
+                                  isActive
+                                    ? 'border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-50))]'
+                                    : 'border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))]'
+                                }`}
+                              >
+                                {isEditing ? (
+                                  <div className="space-y-2 p-3">
+                                    <input
+                                      type="text"
+                                      value={gardenNameInput}
+                                      onChange={(e) => setGardenNameInput(e.target.value)}
+                                      autoFocus
+                                      maxLength={80}
+                                      aria-label="Saved filter name"
+                                      className={FIELD_CLASS}
+                                    />
+                                    <textarea
+                                      value={gardenNotesInput}
+                                      onChange={(e) => setGardenNotesInput(e.target.value)}
+                                      rows={2}
+                                      maxLength={500}
+                                      placeholder="Notes"
+                                      aria-label="Notes"
+                                      className={TEXTAREA_CLASS}
+                                    />
+                                    <div className="flex gap-2">
+                                      <Button type="button" size="sm" onClick={handleUpdateSelectedGarden} className="max-md:h-11">Save</Button>
+                                      <Button type="button" size="sm" variant="outline" onClick={() => setIsEditingGardenEntry(false)} className="max-md:h-11">Cancel</Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2 py-2 pl-3.5 pr-2">
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-[13px] font-medium">{preset.name}</p>
+                                      {preset.notes && <p className="truncate text-[12px] text-muted-foreground">{preset.notes}</p>}
+                                      <p className="text-[12px] text-muted-foreground tabular-nums">
+                                        {colCount} column{colCount === 1 ? '' : 's'}
+                                        {preset.metadata?.genome_build ? ` · ${preset.metadata.genome_build}` : ''}
+                                      </p>
+                                    </div>
+                                    {isActive ? (
+                                      <Button type="button" size="sm" variant="outline" onClick={resetFilters} disabled={isApplying} className="max-md:h-11" title="Deactivate this saved filter and clear its filters">
+                                        <X aria-hidden /> Deactivate
+                                      </Button>
+                                    ) : (
+                                      <Button type="button" size="sm" variant="outline" onClick={() => handleApplySelectedGarden(preset.id)} disabled={isApplyingPreset || isManualFiltersDisabled} className="max-md:h-11">
+                                        {isApplyingPreset && selectedPresetId === preset.id ? 'Applying…' : 'Apply'}
+                                      </Button>
+                                    )}
+                                    <Button
+                                      type="button"
+                                      size="icon-sm"
+                                      variant="ghost"
+                                      aria-label={`Edit ${preset.name}`}
+                                      className="max-md:size-11"
+                                      onClick={() => {
+                                        setSelectedPresetId(preset.id);
+                                        setIsEditingGardenEntry(true);
+                                        setGardenNameInput(preset.name || '');
+                                        setGardenNotesInput(preset.notes || '');
+                                      }}
+                                    >
+                                      <PencilLine aria-hidden />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="icon-sm"
+                                      variant="ghost"
+                                      aria-label={`Delete ${preset.name}`}
+                                      className="max-md:size-11 hover:text-[var(--error)]"
+                                      onClick={() => handleDeleteSelectedGarden(preset.id)}
+                                    >
+                                      <Trash2 aria-hidden />
+                                    </Button>
+                                  </div>
+                                )}
+                                {selectedPresetId === preset.id && gardenApplyMissingColumns.length > 0 && (
+                                  <div className="px-3 pb-3">
+                                    <InlineNotice
+                                      tone="warning"
+                                      title={`Missing columns: ${gardenApplyMissingColumns.join(', ')}`}
+                                      action={
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={handleRunAnnovarFromGarden}
+                                          disabled={isRunningAnnovar || annovarQuotaBlocked}
+                                          className="max-md:h-11"
+                                        >
+                                          <Tags aria-hidden />
+                                          {isRunningAnnovar ? 'Running annotation…' : 'Run annotation'}
+                                        </Button>
+                                      }
+                                    >
+                                      {annovarQuotaBlocked
+                                        ? <span className="text-[var(--error)]">{annovarGate.reason}</span>
+                                        : annovarMeterLabel || 'This file has not been annotated with these columns yet.'}
+                                    </InlineNotice>
+                                  </div>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
 
-            {/* Columns: search results, or collapsible groups */}
-            <div className="border-t border-border">
+                      {!isGardenSaveFormOpen ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setIsGardenSaveFormOpen(true);
+                            setGardenNameInput('');
+                            setGardenNotesInput('');
+                          }}
+                          disabled={!canSavePreset || isManualFiltersDisabled}
+                          className="w-full max-md:h-11"
+                        >
+                          <Plus aria-hidden />
+                          Save current filters
+                        </Button>
+                      ) : (
+                        <div className="space-y-2.5 rounded-2xl border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-50))] p-3">
+                          <label className="block">
+                            <span className="mb-1 block pl-1 text-[12px] font-medium text-muted-foreground">Name</span>
+                            <input
+                              type="text"
+                              value={gardenNameInput}
+                              onChange={(e) => setGardenNameInput(e.target.value)}
+                              placeholder="For example, Rare and damaging"
+                              autoFocus
+                              maxLength={80}
+                              className={FIELD_CLASS}
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="mb-1 block pl-1 text-[12px] font-medium text-muted-foreground">Notes (optional)</span>
+                            <textarea
+                              value={gardenNotesInput}
+                              onChange={(e) => setGardenNotesInput(e.target.value)}
+                              rows={2}
+                              maxLength={500}
+                              className={TEXTAREA_CLASS}
+                            />
+                          </label>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={async () => {
+                                await handleSaveCurrentToGarden();
+                                setIsGardenSaveFormOpen(false);
+                              }}
+                              disabled={isSavingPreset || !gardenNameInput.trim()}
+                              className="max-md:h-11"
+                            >
+                              {isSavingPreset ? 'Saving…' : 'Save'}
+                            </Button>
+                            <Button type="button" size="sm" variant="outline" onClick={() => setIsGardenSaveFormOpen(false)} className="max-md:h-11">
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {/* Column search */}
+              <div>
+                <CardHeader title="Columns" count={allColumns.length.toLocaleString()}>
+                  <span className="text-[12px] text-muted-foreground">{modeBlurb}</span>
+                </CardHeader>
+                <div className="relative mt-1.5">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                  <input
+                    type="text"
+                    value={columnSearchQuery}
+                    onChange={(e) => setColumnSearchQuery(e.target.value)}
+                    placeholder={`Search ${allColumns.length.toLocaleString()} columns`}
+                    aria-label="Search columns"
+                    spellCheck={false}
+                    autoComplete="off"
+                    className={`${FIELD_CLASS} pl-9 pr-9`}
+                  />
+                  {columnSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setColumnSearchQuery('')}
+                      aria-label="Clear column search"
+                      className={`absolute right-1.5 top-1/2 -translate-y-1/2 ${MINI_ICON_BTN}`}
+                    >
+                      <X className="size-3.5" aria-hidden />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Columns: search results, or collapsible groups (one card per group) */}
               {searchMatches ? (
                 searchMatches.length === 0 ? (
-                  <p className="px-4 py-6 text-center text-[13px] text-muted-foreground">
-                    No columns match &ldquo;{columnSearchQuery}&rdquo;.
-                  </p>
-                ) : (
-                  <div className="divide-y divide-border">
-                    {searchMatches.map((c) => renderColumnRow(c, { showGroup: true }))}
+                  <div className="wb-card px-4 py-8 text-center">
+                    <p className="text-[13px] font-medium text-foreground">No columns match &ldquo;{columnSearchQuery}&rdquo;</p>
+                    <p className="mt-1 text-[13px] text-muted-foreground">Check the spelling or search for part of the name.</p>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setColumnSearchQuery('')} className="mt-3 max-md:h-11">
+                      Clear search
+                    </Button>
                   </div>
+                ) : (
+                  <section className="wb-card p-1.5" aria-label="Matching columns">
+                    <div className="space-y-0.5">
+                      {searchMatches.map((c) => renderColumnRow(c, { showGroup: true }))}
+                    </div>
+                  </section>
                 )
               ) : (
-                <div className="divide-y divide-border">
-                  {columnGroups.map(([groupName, cols], groupIndex) => {
-                    const isGroupOpen = expandedGroups[groupName] ?? (groupIndex === 0 || columnGroups.length === 1);
-                    const activeInGroup = cols.reduce((acc, c) => acc + (pendingFilterPayload[c] ? 1 : 0), 0);
-                    return (
-                      <div key={groupName}>
-                        <button
-                          type="button"
-                          aria-expanded={isGroupOpen}
-                          aria-controls={`filter-group-${groupIndex}`}
-                          onClick={() => setExpandedGroups((prev) => ({ ...prev, [groupName]: !isGroupOpen }))}
-                          className="flex w-full items-center gap-2 px-4 py-2 text-left text-[13px] outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60 max-md:min-h-11"
-                        >
-                          <ChevronRight className={`size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${isGroupOpen ? 'rotate-90' : ''}`} aria-hidden />
-                          <span className="min-w-0 truncate font-medium">{groupName}</span>
-                          <span className="text-[12px] tabular-nums text-muted-foreground">{cols.length}</span>
-                          {activeInGroup > 0 && (
-                            <span className="ml-auto inline-flex h-5 shrink-0 items-center rounded-full bg-primary/10 px-2 text-[12px] font-medium tabular-nums text-primary">
-                              {activeInGroup} active
-                            </span>
-                          )}
-                        </button>
-                        {isGroupOpen && (
-                          <div id={`filter-group-${groupIndex}`} className="divide-y divide-border/60 pb-1">{cols.map((c) => renderColumnRow(c))}</div>
+                columnGroups.map(([groupName, cols], groupIndex) => {
+                  const isGroupOpen = expandedGroups[groupName] ?? (groupIndex === 0 || columnGroups.length === 1);
+                  const activeInGroup = cols.reduce((acc, c) => acc + (pendingFilterPayload[c] ? 1 : 0), 0);
+                  return (
+                    <section key={groupName} className="wb-card overflow-hidden" aria-label={groupName}>
+                      <button
+                        type="button"
+                        aria-expanded={isGroupOpen}
+                        aria-controls={`filter-group-${groupIndex}`}
+                        onClick={() => setExpandedGroups((prev) => ({ ...prev, [groupName]: !isGroupOpen }))}
+                        className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-[13px] outline-none transition-colors hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
+                      >
+                        <ChevronRight className={`size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${isGroupOpen ? 'rotate-90' : ''}`} aria-hidden />
+                        <span className="min-w-0 truncate font-medium">{groupName}</span>
+                        <span className="wb-tab-badge text-muted-foreground">{cols.length}</span>
+                        {activeInGroup > 0 && (
+                          <span className="wb-chip ml-auto tabular-nums" data-tone="brand">
+                            {activeInGroup} active
+                          </span>
                         )}
-                      </div>
-                    );
-                  })}
-                </div>
+                      </button>
+                      {isGroupOpen && (
+                        <div id={`filter-group-${groupIndex}`} className="space-y-0.5 border-t border-[hsl(var(--wb-line))] p-1.5">
+                          {cols.map((c) => renderColumnRow(c))}
+                        </div>
+                      )}
+                    </section>
+                  );
+                })
               )}
-            </div>
-          </div>
-        )}
-
-        {/* ---- ACMG ---- */}
-        {filterMode === 'acmg' && (
-          <div className="space-y-2 px-4 py-4">
-            {proprietaryFilterPreviews?.filter_1?.preview_pending && activeProprietaryFilter !== 'filter_1' && (
-              <p className="text-[13px] text-muted-foreground">The match count appears after you apply.</p>
-            )}
-            {activeProprietaryFilter === 'filter_1' ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => handleApplyProprietaryFilter('filter_1')}
-                disabled={isApplyingProprietaryFilter}
-                className={`${proprietaryBtnBase} text-destructive hover:text-destructive`}
-              >
-                {isApplyingProprietaryFilter ? 'Removing…' : 'Remove ACMG filter'}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                onClick={() => handleApplyProprietaryFilter('filter_1')}
-                disabled={!acmgFilterCanApply || isApplyingProprietaryFilter}
-                className={proprietaryBtnBase}
-              >
-                {isApplyingProprietaryFilter ? 'Applying…' : 'Apply ACMG filter'}
-              </Button>
-            )}
-          </div>
-        )}
-
-        {/* ---- Phenotype ---- */}
-        {filterMode === 'exomiser' && !phenotypeMissing && (
-          <div className="space-y-3 px-4 py-4">
-            {exoRunning && (
-              <div className="grid min-h-[36px] rounded-md bg-muted px-3 py-2">
-                <AnimatePresence initial={false}>
-                  <motion.p
-                    key={exoRunningMessage}
-                    className="col-start-1 row-start-1 text-[13px] font-medium text-foreground"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: reduceMotion ? 0 : 0.15, ease: 'easeOut' }}
-                  >
-                    {`${exoRunningMessage.replace(/[.…\s]+$/, '')}…`}
-                  </motion.p>
-                </AnimatePresence>
-              </div>
-            )}
-
-            {exoFailed && exoFailureDetail && (
-              <InlineNotice tone="error" title={PHENOTYPE_FAILED_TITLE} role="alert">
-                {exoFailureDetail}
-              </InlineNotice>
-            )}
-
-            {!exoRunning && !exoFailed && !exoIsActive && !exoCanRun && exoReasons.length > 0 && (
-              <InlineNotice tone="warning" title="Cannot run phenotype prioritization yet">
-                <ul className="list-disc space-y-0.5 pl-4">
-                  {exoReasons.map((r) => (
-                    <li key={r}>{PHENOTYPE_REASON_LABELS[r] || r}</li>
-                  ))}
-                </ul>
-              </InlineNotice>
-            )}
-
-            {exoIsActive ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => handleApplyProprietaryFilter('filter_3')}
-                disabled={isApplyingProprietaryFilter}
-                className={`${proprietaryBtnBase} text-destructive hover:text-destructive`}
-              >
-                {isApplyingProprietaryFilter ? 'Removing…' : `Remove ${PHENOTYPE_FILTER_DISPLAY_NAME}`}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                onClick={() => runExomiser && runExomiser()}
-                disabled={!exoCanRun || exoRunning || !runExomiser || acmgQuotaBlocked}
-                className={proprietaryBtnBase}
-              >
-                {exoRunning ? (
-                  'Running…'
-                ) : exoFailed ? (
-                  <>Retry <PhenotypeAiLabel variant="inline" /></>
-                ) : (
-                  <>Run <PhenotypeAiLabel variant="inline" /></>
-                )}
-              </Button>
-            )}
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* ---------------- Sticky footer ---------------- */}
-      {/* One primary action (Apply). Clear all is an outline button; Download and Review are quiet
-        * secondary controls. The scroll area above is a sibling, so this bar never overlaps a
-        * focused control. */}
-      <div className="shrink-0 space-y-2 border-t border-border bg-background px-4 py-2.5">
-        {filterMode === 'manual' && (
-          <p id="filter-apply-status" role="status" className="flex items-center gap-1.5 text-[12px] leading-snug text-muted-foreground">
-            {isManualFiltersDisabled ? (
-              <><StatusDot tone="warning" />Apply is off while a pipeline job runs.</>
-            ) : hasUnappliedFilterChanges ? (
-              <><StatusDot tone="warning" /><span className="tabular-nums">{unappliedCount > 0 ? `${unappliedCount} unapplied change${unappliedCount === 1 ? '' : 's'}` : 'Unapplied changes'}. Press Apply to update the variants.</span></>
-            ) : hasAppliedManualFilters ? (
-              <><StatusDot tone="success" />Filters applied. Change a filter to enable Apply.</>
-            ) : (
-              <><StatusDot tone="muted" />Choose a column filter to enable Apply.</>
-            )}
+      {/* The live count, then the one primary action for the selected mode (Apply for Manual) beside
+        * Reset. Download and the report are quiet outline pills. The scroll area above is a sibling,
+        * so this bar never overlaps a focused control. */}
+      <div className="shrink-0 space-y-2 border-t border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] px-4 pb-3 pt-2.5">
+        <div id="filter-apply-status" role="status" className="space-y-0.5">
+          {fileTotalVariants > 0 && (
+            <p className="flex items-baseline justify-between gap-2 tabular-nums">
+              <span>
+                <span className="text-[15px] font-semibold text-foreground"><CountUp value={underConsiderationCount} /></span>
+                <span className="text-[13px] text-muted-foreground"> of {displayTotalVariants.toLocaleString()} variants in scope</span>
+              </span>
+              {filteredOutCount > 0 && (
+                <span className="text-[12px] text-muted-foreground">{filteredOutCount.toLocaleString()} filtered out</span>
+              )}
+            </p>
+          )}
+          {/* Idle and success states are spoken to assistive tech but not repeated visually: the count
+            * above already shows the result. Anything that needs attention is written out. */}
+          <p className={footerQuiet ? 'sr-only' : 'flex items-start gap-1.5 text-[12px] leading-snug text-muted-foreground'}>
+            {!footerQuiet && <StatusDot tone={footerStatus.tone} pulse={footerStatus.pulse} className="mt-[5px]" />}
+            <span>{footerStatus.text}</span>
           </p>
-        )}
+        </div>
 
         <div className="flex gap-2">
-          {filterMode === 'manual' && (
-            <Button
-              type="button"
-              onClick={applyFilters}
-              disabled={isApplying || isManualFiltersDisabled || !hasUnappliedFilterChanges}
-              aria-describedby="filter-apply-status"
-              className="h-8 flex-1 max-md:h-11"
-            >
-              {isApplying ? 'Applying…' : 'Apply'}
-            </Button>
-          )}
+          {renderPrimaryAction()}
           <Button
             type="button"
             variant="outline"
             onClick={resetFilters}
             disabled={isApplying}
-            aria-label="Clear all filters"
+            aria-label="Reset all filters"
             title={
               isGuest
-                ? 'Clear all filters and restore all preview variants for chat'
-                : 'Clear all active filters (manual and proprietary) and restore all variants'
+                ? 'Reset all filters and restore all preview variants for chat'
+                : 'Reset all active filters (manual and proprietary) and restore all variants'
             }
-            className={`h-8 max-md:h-11 ${filterMode === 'manual' ? '' : 'flex-1'}`}
+            className="h-9 max-md:h-11"
           >
             <RotateCcw aria-hidden />
-            Clear all
+            Reset
           </Button>
         </div>
 
         {!isGuest && variantData && (
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] items-start gap-x-2 gap-y-1 border-t border-border pt-2">
+          <div className="grid grid-cols-2 items-start gap-2">
             <ExportVariantsButton
               conversationId={conversationId}
               variantData={variantData}

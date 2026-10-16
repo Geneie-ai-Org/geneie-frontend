@@ -1732,6 +1732,7 @@ const ChatPage = () => {
         uploadInProgress: variantUploadInProgress,
         uploadProgress,
         categoricalColumns: variantData?.categorical_columns,
+        contigCounts: variantData?.contig_counts,
         sampleOnly: variantData?.sample_only_ingest,
       })
     : null;
@@ -2340,7 +2341,7 @@ const ChatPage = () => {
               icon: LayoutList,
               closable: false,
               subtitle: currentDocument?.name ?? currentDocument?.file_name ?? 'No file yet',
-              content: <SummaryTab summary={summary} jumps={summaryJumps} />,
+              content: <SummaryTab summary={summary} jumps={summaryJumps} conversationId={activeConversationId} />,
             },
             {
               id: 'variants',

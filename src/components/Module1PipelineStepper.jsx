@@ -248,6 +248,13 @@ const Module1PipelineStepper = ({
         const st = nodeStatus(group.id, activeGroupId, failed, groupOrder, finishedOk);
         // The "Queued" stage while the job is queued is where it is waiting, not a run in progress.
         const step = { id: group.id, label: group.label, status: st === 'running' && queued ? 'queued' : st };
+        // How long the stage took, when the service recorded it (sum over the group's phases; open stages show none).
+        if (st === 'done') {
+          const secs = (job.stageTimings || [])
+            .filter((t) => group.phases.includes(t.phase) && Number.isFinite(Number(t.duration_seconds)))
+            .reduce((a, t) => a + Number(t.duration_seconds), 0);
+          if (secs > 0) step.time = formatJobDuration(secs * 1000);
+        }
         // The stage that broke says why and carries the way forward, so the detail is one tap from the banner.
         if (st === 'failed' && failed && typeof onStartOver === 'function') {
           step.reason = statusText;
@@ -272,6 +279,9 @@ const Module1PipelineStepper = ({
     ['duration', formatJobDuration(job.durationSeconds != null ? Number(job.durationSeconds) * 1000 : null)],
     ['failure.code', job.failure?.code],
     ['failure', failed ? getModule1FailureMessage(job) : null],
+    ...(job.stageTimings || [])
+      .filter((t) => t && t.phase && Number.isFinite(Number(t.duration_seconds)))
+      .map((t) => [`stage.${t.phase}`, formatJobDuration(Number(t.duration_seconds) * 1000)]),
   ];
   const showControls = showQueuePanel || showRunPanel;
 

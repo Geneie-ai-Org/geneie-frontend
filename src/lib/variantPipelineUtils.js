@@ -16,6 +16,7 @@ export function buildVariantDataFromConversation(convData, vm) {
   return {
     parameter_ranges: vm.parameter_ranges || {},
     categorical_columns: vm.categorical_columns || {},
+    contig_counts: vm.contig_counts || null, // { '1': n, ..., X, Y, MT, other }: written at ingest; older files lack it
     columns: vm.columns || [],
     numeric_columns: vm.numeric_columns || [],
     all_unique_values: vm.all_unique_values || {},

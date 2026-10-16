@@ -340,7 +340,7 @@ const PipelineDrawer = ({
     if (steps.annovar === 'failed') {
       return {
         what: `Annotation failed${at}.`,
-        why: reason(annovarJob?.message, annovarJob?.error),
+        why: reason(annovarJob?.failure?.user_message, annovarJob?.message, annovarJob?.error),
         next: nextRetry('Retry to run it again.'),
         action: { label: 'Retry annotation', run: () => onStepAction?.('annovar') },
       };
@@ -349,7 +349,7 @@ const PipelineDrawer = ({
       const job = exomiserStatus?.status === 'failed' ? exomiserStatus : filterJob;
       return {
         what: `Prioritization failed${at}.`,
-        why: reason(sanitizePhenotypeStatusMessage(job?.message, ''), job?.message, job?.error),
+        why: reason(job?.failure?.user_message, sanitizePhenotypeStatusMessage(job?.message, ''), job?.message, job?.error),
         next: nextRetry('Open the filters to try again.'),
         action: { label: 'Choose a filter', run: () => onStepAction?.('reduce') },
       };
@@ -530,10 +530,14 @@ const PipelineDrawer = ({
       L.push(['duration', formatJobDuration(jobDurationMs(job))]);
       if (job.failure) {
         L.push(['failure.code', job.failure.code]);
+        if (job.failure.reason && job.failure.reason !== job.failure.code) L.push(['failure.reason', job.failure.reason]);
         if (job.failure.retryable != null) L.push(['failure.retryable', String(job.failure.retryable)]);
         if (job.failure.attempts != null) L.push(['failure.attempts', String(job.failure.attempts)]);
       }
-      if (msg) L.push(['message', INFRA.test(msg) ? '(withheld: internal detail)' : msg]);
+      // The service's own user-safe wording wins; raw text is shown only when it carries no internals.
+      const safe = String(job.failure?.user_message || '').trim();
+      if (safe) L.push(['message', safe]);
+      else if (msg) L.push(['message', INFRA.test(msg) ? '(withheld: internal detail)' : msg]);
     };
     add('annotation', annovarJob);
     add('filter', filterJob);

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowRight, ChevronRight, FileText, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -6,6 +6,7 @@ import { usePanelWidth } from '@/hooks/useWorkbenchWidth';
 import { CountUp, StageMark, StateButton } from '@/components/motion';
 import { PIPELINE_STEP_DEFS, computePipelineSteps, getPipelineBackgroundActive, resolveDisplayStatuses } from '@/lib/variantPipelineSteps';
 import { formatIstWhen, formatJobDuration, jobDurationMs } from '@/lib/istTime';
+import { fetchContigCounts } from '@/services/backendApi';
 
 // Full-alpha 2px ring (the global one is 45% alpha, under 3:1 on white).
 const FOCUS = 'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--ring))]';
@@ -85,6 +86,61 @@ export function deriveContigs(categoricalColumns, sampleOnly = false) {
   return { present, mt: present.has('MT'), sampleOnly: Boolean(sampleOnly) };
 }
 
+
+/** Chromosome counts from the server (`{ '1': n, ..., X, Y, MT, other }`): lit where the count is above zero. */
+export function deriveContigsFromCounts(counts, sampleOnly = false) {
+  if (!counts || typeof counts !== 'object') return null;
+  const known = new Set([...CHROMS.map(([c]) => c), 'MT']);
+  const byContig = {};
+  for (const [k, v] of Object.entries(counts)) {
+    const c = normContig(k);
+    const n = Number(v);
+    if (known.has(c) && Number.isFinite(n) && n > 0) byContig[c] = (byContig[c] || 0) + n;
+  }
+  const present = new Set(Object.keys(byContig));
+  if (!present.size) return null;
+  return { present, counts: byContig, mt: present.has('MT'), sampleOnly: Boolean(sampleOnly) };
+}
+
+// One fetch per conversation per session; the endpoint is read-only and bounded on the server.
+const contigCountsCache = new Map();
+const contigCountsInFlight = new Map();
+
+function useContigCounts(conversationId, stored) {
+  const [fetched, setFetched] = useState(() => (conversationId ? contigCountsCache.get(conversationId) || null : null));
+  useEffect(() => {
+    if (stored || !conversationId) return undefined;
+    const hit = contigCountsCache.get(conversationId);
+    if (hit !== undefined) {
+      setFetched(hit);
+      return undefined;
+    }
+    let cancelled = false;
+    let request = contigCountsInFlight.get(conversationId);
+    if (!request) {
+      request = fetchContigCounts(conversationId)
+        .then((data) => {
+          const value = data?.available ? data : null;
+          contigCountsCache.set(conversationId, value);
+          return value;
+        })
+        .finally(() => contigCountsInFlight.delete(conversationId));
+      contigCountsInFlight.set(conversationId, request);
+    }
+    request
+      .then((value) => {
+        if (!cancelled) setFetched(value);
+      })
+      .catch(() => {
+        // Not cached: a later mount may try again. The ruler simply stays presence-only.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, stored]);
+  return stored ? { contig_counts: stored } : fetched;
+}
+
 /** Turn the page state into summary props. Defensive: every input may be missing. */
 export function deriveSummary({
   fileName,
@@ -116,6 +172,7 @@ export function deriveSummary({
   uploadProgress,
   categoricalColumns,
   sampleOnly,
+  contigCounts,
   now,
 }) {
   const total = Number(totalVariants);
@@ -219,6 +276,7 @@ export function deriveSummary({
     stages,
     headline,
     contigs: deriveContigs(categoricalColumns, sampleOnly),
+    contigCounts: contigCounts || null,
     nextAction: nextAction || null,
     annotationFailed: failed?.id === 'annovar',
   };
@@ -296,7 +354,7 @@ function GenomeRuler({ contigs }) {
   let x = 0;
   const segs = chroms.map(([c, l]) => {
     const w = Math.max(5, (avail * l) / sum);
-    const seg = { c, x, w, on: contigs.present.has(c) };
+    const seg = { c, x, w, on: contigs.present.has(c), n: contigs.counts ? contigs.counts[c] || 0 : null };
     x += w + GAP;
     return seg;
   });
@@ -304,7 +362,12 @@ function GenomeRuler({ contigs }) {
   const labelled = new Set(['1', '5', '10', '15', '20', 'X']);
   const onList = segs.filter((s) => s.on).map((s) => s.c);
   const offList = segs.filter((s) => !s.on).map((s) => s.c);
-  const label = `Chromosomes with variants: ${onList.join(', ') || 'none'}.${offList.length ? ` None recorded on ${offList.join(', ')}.` : ''}`;
+  const peak = contigs.counts ? Math.max(1, ...Object.values(contigs.counts)) : 0;
+  // Counts spread over orders of magnitude, so the shade follows the log of the count (0.45 to 0.95).
+  const shade = (n) => (peak > 1 ? 0.45 + 0.5 * (Math.log(n + 1) / Math.log(peak + 1)) : 0.95);
+  const label = contigs.counts
+    ? `Variants per chromosome: ${onList.map((c) => `${c} ${nf(contigs.counts[c])}`).join(', ') || 'none'}.${offList.length ? ` None recorded on ${offList.join(', ')}.` : ''}`
+    : `Chromosomes with variants: ${onList.join(', ') || 'none'}.${offList.length ? ` None recorded on ${offList.join(', ')}.` : ''}`;
   return (
     <svg viewBox={`0 0 ${total} 40`} className="block h-auto w-full" role="img" aria-label={label}>
       {segs.map((s) => (
@@ -319,8 +382,10 @@ function GenomeRuler({ contigs }) {
             stroke={s.on ? 'none' : 'hsl(var(--wb-line-strong))'}
             strokeWidth="1"
             strokeDasharray={s.on ? undefined : '2.5 2.5'}
-            opacity={s.on ? 0.95 : 0.9}
-          />
+            opacity={s.on ? (s.n != null ? shade(s.n) : 0.95) : 0.9}
+          >
+            <title>{s.n != null ? `Chromosome ${s.c}: ${nf(s.n)} ${s.n === 1 ? 'variant' : 'variants'}` : `Chromosome ${s.c}${s.on ? ': has variants' : ': none recorded'}`}</title>
+          </rect>
           {labelled.has(s.c) ? (
             <text x={s.x + s.w / 2} y="36" textAnchor="middle" fontSize="11.5" fill="hsl(var(--muted-foreground))" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {s.c}
@@ -398,7 +463,30 @@ function Shell({ children, className }) {
   return <div ref={ref} className={cn('group/tab h-full min-h-0 space-y-3 overflow-y-auto overscroll-contain px-4 pb-6 pt-1 group-data-[w=narrow]/tab:px-3 group-data-[w=narrow]/tab:pb-[max(1.5rem,var(--mtabs-safe-b,env(safe-area-inset-bottom)))]', className)}>{children}</div>;
 }
 
-export default function SummaryTab({ summary, jumps = [], emptyAction, loading = false, error = null, className }) {
+/** Chromosome ruler: real per-chromosome counts when the server has them, presence-only otherwise. */
+function ContigsSection({ conversationId, summary }) {
+  const server = useContigCounts(conversationId, summary.contigCounts);
+  const fromCounts = server?.contig_counts ? deriveContigsFromCounts(server.contig_counts, server.sample_only ?? summary.contigs?.sampleOnly) : null;
+  const contigs = fromCounts || summary.contigs;
+  if (!contigs) return null;
+  const lit = [...contigs.present].filter((c) => c === 'MT' || CHROMS.some(([k]) => k === c)).length;
+  return (
+    <section className="wb-card wb-rise px-4 pb-3.5 pt-3.5" style={{ animationDelay: '100ms' }} aria-label="Chromosomes with variants">
+      <SectionTitle trailing={<span className="wb-chip tabular-nums">{lit} of {CHROMS.length + (contigs.mt ? 1 : 0)}</span>}>
+        {contigs.counts ? 'Variants per chromosome' : 'Chromosomes with variants'}
+      </SectionTitle>
+      <GenomeRuler contigs={contigs} />
+      <p className="m-0 mt-1.5 text-[11.5px] leading-4 text-muted-foreground">
+        {contigs.counts
+          ? 'Darker where the file has more variants (a log scale), drawn to GRCh38 chromosome lengths. Hover a chromosome for its count.'
+          : 'Lit where the file has at least one variant, drawn to GRCh38 chromosome lengths.'}
+        {contigs.sampleOnly ? ' Read from a sample of the file.' : ''}
+      </p>
+    </section>
+  );
+}
+
+export default function SummaryTab({ summary, jumps = [], emptyAction, loading = false, error = null, conversationId, className }) {
   if (loading) {
     return (
       <Shell className={className}>
@@ -535,18 +623,7 @@ export default function SummaryTab({ summary, jumps = [], emptyAction, loading =
         <StageRail stages={stages} />
       </section>
 
-      {contigs ? (
-        <section className="wb-card wb-rise px-4 pb-3.5 pt-3.5" style={{ animationDelay: '100ms' }} aria-label="Chromosomes with variants">
-          <SectionTitle trailing={<span className="wb-chip tabular-nums">{[...contigs.present].filter((c) => c === 'MT' || CHROMS.some(([k]) => k === c)).length} of {CHROMS.length + (contigs.mt ? 1 : 0)}</span>}>
-            Chromosomes with variants
-          </SectionTitle>
-          <GenomeRuler contigs={contigs} />
-          <p className="m-0 mt-1.5 text-[11.5px] leading-4 text-muted-foreground">
-            Lit where the file has at least one variant, drawn to GRCh38 chromosome lengths.
-            {contigs.sampleOnly ? ' Read from a sample of the file.' : ''}
-          </p>
-        </section>
-      ) : null}
+      <ContigsSection conversationId={conversationId} summary={summary} />
 
       {jumps.length > 0 ? (
         <section className="wb-rise" style={{ animationDelay: '140ms' }} aria-label="Open">

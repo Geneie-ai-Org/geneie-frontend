@@ -62,6 +62,8 @@ function jobFromStatusPayload(data, conversationId = null) {
     startedAt: data.started_at ?? null,
     completedAt: data.completed_at ?? null,
     durationSeconds: data.duration_seconds ?? null,
+    // Per-phase clock as the status endpoint observed it: [{ phase, started_at, finished_at, duration_seconds }]. Optional.
+    stageTimings: Array.isArray(data.stage_timings) ? data.stage_timings : null,
     // Queue/compute fields are optional: older backends omit them and the UI falls back.
     computePreference: data.compute_preference ?? null,
     compute: data.compute ?? null,

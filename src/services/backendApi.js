@@ -1029,6 +1029,23 @@ export async function searchPanelAppPanels({
  * GA triage status + top candidates for analyst review UI.
  * GET /api/conversations/{id}/ga-triage
  */
+/**
+ * Per-chromosome variant counts for a conversation's file (read-only). `available: false` (with a `reason`)
+ * means the file has no usable chromosome column or storage cannot answer; callers fall back to presence-only.
+ */
+export async function fetchContigCounts(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(
+    apiUrl(`/api/conversations/${encodeURIComponent(conversationId)}/contig-counts`),
+    { headers },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load chromosome counts');
+  }
+  return data;
+}
+
 export async function fetchGaTriage(conversationId) {
   const headers = await getAuthHeaders();
   const response = await fetch(

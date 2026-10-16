@@ -1,8 +1,9 @@
-import React from 'react';
-import { AlertCircle, CheckCircle2, FileText } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertCircle, CheckCircle2, Eye, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import RunTimer from '@/components/ui/RunTimer';
 import { useRunTimer } from '@/hooks/useRunTimer';
+import CaseReportPreviewDialog from '@/components/workspace/CaseReportPreviewDialog';
 
 /**
  * Same unlock rules as variant chat + job downloadGate.
@@ -128,6 +129,7 @@ export default function CaseReportDownloadButton({
     gaStartedAt: gaTriageUpdatedAt,
   });
   const ga = String(gaTriageStatus || '').toLowerCase();
+  const [previewOpen, setPreviewOpen] = useState(false);
   const gaTimer = useRunTimer(
     conversationId ? `${conversationId}:ga-triage` : null,
     gaInFlight,
@@ -152,6 +154,22 @@ export default function CaseReportDownloadButton({
         <FileText aria-hidden />
         <span className="min-w-0 truncate">{compact && blocked && !gaInFlight ? 'Report' : label}</span>
       </Button>
+      {/* Read the one-page case report (HTML or PDF) in a viewer. Only offered once the report is unlocked. */}
+      {!blocked && (
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setPreviewOpen(true)}
+            title="Read the one-page case report here, as a document or the PDF"
+            className="h-8 w-full justify-start gap-1.5 px-3.5 text-[12px] text-muted-foreground [@media(pointer:coarse)]:h-11"
+          >
+            <Eye aria-hidden />
+            <span className="min-w-0 truncate">Preview 1-page summary</span>
+          </Button>
+          <CaseReportPreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} conversationId={conversationId} />
+        </>
+      )}
       {/* Why the button is locked is shown as text, not only in a tooltip. */}
       {blocked && !gaInFlight && title && !(hideEligibilityReason && title === chatEligibility?.message) && (
         <p className="wb-rise line-clamp-3 px-1 text-[12px] leading-snug text-muted-foreground" title={title}>{title}</p>

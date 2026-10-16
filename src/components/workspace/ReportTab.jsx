@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Download, FileText, Lock, RotateCw, Search } from 'lucide-react';
+import { ArrowRight, Download, Eye, FileText, Lock, RotateCw, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import RunTimer from '@/components/ui/RunTimer';
 import { useRunTimer } from '@/hooks/useRunTimer';
@@ -11,6 +11,11 @@ import {
   fetchClinicalReportCandidates,
   generateClinicalReport,
 } from '@/services/backendApi';
+import { fetchClinicalReportPreviewHtml } from '@/services/reportPreviewApi';
+import { picksSignature, saveBlob } from '@/lib/reportPreview';
+import ReportPreview from '@/components/workspace/ReportPreview';
+import DocumentViewerDialog from '@/components/workspace/DocumentViewerDialog';
+import { useReportDoc, useReportPdf } from '@/components/workspace/useReportDocuments';
 import {
   ADDITIONAL,
   INCLUDE,
@@ -115,6 +120,10 @@ function CheckRow({ item }) {
  * Same API calls as the modal, unchanged: GET .../clinical-report/candidates, POST .../clinical-report
  * (which returns and downloads the PDF; there is no separate "assign" call and no stored report) and the
  * GA ranking TSV. Picks stay in this tab until Generate posts them.
+ *
+ * Preview (a section of this tab, and an Expand dialog): Document = POST .../clinical-report/preview (HTML,
+ * not a generation, shown in a sandboxed iframe); PDF = the bytes of the generation the user ran, kept in
+ * memory so Download can reuse them. Both go stale when the picks change; nothing refreshes by itself.
  */
 export default function ReportTab({
   conversationId,
@@ -154,6 +163,10 @@ export default function ReportTab({
   const [genError, setGenError] = useState(null);
   const [last, setLast] = useState(() => readJson('localStorage', lastKey(conversationId)) || { ok: null, fail: null });
   const [tsv, setTsv] = useState('idle');
+  const [mode, setMode] = useState('document'); // preview: document | pdf
+  const [expanded, setExpanded] = useState(false);
+  const previewDoc = useReportDoc(conversationId);
+  const pdfStore = useReportPdf(conversationId);
 
   const fetchCandidates = useCallback(async () => {
     if (!conversationId) return;
@@ -197,6 +210,8 @@ export default function ReportTab({
     setLoadError(null);
     setGen({ state: 'idle', source: null });
     setGenError(null);
+    setMode('document');
+    setExpanded(false);
     setFilter(null);
     setQuery('');
     setShown(PAGE);
@@ -292,14 +307,21 @@ export default function ReportTab({
   const busy = gen.state === 'running';
   const canGenerate = !blocked && load === 'ready' && includeCount >= 1 && !busy;
 
+  // The exact body both Generate and Preview send. Its signature says which picks a document was built from.
+  const body = useMemo(
+    () => ({ clinical_result_variant_ids: selected.clinical, additional_finding_variant_ids: selected.additional }),
+    [selected]
+  );
+  const bodyKey = useMemo(() => picksSignature(body), [body]);
+
   const run = async (source) => {
     if (!canGenerate || !conversationId) return;
     clearTimeout(resetTimer.current);
     setGen({ state: 'running', source });
     setGenError(null);
-    const body = { clinical_result_variant_ids: selected.clinical, additional_finding_variant_ids: selected.additional };
     try {
-      await generateClinicalReport(conversationId, body);
+      const { blob, filename } = await generateClinicalReport(conversationId, body);
+      pdfStore.set(blob, filename, bodyKey); // the same bytes serve viewing and Download
       const rec = { ok: { at: Date.now(), include: includeCount, additional: additionalCount }, fail: null };
       setLast(rec);
       writeJson('localStorage', lastKey(conversationId), rec);
@@ -313,6 +335,54 @@ export default function ReportTab({
       setGenError(message);
       setGen({ state: 'error', source });
     }
+  };
+
+  // Download: the PDF already built from these exact picks is saved as is; only changed picks build a new one.
+  const download = () => {
+    if (pdfStore.state === 'ready' && pdfStore.key === bodyKey && pdfStore.blob) {
+      clearTimeout(resetTimer.current);
+      saveBlob(pdfStore.blob, pdfStore.filename);
+      setGen({ state: 'done', source: 'download' });
+      resetTimer.current = setTimeout(() => setGen({ state: 'idle', source: null }), 2800);
+      return;
+    }
+    run('download');
+  };
+
+  const canPreview = !blocked && load === 'ready' && includeCount >= 1 && !!conversationId;
+  const buildPreview = useCallback(() => {
+    if (!canPreview) return;
+    previewDoc.load((signal) => fetchClinicalReportPreviewHtml(conversationId, body, { signal }), bodyKey);
+  }, [canPreview, previewDoc.load, conversationId, body, bodyKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const docView = { ...previewDoc, stale: previewDoc.state === 'ready' && previewDoc.key !== bodyKey };
+  const pdfView = {
+    state: busy ? 'fetching' : pdfStore.state === 'ready' ? 'ready' : gen.state === 'error' ? 'error' : 'idle',
+    url: pdfStore.url,
+    error: genError,
+    stale: pdfStore.state === 'ready' && pdfStore.key !== bodyKey,
+  };
+  // The status pill describes whichever pane is showing.
+  const paneState = mode === 'pdf' ? pdfView : docView;
+  const previewWord = paneState.state === 'fetching' ? ['running', 'Building']
+    : paneState.state === 'error' ? ['failed', 'Failed']
+      : paneState.state === 'ready' ? (paneState.stale ? ['pending', 'Out of date'] : ['done', 'Ready'])
+        : ['pending', 'Not built'];
+  const previewProps = {
+    mode,
+    onModeChange: setMode,
+    doc: docView,
+    pdf: pdfView,
+    onBuildDoc: buildPreview,
+    onBuildPdf: () => run('generate'),
+    buildPdfLabel: 'Generate report',
+    pdfIdleText: 'Generate report builds the PDF, downloads it and shows it here.',
+    onDownloadPdf: () => (pdfStore.blob ? saveBlob(pdfStore.blob, pdfStore.filename) : null),
+    canBuild: canGenerate || (mode === 'document' && canPreview),
+    idleDocAction: canPreview ? (
+      <Button type="button" size="sm" onClick={buildPreview} className="gap-1.5 [@media(pointer:coarse)]:h-10"><Eye className="size-3.5" aria-hidden="true" />Preview report</Button>
+    ) : null,
+    idleDocText: includeCount >= 1 ? 'Build a preview to read the report here before you generate the PDF. It is not a generation and is not saved.' : 'Mark at least one variant as Include to preview the report.',
   };
 
   const downloadTsv = async () => {
@@ -589,6 +659,39 @@ export default function ReportTab({
           )}
         </section>
 
+        {/* ---- preview: the report itself, as a document and as the PDF ------------------------ */}
+        {!blocked ? (
+          <section className="wb-card wb-rise overflow-hidden" aria-label="Report preview" id="report-preview" tabIndex={-1} style={{ animationDelay: '125ms', outline: 'none' }}>
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 pb-2 pt-3">
+              <div className="flex items-center gap-2">
+                <h3 className="wb-card-title">Preview</h3>
+                <span className="wb-status" data-state={previewWord[0]} role="status">{previewWord[1]}</span>
+              </div>
+              <StateButton
+                size="sm"
+                variant={docView.state === 'ready' && !docView.stale ? 'outline' : 'default'}
+                state={docView.state === 'fetching' ? 'running' : docView.state === 'error' ? 'error' : 'idle'}
+                icon={docView.state === 'ready' ? RotateCw : Eye}
+                labels={{ idle: docView.state === 'ready' ? 'Refresh preview' : 'Preview report', running: 'Building preview', done: 'Preview ready', error: 'Try again' }}
+                disabled={!canPreview && docView.state !== 'error'}
+                onClick={buildPreview}
+                className="[@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:px-4"
+              />
+            </div>
+            <p className="px-4 pb-2.5 text-xs leading-5 text-muted-foreground">
+              {includeCount < 1 ? 'Mark at least one variant as Include to preview the report.' : 'Read the report before you generate it. A preview is not a generation and is not saved; it does not refresh when you change picks.'}
+            </p>
+            {expanded ? (
+              <div className="wb-report-state h-[min(40vh,320px)] border-t border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-bg))]" role="status">
+                <p className="text-[13px] text-muted-foreground">The preview is open in the large view.</p>
+                <Button type="button" variant="outline" size="sm" onClick={() => setExpanded(false)}>Bring it back here</Button>
+              </div>
+            ) : (
+              <ReportPreview {...previewProps} onExpand={() => setExpanded(true)} className="border-t border-[hsl(var(--wb-line))]" canvasClassName="h-[min(66vh,620px)]" />
+            )}
+          </section>
+        ) : null}
+
         {/* ---- what the PDF holds + last result ---------------------------------------------- */}
         <section className="wb-card wb-rise px-4 py-3" style={{ animationDelay: '150ms' }} aria-label="Report preview">
           <div className="flex items-center justify-between gap-2">
@@ -630,7 +733,7 @@ export default function ReportTab({
                     <span>Last attempt failed {formatIST(last.fail.at)}<span className="block text-xs text-muted-foreground">{last.fail.message}</span></span>
                   </p>
                 ) : null}
-                <p className="text-xs leading-5 text-muted-foreground">PDFs are built when you ask and are not stored. Download rebuilds the report from your current picks.</p>
+                <p className="text-xs leading-5 text-muted-foreground">PDFs are built when you ask and are not stored. Download saves the PDF built in this session while your picks are unchanged; changed picks build a new one.</p>
                 {last.ok ? (
                   <StateButton
                     variant="outline"
@@ -639,7 +742,7 @@ export default function ReportTab({
                     icon={Download}
                     labels={{ idle: 'Download PDF', running: 'Building PDF', done: 'PDF downloaded', error: 'Try again' }}
                     disabled={!canGenerate && gen.state !== 'error'}
-                    onClick={() => run('download')}
+                    onClick={download}
                     className="mt-1"
                   />
                 ) : null}
@@ -648,6 +751,19 @@ export default function ReportTab({
           </div>
         </section>
       </div>
+
+      <DocumentViewerDialog
+        open={expanded && !blocked}
+        onOpenChange={(next) => {
+          setExpanded(next);
+          // The Expand button is replaced while the dialog is open, so hand focus back to the preview section.
+          if (!next) requestAnimationFrame(() => document.getElementById('report-preview')?.focus({ preventScroll: true }));
+        }}
+        title="Clinical report preview"
+        description={fileName ? `${fileName} · ${includeCount} Include · ${additionalCount} Additional` : undefined}
+      >
+        <ReportPreview {...previewProps} className="min-h-0 flex-1" />
+      </DocumentViewerDialog>
 
       {/* ---- footer: one primary ----------------------------------------------------------- */}
       <div className="shrink-0 space-y-2 border-t border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] px-4 pt-3 pb-[max(0.75rem,var(--mtabs-safe-b,env(safe-area-inset-bottom)))]">

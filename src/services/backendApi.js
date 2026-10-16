@@ -1141,7 +1141,8 @@ export async function generateClinicalReport(conversationId, body) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  return true;
+  // The bytes are handed back so the Report tab can show this same PDF without a second generation.
+  return { blob, filename };
 }
 
 /**

@@ -706,3 +706,77 @@
   .adm-scope :is([data-slot='button']:not([data-size^='icon']), .wb-tab) { min-height: 40px; }
   .adm-scope :is(input:not([type='checkbox']):not([type='radio']), select, textarea) { min-height: 40px; font-size: 16px; }
 }
+
+/* ======================================================================================
+ * Report viewer (lane REPORT-PREVIEW): the Document | PDF viewer used by the Report tab, its
+ * large dialog, the 1-page case report and any other generated document. The document always
+ * sits on a white "paper" sheet with a soft shadow on the faint canvas, in dark mode too.
+ * ====================================================================================== */
+.wb-report-viewer { container-type: inline-size; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.wb-report-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid hsl(var(--wb-line));
+  background-color: hsl(var(--wb-card));
+}
+.wb-report-canvas {
+  position: relative; flex: 1 1 auto; min-height: 0; overflow: auto;
+  background-color: hsl(var(--wb-bg));
+  overscroll-behavior: contain;
+}
+.wb-report-canvas:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: -2px; }
+.wb-report-sheet {
+  position: relative; overflow: hidden;
+  background-color: #fff; border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(16, 24, 28, 0.07), 0 1px 2px rgba(16, 24, 28, 0.08), 0 10px 28px -8px rgba(16, 24, 28, 0.2);
+  transition: opacity 200ms var(--ease-out);
+}
+html.dark .wb-report-sheet { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 12px 32px -8px rgba(0, 0, 0, 0.65); }
+.wb-report-sheet[data-dim], .wb-report-pdf[data-dim] { opacity: 0.55; }
+.wb-report-frame { position: absolute; top: 0; left: 0; display: block; max-width: none; border: 0; background-color: #fff; transition: opacity 160ms var(--ease-out); }
+.wb-report-pdf { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background-color: #fff; }
+.wb-report-sheet > .wb-report-skel { position: absolute; inset: 0; }
+
+.wb-report-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;
+  min-height: 100%; padding: 1.5rem 1.25rem; text-align: center;
+}
+.wb-report-state-icon {
+  display: flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; border-radius: 9999px;
+  border: 1px solid hsl(var(--wb-line)); background-color: hsl(var(--wb-pill)); color: hsl(var(--muted-foreground));
+}
+.wb-report-paper-wait {
+  width: min(100%, 340px); aspect-ratio: 1 / 1.15; overflow: hidden;
+  background-color: #fff; border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(16, 24, 28, 0.07), 0 10px 28px -8px rgba(16, 24, 28, 0.2);
+}
+html.dark .wb-report-paper-wait { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 12px 32px -8px rgba(0, 0, 0, 0.65); }
+.wb-report-skel { display: block; width: 100%; height: 100%; padding: 28px 26px; background-color: #fff; }
+.wb-report-skel-bar, .wb-report-skel-block {
+  display: block; border-radius: 9999px;
+  background-image: linear-gradient(90deg, #e3ecec 0%, #f1f6f6 50%, #e3ecec 100%);
+  background-size: 200% 100%;
+  animation: wb-shimmer 1.6s linear infinite;
+}
+.wb-report-skel-block { border-radius: 8px; width: 100%; }
+@media (prefers-reduced-motion: reduce) {
+  .wb-report-skel-bar, .wb-report-skel-block { animation: none; }
+  .wb-report-sheet, .wb-report-frame { transition: none; }
+}
+
+.wb-report-notice {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem;
+  padding: 0.5rem 0.75rem; font-size: 13px; line-height: 1.25rem;
+  color: var(--warning); background-color: var(--warning-soft);
+  border-bottom: 1px solid hsl(var(--wb-line));
+}
+.wb-report-notice [data-slot='button'] { color: hsl(var(--foreground)); }
+
+/* Narrow viewer: the toolbar buttons keep their icon and lose the words (they all carry an aria-label). */
+@container (max-width: 559px) {
+  .wb-report-btn-label { display: none; }
+}
+/* ...except in empty/fallback cards, where there is room and the words matter. */
+@container (max-width: 559px) {
+  .wb-report-state .wb-report-btn-label { display: inline; }
+}

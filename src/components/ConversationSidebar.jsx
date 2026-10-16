@@ -6,6 +6,7 @@ import {
     X,
     MoreHorizontal,
     Pencil,
+    Check,
     Trash2,
     PanelLeftClose,
     PanelLeftOpen,
@@ -29,6 +30,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import UsageMeter, { UsageBar, meterStatus } from './account/UsageMeter';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { MAX_USER_TITLE } from '@/lib/conversationTitle';
+import { PopIn } from '@/components/motion';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -116,10 +119,7 @@ const KIND_META = {
     raw: { label: 'Raw sequencing', Icon: Dna },
 };
 
-/**
- * Job status, only when the conversations list exposes it. The list endpoint does not carry
- * pipeline state today, so this stays null until the lead maps `status` onto the record.
- */
+/** Job status mapped onto the record by ChatPage (`annovar_job.status`); null when there is none. */
 function conversationStatus(conv) {
     const raw = conv.status ?? conv.pipelineStatus ?? conv.jobStatus ?? (conv.isRunning ? 'running' : null);
     if (!raw) return null;
@@ -281,6 +281,9 @@ const ConversationSidebar = ({
     const focusSearchAfterOpen = useRef(false);
     const renameCancelled = useRef(false);
     const renameByKey = useRef(false);
+    const [savedId, setSavedId] = useState(null); // row that just saved a rename (shows a check for a moment)
+    const savedTimer = useRef(null);
+    useEffect(() => () => clearTimeout(savedTimer.current), []);
     const [openGroups, setOpenGroups] = useState(() => new Set()); // group labels showing every row
 
     // On a phone the rail is a drawer: whenever it is on screen it shows the full layout.
@@ -384,6 +387,9 @@ const ConversationSidebar = ({
         if (!next || next === row.label || !onRenameConversation) return;
         try {
             await onRenameConversation(row.conv.id, next);
+            setSavedId(String(row.conv.id));
+            clearTimeout(savedTimer.current);
+            savedTimer.current = setTimeout(() => setSavedId(null), 1600);
         } catch (err) {
             console.error('[ConversationSidebar] rename failed:', err);
             toast.error('Could not rename this chat. Try again.');
@@ -505,7 +511,7 @@ const ConversationSidebar = ({
                 onFocusCapture={measureTruncation(key)}
             >
                 {renaming ? (
-                    <div className="flex h-8 items-center gap-2 rounded-[var(--row-radius)] bg-sidebar-accent px-2 max-md:h-11">
+                    <div className="flex h-8 items-center gap-2 rounded-full border border-[hsl(var(--brand-300))] bg-[var(--bg-surface)] px-2.5 shadow-[0_0_0_3px_hsl(var(--brand-100)/0.7)] max-md:h-11">
                         <Icon {...ICON} className="size-4 shrink-0 text-[var(--text-secondary)]" />
                         <input
                             autoFocus
@@ -518,8 +524,10 @@ const ConversationSidebar = ({
                                 if (e.key === 'Escape') { e.preventDefault(); renameCancelled.current = true; renameByKey.current = true; e.currentTarget.blur(); }
                             }}
                             aria-label="Chat title"
-                            maxLength={120}
-                            className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--text-primary)] outline-none focus-visible:outline-none"
+                            maxLength={MAX_USER_TITLE}
+                            placeholder="Name this chat"
+                            enterKeyHint="done"
+                            className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--text-primary)] outline-none placeholder:text-muted-foreground focus-visible:outline-none"
                         />
                     </div>
                 ) : (
@@ -534,6 +542,7 @@ const ConversationSidebar = ({
                                         tabIndex={key === tabStopId ? 0 : -1}
                                         onFocus={() => setRovingId(key)}
                                         onClick={() => onSelectConversation(conv.id)}
+                                        onDoubleClick={onRenameConversation ? () => startRename(row) : undefined}
                                         aria-current={active ? 'page' : undefined}
                                         className={cn(
                                             ROW_BASE,
@@ -546,7 +555,14 @@ const ConversationSidebar = ({
                                 <Icon {...ICON} className={cn('size-4 shrink-0', active ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]')} />
                                 {row.kind !== 'chat' && <span className="sr-only">{kindLabel}: </span>}
                                 <span data-label className="min-w-0 flex-1 truncate">{row.label}</span>
-                                <StatusDot status={row.status} />
+                                {savedId === key ? (
+                                    <PopIn className="inline-flex shrink-0 items-center text-[hsl(var(--brand-700))]">
+                                        <Check {...ICON} className="size-3.5" />
+                                        <span className="sr-only" role="status">Renamed</span>
+                                    </PopIn>
+                                ) : (
+                                    <StatusDot status={row.status} />
+                                )}
                             </TooltipTrigger>
                             {truncId === key && (
                                 <TooltipContent side="right" className="max-w-[18rem] break-words">
@@ -555,7 +571,7 @@ const ConversationSidebar = ({
                             )}
                         </Tooltip>
                         {/* Right edge: time-ago, swapped for the more menu on hover / focus / open menu. Same box, so nothing shifts. */}
-                        {ago && (
+                        {ago && savedId !== key && (
                             <span
                                 aria-hidden="true"
                                 className={cn(

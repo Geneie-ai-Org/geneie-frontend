@@ -125,6 +125,36 @@ export const updateConversation = async (conversationId, updates) => {
 };
 
 /**
+ * Rename a conversation from the rail. The backend marks the title user-set, after which no automatic
+ * title (first message, uploaded file name) can replace it.
+ */
+export const renameConversation = (conversationId, title) =>
+  updateConversation(conversationId, { title, title_source: 'user' });
+
+/**
+ * Automatic title write (first-message title, uploaded file name). Resolves to true when it was applied
+ * and false when the backend kept a title the user set in the meantime.
+ */
+export const autoTitleConversation = async (conversationId, title, source = 'auto') => {
+  const token = await getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const response = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ title, title_source: source })
+  });
+
+  if (!response.ok) await handleResponseError(response);
+
+  const data = await response.json();
+  return data.applied !== false;
+};
+
+/**
  * Patch sample metadata for a conversation (edit sample info).
  */
 export const patchSampleMetadata = async (conversationId, sampleMetadata) => {

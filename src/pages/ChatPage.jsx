@@ -1385,6 +1385,25 @@ const ChatPage = () => {
     return () => { delete window.__geneieLand; };
   }, []);
 
+  // Module 1 (FASTQ): the run is finished when the job is `complete` AND its VCF import is `done` (the same
+  // condition the hook uses to run its ingest-done sequence). Fires only on a live transition of one job:
+  // a reload that finds an already-finished job stays quiet.
+  const m1Job = module1.module1Job;
+  const m1Done = m1Job?.status === 'complete' && m1Job?.ingestStatus === 'done';
+  const m1WatchRef = useRef({ key: null, jobId: null, done: false });
+  useEffect(() => {
+    const w = m1WatchRef.current;
+    const jobId = m1Job?.jobId ?? null;
+    if (w.key !== activeConversationId || w.jobId !== jobId) {
+      m1WatchRef.current = { key: activeConversationId, jobId, done: m1Done };
+      return;
+    }
+    if (m1Done && !w.done) {
+      landTabRef.current?.('pipeline', 'Sequencing pipeline finished. Your variants are imported.');
+    }
+    w.done = m1Done;
+  }, [activeConversationId, m1Job?.jobId, m1Done]);
+
   // Annotation and filter runs: land on the true -> false edge once the result is visible in state.
   const annotatingNow = Boolean(isRunningAnnovar || pipelineSnapshot.annovarJob?.status === 'running');
   const reducingNow = Boolean(isApplyingProprietaryFilter || isRunningExomiser);

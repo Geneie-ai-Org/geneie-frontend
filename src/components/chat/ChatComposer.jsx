@@ -250,7 +250,7 @@ const ChatComposer = ({
       rows={1}
       placeholder={placeholder}
       aria-label="Message Geneie"
-      className={`${TEXTAREA_BASE} text-[15px] leading-6 py-1 ${
+      className={`${TEXTAREA_BASE} text-[15px] [@media(pointer:coarse)]:text-[16px] leading-6 py-1 ${
         isStacked ? 'min-h-[52px] max-h-[200px]' : 'min-h-[32px] max-h-[160px]'
       }`}
       style={{ color: 'var(--text-primary)' }}
@@ -292,6 +292,16 @@ const ChatComposer = ({
           <span id={reasonId} role="status" className="sr-only">
             {reason}
           </span>
+          {/* Phones: the blocked reason's action gets its own full-width row (the toolbar has no room for it). */}
+          {blocked && blockedLink && (
+            <button
+              type="button"
+              onClick={blockedLink.onClick}
+              className="chat-focus mt-1 min-h-10 self-start rounded-sm text-[14px] font-medium text-[var(--accent-teal)] underline decoration-1 underline-offset-[0.18em] min-[481px]:hidden"
+            >
+              {blockedLink.label}
+            </button>
+          )}
           {/* Toolbar, inside the card: + · mode · space · workspace · send. The space holds the
            * next action when chat is blocked (a text link), so the card keeps one height. */}
           <div className="chat-composer-toolbar flex h-8 items-center gap-2 mt-2 [@media(pointer:coarse)]:h-11">
@@ -307,7 +317,7 @@ const ChatComposer = ({
                 <button
                   type="button"
                   onClick={blockedLink.onClick}
-                  className="chat-focus min-h-6 max-w-full truncate rounded-sm text-[13px] font-medium text-[var(--accent-teal)] underline decoration-1 underline-offset-[0.18em] hover:decoration-2"
+                  className="chat-focus min-h-6 max-w-full truncate rounded-sm text-[13px] font-medium text-[var(--accent-teal)] underline decoration-1 underline-offset-[0.18em] hover:decoration-2 max-[480px]:hidden"
                 >
                   {blockedLink.label}
                 </button>

@@ -105,7 +105,7 @@ export default function PipelineStatusStrip({ status, onOpen, notice, className 
   return (
     <div
       className={cn(
-        'relative mx-auto mb-2 w-full max-w-[var(--chat-max-width)] overflow-hidden rounded-xl bg-muted px-3.5 py-2.5 text-[13px] tabular-nums',
+        'chat-strip relative mx-auto mb-2 w-full max-w-[var(--chat-max-width)] overflow-hidden rounded-xl bg-muted px-3.5 py-2.5 text-[13px] tabular-nums',
         className
       )}
     >
@@ -114,9 +114,9 @@ export default function PipelineStatusStrip({ status, onOpen, notice, className 
       </span>
 
       {status ? (
-        <div className="flex items-center gap-3">
+        <div className="chat-strip__status flex items-center gap-3 max-[480px]:flex-wrap max-[480px]:gap-x-2.5 max-[480px]:gap-y-0">
           <span className={cn('size-2 shrink-0 rounded-full', TONE[state] || TONE.idle)} aria-hidden="true" />
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 max-[480px]:basis-[calc(100%-1.25rem)]">
             <div className="flex min-w-0 items-baseline gap-2">
               <span className="truncate font-medium text-foreground" title={title}>
                 {title}
@@ -135,7 +135,7 @@ export default function PipelineStatusStrip({ status, onOpen, notice, className 
             <button
               type="button"
               onClick={action.onClick}
-              className={cn(BTN, 'border border-border bg-background text-foreground hover:bg-accent')}
+              className={cn(BTN, 'border border-border bg-background text-foreground hover:bg-accent max-[480px]:ml-[1.125rem] max-[480px]:h-10 max-[480px]:rounded-full max-[480px]:px-4')}
             >
               {action.label}
             </button>
@@ -144,7 +144,7 @@ export default function PipelineStatusStrip({ status, onOpen, notice, className 
             <button
               type="button"
               onClick={onOpen}
-              className={cn(BTN, 'pr-1.5 text-muted-foreground hover:bg-accent hover:text-foreground')}
+              className={cn(BTN, 'pr-1.5 text-muted-foreground hover:bg-accent hover:text-foreground max-[480px]:ml-auto max-[480px]:h-10 max-[480px]:rounded-full')}
             >
               View details <ChevronRight className="size-3.5" aria-hidden="true" />
             </button>
@@ -155,16 +155,16 @@ export default function PipelineStatusStrip({ status, onOpen, notice, className 
       {notice?.message ? (
         <div
           className={cn(
-            'flex items-start gap-2 text-[13px] leading-5 text-muted-foreground',
-            status && 'mt-2 border-t border-border pt-2 pl-5'
+            'chat-strip__notice flex items-start gap-2 text-[13px] leading-5 text-muted-foreground max-[480px]:flex-wrap',
+            status && 'mt-2 border-t border-border pt-2 pl-5 max-[480px]:pl-0'
           )}
         >
-          <span className="min-w-0 flex-1 py-0.5">{notice.message}</span>
+          <span className="min-w-0 flex-1 py-0.5 max-[480px]:order-1 max-[480px]:basis-[calc(100%-3rem)]">{notice.message}</span>
           {notice.ctaLabel && notice.onCta ? (
             <button
               type="button"
               onClick={notice.onCta}
-              className="chat-focus min-h-6 shrink-0 rounded-sm font-medium text-[hsl(var(--signal))] underline decoration-1 underline-offset-[0.18em] hover:decoration-2 [@media(pointer:coarse)]:min-h-11"
+              className="chat-focus min-h-6 shrink-0 rounded-sm font-medium text-[hsl(var(--signal))] underline decoration-1 underline-offset-[0.18em] hover:decoration-2 [@media(pointer:coarse)]:min-h-11 max-[480px]:order-3 max-[480px]:min-h-9"
             >
               {notice.ctaLabel}
             </button>
@@ -174,7 +174,7 @@ export default function PipelineStatusStrip({ status, onOpen, notice, className 
               type="button"
               onClick={notice.onDismiss}
               aria-label="Dismiss notice"
-              className="chat-focus inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,transform] duration-150 hover:bg-accent hover:text-foreground active:scale-[.98] motion-reduce:transition-none [@media(pointer:coarse)]:size-11"
+              className="chat-focus inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,transform] duration-150 hover:bg-accent hover:text-foreground active:scale-[.98] motion-reduce:transition-none [@media(pointer:coarse)]:size-11 max-[480px]:order-2 max-[480px]:-mt-1.5 max-[480px]:-mr-2"
             >
               <X className="size-3.5" aria-hidden="true" />
             </button>

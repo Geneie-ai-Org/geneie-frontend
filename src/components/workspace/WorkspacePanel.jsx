@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, Reorder, motion, useReducedMotion } from 'motion/react';
+import { useIsMobile } from '@/hooks/useIsMobile';
+import useSwipeDismiss from '@/hooks/useSwipeDismiss';
 
 /**
  * Right-hand workbench. Everything that is not the conversation opens here as a tab: a Summary,
@@ -84,7 +86,7 @@ export function useWorkspaceWidth(expanded = false) {
   return [width, (w) => setWidth(clampWidth(w))];
 }
 
-function IconButton({ label, onClick, children }) {
+function IconButton({ label, onClick, children, className }) {
   return (
     <Tooltip>
       <TooltipTrigger
@@ -95,7 +97,7 @@ function IconButton({ label, onClick, children }) {
             size="icon-sm"
             onClick={onClick}
             aria-label={label}
-            className="wb-iconbtn focus-visible:ring-[hsl(var(--ring))]"
+            className={cn('wb-iconbtn focus-visible:ring-[hsl(var(--ring))]', className)}
           >
             {children}
           </Button>
@@ -141,6 +143,11 @@ export default function WorkspacePanel({
 }) {
   const uid = useId();
   const reduceMotion = useReducedMotion();
+  // Phone: the panel is a bottom sheet. It gets its own header (back, title), no resize/expand, a tab strip
+  // that scrolls under the finger (no drag-to-reorder), and a swipe-down on the header to close.
+  const isPhone = useIsMobile();
+  const hostRef = useRef(null);
+  const sheetHeadRef = useRef(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const rootRef = useRef(null);
   const menuRef = useRef(null);
@@ -162,6 +169,9 @@ export default function WorkspacePanel({
   const openable = tabs.filter((t) => !t.hidden && !openIds.includes(t.id));
   const tabDomId = (id) => `${uid}-tab-${id}`;
   const panelDomId = (id) => `${uid}-panel-${id}`;
+
+  useEffect(() => { hostRef.current = rootRef.current?.parentElement || null; });
+  useSwipeDismiss({ targetRef: hostRef, handleRef: sheetHeadRef, enabled: isPhone, axis: 'y', sign: 1, onDismiss: onClose });
 
   // ---- Remember open tabs and the active tab per conversation -------------------------------
   useEffect(() => {
@@ -403,8 +413,23 @@ export default function WorkspacePanel({
 
   return (
     <TooltipProvider delay={500} closeDelay={0} timeout={600}>
-    <div ref={rootRef} className={cn('relative flex h-full min-h-0 flex-col', className)}>
+    <div ref={rootRef} className={cn('ws-root relative flex h-full min-h-0 flex-col', className)}>
       <style>{MOTION_CSS}</style>
+      {/* Phone sheet header: grabber, a clear way back to the chat, the title. Swipe it down to close. */}
+      <div ref={sheetHeadRef} className="ws-sheet-head md:hidden">
+        <span className="ws-sheet-grab" aria-hidden="true" />
+        <div className="flex h-12 items-center gap-1 pl-1 pr-4">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Back to chat"
+            className={cn('ws-sheet-back', FOCUS)}
+          >
+            <ChevronLeft className="size-5" aria-hidden="true" />
+          </button>
+          <h2 className="m-0 min-w-0 flex-1 truncate text-[16px] font-medium text-foreground">Workspace</h2>
+        </div>
+      </div>
       {!expanded && (
         <div
           role="separator"
@@ -432,7 +457,7 @@ export default function WorkspacePanel({
       )}
 
       {/* Tab strip */}
-      <div className="flex h-12 shrink-0 items-center gap-1.5 pl-3 pr-2.5">
+      <div className="ws-strip-row flex h-12 shrink-0 items-center gap-1.5 pl-3 pr-2.5 max-md:h-14 max-md:pr-3">
         <div className="relative min-w-0 flex-1">
         <motion.div
           ref={listRef}
@@ -441,7 +466,7 @@ export default function WorkspacePanel({
           aria-label="Workspace tabs"
           onScroll={measureEdges}
           style={edgeMask ? { maskImage: edgeMask, WebkitMaskImage: edgeMask } : undefined}
-          className="flex min-w-0 items-center gap-1.5 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex min-w-0 items-center gap-1.5 overflow-x-auto overscroll-x-contain py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           <Reorder.Group
             as="div"
@@ -461,7 +486,7 @@ export default function WorkspacePanel({
                 as="div"
                 key={t.id}
                 value={t.id}
-                drag={onReorderTabs && t.closable !== false && !reduceMotion ? 'x' : false}
+                drag={onReorderTabs && t.closable !== false && !reduceMotion && !isPhone ? 'x' : false}
                 dragMomentum={false}
                 whileDrag={{ scale: 1.05, zIndex: 20, boxShadow: '0 6px 18px -6px rgb(0 0 0 / 0.25)' }}
                 initial={reduceMotion ? false : { opacity: 0, scale: 0.86 }}
@@ -544,7 +569,7 @@ export default function WorkspacePanel({
             disabled={!edge[side]}
             onClick={() => nudge(dir)}
             className={cn(
-              'ws-nudge absolute top-1/2 z-10 flex size-6 -translate-y-1/2 items-center justify-center rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] text-muted-foreground shadow-[var(--shadow-sm)] transition-[opacity,color,border-color] duration-150 hover:border-[hsl(var(--brand-300))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none',
+              'ws-nudge max-md:hidden absolute top-1/2 z-10 flex size-6 -translate-y-1/2 items-center justify-center rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] text-muted-foreground shadow-[var(--shadow-sm)] transition-[opacity,color,border-color] duration-150 hover:border-[hsl(var(--brand-300))] hover:text-[hsl(var(--brand-700))] motion-reduce:transition-none',
               side === 'left' ? 'left-0' : 'right-0',
               edge[side] ? 'opacity-100' : 'pointer-events-none opacity-0'
             )}
@@ -587,7 +612,7 @@ export default function WorkspacePanel({
                     role="menuitem"
                     tabIndex={-1}
                     onClick={() => pickTab(t.id)}
-                    className="wb-fade flex h-9 w-full items-center gap-2.5 rounded-full px-3 text-left text-[13px] text-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:bg-[hsl(var(--brand-50))] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none"
+                    className="wb-fade flex h-9 max-md:h-11 w-full items-center gap-2.5 rounded-full px-3 text-left text-[13px] text-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:bg-[hsl(var(--brand-50))] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[hsl(var(--ring))] motion-reduce:transition-none"
                   >
                     {t.icon ? <t.icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <span className="size-4 shrink-0" />}
                     <span className="flex-1 truncate">{t.label}</span>
@@ -600,11 +625,11 @@ export default function WorkspacePanel({
         ) : null}
 
         {onToggleExpand ? (
-          <IconButton label={expanded ? 'Shrink workspace' : 'Expand workspace'} onClick={onToggleExpand}>
+          <IconButton label={expanded ? 'Shrink workspace' : 'Expand workspace'} onClick={onToggleExpand} className="max-md:!hidden">
             {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
           </IconButton>
         ) : null}
-        <IconButton label="Close workspace" onClick={onClose}>
+        <IconButton label="Close workspace" onClick={onClose} className="max-md:!hidden">
           <PanelRightClose className="size-4" />
         </IconButton>
       </div>

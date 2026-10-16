@@ -56,6 +56,8 @@ import { module1FinishedSuccessfully } from '@/lib/module1PipelinePhases';
 import { useModule1Capacity } from '@/hooks/useModule1Capacity';
 import { useAutomaticPipelineConductor } from '@/hooks/useAutomaticPipelineConductor';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import useSwipeDismiss from '@/hooks/useSwipeDismiss';
+import useKeyboardViewport from '@/hooks/useKeyboardViewport';
 import { getClinicalReportGate } from '@/components/CaseReportDownloadButton';
 import ReportTab from '@/components/workspace/ReportTab';
 import WorkspacePanel, { useWorkspaceWidth } from '@/components/workspace/WorkspacePanel';
@@ -153,7 +155,12 @@ const ChatPage = () => {
    * published as a CSS variable to avoid re-rendering the whole page on every resize. */
   const chatColumnRef = useRef(null);
   const composerDockRef = useRef(null);
+  const leftAsideRef = useRef(null);
   const homeComposerRef = useRef(null); // the empty-state composer's field, focused by the starter chips
+  // Phone: swipe the rail drawer left to close it, and keep the shell on the visible area while the
+  // on-screen keyboard is up. (The workspace sheet wires its own swipe-down in WorkspacePanel.)
+  useSwipeDismiss({ targetRef: leftAsideRef, enabled: isMobile && isSidebarOpen, axis: 'x', sign: -1, onDismiss: () => setIsSidebarOpen(false) });
+  useKeyboardViewport(isMobile);
 
   // --- HOOK INTEGRATION ---
   const { userId, isAuthReady, userLoading, userTier, limits: rawLimits, refreshSubscriptionStatus, refreshGuestStatus } = useAuth();
@@ -1884,7 +1891,7 @@ const ChatPage = () => {
       /* The sidebar seam starts below the conversation header when there is one. */
       data-header={!isMobile && (isConversationStarted || isCurrentlyActive) ? 'on' : 'off'}
     >
-      <aside className="chat-shell-left" aria-hidden={userTier === 'guest'}>
+      <aside ref={leftAsideRef} className="chat-shell-left" aria-hidden={userTier === 'guest'}>
         {userTier !== 'guest' && (
           <ConversationSidebar
             conversations={conversations}
@@ -1906,8 +1913,18 @@ const ChatPage = () => {
       {/* Mobile sidebar backdrop */}
       {isMobile && isSidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/50"
+          className="chat-scrim fixed inset-0 z-30"
+          aria-hidden="true"
           onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Mobile workspace sheet backdrop: tapping the sliver of chat above the sheet closes it. */}
+      {isMobile && isVariantSidebarOpen && (
+        <div
+          className="chat-scrim fixed inset-0 z-[44]"
+          aria-hidden="true"
+          onClick={() => setIsVariantSidebarOpen(false)}
         />
       )}
 
@@ -1917,7 +1934,7 @@ const ChatPage = () => {
       {/* Mobile top bar */}
       {isMobile && (
         <div
-          className="flex items-center gap-2 px-3 h-12 shrink-0 border-b"
+          className="chat-mobile-bar flex items-center gap-1 pl-1 pr-3 shrink-0 border-b"
           style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'transparent' }}
         >
           <TooltipProvider>
@@ -1929,10 +1946,10 @@ const ChatPage = () => {
                     variant="ghost"
                     size="icon"
                     onClick={() => setIsSidebarOpen(true)}
-                    className="rounded-lg hover:bg-white/5 text-[var(--text-secondary)]"
+                    className="chat-mobile-bar__menu size-11 rounded-full text-[var(--text-secondary)]"
                     aria-label="Open sidebar"
                   >
-                    <Menu className="size-[18px]" />
+                    <Menu className="size-5" />
                   </Button>
                 }
               />
@@ -1957,7 +1974,7 @@ const ChatPage = () => {
                 setIsShowingAuthForm(true);
                 setJustSignedUp(false);
               }}
-              className="text-xs px-2.5 py-1 rounded-lg font-medium border transition-colors hover:opacity-90 shrink-0"
+              className="text-[13px] px-3.5 h-10 rounded-full font-medium border transition-colors hover:opacity-90 shrink-0"
               style={{
                 backgroundColor: 'var(--bg-surface)',
                 borderColor: 'var(--border-default)',
@@ -2234,7 +2251,7 @@ const ChatPage = () => {
                 </div>
                 {/* The scroll port now runs under the dock, so this has to clear it. */}
                 <div
-                  className="sticky flex justify-center pointer-events-none"
+                  className="chat-scroll-bottom sticky flex justify-center pointer-events-none"
                   style={{ zIndex: 10, bottom: 'calc(var(--composer-dock-height, 0px) - 6rem)' }}
                 >
                   <Button
@@ -2294,7 +2311,7 @@ const ChatPage = () => {
         </div>
       </main>
 
-      <aside className="chat-shell-right" aria-hidden={!isVariantSidebarOpen}>
+      <aside className="chat-shell-right" aria-hidden={!isVariantSidebarOpen} data-sheet>
         <WorkspacePanel
           width={workspaceWidth}
           onWidthChange={setWorkspaceWidth}

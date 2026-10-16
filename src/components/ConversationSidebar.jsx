@@ -199,7 +199,7 @@ const ICON_BTN = cn(
 
 /** The shared 32px rail row: icon, label, optional right hint. Used by New chat, Search and More. */
 const ROW_BASE = cn(
-    'flex h-8 w-full items-center gap-2 rounded-[var(--row-radius)] px-2 text-left text-[13px] leading-none text-[var(--text-primary)] transition-colors duration-150 hover:bg-sidebar-accent/60 max-md:h-11',
+    'flex h-8 w-full items-center gap-2 rounded-[var(--row-radius)] px-2 text-left text-[13px] leading-none text-[var(--text-primary)] transition-colors duration-150 hover:bg-sidebar-accent/60 max-md:h-11 max-md:text-[15px]',
     FOCUS_RING_INSET
 );
 
@@ -546,7 +546,7 @@ const ConversationSidebar = ({
                                         aria-current={active ? 'page' : undefined}
                                         className={cn(
                                             ROW_BASE,
-                                            'pr-11',
+                                            'pr-11 max-md:pr-12',
                                             active ? 'bg-sidebar-accent font-medium' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                                         )}
                                     />
@@ -589,7 +589,7 @@ const ConversationSidebar = ({
                                 aria-label={`More actions for ${row.label}`}
                                 className={cn(
                                     ICON_BTN,
-                                    'absolute right-1 top-1/2 size-6 -translate-y-1/2 max-md:size-9',
+                                    'absolute right-1 top-1/2 size-6 -translate-y-1/2 max-md:right-0.5 max-md:size-10 max-md:rounded-full',
                                     'opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 data-[popup-open]:opacity-100 [@media(hover:none)]:opacity-100'
                                 )}
                             >
@@ -624,7 +624,8 @@ const ConversationSidebar = ({
             >
 
                 {/* Chrome strip (same height as the thread header): collapse toggle only, no logo block */}
-                <div className={cn('flex h-11 shrink-0 items-center', expanded ? 'px-2' : 'justify-center')}>
+                <div className={cn('flex h-11 shrink-0 items-center', expanded ? 'px-2' : 'justify-center', isMobile && 'h-14 justify-between pl-4')}>
+                    {isMobile && <span className="font-brand text-[15px] text-[var(--text-primary)]">Geneie</span>}
                     <Tip
                         label={isMobile ? 'Close' : expanded ? 'Collapse sidebar' : 'Expand sidebar'}
                         render={
@@ -632,9 +633,9 @@ const ConversationSidebar = ({
                                 type="button"
                                 onClick={onToggle}
                                 aria-label={isMobile ? 'Close sidebar' : expanded ? 'Collapse sidebar' : 'Expand sidebar'}
-                                aria-expanded={expanded}
+                                aria-expanded={isMobile ? undefined : expanded}
                                 aria-controls={navId}
-                                className={cn(ICON_BTN, 'size-8 max-md:size-11')}
+                                className={cn(ICON_BTN, 'size-8 max-md:size-11 max-md:rounded-full')}
                             />
                         }
                     >
@@ -649,7 +650,7 @@ const ConversationSidebar = ({
                             <button type="button" onClick={onCreateConversation} className={ROW_BASE}>
                                 <SquarePen {...ICON} className="size-4 shrink-0 text-[var(--text-secondary)]" />
                                 <span className="flex-1 truncate">New chat</span>
-                                <span aria-hidden="true" className="text-[12px] text-muted-foreground">{NEW_CHAT_HINT}</span>
+                                <span aria-hidden="true" className="text-[12px] text-muted-foreground max-md:hidden">{NEW_CHAT_HINT}</span>
                             </button>
                             <label className={cn(ROW_BASE, 'cursor-text focus-within:bg-sidebar-accent/60 focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring/70')}>
                                 <Search {...ICON} className="size-4 shrink-0 text-[var(--text-secondary)]" />

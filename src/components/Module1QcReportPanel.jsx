@@ -82,12 +82,15 @@ function MetricGrid({ rows }) {
  * Durable Module 1 QC interpretation + charts/snapshots after BAM/QC purge.
  * Chat answers from the same saved report.
  *
+ * `nativeCharts`: the interactive read-quality view is shown above, so the saved metric grid and the
+ * static chart images (same numbers) are left out. Narrative, HTML reports and snapshots stay.
+ *
  * While the live alignment browser is still available (`hideBrowserSnapshots`),
  * omit PNG browser captures so they are not mistaken for an interactive view.
  *
  * Plain content (no surface of its own): it fills a card section or a workspace tab.
  */
-const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = false, surface = false, runLabel = null }) => {
+const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = false, surface = false, runLabel = null, nativeCharts = false }) => {
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState(null);
   const [error, setError] = useState(null);
@@ -142,13 +145,15 @@ const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = 
           (f.content_type || '').startsWith('image/'))
     )
     .filter((f) => !(hideBrowserSnapshots && f.kind === 'browser_snapshot'))
+    // The native read-quality view (interactive, same fastp numbers) replaces the static chart images.
+    .filter((f) => !(nativeCharts && (f.kind === 'metrics_chart' || f.kind === 'quality_curve')))
     // Charts first; browser PNG last so a frozen chrome shot never looks like the live viewer.
     .sort((a, b) => {
       const rank = (f) => (f.kind === 'browser_snapshot' ? 2 : f.kind === 'metrics_chart' ? 0 : 1);
       return rank(a) - rank(b);
     });
   const htmlFigs = figures.filter((f) => f?.url && f.kind === 'html_report');
-  const metricRows = buildQcMetricRows(report?.metrics);
+  const metricRows = nativeCharts ? [] : buildQcMetricRows(report?.metrics);
 
   return (
     <section ref={sectionRef} tabIndex={-1} className={`space-y-3 outline-none ${qcSurfaceClass(surface)}`} aria-label="Saved Module 1 QC report" aria-busy={loading || undefined}>

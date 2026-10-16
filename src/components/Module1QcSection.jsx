@@ -23,6 +23,7 @@ export function module1HasQcArtifacts(job) {
  */
 export default function Module1QcSection({ job, variant = 'card' }) {
   const [qcOpen, setQcOpen] = useState(false);
+  const [nativeCharts, setNativeCharts] = useState(false);
   const reduceMotion = useReducedMotion();
   if (!module1HasQcArtifacts(job)) return null;
 
@@ -35,7 +36,7 @@ export default function Module1QcSection({ job, variant = 'card' }) {
   const surface = variant === 'panel';
   const sections = (
     <div className={surface ? 'space-y-3' : 'space-y-5'}>
-      <Module1QcSummary conversationId={job.conversationId} surface={surface} />
+      <Module1QcSummary conversationId={job.conversationId} surface={surface} onResolved={setNativeCharts} />
 
       {job.hasQc && <Module1QcPanel conversationId={job.conversationId} hasQc={job.hasQc} surface={surface} runLabel={job.sampleName} />}
 
@@ -53,6 +54,7 @@ export default function Module1QcSection({ job, variant = 'card' }) {
         conversationId={job.conversationId}
         visible
         hideBrowserSnapshots={Boolean(job.hasBam)}
+        nativeCharts={nativeCharts}
         surface={surface}
         runLabel={job.sampleName}
       />

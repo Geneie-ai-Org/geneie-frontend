@@ -4,7 +4,7 @@ import DocumentViewerDialog from '@/components/workspace/DocumentViewerDialog';
 import { fetchModule1QcSummary } from '@/services/backendApi';
 import { CountUp, StageMark } from '@/components/motion';
 import { QcErrorNotice, QcHeading, QcSkeleton, QcStatusPill, qcSurfaceClass } from '@/components/Module1QcPanel';
-import { ChartLegend, Histogram, LineChart } from '@/components/qc/QcCharts';
+import { Histogram, LineChart } from '@/components/qc/QcCharts';
 import {
   GUIDE, OVERALL_LABEL, filterSegments, fmtCompact, fmtInt, fmtPct,
   frameRange, gradeDup, gradeKept, gradeQ30, overallGrade,
@@ -171,7 +171,7 @@ function SummaryBody({ data, wide = false }) {
       {qualitySeries.length > 0 && (
         <ChartBlock
           title="Base quality along the read"
-          hint="Mean Phred score per position. Above 30 is excellent; quality usually falls toward the 3' end."
+          hint="Mean Phred score per position. Above 30 is excellent; quality usually falls toward the 3' end. Drag to zoom, drag the strip to slide."
           trailing={<ReadToggle value={read} onChange={setRead} paired={s.paired && Boolean(s.reads?.r2)} />}
         >
           <LineChart
@@ -182,7 +182,6 @@ function SummaryBody({ data, wide = false }) {
             yFormat={(v) => v.toFixed(1)}
             ariaLabel={`Mean base quality by position, ${read === 'r2' ? 'read 2' : 'read 1'}, before and after filtering`}
           />
-          <div className="mt-2"><ChartLegend items={qualitySeries} /></div>
         </ChartBlock>
       )}
 
@@ -199,7 +198,6 @@ function SummaryBody({ data, wide = false }) {
             yFormat={(v) => `${v.toFixed(1)}%`}
             ariaLabel={`Base composition by position, ${read === 'r2' ? 'read 2' : 'read 1'}, after filtering`}
           />
-          <div className="mt-2"><ChartLegend items={contentSeries} /></div>
         </ChartBlock>
       )}
 
@@ -235,7 +233,7 @@ function SummaryBody({ data, wide = false }) {
 }
 
 /** Read-quality summary. Renders nothing when this run has no fastp numbers (the Reports block still shows). */
-export default function Module1QcSummary({ conversationId, enabled = true, surface = false }) {
+export default function Module1QcSummary({ conversationId, enabled = true, surface = false, onResolved }) {
   const [state, setState] = useState({ status: 'idle', data: null, error: null });
   const [attempt, setAttempt] = useState(0);
   const [expanded, setExpanded] = useState(false);
@@ -251,9 +249,10 @@ export default function Module1QcSummary({ conversationId, enabled = true, surfa
     return () => { cancelled = true; };
   }, [conversationId, enabled, attempt]);
 
-  if (!enabled || !conversationId) return null;
   const { status, data, error } = state;
   const has = Boolean(data?.has_summary && data.summary);
+  useEffect(() => { onResolved?.(has); }, [has, onResolved]);
+  if (!enabled || !conversationId) return null;
   if (status === 'done' && !has) return null;
 
   return (

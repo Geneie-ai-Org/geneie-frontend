@@ -107,7 +107,13 @@ export default function DocumentViewer({
   const framed = kind === 'html' || kind === 'url';
   const showingDoc = !children && Boolean(source);
   const sb = safeSandbox(sandbox);
-  const srcDoc = useMemo(() => (kind === 'html' ? (sb.includes('allow-scripts') ? String(source.html || '') : hardenHtml(source.html)) : null), [kind, source, sb]);
+  // The viewer already supplies the paper sheet, so Geneie's own screen sheet drops its frame, margin and shadow here
+  // (print and the new-tab copy are untouched).
+  const srcDoc = useMemo(() => {
+    if (kind !== 'html') return null;
+    const doc = sb.includes('allow-scripts') ? String(source.html || '') : hardenHtml(source.html);
+    return `${doc}<style>.sheet{margin:0 auto!important;box-shadow:none!important;border:0!important;border-radius:0!important}</style>`;
+  }, [kind, source, sb]);
 
   const openIt = () => {
     if (!source) return;

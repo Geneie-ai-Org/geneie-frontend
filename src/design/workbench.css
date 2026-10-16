@@ -262,3 +262,10 @@
   .wb-fill, .wb-chev { transition: none; }
   .chat-shell-right [data-slot='button']:active:not(:disabled) { transform: none; }
 }
+
+/* Primitive helpers (motion.jsx). */
+.wb-spin-inline { width: 14px; height: 14px; border-radius: 9999px; border: 2px solid currentColor; border-right-color: transparent; animation: wb-spin 800ms linear infinite; display: inline-block; }
+.wb-draw-lucide path { stroke-dasharray: 24; stroke-dashoffset: 24; animation: wb-draw 340ms var(--ease-out) 60ms forwards; }
+/* Resize handle: a slim grip that grows on hover and while dragging. */
+.wb-grip { transition: top 180ms var(--ease-out), bottom 180ms var(--ease-out), background-color 150ms var(--ease-out); }
+@media (prefers-reduced-motion: reduce) { .wb-spin-inline { animation-duration: 1.6s; } .wb-draw-lucide path { animation: none; stroke-dashoffset: 0; } }

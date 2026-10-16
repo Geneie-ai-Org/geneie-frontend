@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, ChevronLeft, FileText, Loader2, X } from 'lucide-react';
+import { useReducedMotion } from 'motion/react';
+import { AlertCircle, ArrowRight, ChevronLeft, Play, Upload, X } from 'lucide-react';
+import { CountUp, HoldButton, StageMark, StateButton } from '@/components/motion';
 import {
   Dialog,
   DialogContent,
@@ -9,7 +11,6 @@ import {
 import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -17,9 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { PillToggle } from '@/components/ui/pill-toggle';
 import { MODULE1_BED_MAX_BYTES, MODULE1_FASTQ_MAX_BYTES } from '@/services/backendApi';
 import { isRecognizedImportUrl, module1UrlErrorMessage, precheckBedChromStyle } from '@/services/backendApi';
 import { useAuth } from '@/hooks/useAuth';
@@ -44,10 +43,14 @@ import {
   Disclosure,
   Field,
   FieldGroup,
+  ICON_BTN_CLASS,
   MissingHint,
   QuietSummary,
+  SegmentedPill,
   TEXT_INPUT_CLASS,
   UploadErrorBanner,
+  WIZARD_DIALOG_CLASS,
+  WizardPanes,
   WizardSelect,
   WizardStepper,
   inputBorderClass,
@@ -151,35 +154,109 @@ function basenameFromUrl(fileUrl) {
   }
 }
 
-/** One FASTQ/BED file slot: a button-like row with the file name and size, and its upload bar. */
+/**
+ * One file slot (FASTQ, custom BED): a pill-cornered drop target. Empty it is dashed teal and takes a
+ * click or a drop; filled it shows a drawn check, the file name and size, and can be cleared.
+ */
+function FileSlot({ file, onSelect, accept, placeholder, error, onTouched, id, disabled = false }) {
+  const [over, setOver] = useState(false);
+  const reduce = useReducedMotion();
+  return (
+    <label
+      data-drag={over || undefined}
+      className={cn(
+        'flex h-11 w-full cursor-pointer items-center gap-2.5 rounded-full border px-3 text-[13px] outline-none transition-[background-color,border-color,transform] duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[hsl(var(--brand-500)/0.5)] motion-reduce:transition-none',
+        file ? 'border-solid' : 'border-dashed',
+        error
+          ? 'border-[var(--error)] bg-[hsl(var(--wb-card))]'
+          : over
+            ? cn('border-[hsl(var(--brand-500))] bg-[hsl(var(--brand-100))]', !reduce && 'scale-[1.015]')
+            : file
+              ? 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-50))]'
+              : 'border-[hsl(var(--brand-300))] bg-[hsl(var(--wb-card))] hover:border-[hsl(var(--brand-500))] hover:bg-[hsl(var(--brand-50))]',
+        disabled && 'pointer-events-none opacity-60'
+      )}
+      onClick={() => onTouched?.()}
+      onDragOver={(e) => { e.preventDefault(); if (!disabled) setOver(true); }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(false); }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        const dropped = e.dataTransfer.files?.[0];
+        if (dropped && !disabled) { onTouched?.(); onSelect(dropped); }
+      }}
+    >
+      {file ? (
+        <StageMark state="done" size={22} className="shrink-0" />
+      ) : (
+        <span aria-hidden="true" className="flex size-[22px] shrink-0 items-center justify-center text-[hsl(var(--brand-700))]">
+          <Upload className="size-4" strokeWidth={1.8} />
+        </span>
+      )}
+      <span className={cn('min-w-0 flex-1 truncate', file ? 'font-mono text-xs text-foreground' : 'text-muted-foreground')} title={file?.name}>
+        {file?.name || (over ? 'Drop to add this file' : placeholder)}
+      </span>
+      {file ? (
+        <>
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{formatBytes(file.size)}</span>
+          <button
+            type="button"
+            aria-label={`Remove ${file.name}`}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onSelect(null); }}
+            className="-mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        </>
+      ) : (
+        <span className="wb-chip shrink-0 !bg-transparent font-medium text-[hsl(var(--brand-700))]" data-tone="brand">Browse</span>
+      )}
+      <input
+        id={id}
+        type="file"
+        accept={accept}
+        className="sr-only"
+        disabled={disabled}
+        onChange={(e) => onSelect(e.target.files?.[0] || null)}
+      />
+    </label>
+  );
+}
+
+/** Upload / import progress: slim pill track, tabular percent. */
+function ProgressRow({ label, value }) {
+  const pct = value == null ? null : Math.max(0, Math.min(100, Math.round(value)));
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="tabular-nums text-foreground">{pct == null ? 'Waiting' : <><CountUp value={pct} duration={0.4} />%</>}</span>
+      </div>
+      <div className="wb-track" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? 0}>
+        <div className="wb-fill" style={{ width: `${pct ?? 0}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/** One FASTQ/BED file slot with its label, drop target and upload bar. */
 function FilePickerRow({ label, file, onSelect, progress, accept, placeholder, error, onTouched, id }) {
   return (
     <Field label={label} required htmlFor={id} error={error}>
-      <label
-        className={cn(
-          'flex h-10 w-full cursor-pointer items-center gap-2 rounded-lg border bg-[var(--bg-input)] px-3 text-sm transition-colors hover:border-[var(--border-strong)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/40',
-          inputBorderClass(Boolean(error))
-        )}
-        onClick={() => onTouched?.()}
-      >
-        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-        <span className={cn('min-w-0 flex-1 truncate', file ? 'font-mono text-xs text-foreground' : 'text-muted-foreground')}>
-          {file?.name || placeholder || `Choose ${label} file`}
-        </span>
-        {file ? (
-          <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">{formatBytes(file.size)}</span>
-        ) : (
-          <span className="shrink-0 text-xs font-medium text-primary">Browse</span>
-        )}
-        <input
-          id={id}
-          type="file"
-          accept={accept}
-          className="sr-only"
-          onChange={(e) => onSelect(e.target.files?.[0] || null)}
-        />
-      </label>
-      {progress != null && <Progress value={progress} className="mt-1.5" />}
+      <FileSlot
+        id={id}
+        file={file}
+        onSelect={onSelect}
+        accept={accept}
+        placeholder={placeholder || `Choose ${label} file`}
+        error={error}
+        onTouched={onTouched}
+      />
+      {progress != null && (
+        <div className="mt-2 px-1">
+          <ProgressRow label={`${label} upload`} value={progress} />
+        </div>
+      )}
     </Field>
   );
 }
@@ -210,17 +287,18 @@ function UrlPickerRow({ label, required = true, placeholder, state, onChange, on
           }
         }}
         placeholder={placeholder}
+        aria-invalid={state.error ? true : undefined}
         className={cn(TEXT_INPUT_CLASS, inputBorderClass(Boolean(state.error)))}
       />
       {state.checking && (
-        <p className="mt-1.5 flex items-center gap-1.5 text-2xs text-muted-foreground">
-          <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-          Checking link…
+        <p className="mt-1.5 flex items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status">
+          <StageMark state="running" size={16} />
+          Checking link
         </p>
       )}
       {resolved && (
-        <p className="mt-1.5 flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground">
-          <CheckCircle2 className="h-3 w-3 shrink-0 text-[var(--success)]" aria-hidden />
+        <p className="wb-pop mt-1.5 flex min-w-0 items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status">
+          <StageMark state="done" size={16} className="shrink-0" />
           <span className="truncate font-mono">{resolvedLabel}</span>
         </p>
       )}
@@ -231,8 +309,8 @@ function UrlPickerRow({ label, required = true, placeholder, state, onChange, on
       <div>
         {input}
         {!state.checking && state.error && (
-          <p role="alert" className="mt-1.5 flex items-start gap-1 text-2xs text-[var(--error)]">
-            <AlertCircle className="mt-px h-3 w-3 shrink-0" aria-hidden />
+          <p role="alert" className="mt-1.5 flex items-start gap-1.5 px-1 text-xs text-[var(--error)]">
+            <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
             <span>{state.error}</span>
           </p>
         )}
@@ -255,32 +333,25 @@ function SubmitProgress({ progress, files, status, isUrlMode, onCancelImport }) 
         { key: 'r2', label: 'Reverse read (R2)', file: files.r2, value: progress?.r2 },
         ...(files.bed ? [{ key: 'bed', label: 'Custom BED', file: files.bed, value: progress?.bed }] : []),
       ];
+  // It appears below the fold on the last step, so bring it into view when the run starts.
+  const ref = useRef(null);
+  useEffect(() => {
+    ref.current?.scrollIntoView?.({ block: 'nearest', behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  }, []);
   return (
-    <div className="space-y-3 rounded-lg border border-border p-3" role="status" aria-live="polite">
-      <p className="flex items-center gap-2 text-xs font-medium text-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" aria-hidden />
+    <div ref={ref} className="wb-card wb-rise space-y-3 p-3.5" role="status" aria-live="polite">
+      <p className="flex items-center gap-2 text-[13px] font-medium text-foreground">
+        <StageMark state="running" size={18} />
         {isUrlMode ? 'Importing files from your links' : 'Uploading your files'}
       </p>
-      {status ? <p className="text-2xs text-muted-foreground">{status}</p> : null}
+      {status ? <p className="text-xs text-muted-foreground">{status}</p> : null}
       {rows.map((row) => (
-        <div key={row.key}>
-          <div className="mb-1 flex items-baseline justify-between gap-2 text-2xs">
-            <span className="text-muted-foreground">{row.label}</span>
-            <span className="tabular-nums text-muted-foreground">
-              {row.value == null ? 'Waiting' : `${Math.round(row.value)}%`}
-            </span>
-          </div>
-          <Progress value={row.value ?? 0} />
-        </div>
+        <ProgressRow key={row.key} label={row.label} value={row.value} />
       ))}
       {isUrlMode && onCancelImport ? (
-        <button
-          type="button"
-          onClick={onCancelImport}
-          className="text-2xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-        >
+        <Button type="button" variant="outline" size="sm" onClick={onCancelImport}>
           Cancel import
-        </button>
+        </Button>
       ) : null}
     </div>
   );
@@ -734,28 +805,20 @@ const Module1UploadForm = ({
       >
         {/* Pinned to the top rather than centred: the steps grow as results load, and a
           * centred dialog jumped up each time it did. Full-height sheet on phones. */}
-        <DialogContent
-          showCloseButton={false}
-          className="!max-w-2xl w-full top-[5vh] translate-y-0 max-h-[min(90vh,900px)] flex flex-col p-0 gap-0 overflow-hidden ring-0 border border-border bg-popover shadow-[var(--shadow-lg)] max-sm:!top-0 max-sm:!h-[100dvh] max-sm:!max-h-[100dvh] max-sm:!max-w-full max-sm:rounded-none"
-        >
-          <DialogTitle className="sr-only">Upload raw sequencing data (FASTQ)</DialogTitle>
-          <DialogDescription className="sr-only">
-            Upload paired FASTQ files to run the Module 1 variant-calling pipeline.
-          </DialogDescription>
-
+        <DialogContent showCloseButton={false} className={WIZARD_DIALOG_CLASS}>
           <div className="flex-shrink-0 px-5 pb-4 pt-5 sm:px-7 sm:pt-6">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h3 className="text-base font-semibold text-foreground">Upload raw sequencing data</h3>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <DialogTitle className="text-base font-semibold leading-snug text-foreground">Upload raw sequencing data</DialogTitle>
+                <DialogDescription className="mt-1 text-[13px] leading-snug text-muted-foreground">
                   Paired FASTQ (R1 and R2). About 20–30 min on GPU, about 2 h on CPU. You can close this tab; we will notify you.
-                </p>
+                </DialogDescription>
               </div>
               <button
                 type="button"
                 onClick={closeNow}
                 aria-label="Close"
-                className="-mr-2 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55 sm:h-8 sm:w-8"
+                className={cn(ICON_BTN_CLASS, '-mr-1')}
               >
                 <X className="h-4 w-4" aria-hidden />
               </button>
@@ -774,7 +837,8 @@ const Module1UploadForm = ({
           </div>
 
           <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-            <div className="flex-1 space-y-6 overflow-y-auto px-5 pb-4 sm:px-7">
+            <div data-wizard-scroll className="flex-1 overflow-x-hidden overflow-y-auto px-5 pb-4 pt-1 sm:px-7">
+             <WizardPanes step={metadataStep} index={stepIndex} className="space-y-5">
               {metadataStep === 'sample' && (
                 <>
                   <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
@@ -790,6 +854,7 @@ const Module1UploadForm = ({
                         value={sampleName}
                         onChange={(e) => setSampleName(e.target.value)}
                         onBlur={() => touch('name')}
+                        aria-invalid={showError('name', !sampleName.trim(), 'x') ? true : undefined}
                         className={cn(TEXT_INPUT_CLASS, inputBorderClass(Boolean(showError('name', !sampleName.trim(), 'x'))))}
                         placeholder="e.g. EB74_S2"
                       />
@@ -827,12 +892,13 @@ const Module1UploadForm = ({
                     </Field>
                   </div>
 
-                  <section aria-labelledby="m1-raw-title" className="space-y-3">
+                  <section aria-labelledby="m1-raw-title" className="wb-card space-y-3 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h4 id="m1-raw-title" className="text-xs font-semibold text-foreground">
+                      <h4 id="m1-raw-title" className="text-[13px] font-semibold text-foreground">
                         Raw data
                       </h4>
-                      <PillToggle
+                      <SegmentedPill
+                        ariaLabel="Where the raw data is"
                         value={sourceMode}
                         onChange={handleSourceModeChange}
                         options={[
@@ -861,7 +927,7 @@ const Module1UploadForm = ({
                             onValidate={() => validateUrlRow('r2')}
                           />
                         </div>
-                        <p className="text-2xs text-muted-foreground">
+                        <p className="px-1 text-xs text-muted-foreground">
                           Direct https links, Google Drive or Dropbox share links (&ldquo;Anyone with the link&rdquo;), or
                           presigned S3 URLs. Files are copied server-side after you start the run.
                         </p>
@@ -871,7 +937,7 @@ const Module1UploadForm = ({
                         <FilePickerRow
                           id="m1-r1"
                           label="Forward read (R1)"
-                          placeholder="Choose R1 file"
+                          placeholder="Choose or drop R1 file"
                           file={r1File}
                           onSelect={setR1File}
                           progress={module1UploadProgress?.r1}
@@ -882,7 +948,7 @@ const Module1UploadForm = ({
                         <FilePickerRow
                           id="m1-r2"
                           label="Reverse read (R2)"
-                          placeholder="Choose R2 file"
+                          placeholder="Choose or drop R2 file"
                           file={r2File}
                           onSelect={setR2File}
                           progress={module1UploadProgress?.r2}
@@ -894,13 +960,14 @@ const Module1UploadForm = ({
                     )}
                   </section>
 
-                  <section aria-labelledby="m1-bed-title" className="space-y-3">
+                  <section aria-labelledby="m1-bed-title" className="wb-card space-y-3 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h4 id="m1-bed-title" className="flex items-baseline gap-2 text-xs font-semibold text-foreground">
+                      <h4 id="m1-bed-title" className="flex items-baseline gap-2 text-[13px] font-semibold text-foreground">
                         Capture BED
-                        <span className="text-2xs font-normal text-muted-foreground">Required</span>
+                        <span className="text-xs font-normal text-muted-foreground">Required</span>
                       </h4>
-                      <PillToggle
+                      <SegmentedPill
+                        ariaLabel="Capture BED source"
                         value={bedMode}
                         onChange={setBedMode}
                         options={[
@@ -938,44 +1005,41 @@ const Module1UploadForm = ({
                           onChange={(v) => setUrlValue('bed', v)}
                           onValidate={() => validateUrlRow('bed')}
                         />
-                        <p className="mt-1.5 text-2xs text-muted-foreground">
+                        <p className="mt-1.5 px-1 text-xs text-muted-foreground">
                           The BED is validated for {genome} contig style after it is imported.
                         </p>
                       </div>
                     ) : (
                       <div>
-                        <label className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-lg border border-border bg-[var(--bg-input)] px-3 text-sm transition-colors hover:border-[var(--border-strong)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/40">
-                          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                          <span className={cn('min-w-0 flex-1 truncate', customBedFile ? 'font-mono text-xs text-foreground' : 'text-muted-foreground')}>
-                            {customBedFile?.name || 'Choose a .bed file'}
-                          </span>
-                          {!customBedFile && <span className="shrink-0 text-xs font-medium text-primary">Browse</span>}
-                          <input type="file" accept=".bed" className="sr-only" onChange={(e) => handleCustomBedSelect(e.target.files?.[0] || null)} />
-                        </label>
+                        <FileSlot
+                          id="m1-bed-file"
+                          file={customBedFile}
+                          accept=".bed"
+                          placeholder="Choose or drop a .bed file"
+                          error={customBedValidation && !customBedValidation.ok && !isValidatingBed}
+                          onSelect={handleCustomBedSelect}
+                        />
                         {customBedPrecheck?.ok === false && !customBedValidation && (
-                          <p className="mt-1.5 text-2xs text-[var(--warning)]">
-                            First chromosome column ("{customBedPrecheck.sampleChrom}") doesn't look like hg38 style (expected e.g. "chr1").
+                          <p className="mt-1.5 flex items-start gap-1.5 px-1 text-xs text-[var(--warning)]">
+                            <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+                            <span>First chromosome column ("{customBedPrecheck.sampleChrom}") doesn't look like hg38 style (expected e.g. "chr1").</span>
                           </p>
                         )}
                         {isValidatingBed && (
-                          <p className="mt-1.5 flex items-center gap-1.5 text-2xs text-muted-foreground">
-                            <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                            Validating BED file…
+                          <p className="mt-1.5 flex items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status">
+                            <StageMark state="running" size={16} />
+                            Validating BED file
                           </p>
                         )}
                         {customBedValidation && !isValidatingBed && (
                           <p
                             className={cn(
-                              'mt-1.5 flex items-start gap-1.5 text-2xs',
+                              'wb-pop mt-1.5 flex items-start gap-1.5 px-1 text-xs',
                               customBedValidation.ok ? 'text-[var(--success)]' : 'text-[var(--error)]'
                             )}
                             role={customBedValidation.ok ? 'status' : 'alert'}
                           >
-                            {customBedValidation.ok ? (
-                              <CheckCircle2 className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
-                            ) : (
-                              <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
-                            )}
+                            <StageMark state={customBedValidation.ok ? 'done' : 'failed'} size={16} className="shrink-0" />
                             <span>
                               {customBedValidation.message ||
                                 (customBedValidation.ok ? 'BED file looks valid for this genome.' : 'BED file failed validation.')}
@@ -996,8 +1060,8 @@ const Module1UploadForm = ({
               )}
 
               {metadataStep === 'analysis' && (
-                <div className="disclosure-enter space-y-4">
-                  <p className="text-xs text-muted-foreground">
+                <div className="space-y-4">
+                  <p className="text-[13px] text-muted-foreground">
                     Nothing here is required. Clinical context sharpens prioritisation, and you can add it
                     later from Edit sample info.
                   </p>
@@ -1021,7 +1085,7 @@ const Module1UploadForm = ({
               )}
 
               {metadataStep === 'phenotype' && (
-                <div className="disclosure-enter space-y-6">
+                <div className="space-y-6">
                   {isGermline && (
                     <PhenotypeInputPanel
                       hideLabel
@@ -1072,7 +1136,7 @@ const Module1UploadForm = ({
                   )}
 
                   {isStaging && (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-[13px] text-muted-foreground">
                       Your plan stages these files now. The run starts after you upgrade; nothing is queued yet.
                     </p>
                   )}
@@ -1088,15 +1152,16 @@ const Module1UploadForm = ({
                   )}
                 </div>
               )}
+             </WizardPanes>
             </div>
 
-            <div className="flex-shrink-0 space-y-2 border-t border-border px-5 py-3 sm:px-7 sm:py-4">
+            <div className="flex-shrink-0 space-y-2.5 border-t border-[hsl(var(--wb-line))] px-5 py-3 sm:px-7 sm:py-4">
               {metadataStep === 'sample' && !essentialsReady && <MissingHint items={essentialsMissing} />}
               {metadataStep === 'sample' && finalBlockers.length > 0 && (
-                <p className="text-2xs text-[var(--error)]">{finalBlockers.join(' ')}</p>
+                <p className="text-xs text-[var(--error)]">{finalBlockers.join(' ')}</p>
               )}
               {isFinalStep && finalBlockers.length > 0 && (
-                <p className="text-2xs text-[var(--error)]" role="alert">{finalBlockers.join(' ')}</p>
+                <p className="text-xs text-[var(--error)]" role="alert">{finalBlockers.join(' ')}</p>
               )}
               {isFinalStep && !isStaging && notProvided.length > 0 && !module1Submitting && (
                 <QuietSummary>
@@ -1144,30 +1209,25 @@ const Module1UploadForm = ({
                         className="max-sm:h-11 max-sm:w-full"
                       >
                         Continue
+                        <ArrowRight className="size-4" aria-hidden />
                       </Button>
                     ) : (
-                      <Button
+                      <StateButton
                         type="submit"
                         size="lg"
+                        state={module1Submitting ? 'running' : 'idle'}
+                        icon={Play}
+                        labels={{ idle: finalSubmitLabel, running: isUrlMode ? 'Importing' : 'Uploading' }}
                         disabled={!canSubmit || analysisTypeMissing}
                         title={finalBlockers.length ? finalBlockers.join(' ') : undefined}
-                        className="max-sm:h-11 max-sm:w-full whitespace-normal"
-                      >
-                        {module1Submitting ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                            {isUrlMode ? 'Importing…' : 'Uploading…'}
-                          </>
-                        ) : (
-                          finalSubmitLabel
-                        )}
-                      </Button>
+                        className="max-sm:h-11 max-sm:w-full"
+                      />
                     )}
                   </div>
                 </div>
               </div>
               {isFinalStep && showComputeChoice && (
-                <p className="text-right text-2xs text-muted-foreground tabular-nums">
+                <p className="text-right text-xs text-muted-foreground tabular-nums">
                   Uses 1 run credit when results are delivered.
                   {runsLeftLabel ? ` ${runsLeftLabel}` : ''}
                   {gateMeterDetail ? ` ${gateMeterDetail}` : ''}
@@ -1187,15 +1247,16 @@ const Module1UploadForm = ({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep editing</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-[var(--error)] text-white hover:brightness-110"
-              onClick={() => {
+            <HoldButton
+              holdMs={900}
+              doneLabel="Discarded"
+              onConfirm={() => {
                 setShowDiscardConfirm(false);
                 onClose?.();
               }}
             >
-              Discard
-            </AlertDialogAction>
+              Hold to discard upload
+            </HoldButton>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

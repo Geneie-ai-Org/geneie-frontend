@@ -214,8 +214,8 @@
 .wb-status[data-state='queued'] { background-color: hsl(var(--wb-pill)); border-color: hsl(var(--wb-line)); color: hsl(var(--foreground)); }
 
 /* ---- Table rows (Results, Triage): hover and selected tints that stay visible in light and dark ---- */
-.chat-shell-right { --wb-row-hover: var(--brand-50); --wb-row-sel: var(--brand-100); }
-.dark .chat-shell-right { --wb-row-hover: 177 16% 15.5%; --wb-row-sel: 177 18% 20%; }
+:root { --wb-row-hover: var(--brand-50); --wb-row-sel: var(--brand-100); }
+.dark { --wb-row-hover: 177 16% 15.5%; --wb-row-sel: 177 18% 20%; }
 
 /* ---- Interaction layer ------------------------------------------------------------------------ */
 

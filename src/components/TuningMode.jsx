@@ -15,19 +15,21 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Sliders, Play, Loader2, Copy, Check, RotateCcw, X, SlidersHorizontal } from 'lucide-react';
+import { Sliders, Play, RotateCcw, X, SlidersHorizontal } from 'lucide-react';
 import { buildOverridesHeader } from '@/services/streamCompare';
 import TuningConfigModal from '@/components/TuningConfigModal';
+import { CopyButton, CountUp, StateButton } from '@/components/motion';
+import { SegmentedPill } from '@/components/UploadWizardKit';
 
-/** Small button for the tuning panel: outline by default, filled for the one primary action. */
+/** Small pill button for the tuning panel: hairline by default, brand tint for the one primary action. */
 function PillButton({ children, active, disabled, title, onClick, icon: Icon, tone = 'default' }) {
   const tones = {
     default:
-      'border-border bg-transparent text-foreground hover:bg-[var(--bg-surface-hover)]',
+      'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] text-foreground hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))]',
     primary:
-      'border-transparent bg-primary text-primary-foreground hover:bg-primary/85',
+      'border-transparent bg-[hsl(var(--brand-solid))] text-[hsl(var(--on-brand))] hover:bg-[hsl(var(--brand-solid-hover))]',
     ghost:
-      'border-transparent bg-transparent text-muted-foreground hover:text-foreground hover:bg-[var(--bg-surface-hover)]',
+      'border-transparent bg-transparent text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--wb-pill))]',
   };
   return (
     <button
@@ -35,11 +37,11 @@ function PillButton({ children, active, disabled, title, onClick, icon: Icon, to
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`inline-flex h-7 items-center gap-1.5 rounded-[8px] border px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 [@media(pointer:coarse)]:h-9 ${
+      className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium outline-none transition-[background-color,border-color,color,transform] duration-150 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none [@media(pointer:coarse)]:h-9 ${
         active ? tones.primary : tones[tone]
       }`}
     >
-      {Icon ? <Icon className={`h-3.5 w-3.5 ${active && Icon === Loader2 ? 'animate-spin' : ''}`} aria-hidden /> : null}
+      {Icon ? <Icon className="size-3.5" aria-hidden /> : null}
       {children}
     </button>
   );
@@ -83,7 +85,6 @@ export default function TuningMode({ tuning, onClose }) {
     baseline, configError, reloadConfig, dirtyKeys, running, run, hasColumns, canRun,
   } = tuning;
   const [editorOpen, setEditorOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
   const pos = useClearOfChrome();
 
   if (!isAdmin) return null; // non-admins never see this at all
@@ -96,8 +97,9 @@ export default function TuningMode({ tuning, onClose }) {
   return (
    <>
     <div
-      className="tune-root"
+      className="tune-root wb-scope"
       style={{
+        backgroundColor: 'transparent',
         position: 'fixed',
         right: pos.right,
         bottom: pos.bottom,
@@ -114,7 +116,7 @@ export default function TuningMode({ tuning, onClose }) {
       <div
         className={
           active
-            ? 'rounded-xl border border-border bg-popover p-2 text-popover-foreground shadow-[var(--shadow-md)]'
+            ? 'wb-rise rounded-3xl border border-[hsl(var(--wb-line))] bg-popover p-2 text-popover-foreground shadow-[var(--shadow-md)]'
             : ''
         }
       >
@@ -122,70 +124,52 @@ export default function TuningMode({ tuning, onClose }) {
           className={
             active
               ? 'flex flex-wrap items-center gap-1.5'
-              : 'inline-flex items-center gap-2 rounded-[8px] border border-border bg-card px-1.5 py-0.5 text-muted-foreground'
+              : 'inline-flex items-center gap-2 rounded-full border border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] py-0.5 pl-3 pr-0.5 text-muted-foreground'
           }
           style={{ pointerEvents: 'auto' }}
         >
-          <button
-            type="button"
-            role="switch"
-            aria-checked={active}
-            onClick={() => setActive((v) => !v)}
+          <span
+            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-foreground"
             title={active ? undefined : 'Off: chat behaves exactly as it does normally (no header, no second column).'}
-            className="inline-flex h-7 items-center gap-2 rounded-md px-1 text-xs font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [@media(pointer:coarse)]:h-9"
           >
-            <span
-              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
-                active ? 'bg-primary' : 'bg-[var(--border-strong)]'
-              }`}
-              aria-hidden
-            >
-              <span
-                className={`inline-block h-3 w-3 transform rounded-full bg-background shadow-[var(--shadow-sm)] transition-transform ${
-                  active ? 'translate-x-[14px]' : 'translate-x-[2px]'
-                }`}
-              />
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Sliders className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
-              Tuning
-            </span>
-          </button>
+            <Sliders className="size-3.5 text-muted-foreground" aria-hidden />
+            Tuning
+          </span>
+          <SegmentedPill
+            ariaLabel="Tuning mode"
+            value={active ? 'on' : 'off'}
+            onChange={(v) => setActive(v === 'on')}
+            options={[
+              { value: 'off', label: 'Off' },
+              { value: 'on', label: 'On' },
+            ]}
+          />
 
           {active ? (
             <>
-              <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
+              <span className="mx-0.5 h-4 w-px bg-[hsl(var(--wb-line))]" aria-hidden />
               <PillButton onClick={() => setEditorOpen(true)} icon={SlidersHorizontal}>
                 Edit config
                 {dirtyKeys.length ? (
-                  <span className="ml-0.5 rounded-full bg-muted px-1.5 text-[10px] leading-4 text-foreground">
-                    {dirtyKeys.length}
+                  <span className="wb-chip !h-5 !px-1.5 tabular-nums text-[11px]" data-tone="brand">
+                    <CountUp value={dirtyKeys.length} duration={0.3} />
                   </span>
                 ) : null}
               </PillButton>
-              <PillButton
+              <StateButton
+                state={running ? 'running' : 'idle'}
+                labels={{ idle: 'Run comparison', running: 'Comparing' }}
+                icon={Play}
                 onClick={run}
                 disabled={!canRun}
-                icon={running ? Loader2 : Play}
-                tone="primary"
-                active
                 title={canRun ? undefined : 'Type a question in the composer first.'}
-              >
-                {running ? 'Comparing…' : 'Run comparison'}
-              </PillButton>
-              <PillButton
+              />
+              <CopyButton
+                label="Copy config"
                 disabled={!dirtyKeys.length}
-                onClick={() => {
-                  const h = buildOverridesHeader(overrides);
-                  navigator.clipboard?.writeText(h || '');
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1500);
-                }}
-                icon={copied ? Check : Copy}
+                getText={() => buildOverridesHeader(overrides) || ''}
                 title="Copy the override JSON. Promoting it to global is a separate, deliberate admin PUT."
-              >
-                {copied ? 'Copied' : 'Copy config'}
-              </PillButton>
+              />
               <PillButton
                 onClick={resetAll}
                 icon={RotateCcw}

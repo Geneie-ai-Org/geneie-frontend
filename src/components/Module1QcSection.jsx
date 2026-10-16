@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { ChevronRight } from 'lucide-react';
+import { Turn } from '@/components/motion';
 import Module1QcPanel from '@/components/Module1QcPanel';
 import Module1IgvPanel from '@/components/Module1IgvPanel';
 import Module1QcReportPanel from '@/components/Module1QcReportPanel';
-import { cn } from '@/lib/utils';
 
 const EASE = [0.23, 1, 0.32, 1];
 
@@ -31,9 +31,10 @@ export default function Module1QcSection({ job, variant = 'card' }) {
     job.hasQc || job.hasBam || job.bamQcPurged ? 'saved summary' : null,
   ].filter(Boolean);
 
+  const surface = variant === 'panel';
   const sections = (
-    <div className="space-y-5">
-      {job.hasQc && <Module1QcPanel conversationId={job.conversationId} hasQc={job.hasQc} />}
+    <div className={surface ? 'space-y-3' : 'space-y-5'}>
+      {job.hasQc && <Module1QcPanel conversationId={job.conversationId} hasQc={job.hasQc} surface={surface} />}
 
       {job.hasBam && (
         <Module1IgvPanel
@@ -41,6 +42,7 @@ export default function Module1QcSection({ job, variant = 'card' }) {
           hasBam={job.hasBam}
           genome={job.genome}
           variant={variant === 'panel' ? 'panel' : 'card'}
+          surface={surface}
         />
       )}
 
@@ -48,6 +50,7 @@ export default function Module1QcSection({ job, variant = 'card' }) {
         conversationId={job.conversationId}
         visible
         hideBrowserSnapshots={Boolean(job.hasBam)}
+        surface={surface}
       />
     </div>
   );
@@ -61,19 +64,18 @@ export default function Module1QcSection({ job, variant = 'card' }) {
   }
 
   return (
-    <div className="border-t border-border pt-1">
+    <div className="border-t border-[hsl(var(--wb-line))] pt-2">
       <button
         type="button"
         onClick={() => setQcOpen((v) => !v)}
         aria-expanded={qcOpen}
-        className="-mx-1.5 flex min-h-9 w-[calc(100%+0.75rem)] items-center gap-1.5 rounded-md px-1.5 text-left text-xs font-medium text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/55"
+        className="flex min-h-9 w-full items-center gap-1.5 rounded-full px-2.5 text-left text-[13px] font-medium text-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
       >
-        <ChevronRight
-          className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none', qcOpen && 'rotate-90')}
-          aria-hidden
-        />
+        <Turn open={qcOpen} className="shrink-0 text-muted-foreground">
+          <ChevronRight className="size-3.5" aria-hidden />
+        </Turn>
         <span>QC and alignment</span>
-        <span className="min-w-0 flex-1 truncate text-2xs font-normal text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate text-xs font-normal text-muted-foreground">
           {qcOpen ? '' : qcButtonBits.join(' · ')}
         </span>
       </button>

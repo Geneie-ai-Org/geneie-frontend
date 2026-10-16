@@ -1,9 +1,12 @@
 /**
  * Case-level Manual vs Automatic for the full pipeline (M1 → report).
  */
-import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Info } from 'lucide-react';
-import { PillToggle } from '@/components/ui/pill-toggle';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { PopIn } from '@/components/motion';
+import { SegmentedPill } from '@/components/UploadWizardKit';
+import { cn } from '@/lib/utils';
 
 export const PIPELINE_RUN_MANUAL = 'manual';
 export const PIPELINE_RUN_AUTOMATIC = 'automatic';
@@ -52,57 +55,27 @@ export function applyPipelineRunModeChange(prev = {}, mode) {
 const AUTOMATIC_INFO =
   'Early access. Automatic advances annotation and phenotype prioritization when ready, and pre-selects strong disease matches (score ≥ 0.90) plus high-confidence findings. Review before clinical use.';
 
+/** Click-to-open explanation (a popover: Esc closes it and focus returns to the button). */
 function AutomaticInfoButton() {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onPointerDown = (e) => {
-      if (!wrapRef.current?.contains(e.target)) setOpen(false);
-    };
-    const onKey = (e) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
   return (
-    <span className="relative inline-flex" ref={wrapRef}>
-      <button
-        type="button"
-        className="-m-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55"
+    <Popover>
+      <PopoverTrigger
         aria-label="About Automatic mode"
-        aria-expanded={open}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
+        className="relative inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] after:absolute after:-inset-2"
       >
-        <Info className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-      </button>
-      {open ? (
-        <div
-          role="tooltip"
-          className="absolute left-0 top-full z-50 mt-1.5 w-60 rounded-md border border-border bg-popover px-2.5 py-2 text-2xs leading-snug text-[var(--text-secondary)] shadow-md"
-        >
-          {AUTOMATIC_INFO}
-        </div>
-      ) : null}
-    </span>
+        <Info className="size-3.5" strokeWidth={2} aria-hidden />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 text-xs leading-snug text-[var(--text-secondary)]">
+        {AUTOMATIC_INFO}
+      </PopoverContent>
+    </Popover>
   );
 }
 
 /**
- * Manual vs Automatic for the whole case. A quiet row: the label and one line of what it means on
- * the left, the two-way switch on the right. Automatic is an early-access mode, so it carries a
- * text tag rather than a decorative border.
+ * Manual vs Automatic for the whole case. One hairline card: the label and one line of what the
+ * mode means on the left, a sliding pill switch on the right. Automatic is an early-access mode,
+ * so it carries a text chip (it pops in) rather than a decorative border.
  */
 export default function PipelineRunModeToggle({
   value = PIPELINE_RUN_MANUAL,
@@ -110,29 +83,47 @@ export default function PipelineRunModeToggle({
   disabled = false,
   className = '',
 }) {
+  const reduce = useReducedMotion();
   const mode = normalizePipelineRunMode(value);
   const isAutomatic = mode === PIPELINE_RUN_AUTOMATIC;
   return (
     <div
-      className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg border px-3 py-2.5 ${
-        isAutomatic ? 'border-primary' : 'border-border'
-      } ${className}`}
+      className={cn(
+        'wb-card flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3.5 py-2.5 transition-colors duration-200 motion-reduce:transition-none',
+        isAutomatic && '!border-[hsl(var(--brand-300))]',
+        className
+      )}
     >
       <div className="min-w-0">
-        <div className="flex items-center gap-1.5">
-          <p className="text-xs font-medium text-foreground">Analysis mode</p>
-          {isAutomatic && (
-            <span className="inline-flex h-[18px] items-center rounded-full bg-[var(--accent-teal-soft)] px-1.5 text-2xs font-semibold text-primary">
-              Early access
-            </span>
-          )}
+        <div className="flex min-h-6 items-center gap-1.5">
+          <p className="text-[13px] font-medium text-foreground">Analysis mode</p>
+          <AnimatePresence initial={false}>
+            {isAutomatic ? (
+              <PopIn key="ea">
+                <span className="wb-chip !h-5 text-[11px]" data-tone="brand">Early access</span>
+              </PopIn>
+            ) : null}
+          </AnimatePresence>
           {isAutomatic && <AutomaticInfoButton />}
         </div>
-        <p className="mt-0.5 text-2xs text-muted-foreground">
-          {isAutomatic ? 'Runs the full analysis for you.' : 'You control each step.'}
-        </p>
+        <div className="relative mt-0.5 h-4 overflow-hidden">
+          <AnimatePresence initial={false} mode="popLayout">
+            <motion.p
+              key={mode}
+              className="text-xs leading-4 text-muted-foreground"
+              initial={reduce ? false : { opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduce ? { opacity: 0 } : { opacity: 0, y: -6 }}
+              transition={{ duration: reduce ? 0 : 0.16 }}
+            >
+              {isAutomatic ? 'Runs the full analysis for you.' : 'You control each step.'}
+            </motion.p>
+          </AnimatePresence>
+        </div>
       </div>
-      <PillToggle
+      <SegmentedPill
+        ariaLabel="Analysis mode"
+        disabled={disabled}
         value={mode}
         onChange={(next) => {
           if (disabled) return;

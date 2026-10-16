@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2, Plus, ChevronLeft } from 'lucide-react';
+import { Upload, FileText, X, CheckCircle, Plus, ChevronLeft, ArrowRight, Download, Check, Trash2 } from 'lucide-react';
 import { optionalIdToken, requiredIdToken } from '@/lib/safeAuth';
 import { apiUrl as buildApiUrl } from '@/config/api';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,15 +24,22 @@ import PhenotypeInputPanel, {
 import GermlinePedigreeFields, { countPedigreeFieldsFilled } from '@/components/GermlinePedigreeFields';
 import {
   Disclosure,
+  DropZone,
   Field,
   FieldGroup,
+  FileChip,
+  ICON_BTN_CLASS,
   MissingHint,
   QuietSummary,
+  SegmentedPill,
   TEXT_INPUT_CLASS,
   UploadErrorBanner,
+  WIZARD_DIALOG_CLASS,
+  WizardPanes,
   WizardSelect,
   WizardStepper,
 } from '@/components/UploadWizardKit';
+import { Collapse, HoldButton, StateButton } from '@/components/motion';
 import { Button } from '@/components/ui/button';
 import {
   EMPTY_PEDIGREE_FIELDS,
@@ -44,12 +51,10 @@ import PipelineRunModeToggle, {
   normalizePipelineRunMode,
   applyPipelineRunModeChange,
 } from '@/components/PipelineRunModeToggle';
-import { PillToggle } from '@/components/ui/pill-toggle';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
@@ -1101,40 +1106,36 @@ const DocumentUpload = ({
         {existingDocument ? (
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
-              className="text-xs px-2 py-1 border rounded transition-colors flex items-center gap-1"
-              style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--accent-teal)', color: 'var(--accent-teal)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; }}
+              className="wb-chip !h-8 gap-1.5 !bg-[hsl(var(--wb-card))] px-3 text-xs outline-none transition-colors hover:!border-[hsl(var(--brand-300))] hover:!bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:opacity-50"
               title={existingDocument.name}
             >
-              <FileText className="w-3 h-3" />
-              <span className="truncate max-w-[100px]">{existingDocument.name}</span>
+              <FileText className="size-3.5" aria-hidden />
+              <span className="max-w-[100px] truncate">{existingDocument.name}</span>
             </button>
             <button
+              type="button"
               onClick={handleRemoveDocument}
-              className="p-1 rounded transition-colors"
-              style={{ color: 'var(--error)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--error-soft)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              className={ICON_BTN_CLASS}
               aria-label="Remove document"
               title="Remove document"
             >
-              <X className="w-3 h-3" />
+              <X className="size-3.5" aria-hidden />
             </button>
           </div>
         ) : (
           <label
             htmlFor="document-upload-compact"
-            className={`text-xs px-3 py-1.5 border rounded transition-colors cursor-pointer flex items-center gap-1 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
-            style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
+            className={`wb-chip !h-8 cursor-pointer gap-1.5 !bg-[hsl(var(--wb-card))] px-3 text-xs transition-colors hover:!border-[hsl(var(--brand-300))] hover:!bg-[hsl(var(--brand-50))] ${
+              isUploading ? 'cursor-not-allowed opacity-50' : ''
+            }`}
           >
             {isUploading ? (
               <>
-                <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--accent-teal)' }} />
-                <span className="truncate max-w-[120px]">
+                <span className="wb-spin-inline" aria-hidden />
+                <span className="max-w-[120px] truncate tabular-nums">
                   {uploadProgress > 0 && uploadProgress < 100
                     ? `${Math.round(uploadProgress)}%`
                     : 'Processing'}
@@ -1142,7 +1143,7 @@ const DocumentUpload = ({
               </>
             ) : (
               <>
-                <Upload className="w-3 h-3" />
+                <Upload className="size-3.5" aria-hidden />
                 <span>Upload</span>
               </>
             )}
@@ -1151,11 +1152,14 @@ const DocumentUpload = ({
 
         {/* Error/Success messages for compact mode */}
         {(error || success) && (
-          <div className="absolute top-full right-0 mt-1 p-2 rounded text-xs whitespace-nowrap z-50 border"
-            style={error
-              ? { backgroundColor: 'var(--error-soft)', borderColor: 'var(--error)', color: 'var(--error)' }
-              : { backgroundColor: 'var(--success-soft)', borderColor: 'var(--success)', color: 'var(--success)' }
-            }>
+          <div
+            role={error ? 'alert' : 'status'}
+            className={`wb-pop absolute right-0 top-full z-50 mt-1 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs ${
+              error
+                ? 'border-[var(--error)]/40 bg-[var(--error-soft)] text-[var(--error)]'
+                : 'border-[var(--success)]/40 bg-[var(--success-soft)] text-[var(--success)]'
+            }`}
+          >
             {error || success}
           </div>
         )}
@@ -1164,28 +1168,29 @@ const DocumentUpload = ({
     );
   }
 
-  // Full mode (original implementation, now with tabs)
-  // Note: Tabs are now rendered in App.jsx modal header, so we don't show them here
+  // Full mode. `wb-scope` makes the shared Button/Badge pills here too (this panel sits inside the
+  // page's own card frame, not a Dialog); the transparent background keeps that frame's surface.
   return (
-    <div className="w-full">
+    <div className="wb-scope w-full" style={{ backgroundColor: 'transparent' }}>
       {/* Hide upload UI when form is showing or file was pre-selected */}
       {!showInfoForm && !preSelectedFile && (
         <>
           {!compact && !existingDocument && (
-            <div className="mb-3">
-              <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-                Add a variants file (VCF/TSV)
+            <div className="mb-4">
+              <h3 className="text-base font-semibold text-foreground">
+                Add a variants file
               </h3>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+              <p className="mt-0.5 text-[13px] text-muted-foreground">
                 VCF, TSV or CSV with variant calls. Annotated or not.
               </p>
             </div>
           )}
 
-          {/* Source of the file — the kind of file was already chosen in the upload menu */}
+          {/* Source of the file: the kind of file was already chosen in the upload menu */}
           {!compact && !existingDocument && userTier !== 'guest' && userId !== 'guest' && (
-            <PillToggle
+            <SegmentedPill
               className="mb-3"
+              ariaLabel="Where the file is"
               value={importMode}
               onChange={handleImportModeChange}
               options={[
@@ -1195,7 +1200,7 @@ const DocumentUpload = ({
             />
           )}
 
-          {/* Pick a local file — click or drag. Drops route through the same processFile
+          {/* Pick a local file: click or drag. Drops route through the same processFile
               path as the hidden input, so validation and genome detection are identical. */}
           {importMode === 'file' && !compact && !existingDocument && (
             <div>
@@ -1208,8 +1213,12 @@ const DocumentUpload = ({
                 id="document-upload-full"
                 disabled={isUploading}
               />
-              <label
+              <DropZone
                 htmlFor="document-upload-full"
+                dragOver={isDragOver}
+                disabled={isUploading}
+                busy={isUploading}
+                formats={['.vcf', '.vcf.gz', '.tsv', '.csv']}
                 onDragOver={(e) => {
                   e.preventDefault();
                   if (!isUploading) setIsDragOver(true);
@@ -1222,172 +1231,134 @@ const DocumentUpload = ({
                   const file = e.dataTransfer.files?.[0];
                   if (file) processFile(file);
                 }}
-                className={`flex flex-col items-center justify-center gap-2 w-full px-4 py-8 border border-dashed rounded-xl text-center transition-colors ${
-                  isUploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                }`}
-                style={{
-                  borderColor: isDragOver ? 'var(--accent-teal)' : 'var(--border-default)',
-                  backgroundColor: isDragOver ? 'var(--accent-teal-soft)' : 'var(--bg-input)',
-                }}
-              >
-                <Upload className="w-5 h-5" style={{ color: 'var(--accent-teal)' }} />
-                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                  {isUploading ? 'Processing…' : 'Choose a file or drag it here'}
-                </span>
-                <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                  .vcf, .vcf.gz, .tsv or .csv
-                </span>
-              </label>
+              />
             </div>
           )}
 
-          {/* Import from a link — public URL / Drive / Dropbox */}
+          {/* Import from a link: public URL / Drive / Dropbox */}
           {importMode === 'url' && !compact && (
             <div>
-              <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
-                Import from a link
-              </p>
-              {/* Optional filename — progressive disclosure */}
-              {showUrlFilename || urlFilenameOverride ? (
-                <input
-                  type="text"
-                  value={urlFilenameOverride}
-                  onChange={(e) => setUrlFilenameOverride(e.target.value)}
-                  placeholder="Filename"
-                  autoFocus={showUrlFilename && !urlFilenameOverride}
-                  className="w-full h-9 px-3 mb-2 text-xs rounded-lg border transition-all focus:outline-none placeholder:text-[var(--text-tertiary)]"
-                  style={{ borderColor: 'var(--border-default)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
-                  onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--accent-teal)')}
-                  onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border-default)')}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleUrlContinue(); }}
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowUrlFilename(true)}
-                  className="inline-flex items-center gap-1 mt-2 text-xs transition-colors"
-                  style={{ color: 'var(--text-tertiary)' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-tertiary)')}
-                >
-                  <Plus className="w-3 h-3" />
-                  Set a filename
-                </button>
-              )}
-              {/* URL field with inline icon + clear */}
-              <div className="relative">
-                <input
-                  type="url"
-                  inputMode="url"
-                  value={fileUrl}
-                  onChange={(e) => setFileUrl(e.target.value)}
-                  placeholder="https://drive.google.com/file/uefaebf/view?usp=sharing"
-                  autoFocus
-                  className="w-full h-10 px-3 text-sm rounded-lg border transition-all focus:outline-none placeholder:text-[var(--text-tertiary)]"
-                  style={{
-                    borderColor: error ? 'var(--error)' : (urlFieldFocused ? 'var(--accent-teal)' : 'var(--border-default)'),
-                    background: 'var(--bg-input)',
-                    color: 'var(--text-primary)',
-                  }}
-                  onFocus={() => setUrlFieldFocused(true)}
-                  onBlur={() => setUrlFieldFocused(false)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleUrlContinue(); }}
-                />
-                {fileUrl && (
+              <Field
+                label="Link to the file"
+                htmlFor="document-upload-url"
+                error={error || null}
+                helper={
+                  <>
+                    Links must be shared as <span className="text-foreground">&ldquo;Anyone with the link.&rdquo;</span>
+                  </>
+                }
+              >
+                <div className="relative">
+                  <input
+                    id="document-upload-url"
+                    type="url"
+                    inputMode="url"
+                    value={fileUrl}
+                    onChange={(e) => setFileUrl(e.target.value)}
+                    placeholder="https://drive.google.com/file/uefaebf/view?usp=sharing"
+                    autoFocus
+                    aria-invalid={error ? true : undefined}
+                    className={cn(TEXT_INPUT_CLASS, 'pr-11', error && 'border-[var(--error)]')}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleUrlContinue(); }}
+                  />
+                  {fileUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setFileUrl('')}
+                      aria-label="Clear URL"
+                      className="absolute right-2 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
+                    >
+                      <X className="size-3.5" aria-hidden />
+                    </button>
+                  )}
+                </div>
+              </Field>
+
+              {/* Optional filename: revealed on request */}
+              <div className="mt-3">
+                {showUrlFilename || urlFilenameOverride ? null : (
                   <button
                     type="button"
-                    onClick={() => setFileUrl('')}
-                    aria-label="Clear URL"
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-md flex items-center justify-center"
-                    style={{ backgroundColor: 'var(--bg-surface-hover)', color: 'var(--text-secondary)' }}
+                    onClick={() => setShowUrlFilename(true)}
+                    className="wb-chip !h-7 gap-1 text-muted-foreground outline-none transition-colors hover:!border-[hsl(var(--brand-300))] hover:!bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <Plus className="size-3" aria-hidden />
+                    Set a filename
                   </button>
                 )}
+                <Collapse open={Boolean(showUrlFilename || urlFilenameOverride)}>
+                  <div className="px-px pb-px">
+                    <Field label="Filename" htmlFor="document-upload-url-name" helper="Only needed when the link does not end in the file name.">
+                      <input
+                        id="document-upload-url-name"
+                        type="text"
+                        value={urlFilenameOverride}
+                        onChange={(e) => setUrlFilenameOverride(e.target.value)}
+                        placeholder="sample.vcf.gz"
+                        autoFocus={showUrlFilename && !urlFilenameOverride}
+                        className={TEXT_INPUT_CLASS}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleUrlContinue(); }}
+                      />
+                    </Field>
+                  </div>
+                </Collapse>
               </div>
-              {/* Inline error replaces the guidance line, in red */}
-              {error ? (
-                <div className="flex items-start gap-2 mt-3 ml-3">
-                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: 'var(--error)' }} />
-                  <p className="text-2xs leading-relaxed" style={{ color: 'var(--error)' }}>{error}</p>
-                </div>
-              ) : (
-                <div className="flex items-start gap-2 mt-3 ml-3">
-                  <p className="text-2xs leading-relaxed" style={{ color: 'var(--text-tertiary)' }}>
-                    Links must be shared as{' '}
-                    <span style={{ color: 'var(--text-secondary)' }}>&ldquo;Anyone with the link.&rdquo;</span>
-                  </p>
-                </div>
-              )}
 
               {/* Primary action */}
-              <div className="flex justify-end mt-3">
-                <button
-                  type="button"
+              <div className="mt-4 flex justify-end">
+                <StateButton
+                  state={isPreflighting ? 'running' : 'idle'}
+                  labels={{ idle: 'Continue', running: 'Validating link' }}
+                  icon={ArrowRight}
                   onClick={handleUrlContinue}
                   disabled={isPreflighting || !fileUrl.trim()}
-                  className="h-9 px-5 rounded-lg text-xs font-medium inline-flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
-                  onMouseEnter={(e) => { if (!isPreflighting && fileUrl.trim()) e.currentTarget.style.backgroundColor = 'var(--accent-teal-hover)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-teal)'; }}
-                >
-                  {isPreflighting ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Validating
-                    </>
-                  ) : (
-                    'Continue'
-                  )}
-                </button>
+                  size="lg"
+                />
               </div>
             </div>
           )}
 
           {/* Existing Document Display */}
           {existingDocument && !isUploading && (
-            <div className="mb-3 p-3 border rounded-lg flex items-center justify-between" style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--accent-teal)' }}>
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'var(--accent-teal-soft)' }}>
-                  <FileText className="w-4 h-4" style={{ color: 'var(--accent-teal)' }} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+            <div className="wb-card mb-3 flex items-center justify-between gap-3 p-3">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]">
+                  <FileText className="size-4" aria-hidden />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-medium text-foreground">
                     {existingDocument.name}
                   </p>
-                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                    {existingDocument.type.toUpperCase()} • {(existingDocument.size / 1024).toFixed(1)} KB
+                  <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="wb-chip !h-5 text-[11px]" data-tone="brand">{String(existingDocument.type || '').toUpperCase()}</span>
+                    <span className="tabular-nums">{formatFileSize(existingDocument.size)}</span>
                   </p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={handleRemoveDocument}
-                className="p-1.5 rounded-lg transition-colors"
-                style={{ color: 'var(--text-tertiary)' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--error-soft)';
-                  e.currentTarget.style.color = 'var(--error)';
-                }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-tertiary)'; }}
+                className={ICON_BTN_CLASS}
                 aria-label="Remove document"
+                title="Remove document"
               >
-                <X className="w-4 h-4" />
+                <X className="size-4" aria-hidden />
               </button>
             </div>
           )}
 
           {/* Replace Document Button */}
           {existingDocument && !isUploading && (
-            <button
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
               onClick={() => fileInputRef.current?.click()}
-              className="w-full py-2 px-4 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2"
-              style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--accent-teal)', color: 'var(--accent-teal)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; }}
+              className="w-full"
             >
-              <Upload className="w-4 h-4" />
-              Replace Document
-            </button>
+              <Upload className="size-4" aria-hidden />
+              Replace file
+            </Button>
           )}
 
           {/* Hidden file input for replace */}
@@ -1403,7 +1374,7 @@ const DocumentUpload = ({
           )}
 
           {/* Error Message - Only show upload-related errors, not form validation errors.
-          URL mode renders its own inline error under the panel. */}
+          URL mode renders its own inline error under the field. */}
           {error && !showInfoForm && importMode !== 'url' && (
             <UploadErrorBanner
               className="mt-3"
@@ -1415,9 +1386,9 @@ const DocumentUpload = ({
 
           {/* Success Message */}
           {success && (
-            <div className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--success)] bg-[var(--success-soft)] p-3" role="status">
-              <CheckCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--success)]" aria-hidden />
-              <p className="text-sm text-foreground">{success}</p>
+            <div className="wb-rise mt-3 flex items-start gap-2 rounded-2xl border border-[var(--success)]/40 bg-[var(--success-soft)] p-3" role="status">
+              <CheckCircle className="mt-0.5 size-4 shrink-0 text-[var(--success)]" aria-hidden />
+              <p className="text-[13px] text-foreground">{success}</p>
             </div>
           )}
 
@@ -1445,47 +1416,40 @@ const DocumentUpload = ({
           * centred dialog jumped up each time it did. Full-height sheet on phones. */}
         <DialogContent
           showCloseButton={false}
-          className="!max-w-2xl w-full top-[5vh] translate-y-0 max-h-[min(90vh,900px)] flex flex-col p-0 gap-0 overflow-hidden ring-0 border border-border bg-popover shadow-[var(--shadow-lg)] max-sm:!top-0 max-sm:!h-[100dvh] max-sm:!max-h-[100dvh] max-sm:!max-w-full max-sm:rounded-none"
+          initialFocus={() => document.getElementById('meta-name') || true}
+          className={WIZARD_DIALOG_CLASS}
         >
-          <DialogTitle className="sr-only">{editMode ? 'Edit sample information' : 'Sample metadata'}</DialogTitle>
           <DialogDescription className="sr-only">
             {editMode ? 'Update metadata for this variant file.' : 'Provide details about your variant file for better analysis.'}
           </DialogDescription>
           <div className="flex-shrink-0 px-5 pb-4 pt-5 sm:px-7 sm:pt-6">
             <div className="flex items-start justify-between gap-3">
-              <h3 id="sample-metadata-title" className="min-w-0 text-base font-semibold text-foreground">
+              <DialogTitle id="sample-metadata-title" className="min-w-0 text-base font-semibold leading-snug text-foreground">
                 {editMode ? 'Edit sample information' : 'Add sample details'}
-              </h3>
+              </DialogTitle>
               <button
                 type="button"
                 onClick={handleInfoFormCancel}
                 disabled={isUploading}
                 aria-label="Close"
-                className="-mr-2 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55 disabled:opacity-40 sm:h-8 sm:w-8"
+                className={cn(ICON_BTN_CLASS, '-mr-1')}
               >
                 <X className="h-4 w-4" aria-hidden />
               </button>
             </div>
             {!editMode && (selectedFile || importUrlMeta) && (
-              <div className="mt-2 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                <span
-                  className="min-w-0 truncate font-mono"
-                  title={selectedFile ? selectedFile.name : importUrlMeta?.file_name}
-                >
-                  {selectedFile ? selectedFile.name : importUrlMeta?.file_name}
-                </span>
-                {selectedFile ? (
-                  <span className="shrink-0 tabular-nums">{formatFileSize(selectedFile.size)}</span>
-                ) : importUrlMeta?.content_length != null ? (
-                  <span className="shrink-0 tabular-nums">{formatFileSize(importUrlMeta.content_length)}</span>
-                ) : null}
-                {sampleMetadata.sampleFileType ? (
-                  <span className="shrink-0 rounded-full bg-muted px-1.5 text-2xs font-medium text-muted-foreground">
-                    {sampleMetadata.sampleFileType}
-                  </span>
-                ) : null}
-              </div>
+              <FileChip
+                className="mt-2.5"
+                name={selectedFile ? selectedFile.name : importUrlMeta?.file_name}
+                size={
+                  selectedFile
+                    ? formatFileSize(selectedFile.size)
+                    : importUrlMeta?.content_length != null
+                      ? formatFileSize(importUrlMeta.content_length)
+                      : null
+                }
+                kind={sampleMetadata.sampleFileType || null}
+              />
             )}
             <WizardStepper steps={wizardSteps} current={metadataStepIndex - 1} className="mt-4" />
             {error && showInfoForm && (
@@ -1501,7 +1465,8 @@ const DocumentUpload = ({
           </div>
 
           <form onSubmit={handleInfoFormSubmit} className="flex min-h-0 flex-1 flex-col">
-            <div className="flex-1 space-y-5 overflow-y-auto px-5 pb-4 sm:px-7">
+            <div data-wizard-scroll className="flex-1 overflow-x-hidden overflow-y-auto px-5 pb-4 pt-1 sm:px-7">
+             <WizardPanes step={metadataStep} index={metadataStepIndex} className="space-y-5">
               {metadataStep === 'sample' && (
                 <div className="space-y-5">
                   <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
@@ -1511,7 +1476,7 @@ const DocumentUpload = ({
                         type="text"
                         value={sampleMetadata.name}
                         onChange={(e) => setSampleMetadata({ ...sampleMetadata, name: e.target.value })}
-                        className={cn(TEXT_INPUT_CLASS, 'border-border')}
+                        className={TEXT_INPUT_CLASS}
                         placeholder="Enter sample name"
                       />
                     </Field>
@@ -1605,8 +1570,8 @@ const DocumentUpload = ({
               )}
 
               {metadataStep === 'analysis' && (
-                <div className="disclosure-enter space-y-4">
-                  <p className="text-xs text-muted-foreground">
+                <div className="space-y-4">
+                  <p className="text-[13px] text-muted-foreground">
                     Nothing here is required. Clinical context sharpens prioritisation, and you can add it
                     later from Edit sample info.
                   </p>
@@ -1698,7 +1663,7 @@ const DocumentUpload = ({
                             value={sampleMetadata.tumorType}
                             onChange={(e) => setSampleMetadata({ ...sampleMetadata, tumorType: e.target.value })}
                             placeholder="e.g. Breast cancer, Lung adenocarcinoma"
-                            className={cn(TEXT_INPUT_CLASS, 'border-border')}
+                            className={TEXT_INPUT_CLASS}
                           />
                         </Field>
                       )}
@@ -1719,7 +1684,7 @@ const DocumentUpload = ({
               )}
 
               {metadataStep === 'phenotype' && sampleMetadata.analysisType === 'Germline' && (
-                <div className="disclosure-enter">
+                <div>
                   <PhenotypeInputPanel
                     hideLabel
                     onDraftChange={setPhenotypeDraft}
@@ -1759,10 +1724,11 @@ const DocumentUpload = ({
                   />
                 </div>
               )}
+             </WizardPanes>
             </div>
 
             {/* Footer: pinned. What is missing / left out is plain text, not a tooltip or a confirm. */}
-            <div className="flex-shrink-0 space-y-2 border-t border-border px-5 py-3 sm:px-7 sm:py-4">
+            <div className="flex-shrink-0 space-y-2.5 border-t border-[hsl(var(--wb-line))] px-5 py-3 sm:px-7 sm:py-4">
               {metadataStep === 'sample' && missingEssentials.length > 0 && (
                 <MissingHint items={missingEssentials} />
               )}
@@ -1815,27 +1781,28 @@ const DocumentUpload = ({
                       className="max-sm:h-11 max-sm:w-full"
                     >
                       Continue
+                      <ArrowRight className="size-4" aria-hidden />
                     </Button>
                   ) : (
-                    <Button type="submit" size="lg" disabled={isUploading} className="max-sm:h-11 max-sm:w-full">
-                      {isUploading ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                          {editMode ? 'Saving…' : 'Uploading…'}
-                        </>
-                      ) : editMode ? (
-                        'Save changes'
-                      ) : metadataStep === 'phenotype' &&
-                        sampleMetadata.analysisType === 'Germline' &&
-                        !phenotypeDraft.trim() &&
-                        !(sampleMetadata.phenotype || '').trim() ? (
-                        importMode === 'url' ? 'Skip phenotype and import' : 'Skip phenotype and upload'
-                      ) : importMode === 'url' ? (
-                        'Import file'
-                      ) : (
-                        'Upload file'
-                      )}
-                    </Button>
+                    <StateButton
+                      type="submit"
+                      size="lg"
+                      state={isUploading ? 'running' : 'idle'}
+                      icon={editMode ? Check : importMode === 'url' ? Download : Upload}
+                      disabled={isUploading}
+                      className="max-sm:h-11 max-sm:w-full"
+                      labels={{
+                        running: editMode ? 'Saving' : 'Uploading',
+                        idle: editMode
+                          ? 'Save changes'
+                          : metadataStep === 'phenotype' &&
+                              sampleMetadata.analysisType === 'Germline' &&
+                              !phenotypeDraft.trim() &&
+                              !(sampleMetadata.phenotype || '').trim()
+                            ? importMode === 'url' ? 'Skip phenotype and import' : 'Skip phenotype and upload'
+                            : importMode === 'url' ? 'Import file' : 'Upload file',
+                      }}
+                    />
                   )}
                 </div>
               </div>
@@ -1844,23 +1811,20 @@ const DocumentUpload = ({
         </DialogContent>
       </Dialog>
 
-      {/* Remove Document Confirmation Modal */}
+      {/* Remove Document Confirmation Modal: destructive, so the confirm is a press-and-hold. */}
       <AlertDialog open={showRemoveConfirm} onOpenChange={(open) => { if (!open) setShowRemoveConfirm(false); }}>
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove Document?</AlertDialogTitle>
+            <AlertDialogTitle>Remove 1 file from this conversation?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove this document from the conversation?
+              {existingDocument?.name ? `${existingDocument.name} will be removed from the conversation.` : 'The file will be removed from the conversation.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-[var(--accent-teal)] text-white hover:bg-[var(--accent-teal-hover)]"
-              onClick={confirmRemoveDocument}
-            >
-              Remove
-            </AlertDialogAction>
+            <AlertDialogCancel>Keep file</AlertDialogCancel>
+            <HoldButton icon={Trash2} doneLabel="Removed" onConfirm={confirmRemoveDocument}>
+              Hold to remove file
+            </HoldButton>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1877,15 +1841,17 @@ const DocumentUpload = ({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep editing</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-[var(--error)] text-white hover:brightness-110"
-              onClick={() => {
+            <HoldButton
+              icon={Trash2}
+              holdMs={900}
+              doneLabel="Discarded"
+              onConfirm={() => {
                 setShowDiscardConfirm(false);
                 handleInfoFormCancel();
               }}
             >
-              Discard
-            </AlertDialogAction>
+              {editMode ? 'Hold to discard edits' : 'Hold to discard upload'}
+            </HoldButton>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1909,15 +1875,14 @@ const DocumentUpload = ({
       >
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>Replace Document?</AlertDialogTitle>
+            <AlertDialogTitle>Replace {existingDocument?.name || 'the current file'} with {pendingFile?.name || 'the new file'}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This conversation already has a document ({existingDocument?.name}). Do you want to replace it?
+              This conversation already has a file ({existingDocument?.name}). The new file takes its place.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Keep current file</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-[var(--accent-teal)] text-[var(--accent-teal-contrast)] hover:bg-[var(--accent-teal-hover)]"
               onClick={async () => {
                 setShowReplaceConfirm(false);
                 const file = pendingFile;
@@ -1934,7 +1899,7 @@ const DocumentUpload = ({
                 }
               }}
             >
-              Replace
+              Replace file
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

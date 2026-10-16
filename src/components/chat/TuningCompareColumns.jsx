@@ -13,37 +13,28 @@ import { COLUMN_LABELS } from '@/services/streamCompare';
 function Column({ col, data, running }) {
   const isCandidate = col === 'candidate';
   const streaming = running && !data.done;
+  const failed = Boolean(data.error);
   return (
     <section
       aria-label={COLUMN_LABELS[col]}
-      className={`flex min-h-[7rem] min-w-0 flex-col rounded-xl border bg-[var(--bg-app)] p-3.5 ${
-        isCandidate ? 'border-[var(--border-strong)]' : 'border-[var(--border-default)]'
+      className={`wb-card flex min-h-[7rem] min-w-0 flex-col p-3.5 ${
+        isCandidate ? '!border-[hsl(var(--brand-300))]' : ''
       }`}
     >
-      <div className="mb-2.5 flex items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2">
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)]">
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              isCandidate ? 'bg-[var(--accent-teal)]' : 'bg-[var(--text-tertiary)]'
-            }`}
-            aria-hidden
-          />
+      <div className="mb-2.5 flex items-center justify-between gap-2 border-b border-[hsl(var(--wb-line))] pb-2.5">
+        <span className="wb-chip" data-tone={isCandidate ? 'brand' : undefined}>
           {COLUMN_LABELS[col]}
         </span>
-        {data.done ? (
-          <span className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[var(--success)]" aria-hidden />
-            Done
-          </span>
+        {failed ? (
+          <span className="wb-status wb-pop" data-state="failed">Failed</span>
+        ) : data.done ? (
+          <span className="wb-status wb-pop" data-state="done">Done</span>
         ) : running ? (
-          <span className="inline-flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
-            <span className="chat-thinking-dot" aria-hidden />
-            Streaming
-          </span>
+          <span className="wb-status" data-state="running">Streaming</span>
         ) : null}
       </div>
       {data.error ? (
-        <div className="whitespace-pre-wrap rounded-md bg-[var(--error-soft)] p-2 text-[13px] text-[var(--text-primary)]" role="alert">
+        <div className="whitespace-pre-wrap rounded-2xl bg-[var(--error-soft)] px-3 py-2 text-[13px] text-[var(--text-primary)]" role="alert">
           <span className="font-medium text-[var(--error)]">Failed. </span>
           {typeof data.error === 'string' ? data.error : JSON.stringify(data.error)}
         </div>
@@ -51,11 +42,14 @@ function Column({ col, data, running }) {
         <div className="min-w-0" style={{ color: 'var(--text-primary)' }}>
           <Markdown className="break-words" streaming={streaming}>{data.text}</Markdown>
         </div>
-      ) : (
-        <div className="flex items-center gap-2 text-[13px] text-[var(--text-tertiary)]">
-          {running ? <span className="chat-thinking-dot" aria-hidden /> : null}
-          {running ? 'Waiting for the first tokens…' : 'No output yet.'}
+      ) : running ? (
+        <div className="space-y-2" role="status" aria-label="Waiting for the first tokens">
+          <div className="wb-shimmer h-3.5 w-4/5 rounded-full" />
+          <div className="wb-shimmer h-3.5 w-3/5 rounded-full" />
+          <div className="wb-shimmer h-3.5 w-2/5 rounded-full" />
         </div>
+      ) : (
+        <div className="text-[13px] text-muted-foreground">No output yet.</div>
       )}
     </section>
   );
@@ -67,8 +61,8 @@ export default function TuningCompareColumns({ acc, running, error, question }) 
   return (
     <div className="w-full">
       {question ? (
-        <div className="mb-2 text-xs text-[var(--text-tertiary)]">
-          Tuning compare for <span className="text-[var(--text-secondary)]">“{question}”</span>
+        <div className="mb-2 text-xs text-muted-foreground">
+          Tuning compare for <span className="text-[var(--text-secondary)]">&ldquo;{question}&rdquo;</span>
         </div>
       ) : null}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -76,7 +70,7 @@ export default function TuningCompareColumns({ acc, running, error, question }) 
         <Column col="candidate" data={cand} running={running && !cand.done} />
       </div>
       {error ? (
-        <div className="mt-2 whitespace-pre-wrap rounded-md bg-[var(--error-soft)] p-2 text-[13px] text-[var(--text-primary)]" role="alert">
+        <div className="mt-2 whitespace-pre-wrap rounded-2xl bg-[var(--error-soft)] px-3 py-2 text-[13px] text-[var(--text-primary)]" role="alert">
           <span className="font-medium text-[var(--error)]">Failed. </span>
           {error}
         </div>

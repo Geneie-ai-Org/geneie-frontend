@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Zap, Compass, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SegmentedPill } from '@/components/UploadWizardKit';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -121,7 +122,7 @@ export default function ExploratoryModeToggle({ variant = 'floating', className 
                 />
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="text-[13px] font-medium text-foreground">{o.label}</span>
-                  <span className="text-xs text-muted-foreground">{o.hint}</span>
+                  <span className="text-xs leading-snug text-muted-foreground">{o.hint}</span>
                 </span>
               </DropdownMenuRadioItem>
             ))}
@@ -131,32 +132,17 @@ export default function ExploratoryModeToggle({ variant = 'floating', className 
     );
   }
 
-  const seg = (active) =>
-    [
-      'chat-focus inline-flex items-center justify-center rounded-[6px] px-2.5 text-xs font-medium whitespace-nowrap',
-      'h-6 transition-[background-color,color,transform] duration-150 active:scale-[.98] motion-reduce:transition-none',
-      active
-        ? 'bg-[var(--segment-thumb)] text-foreground shadow-[var(--shadow-sm)] dark:shadow-none'
-        : 'text-muted-foreground hover:text-foreground',
-    ].join(' ');
-
   const group = (
-    <div
-      role="group"
-      aria-label="Answer mode"
-      title={TITLE}
-      className={[
-        'inline-flex items-center gap-0.5 rounded-[8px] bg-[var(--segment-track)] p-0.5',
-        'border border-border',
-        className,
-      ].join(' ')}
-    >
-      <button type="button" aria-pressed={!on} className={seg(!on)} onClick={() => set(false)}>
-        Standard
-      </button>
-      <button type="button" aria-pressed={on} className={seg(on)} onClick={() => set(true)}>
-        Explore
-      </button>
+    <div title={TITLE} className={cn('rounded-full bg-[hsl(var(--wb-bg))] shadow-[var(--shadow-sm)]', className)}>
+      <SegmentedPill
+        ariaLabel="Answer mode"
+        value={on ? 'explore' : 'standard'}
+        onChange={(v) => set(v === 'explore')}
+        options={[
+          { value: 'standard', label: 'Standard' },
+          { value: 'explore', label: 'Explore' },
+        ]}
+      />
     </div>
   );
 

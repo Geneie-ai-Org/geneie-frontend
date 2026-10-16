@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ExternalLink, Loader2, RotateCw } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { fetchModule1QcReport } from '@/services/backendApi';
-import { Badge } from '@/components/ui/badge';
-import { QcHeading } from '@/components/Module1QcPanel';
+import { StageMark } from '@/components/motion';
+import { QcErrorNotice, QcHeading, QcSkeleton, QcStatusPill, qcSurfaceClass } from '@/components/Module1QcPanel';
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const fmtInt = (v) => (isNum(v) ? Math.round(v).toLocaleString() : null);
@@ -19,8 +19,6 @@ function q30Verdict(q30) {
   if (q30 >= 0.8) return { status: 'warn', label: 'Warn' };
   return { status: 'fail', label: 'Fail' };
 }
-
-const VERDICT_VARIANT = { pass: 'success', warn: 'warning', fail: 'error' };
 
 /** Rows for the definition grid, only for metrics the report actually carries. */
 export function buildQcMetricRows(metrics) {
@@ -58,18 +56,14 @@ export function buildQcMetricRows(metrics) {
 function MetricGrid({ rows }) {
   if (rows.length === 0) return null;
   return (
-    <dl className="m-0 divide-y divide-border rounded-lg border border-border">
+    <dl className="m-0 divide-y divide-[hsl(var(--wb-line))] overflow-hidden rounded-2xl border border-[hsl(var(--wb-line))]">
       {rows.map((row) => (
-        <div key={row.key} className="flex min-h-9 items-center gap-3 px-3 py-1.5">
-          <dt className="min-w-0 flex-1 text-xs text-muted-foreground">{row.label}</dt>
-          <dd className="m-0 flex shrink-0 items-center gap-2 text-xs font-medium tabular-nums text-foreground">
+        <div key={row.key} className="flex min-h-10 items-center gap-3 px-3.5 py-1.5">
+          <dt className="min-w-0 flex-1 text-[13px] text-muted-foreground">{row.label}</dt>
+          <dd className="m-0 flex shrink-0 items-center gap-2 text-[13px] font-medium tabular-nums text-foreground">
             {row.value}
             {row.detail ? <span className="font-normal text-muted-foreground">({row.detail})</span> : null}
-            {row.verdict ? (
-              <Badge variant={VERDICT_VARIANT[row.verdict.status]} className="h-[18px] text-2xs">
-                {row.verdict.label}
-              </Badge>
-            ) : null}
+            {row.verdict ? <QcStatusPill status={row.verdict.status} label={row.verdict.label} /> : null}
           </dd>
         </div>
       ))}
@@ -86,7 +80,7 @@ function MetricGrid({ rows }) {
  *
  * Plain content (no surface of its own): it fills a card section or a workspace tab.
  */
-const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = false }) => {
+const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = false, surface = false }) => {
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState(null);
   const [error, setError] = useState(null);
@@ -139,38 +133,21 @@ const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = 
   const metricRows = buildQcMetricRows(report?.metrics);
 
   return (
-    <section className="space-y-3" aria-label="Saved Module 1 QC report">
+    <section className={`space-y-3 ${qcSurfaceClass(surface)}`} aria-label="Saved Module 1 QC report" aria-busy={loading || undefined}>
       <QcHeading
         title="Saved QC report"
         hint="Kept after BAM and QC cleanup. Ask about it in chat any time."
-        trailing={loading ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" aria-hidden /> : null}
+        trailing={loading ? <StageMark state="running" size={16} className="shrink-0" /> : null}
       />
 
-      {loading && !report ? (
-        <div className="space-y-2" aria-hidden>
-          <div className="h-9 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
-          <div className="h-9 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
-        </div>
-      ) : null}
+      {loading && !report ? <QcSkeleton rows={4} /> : null}
 
-      {error && (
-        <div role="alert" className="flex items-start justify-between gap-3 rounded-lg border border-[var(--error)] bg-[var(--error-soft)] p-2.5">
-          <p className="min-w-0 text-xs text-foreground">{error}</p>
-          <button
-            type="button"
-            onClick={retry}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 text-2xs font-medium text-foreground hover:bg-muted"
-          >
-            <RotateCw className="h-3 w-3" aria-hidden />
-            Retry
-          </button>
-        </div>
-      )}
+      {error && <QcErrorNotice message={error} onRetry={retry} />}
 
       <MetricGrid rows={metricRows} />
 
       {report?.summary_text && (
-        <p className="whitespace-pre-line text-xs leading-relaxed text-[var(--text-secondary)]">{report.summary_text}</p>
+        <p className="whitespace-pre-line text-[13px] leading-relaxed text-[var(--text-secondary)]">{report.summary_text}</p>
       )}
 
       {imageFigs.length > 0 && (
@@ -179,7 +156,7 @@ const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = 
             const isSnapshot = fig.kind === 'browser_snapshot';
             return (
               <figure key={fig.s3_key || fig.name} className="m-0">
-                <figcaption className="mb-1 text-2xs text-muted-foreground">
+                <figcaption className="mb-1.5 px-1 text-xs text-muted-foreground">
                   {isSnapshot
                     ? `${fig.label || 'Alignment browser'} · static snapshot (not interactive)`
                     : fig.label || fig.name}
@@ -194,7 +171,7 @@ const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = 
                         ? 'Static alignment browser snapshot (not interactive)'
                         : fig.label || fig.name || 'QC figure'
                     }
-                    className="w-full rounded-md border border-border bg-white"
+                    className="w-full rounded-2xl border border-[hsl(var(--wb-line))] bg-white"
                     // Discourage treating the PNG as a live genome browser.
                     style={isSnapshot ? { pointerEvents: 'none' } : undefined}
                     draggable={false}
@@ -207,17 +184,17 @@ const Module1QcReportPanel = ({ conversationId, visible, hideBrowserSnapshots = 
       )}
 
       {htmlFigs.length > 0 && (
-        <ul className="m-0 list-none space-y-0.5 p-0">
+        <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
           {htmlFigs.map((fig) => (
-            <li key={fig.s3_key || fig.name}>
+            <li key={fig.s3_key || fig.name} className="min-w-0">
               <a
                 href={fig.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex min-h-8 items-center gap-1.5 text-xs font-medium text-primary underline-offset-2 hover:underline"
+                className="wb-chip max-w-full gap-1.5 font-medium outline-none transition-colors hover:!border-[hsl(var(--brand-300))] hover:!bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
               >
-                Open {fig.label || fig.name}
-                <ExternalLink className="h-3 w-3" aria-hidden />
+                <span className="truncate">Open {fig.label || fig.name}</span>
+                <ExternalLink className="size-3 shrink-0" aria-hidden />
               </a>
             </li>
           ))}

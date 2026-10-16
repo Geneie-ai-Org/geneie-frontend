@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ExternalLink, FileText, Loader2, RotateCw } from 'lucide-react';
+import { AlertTriangle, Check, ExternalLink, FileText, RotateCw, X } from 'lucide-react';
 import { fetchModule1QcArtifacts } from '@/services/backendApi';
+import { StageMark } from '@/components/motion';
+import { Button } from '@/components/ui/button';
 
 function kindLabel(kind) {
   if (kind === 'fastp') return 'fastp';
@@ -14,10 +16,63 @@ export function QcHeading({ title, hint = null, trailing = null }) {
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <h4 className="text-xs font-semibold text-foreground">{title}</h4>
-        {hint ? <p className="mt-0.5 text-2xs text-muted-foreground">{hint}</p> : null}
+        <h4 className="text-[13px] font-semibold text-foreground">{title}</h4>
+        {hint ? <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{hint}</p> : null}
       </div>
       {trailing}
+    </div>
+  );
+}
+
+/** Surface for a QC block: a hairline card in a workspace tab, plain content inside a job card. */
+export const qcSurfaceClass = (surface) => (surface ? 'wb-card p-4' : '');
+
+const QC_STATUS = {
+  pass: { state: 'done', label: 'Pass', Icon: Check },
+  warn: { state: 'pending', label: 'Warn', Icon: AlertTriangle },
+  fail: { state: 'failed', label: 'Fail', Icon: X },
+};
+
+/** pass / warn / fail as a pill with an icon and the word, so the colour never carries it alone. */
+export function QcStatusPill({ status, label, className = '' }) {
+  const cfg = QC_STATUS[status];
+  if (!cfg) return null;
+  const warn = status === 'warn'
+    ? '!border-transparent !bg-[var(--warning-soft)] !text-[var(--warning)]'
+    : '';
+  return (
+    <span data-state={cfg.state} className={`wb-status wb-pop before:!hidden !pl-1.5 ${warn} ${className}`}>
+      <cfg.Icon className="size-3" strokeWidth={2.4} aria-hidden />
+      {label || cfg.label}
+    </span>
+  );
+}
+
+/** A failed load: what happened, with the one next action as a pill. */
+export function QcErrorNotice({ message, onRetry, retryLabel = 'Retry' }) {
+  return (
+    <div role="alert" className="wb-rise flex items-start justify-between gap-3 rounded-2xl border border-[var(--error)]/40 bg-[var(--error-soft)] p-3">
+      <p className="flex min-w-0 items-start gap-2 text-[13px] text-foreground">
+        <StageMark state="failed" size={16} className="mt-0.5 shrink-0" />
+        <span className="min-w-0 break-words">{message}</span>
+      </p>
+      {onRetry ? (
+        <Button type="button" variant="outline" size="sm" onClick={onRetry} className="shrink-0 rounded-full">
+          <RotateCw className="size-3.5" aria-hidden />
+          {retryLabel}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+/** Placeholder rows that match the final row height (no layout jump when content arrives). */
+export function QcSkeleton({ rows = 1 }) {
+  return (
+    <div className="space-y-2" aria-hidden role="presentation">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="wb-shimmer h-10 rounded-full" />
+      ))}
     </div>
   );
 }
@@ -27,7 +82,7 @@ export function QcHeading({ title, hint = null, trailing = null }) {
  * Primary action opens the HTML report (fastp / MultiQC) in a new tab. Plain content: it
  * draws no surface of its own, so it sits in a card section or a workspace tab alike.
  */
-const Module1QcPanel = ({ conversationId, hasQc }) => {
+const Module1QcPanel = ({ conversationId, hasQc, surface = false }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [payload, setPayload] = useState(null);
@@ -69,64 +124,48 @@ const Module1QcPanel = ({ conversationId, hasQc }) => {
   const empty = !loading && !error && !primary?.url && artifacts.length === 0;
 
   return (
-    <section className="space-y-2.5" aria-label="Module 1 quality control reports">
+    <section className={`space-y-2.5 ${qcSurfaceClass(surface)}`} aria-label="Module 1 quality control reports" aria-busy={loading || undefined}>
       <QcHeading
         title="Reports"
         hint="From this run. Available until chat unlocks."
-        trailing={loading ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" aria-hidden /> : null}
+        trailing={loading ? <StageMark state="running" size={16} className="shrink-0" /> : null}
       />
 
-      {loading && !payload ? (
-        <div className="space-y-2" aria-hidden>
-          <div className="h-9 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
-        </div>
-      ) : null}
+      {loading && !payload ? <QcSkeleton /> : null}
 
-      {error && (
-        <div role="alert" className="flex items-start justify-between gap-3 rounded-lg border border-[var(--error)] bg-[var(--error-soft)] p-2.5">
-          <p className="min-w-0 text-xs text-foreground">{error}</p>
-          <button
-            type="button"
-            onClick={retry}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 text-2xs font-medium text-foreground hover:bg-muted"
-          >
-            <RotateCw className="h-3 w-3" aria-hidden />
-            Retry
-          </button>
-        </div>
-      )}
+      {error && <QcErrorNotice message={error} onRetry={retry} />}
 
       {!loading && !error && primary?.url && (
         <a
           href={primary.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/55"
+          className="wb-row wb-rise text-[13px] font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
         >
-          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <FileText className="size-4 shrink-0 text-[hsl(var(--brand-500))]" aria-hidden />
           <span className="min-w-0 flex-1 truncate">Open {kindLabel(primary.kind)} report</span>
-          <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <ExternalLink className="wb-chev size-3.5 shrink-0 text-muted-foreground" aria-hidden />
         </a>
       )}
 
       {empty && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-[13px] text-muted-foreground">
           {payload?.message || 'No QC files yet. They appear here once the run has produced them.'}
         </p>
       )}
 
       {secondary.length > 0 && (
-        <ul className="m-0 list-none space-y-0.5 p-0">
+        <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
           {secondary.map((file) => (
-            <li key={file.key}>
+            <li key={file.key} className="min-w-0">
               <a
                 href={file.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex min-h-8 items-center gap-1.5 text-xs text-[var(--text-secondary)] underline-offset-2 hover:text-foreground hover:underline"
+                className="wb-chip max-w-full gap-1.5 outline-none transition-colors hover:!border-[hsl(var(--brand-300))] hover:!bg-[hsl(var(--brand-50))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
               >
                 <span className="truncate font-mono">{file.name}</span>
-                <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+                <ExternalLink className="size-3 shrink-0" aria-hidden />
               </a>
             </li>
           ))}

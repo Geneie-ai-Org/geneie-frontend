@@ -1,5 +1,6 @@
 import React, { useId } from 'react';
-import { Loader2 } from 'lucide-react';
+import { AlertCircle, Check } from 'lucide-react';
+import { SelectionMarker, StageMark } from '@/components/motion';
 import { cn } from '@/lib/utils';
 
 /** Typical end-to-end ranges, used when live estimates are missing. Minutes. */
@@ -146,16 +147,20 @@ export function module1ComputeSubmitLabel(choice, state) {
   return 'Start on GPU';
 }
 
-function ComputeCard({ name, value, checked, onSelect, disabled, title, badge, eta, description, children }) {
+function ComputeCard({ name, value, checked, onSelect, disabled, title, badge, eta, description, group, children }) {
   return (
     <label
       className={cn(
-        'relative flex items-start gap-3 rounded-lg border px-3.5 py-3 transition-colors',
-        'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/55',
-        checked ? 'border-primary bg-[var(--accent-teal-soft)]' : 'border-border bg-[var(--bg-input)] hover:border-[var(--border-strong)]',
+        'relative flex items-start gap-3 rounded-2xl border px-4 py-3 transition-colors duration-150',
+        'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[hsl(var(--brand-500)/0.5)]',
+        checked
+          ? 'border-[hsl(var(--brand-300))] bg-[hsl(var(--wb-card))]'
+          : 'border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))]',
         disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
       )}
     >
+      {/* The selected tint glides from one card to the other. */}
+      {checked ? <SelectionMarker group={group} bar={false} /> : null}
       <input
         type="radio"
         name={name}
@@ -171,23 +176,23 @@ function ComputeCard({ name, value, checked, onSelect, disabled, title, badge, e
       <span
         aria-hidden="true"
         className={cn(
-          'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
-          checked ? 'border-primary' : 'border-[var(--border-strong)]'
+          'relative mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full border transition-colors duration-150',
+          checked ? 'border-[hsl(var(--brand-500))] bg-[hsl(var(--brand-500))] text-[hsl(var(--wb-card))]' : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))]'
         )}
       >
-        {checked && <span className="h-2 w-2 rounded-full bg-primary" />}
+        {checked ? <Check className="wb-draw-lucide size-3" strokeWidth={3} /> : null}
       </span>
-      <span className="min-w-0 flex-1">
+      <span className="relative min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className="text-sm font-medium text-foreground">{title}</span>
+          <span className="text-[13px] font-medium text-foreground">{title}</span>
           {badge && (
-            <span className="inline-flex h-[18px] items-center rounded-full bg-[var(--accent-teal-soft)] px-1.5 text-2xs font-semibold text-primary">
+            <span className="wb-chip !h-5 text-[11px]" data-tone="brand">
               {badge}
             </span>
           )}
           {eta && <span className="ml-auto text-xs tabular-nums text-muted-foreground">{eta}</span>}
         </span>
-        <span className="mt-0.5 block text-xs text-[var(--text-secondary)]">{description}</span>
+        <span className="mt-0.5 block text-xs leading-snug text-[var(--text-secondary)]">{description}</span>
         {children}
       </span>
     </label>
@@ -208,12 +213,13 @@ const Module1ComputeChoice = ({ value, onChange, state, disabled = false }) => {
 
   return (
     <div>
-      <span id={labelId} className="mb-1.5 block text-xs font-medium text-foreground">
+      <span id={labelId} className="mb-1.5 block px-1 text-[13px] font-medium text-foreground">
         Where should this run?
       </span>
       <div role="radiogroup" aria-labelledby={labelId} className="flex flex-col gap-2">
         <ComputeCard
           name={groupName}
+          group={groupName}
           value="gpu"
           checked={value === 'gpu'}
           onSelect={onChange}
@@ -224,14 +230,16 @@ const Module1ComputeChoice = ({ value, onChange, state, disabled = false }) => {
           description="Fastest. Finishes in about 20–30 min once it starts."
         >
           {state?.gpuLine && (
-            <span className={cn('mt-1.5 flex items-start gap-1.5 text-2xs', lineClass)} aria-live="polite">
-              {kind === 'loading' && <Loader2 className="mt-px h-3 w-3 shrink-0 animate-spin" aria-hidden />}
+            <span className={cn('mt-1.5 flex items-start gap-1.5 text-xs', lineClass)} aria-live="polite">
+              {kind === 'loading' && <StageMark state="running" size={14} className="mt-px shrink-0" />}
+              {kind === 'no_gpu' && <AlertCircle className="mt-px size-3.5 shrink-0" aria-hidden />}
               <span>{state.gpuLine}</span>
             </span>
           )}
         </ComputeCard>
         <ComputeCard
           name={groupName}
+          group={groupName}
           value="cpu"
           checked={value === 'cpu'}
           onSelect={onChange}

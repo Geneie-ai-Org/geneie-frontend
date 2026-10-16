@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Loader2, Maximize2, RotateCcw, RotateCw } from 'lucide-react';
+import { Maximize2, RotateCcw, RotateCw } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import { fetchModule1BamArtifacts, uploadModule1ReportFigure } from '@/services/backendApi';
 import { useTheme } from '@/hooks/useTheme';
@@ -10,7 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { QcHeading } from '@/components/Module1QcPanel';
+import { QcHeading, qcSurfaceClass } from '@/components/Module1QcPanel';
+import { Button } from '@/components/ui/button';
+import { StageMark } from '@/components/motion';
 import { cn } from '@/lib/utils';
 import {
   assemblyForGenome,
@@ -38,7 +40,7 @@ function getLgView(viewState) {
  *
  * Snapshot is saved the first time the viewer is shown (not on page load).
  */
-const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint, variant = 'card' }) => {
+const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint, variant = 'card', surface = false }) => {
   const { isDark } = useTheme();
   const inline = variant === 'panel';
   const [open, setOpen] = useState(false);
@@ -242,39 +244,36 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint, variant =
   const browserArea = (
     <>
       {loading && (
-        <div className="flex min-h-[320px] flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border" role="status">
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />
-          <p className="text-xs text-muted-foreground">Loading the alignment browser…</p>
+        <div className="flex min-h-[320px] flex-1 flex-col items-center justify-center gap-2.5 rounded-2xl border border-dashed border-[hsl(var(--brand-300))]" role="status">
+          <StageMark state="running" size={22} />
+          <p className="text-[13px] text-muted-foreground">Loading the alignment browser</p>
         </div>
       )}
       {error && !loading && (
-        <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-border px-6 text-center" role="alert">
-          <AlertCircle className="h-5 w-5 text-[var(--error)]" aria-hidden />
+        <div className="wb-rise flex min-h-[240px] flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-[var(--error)]/40 bg-[var(--error-soft)] px-6 text-center" role="alert">
+          <StageMark state="failed" size={24} />
           <div>
-            <p className="text-sm font-medium text-foreground">The alignment browser could not open</p>
+            <p className="text-[13px] font-medium text-foreground">The alignment browser could not open</p>
             <p className="mt-1 text-xs text-muted-foreground">{error}</p>
           </div>
-          <button
-            type="button"
-            onClick={retry}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-xs font-medium text-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/55"
-          >
-            <RotateCw className="h-3 w-3" aria-hidden />
+          <Button type="button" variant="outline" size="sm" onClick={retry} className="rounded-full">
+            <RotateCw className="size-3.5" aria-hidden />
             Try again
-          </button>
+          </Button>
         </div>
       )}
       {!loading && !error && Browser && viewState && (
+        // bg-background stays concrete: the snapshot reads this element's computed background as its matte.
         <div
           ref={captureRootRef}
-          className={cn('module1-jbrowse-root min-h-[420px] flex-1 rounded-lg border border-border bg-background', inline && 'min-h-[360px]')}
+          className={cn('module1-jbrowse-root min-h-[420px] flex-1 overflow-hidden rounded-2xl border border-[hsl(var(--wb-line))] bg-background', inline && 'min-h-[360px]')}
           style={{ touchAction: 'none' }}
         >
           <Browser viewState={viewState} />
         </div>
       )}
       {!loading && !error && !(Browser && viewState) && (
-        <div className="flex min-h-[240px] flex-1 items-center justify-center rounded-lg border border-dashed border-border px-6 text-center text-xs text-muted-foreground">
+        <div className="flex min-h-[240px] flex-1 items-center justify-center rounded-2xl border border-dashed border-[hsl(var(--wb-line-strong))] px-6 text-center text-[13px] text-muted-foreground">
           No alignment loaded yet.
         </div>
       )}
@@ -282,27 +281,51 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint, variant =
   );
 
   const resetButton = (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="sm"
       onClick={resetView}
       disabled={!viewState || !bamMeta}
-      className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/55 disabled:opacity-40"
+      className="shrink-0 rounded-full"
     >
-      <RotateCcw className="h-3 w-3" aria-hidden />
+      <RotateCcw className="size-3.5" aria-hidden />
       Reset view
-    </button>
+    </Button>
   );
 
   const hint = `Drag to pan. Zoom in to load reads; zooming out too far is blocked for BAM size${bamMeta?.genome ? ` · ${bamMeta.genome}` : ''}.`;
 
+  /** The snapshot save is a real status, so it gets a pill with a word instead of trailing hint text. */
+  const snapshotState = !snapshotStatus
+    ? null
+    : /^Saving/i.test(snapshotStatus)
+      ? 'running'
+      : /saved/i.test(snapshotStatus)
+        ? 'done'
+        : 'failed';
+  const snapshotPill = snapshotStatus ? (
+    <span data-state={snapshotState} className="wb-status" role="status">
+      {snapshotState === 'running' ? 'Saving snapshot' : snapshotState === 'done' ? 'Snapshot saved' : 'Snapshot not saved'}
+    </span>
+  ) : null;
+  const toolbarChips = (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {bamMeta?.sample ? <span className="wb-chip" data-tone="brand">{bamMeta.sample}</span> : null}
+      {bamMeta?.genome ? <span className="wb-chip tabular-nums">{bamMeta.genome}</span> : null}
+      {snapshotPill}
+    </div>
+  );
+
   if (inline) {
     return (
-      <section className="flex min-h-0 flex-1 flex-col gap-3" aria-label="Module 1 alignment viewer">
+      <section className={cn('flex min-h-0 flex-1 flex-col gap-3', qcSurfaceClass(surface))} aria-label="Module 1 alignment viewer">
         <QcHeading
-          title={`Alignment browser${bamMeta?.sample ? ` · ${bamMeta.sample}` : ''}`}
-          hint={snapshotStatus ? `${hint} ${snapshotStatus}` : hint}
+          title="Alignment browser"
+          hint="Drag to pan. Zoom in to load reads; zooming out too far is blocked for BAM size."
           trailing={resetButton}
         />
+        {bamMeta ? toolbarChips : null}
         {browserArea}
       </section>
     );
@@ -310,40 +333,40 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint, variant =
 
   return (
     <>
-      <section aria-label="Module 1 alignment viewer" className="space-y-2.5">
+      <section aria-label="Module 1 alignment viewer" className={cn('space-y-2.5', qcSurfaceClass(surface))}>
         <QcHeading title="Alignment browser" hint="Pan, zoom and search the reads while the BAM is retained." />
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="flex min-h-10 w-full items-center gap-2 rounded-lg border border-border px-3 text-left text-sm font-medium text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/55"
+          className="wb-row text-[13px] font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)]"
         >
           <span className="min-w-0 flex-1 truncate">Open interactive view{bamMeta?.genome ? ` · ${bamMeta.genome}` : ''}</span>
-          <Maximize2 className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <Maximize2 className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         </button>
       </section>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           showCloseButton
-          className="!max-w-[min(96vw,1100px)] !min-w-[min(96vw,720px)] w-full h-[min(90vh,860px)] flex flex-col p-0 gap-0 overflow-hidden bg-popover border border-border max-sm:!min-w-full max-sm:!h-[100dvh] max-sm:rounded-none"
+          className="!max-w-[min(96vw,1100px)] !min-w-[min(96vw,720px)] w-full h-[min(90vh,860px)] flex flex-col p-0 gap-0 overflow-hidden bg-popover border border-[hsl(var(--wb-line))] max-sm:!min-w-full max-sm:!h-[100dvh] max-sm:rounded-none"
         >
-          <DialogHeader className="shrink-0 px-4 pb-2 pt-4 pr-12">
+          <DialogHeader className="shrink-0 px-5 pb-3 pt-4 pr-14">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <DialogTitle className="text-sm text-foreground">
+                <DialogTitle className="text-base font-semibold text-foreground">
                   Alignment browser
                   {bamMeta?.sample ? ` · ${bamMeta.sample}` : ''}
                 </DialogTitle>
-                <DialogDescription className="text-2xs text-muted-foreground">
+                <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
                   {hint}
-                  {snapshotStatus ? ` ${snapshotStatus}` : ''}
                 </DialogDescription>
               </div>
               {resetButton}
             </div>
+            {bamMeta ? <div className="mt-2">{toolbarChips}</div> : null}
           </DialogHeader>
 
-          <div className="flex min-h-0 flex-1 flex-col px-3 pb-3">{browserArea}</div>
+          <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">{browserArea}</div>
         </DialogContent>
       </Dialog>
     </>

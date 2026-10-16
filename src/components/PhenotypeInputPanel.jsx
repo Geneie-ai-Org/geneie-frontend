@@ -4,9 +4,11 @@
  * Disease matches are a shortcut to load annotated findings for review.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Check, ChevronDown, ChevronUp, Circle, Info, Loader2, Lock, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, ChevronUp, Circle, Info, Lock, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ChipList, CountUp, PopIn, StageMark } from '@/components/motion';
 import { interpretPhenotypeNarrative, resolveHpoTerms } from '@/services/mongodbApi';
 import PanelAppSuggestSection from '@/components/PanelAppSuggestSection';
 
@@ -456,52 +458,20 @@ function mergeDiseaseCatalog(existing, incoming) {
 /**
  * Clinical-note phenotype panel (pinned findings + optional disease shortcut).
  */
-/** Small (i) button that opens a short explanation on click; closes on outside click or Escape. */
+/** Small (i) button that opens a short explanation. A popover, so Esc closes it and focus returns. */
 function InfoHint({ label, children }) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onPointerDown = (e) => {
-      if (!wrapRef.current?.contains(e.target)) setOpen(false);
-    };
-    const onKey = (e) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
   return (
-    <span className="relative inline-flex align-middle" ref={wrapRef}>
-      <button
-        type="button"
-        className="relative inline-flex size-5 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/55 after:absolute after:-inset-2.5"
-        style={{ color: open ? 'var(--text-primary)' : 'var(--text-tertiary)' }}
+    <Popover>
+      <PopoverTrigger
         aria-label={label}
-        aria-expanded={open}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
+        className="relative inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] after:absolute after:-inset-2.5"
       >
         <Info className="size-3.5" aria-hidden />
-      </button>
-      {open ? (
-        <div
-          role="tooltip"
-          className="absolute left-0 top-full z-50 mt-1.5 w-60 max-w-[min(15rem,75vw)] space-y-1 rounded-md border border-border bg-popover px-2.5 py-2 text-xs font-normal leading-snug text-popover-foreground shadow-md"
-        >
-          {children}
-        </div>
-      ) : null}
-    </span>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 space-y-1 text-xs font-normal leading-snug">
+        {children}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -1308,9 +1278,14 @@ export default function PhenotypeInputPanel({
 
   // One toggle per finding. There's no separate remove: an unselected finding is already left
   // out of ranking, and removing one could only be undone by re-applying the disease.
+  // Chips pop in as they are found (PopIn) and the row re-flows around them.
   const renderChip = (c) => {
     const label = c.hpo_name || c.matched_phrase || c.hpo_id;
-    return <FindingChip key={c.hpo_id} candidate={c} label={label} disabled={disabled} onToggle={toggleCandidate} />;
+    return (
+      <PopIn key={c.hpo_id} className="max-w-full">
+        <FindingChip candidate={c} label={label} disabled={disabled} onToggle={toggleCandidate} />
+      </PopIn>
+    );
   };
 
   return (
@@ -1351,7 +1326,7 @@ export default function PhenotypeInputPanel({
             aria-describedby="pheno-note-status"
             placeholder="Describe symptoms, age of onset and anything notable in your own words"
             rows={5}
-            className="min-h-28 resize-none bg-background pr-10 text-base md:text-[13px] md:leading-5"
+            className="min-h-28 resize-none rounded-2xl border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] dark:bg-[hsl(var(--wb-card))] px-4 py-3 pr-11 text-base transition-[border-color,box-shadow] duration-200 hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)] md:text-[13px] md:leading-5"
           />
           {draft.trim() && !disabled && (
             <button
@@ -1359,7 +1334,7 @@ export default function PhenotypeInputPanel({
               onClick={clearNoteOnly}
               aria-label="Clear note and detected findings"
               title="Clear note and detected findings"
-              className="absolute right-1.5 top-1.5 flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55 max-md:size-11"
+              className="absolute right-2 top-2 flex size-7 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:size-11"
             >
               <X className="size-3.5" aria-hidden />
             </button>
@@ -1372,8 +1347,8 @@ export default function PhenotypeInputPanel({
             <button
               type="button"
               onClick={() => setDraft(EXAMPLE_NOTE)}
-              className="rounded font-medium underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55 max-md:inline-flex max-md:min-h-11 max-md:items-center"
-              style={{ color: 'hsl(var(--primary))' }}
+              className="rounded-full font-medium underline underline-offset-2 outline-none transition-colors hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:inline-flex max-md:min-h-11 max-md:items-center"
+              style={{ color: 'hsl(var(--brand-solid))' }}
             >
               Use example
             </button>
@@ -1384,21 +1359,23 @@ export default function PhenotypeInputPanel({
           id="pheno-note-status"
           role="status"
           aria-live="polite"
-          className="flex min-h-5 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground"
+          className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
         >
           {working ? (
-            <span className="inline-flex items-center gap-1.5">
-              <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
-              {searchingDiseases ? 'Finding matches…' : 'Reading note…'}
+            <span className="wb-status" data-state="running">
+              {searchingDiseases ? 'Finding matches' : 'Reading note'}
             </span>
           ) : draftLen > 0 && draftLen < 3 ? (
             <span>Keep typing to search…</span>
           ) : notePreview || candidates.length > 0 ? (
-            <span className="inline-flex items-center gap-1.5 text-foreground">
-              <Check className="size-3.5" style={{ color: 'var(--success)' }} aria-hidden />
-              {noteFoundCount > 0
-                ? `Found ${noteFoundCount} finding${noteFoundCount === 1 ? '' : 's'}`
-                : 'No findings recognised yet'}
+            <span className="wb-status" data-state={noteFoundCount > 0 ? 'done' : 'pending'}>
+              {noteFoundCount > 0 ? (
+                <span>
+                  Found <CountUp value={noteFoundCount} duration={0.4} /> finding{noteFoundCount === 1 ? '' : 's'}
+                </span>
+              ) : (
+                'No findings recognised yet'
+              )}
             </span>
           ) : null}
           {!working ? (
@@ -1412,13 +1389,13 @@ export default function PhenotypeInputPanel({
         {(unmappedCount > 0 || noteAmbiguous.length > 0) && !working && (
           <div
             role="note"
-            className="flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs"
+            className="wb-rise flex items-start gap-2 rounded-2xl px-3.5 py-2.5 text-[13px]"
             style={{
               background: 'var(--warning-soft)',
-              borderColor: 'color-mix(in srgb, var(--warning) 35%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--warning) 30%, transparent)',
             }}
           >
-            <AlertCircle className="mt-0.5 size-3.5 shrink-0" style={{ color: 'var(--warning)' }} aria-hidden />
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" style={{ color: 'var(--warning)' }} aria-hidden />
             <div className="min-w-0 space-y-1 text-foreground">
               {unmappedCount > 0 && (
                 <p>
@@ -1440,6 +1417,18 @@ export default function PhenotypeInputPanel({
         )}
       </section>
 
+      {/* Loading skeleton: matches the finding chips' size, so nothing jumps when they arrive. */}
+      {interpreting && !showFindingsStep && !showConditionStep && (
+        <section className="space-y-2.5 border-t border-[hsl(var(--wb-line))] pt-4" aria-label="Reading your note" aria-busy="true">
+          <div className="wb-shimmer h-4 w-36 rounded-full" />
+          <div className="flex flex-wrap gap-1.5" aria-hidden>
+            {[88, 120, 72, 104, 96, 132, 80].map((w, i) => (
+              <span key={i} className="wb-shimmer h-7 rounded-full" style={{ width: w }} />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* 2. Confirm condition */}
       {showConditionStep &&
         (() => {
@@ -1450,9 +1439,20 @@ export default function PhenotypeInputPanel({
           const shown = showMoreDiseases ? allConditions : collapsed;
           const hiddenCount = allConditions.length - collapsed.length;
           const activeCount = allConditions.filter(isActiveDisease).length;
+          // Rows revealed by "Show more" ease in; a row that merely changes state never replays it.
+          const renderCondition = (c, i) => (
+            <li key={diseaseKey(c)} className={i >= CONDITIONS_PREVIEW ? 'wb-rise' : undefined}>
+              <ConditionRow
+                condition={c}
+                active={isActiveDisease(c)}
+                disabled={disabled || resolving}
+                onToggle={applyDisease}
+              />
+            </li>
+          );
           return (
             <section
-              className="space-y-2 border-t border-border pt-4"
+              className="wb-rise space-y-2 border-t border-[hsl(var(--wb-line))] pt-4"
               aria-labelledby="pheno-step-condition"
             >
               <div className="flex items-center justify-between gap-2">
@@ -1463,22 +1463,17 @@ export default function PhenotypeInputPanel({
                   </InfoHint>
                 </div>
                 <span className="text-xs tabular-nums text-muted-foreground">
-                  {activeCount > 0 ? `${activeCount} selected` : 'Optional'}
+                  {activeCount > 0 ? (
+                    <>
+                      <CountUp value={activeCount} duration={0.3} /> selected
+                    </>
+                  ) : (
+                    'Optional'
+                  )}
                 </span>
               </div>
 
-              <ul className="divide-y divide-border overflow-hidden rounded-md border border-border">
-                {shown.map((c) => (
-                  <li key={diseaseKey(c)}>
-                    <ConditionRow
-                      condition={c}
-                      active={isActiveDisease(c)}
-                      disabled={disabled || resolving}
-                      onToggle={applyDisease}
-                    />
-                  </li>
-                ))}
-              </ul>
+              <ul className="m-0 list-none space-y-1.5 p-0">{shown.map(renderCondition)}</ul>
 
               {hiddenCount > 0 || showMoreDiseases ? (
                 <Button
@@ -1488,7 +1483,7 @@ export default function PhenotypeInputPanel({
                   disabled={disabled}
                   onClick={() => setShowMoreDiseases((v) => !v)}
                   aria-expanded={showMoreDiseases}
-                  className="-ml-2 text-muted-foreground max-md:h-11"
+                  className="text-muted-foreground max-md:h-11"
                 >
                   {showMoreDiseases ? (
                     <>
@@ -1519,8 +1514,8 @@ export default function PhenotypeInputPanel({
                   role="status"
                   className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
                 >
-                  <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
-                  Loading findings for this condition…
+                  <StageMark state="running" size={14} />
+                  Loading findings for this condition
                 </p>
               )}
             </section>
@@ -1530,13 +1525,13 @@ export default function PhenotypeInputPanel({
       {resolveError && (
         <div
           role="alert"
-          className="flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs"
+          className="wb-rise flex items-start gap-2 rounded-2xl px-3.5 py-2.5 text-[13px]"
           style={{
             background: 'var(--error-soft)',
-            borderColor: 'color-mix(in srgb, var(--error) 30%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--error) 30%, transparent)',
           }}
         >
-          <AlertCircle className="mt-0.5 size-3.5 shrink-0" style={{ color: 'var(--error)' }} aria-hidden />
+          <StageMark state="failed" size={16} className="mt-0.5 shrink-0" />
           <span className="min-w-0 text-foreground">{resolveError}</span>
         </div>
       )}
@@ -1544,13 +1539,13 @@ export default function PhenotypeInputPanel({
       {/* 3. Review findings */}
       {showFindingsStep && (
         <section
-          className="space-y-2.5 border-t border-border pt-4"
+          className="wb-rise space-y-2.5 border-t border-[hsl(var(--wb-line))] pt-4"
           aria-labelledby="pheno-step-findings"
         >
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <StepHeader id="pheno-step-findings" n={findingsStepNo} title="Review findings" />
             {clinicalCandidates.length > 0 && (
-              <div className="flex items-center gap-0.5 text-xs">
+              <div className="flex items-center gap-1 text-xs">
                 <Button
                   type="button"
                   variant="ghost"
@@ -1578,7 +1573,7 @@ export default function PhenotypeInputPanel({
           {clinicalCandidates.length > 0 && (
             <p role="status" className="text-xs text-muted-foreground">
               <span className="font-medium tabular-nums text-foreground">
-                {clinicalSelectedCount} of {clinicalCandidates.length} selected
+                <CountUp value={clinicalSelectedCount} duration={0.3} /> of {clinicalCandidates.length} selected
               </span>
               {' · '}
               {selectedCount === 0
@@ -1610,7 +1605,7 @@ export default function PhenotypeInputPanel({
                 size="sm"
                 onClick={() => setShowAllFindings((v) => !v)}
                 aria-expanded={showAllFindings}
-                className="-ml-2 text-muted-foreground max-md:h-11"
+                className="text-muted-foreground max-md:h-11"
               >
                 {showAllFindings ? (
                   <>
@@ -1639,7 +1634,7 @@ export default function PhenotypeInputPanel({
                 onClick={() => setShowInheritance((v) => !v)}
                 disabled={disabled}
                 aria-expanded={showInheritance}
-                className="-ml-2 text-muted-foreground max-md:h-11"
+                className="text-muted-foreground max-md:h-11"
               >
                 {showInheritance ? 'Hide' : 'Show'} inheritance terms ({inheritanceCandidates.length})
                 {showInheritance ? <ChevronUp aria-hidden /> : <ChevronDown aria-hidden />}
@@ -1657,7 +1652,7 @@ export default function PhenotypeInputPanel({
       {/* Also shown while a panel is still chosen: its genes are sent with the upload,
         * so it must stay visible (and removable) even with no findings selected. */}
       {showPanelsStep && (
-        <section className="border-t border-border pt-4" aria-label={`Step ${panelsStepNo}: gene panels`}>
+        <section className="border-t border-[hsl(var(--wb-line))] pt-4" aria-label={`Step ${panelsStepNo}: gene panels`}>
           <PanelAppSuggestSection
             confirmedHpoIds={candidates.filter((c) => c.selected).map((c) => c.hpo_id)}
             // Stable text only — live `draft` was re-fetching panels on every keystroke.
@@ -1687,8 +1682,7 @@ function StepHeader({ id, n, title, aside }) {
     <h3 id={id} className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
       <span
         aria-hidden
-        className="flex size-5 shrink-0 items-center justify-center rounded-full text-2xs font-semibold tabular-nums"
-        style={{ background: 'var(--accent-teal-soft)', color: 'hsl(var(--primary))' }}
+        className="flex size-5 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[11px] font-semibold tabular-nums text-[hsl(var(--brand-700))]"
       >
         {n}
       </span>
@@ -1701,8 +1695,10 @@ function StepHeader({ id, n, title, aside }) {
 function FindingGroup({ label, children }) {
   return (
     <div className="space-y-1.5">
-      {label ? <p className="text-2xs font-medium text-muted-foreground">{label}</p> : null}
-      <div className="flex flex-wrap gap-1.5 max-md:gap-2">{children}</div>
+      {label ? <p className="px-1 text-xs font-medium text-muted-foreground">{label}</p> : null}
+      <div className="flex flex-wrap gap-1.5 max-md:gap-2">
+        <ChipList>{children}</ChipList>
+      </div>
     </div>
   );
 }
@@ -1716,17 +1712,16 @@ function FindingChip({ candidate: c, label, disabled, onToggle }) {
       onClick={() => onToggle(c.hpo_id)}
       aria-pressed={selected}
       title={c.hpo_id ? `${label} · ${c.hpo_id}` : label}
-      className="inline-flex h-7 max-w-full items-center gap-1 rounded-full border px-2.5 text-xs font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring/55 disabled:opacity-60 max-md:min-h-11 max-md:px-3"
-      style={{
-        borderColor: selected ? 'hsl(var(--primary))' : 'var(--border-strong)',
-        background: selected ? 'var(--accent-teal-soft)' : 'var(--bg-input)',
-        color: selected ? 'hsl(var(--primary))' : 'var(--text-primary)',
-      }}
+      className={`inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border pl-2 pr-3 text-xs font-medium outline-none transition-[background-color,border-color,color,transform] duration-150 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] active:scale-[0.97] disabled:opacity-60 motion-reduce:transition-none max-md:min-h-11 max-md:px-3 ${
+        selected
+          ? 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]'
+          : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] text-foreground hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))]'
+      }`}
     >
       {selected ? (
-        <Check className="size-3 shrink-0" aria-hidden />
+        <Check className="wb-draw-lucide size-3 shrink-0" strokeWidth={2.6} aria-hidden />
       ) : (
-        <Circle className="size-3 shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
+        <Circle className="size-3 shrink-0 text-muted-foreground" aria-hidden />
       )}
       <span className="truncate">{label}</span>
     </button>
@@ -1751,24 +1746,26 @@ function ConditionRow({ condition: c, active, disabled, onToggle }) {
       onClick={() => onToggle(c)}
       aria-pressed={active}
       title={c.disease_id ? `${c.disease_name} · ${c.disease_id}` : c.disease_name}
-      className="flex w-full items-start gap-2.5 px-2.5 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/55 disabled:opacity-60 max-md:min-h-11"
-      style={{ background: active ? 'var(--accent-teal-soft)' : undefined }}
+      className={`flex w-full items-start gap-2.5 rounded-2xl border px-3 py-2 text-left outline-none transition-[background-color,border-color,transform] duration-150 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] active:scale-[0.995] disabled:opacity-60 motion-reduce:transition-none max-md:min-h-11 ${
+        active
+          ? 'border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-100))]'
+          : 'border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))]'
+      }`}
     >
       <span
         aria-hidden
-        className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border"
-        style={{
-          borderColor: active ? 'hsl(var(--primary))' : 'var(--border-strong)',
-          background: active ? 'hsl(var(--primary))' : 'var(--bg-input)',
-          color: 'hsl(var(--primary-foreground))',
-        }}
+        className={`mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full border transition-colors duration-150 ${
+          active
+            ? 'border-[hsl(var(--brand-500))] bg-[hsl(var(--brand-500))] text-[hsl(var(--wb-card))]'
+            : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))]'
+        }`}
       >
-        {active ? <Check className="size-2.5" strokeWidth={3.5} /> : null}
+        {active ? <Check className="wb-draw-lucide size-3" strokeWidth={3.2} /> : null}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-medium text-foreground">{c.disease_name}</span>
+        <span className={`block truncate text-[13px] font-medium ${active ? 'text-[hsl(var(--brand-700))]' : 'text-foreground'}`}>{c.disease_name}</span>
         {hints.length > 0 ? (
-          <span className="mt-0.5 block truncate text-2xs tabular-nums text-muted-foreground">
+          <span className="mt-0.5 block truncate text-xs tabular-nums text-muted-foreground">
             {hints.join(' · ')}
           </span>
         ) : null}

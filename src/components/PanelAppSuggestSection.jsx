@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Check, Info, Loader2, Search, X } from 'lucide-react';
+import { Check, Info, Search, X } from 'lucide-react';
 import {
   fetchPanelAppSuggestions,
   persistPanelAppSelection,
@@ -7,12 +7,12 @@ import {
   searchPanelAppPanels,
 } from '@/services/backendApi';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ChipList, CountUp, PopIn, StageMark } from '@/components/motion';
 
 const fmt = (n) => Number(n || 0).toLocaleString();
 
-/** Role=switch, 44px hit area on mobile. Teal when on. */
+/** Role=switch, 44px hit area on mobile. Teal when on; the knob slides (transform only). */
 function Switch({ checked, onChange, disabled, labelledBy }) {
   return (
     <button
@@ -22,12 +22,13 @@ function Switch({ checked, onChange, disabled, labelledBy }) {
       aria-labelledby={labelledBy}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-ring/55 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 after:absolute after:-inset-x-1 after:-inset-y-3 max-md:after:-inset-y-3.5"
-      style={{ background: checked ? 'hsl(var(--primary))' : 'var(--border-strong)' }}
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none after:absolute after:-inset-x-1 after:-inset-y-3 max-md:after:-inset-y-3.5 ${
+        checked ? 'border-[hsl(var(--brand-500))] bg-[hsl(var(--brand-500))]' : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-pill))]'
+      }`}
     >
       <span
         aria-hidden
-        className="block size-4 rounded-full bg-background shadow-sm transition-transform duration-150 motion-reduce:transition-none"
+        className="block size-3.5 rounded-full bg-[hsl(var(--wb-card))] shadow-sm transition-transform duration-150 motion-reduce:transition-none"
         style={{ transform: checked ? 'translateX(18px)' : 'translateX(2px)' }}
       />
     </button>
@@ -40,7 +41,7 @@ function HelpPopover({ label, children }) {
     <Popover>
       <PopoverTrigger
         aria-label={label}
-        className="relative inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/55 after:absolute after:-inset-2.5"
+        className="relative inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] after:absolute after:-inset-2.5"
       >
         <Info className="size-3.5" aria-hidden />
       </PopoverTrigger>
@@ -52,22 +53,20 @@ function HelpPopover({ label, children }) {
 }
 
 /** Relative match meter. Strong rows use the accent, weak rows stay neutral so
- * generic panels never read as "relevant" just because they are listed. */
+ * generic panels never read as "relevant" just because they are listed. The figure beside it
+ * is the same ratio in words, so the bar is never the only carrier. */
 function RelevanceBar({ ratio }) {
   const strong = ratio >= 0.6;
+  const pct = Math.max(1, Math.round(ratio * 100));
   return (
-    <span
-      className="block h-1 w-12 overflow-hidden rounded-full"
-      style={{ background: 'var(--segment-track)' }}
-      aria-hidden
-    >
-      <span
-        className="block h-full rounded-full"
-        style={{
-          width: `${Math.max(6, Math.round(ratio * 100))}%`,
-          background: strong ? 'hsl(var(--primary))' : 'var(--border-strong)',
-        }}
-      />
+    <span className="flex items-center gap-1.5" aria-hidden>
+      <span className="block h-1 w-12 overflow-hidden rounded-full bg-[hsl(var(--wb-pill))]">
+        <span
+          className={`block h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none ${strong ? 'bg-[hsl(var(--brand-500))]' : 'bg-[hsl(var(--wb-line-strong))]'}`}
+          style={{ width: `${Math.max(6, pct)}%` }}
+        />
+      </span>
+      <span className="w-8 text-right text-[11px] tabular-nums text-muted-foreground">{pct}%</span>
     </span>
   );
 }
@@ -102,21 +101,21 @@ function PanelRow({ row, checked, disabled, onToggle, topScore, rank, showCue })
       disabled={disabled}
       onClick={() => onToggle(id)}
       title={row.reason || undefined}
-      className="group flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/55 disabled:opacity-60 max-md:min-h-11"
-      style={{
-        background: checked ? 'var(--accent-teal-soft)' : undefined,
-      }}
+      className={`group flex w-full items-start gap-2.5 rounded-2xl border px-3 py-2 text-left outline-none transition-[background-color,border-color,transform] duration-150 focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] active:scale-[0.995] disabled:opacity-60 motion-reduce:transition-none max-md:min-h-11 ${
+        checked
+          ? 'border-[hsl(var(--brand-300))] bg-[hsl(var(--brand-100))]'
+          : 'border-transparent hover:border-[hsl(var(--brand-300))] hover:bg-[hsl(var(--brand-50))]'
+      }`}
     >
       <span
         aria-hidden
-        className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-[4px] border"
-        style={{
-          borderColor: checked ? 'hsl(var(--primary))' : 'var(--border-strong)',
-          background: checked ? 'hsl(var(--primary))' : 'var(--bg-input)',
-          color: 'hsl(var(--primary-foreground))',
-        }}
+        className={`mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full border transition-colors duration-150 ${
+          checked
+            ? 'border-[hsl(var(--brand-500))] bg-[hsl(var(--brand-500))] text-[hsl(var(--wb-card))]'
+            : 'border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))]'
+        }`}
       >
-        {checked ? <Check className="size-3" strokeWidth={3} /> : null}
+        {checked ? <Check className="wb-draw-lucide size-3" strokeWidth={3.2} /> : null}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline gap-2">
@@ -124,19 +123,19 @@ function PanelRow({ row, checked, disabled, onToggle, topScore, rank, showCue })
             {row.panel_name || id}
           </span>
           {showCue && rank === 0 && hasScore ? (
-            <span className="shrink-0 text-2xs font-medium" style={{ color: 'hsl(var(--primary))' }}>
+            <span className="wb-chip !h-5 shrink-0 text-[11px]" data-tone="brand">
               Top match
             </span>
           ) : null}
         </span>
         {metaBits.length > 0 ? (
-          <span className="mt-0.5 block truncate text-2xs tabular-nums text-muted-foreground">
+          <span className="mt-0.5 block truncate text-xs tabular-nums text-muted-foreground">
             {metaBits.join(' · ')}
           </span>
         ) : null}
       </span>
       {showCue && hasScore ? (
-        <span className="flex shrink-0 flex-col items-end gap-1 pt-1.5" title={`Match score ${score}`}>
+        <span className="flex shrink-0 flex-col items-end gap-1 pt-1" title={`Match score ${score}`}>
           <RelevanceBar ratio={ratio} />
         </span>
       ) : null}
@@ -146,7 +145,7 @@ function PanelRow({ row, checked, disabled, onToggle, topScore, rank, showCue })
 
 function GroupHeader({ children, aside }) {
   return (
-    <div className="flex items-baseline justify-between px-2 pb-0.5 pt-2 text-2xs font-medium text-muted-foreground">
+    <div className="flex items-baseline justify-between px-3 pb-1 pt-2 text-xs font-medium text-muted-foreground">
       <span>{children}</span>
       {aside ? <span className="font-normal tabular-nums">{aside}</span> : null}
     </div>
@@ -396,6 +395,14 @@ export default function PanelAppSuggestSection({
   const showSkeleton = loading && suggestions.length === 0;
   const noSuggestions = !loading && suggestions.length === 0 && !error;
 
+  // Selected panels as chips (name from the saved selection), removable in place.
+  const selectedPanelChips = (value?.selected_panels || [])
+    .map((p) => {
+      const id = String(p?.panel_id || p || '').trim();
+      return id ? { id, name: p?.panel_name || suggestions.find((x) => String(x.panel_id).trim() === id)?.panel_name || id } : null;
+    })
+    .filter(Boolean);
+
   return (
     <div className="space-y-3" aria-busy={loading || searchLoading || undefined}>
       <div>
@@ -407,9 +414,9 @@ export default function PanelAppSuggestSection({
         </p>
       </div>
 
-      <div className="flex items-center justify-between gap-3 rounded-md border border-border px-2.5 py-2 max-md:min-h-11">
+      <div className="wb-card flex items-center justify-between gap-3 px-3.5 py-2 max-md:min-h-11">
         <span className="flex min-w-0 items-center gap-1.5">
-          <span id={switchLabelId} className="text-xs font-medium text-foreground">
+          <span id={switchLabelId} className="text-[13px] font-medium text-foreground">
             Include lower-confidence genes
           </span>
           <HelpPopover label="About lower-confidence genes">
@@ -437,7 +444,7 @@ export default function PanelAppSuggestSection({
       {!isAutomatic && (
         <div className="relative">
           <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+            className="pointer-events-none absolute left-3.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
             aria-hidden
           />
           <input
@@ -447,14 +454,14 @@ export default function PanelAppSuggestSection({
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search all panels by name"
             aria-label="Search gene panels"
-            className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-8 text-base text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60 md:text-[13px] max-md:h-11 [&::-webkit-search-cancel-button]:hidden"
+            className="h-9 w-full rounded-full border border-[hsl(var(--wb-line-strong))] bg-[hsl(var(--wb-card))] pl-9 pr-9 text-base text-foreground outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground hover:border-[hsl(var(--brand-300))] focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.35)] disabled:opacity-60 md:text-[13px] max-md:h-11 [&::-webkit-search-cancel-button]:hidden"
           />
           {searchQuery ? (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
               aria-label="Clear search"
-              className="absolute right-1 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:text-foreground max-md:size-9"
+              className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:size-9"
             >
               <X className="size-3.5" aria-hidden />
             </button>
@@ -465,14 +472,14 @@ export default function PanelAppSuggestSection({
       {error ? (
         <div
           role="alert"
-          className="flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs"
+          className="wb-rise flex items-start gap-2 rounded-2xl px-3.5 py-2.5 text-[13px]"
           style={{
             background: 'var(--error-soft)',
-            borderColor: 'color-mix(in srgb, var(--error) 30%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--error) 30%, transparent)',
             color: 'var(--text-primary)',
           }}
         >
-          <AlertCircle className="mt-0.5 size-3.5 shrink-0" style={{ color: 'var(--error)' }} aria-hidden />
+          <StageMark state="failed" size={16} className="mt-0.5 shrink-0" />
           <span className="min-w-0 flex-1">
             <span className="font-medium">{error}.</span>{' '}
             <span className="text-muted-foreground">
@@ -496,15 +503,15 @@ export default function PanelAppSuggestSection({
         </div>
       ) : null}
 
-      <div className="rounded-md border border-border">
+      <div className="wb-card p-1.5">
         {showSkeleton ? (
-          <div className="space-y-2 p-2" role="status" aria-label="Loading panel suggestions">
+          <div className="space-y-2 p-1.5" role="status" aria-label="Loading panel suggestions">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="flex items-start gap-2.5 px-2 py-1.5">
-                <Skeleton className="mt-0.5 size-4" />
+              <div key={i} className="flex items-start gap-2.5 px-1.5 py-1.5">
+                <div className="wb-shimmer mt-0.5 size-[18px] rounded-full" />
                 <div className="flex-1 space-y-1.5">
-                  <Skeleton className="h-3.5 w-3/5" />
-                  <Skeleton className="h-3 w-2/5" />
+                  <div className="wb-shimmer h-3.5 w-3/5 rounded-full" />
+                  <div className="wb-shimmer h-3 w-2/5 rounded-full" />
                 </div>
               </div>
             ))}
@@ -512,16 +519,18 @@ export default function PanelAppSuggestSection({
         ) : null}
 
         {!searching && !showSkeleton && suggestions.length > 0 ? (
-          <div className="px-1 pb-1">
+          <div>
             <GroupHeader
               aside={
                 loading ? (
-                  <span className="inline-flex items-center gap-1">
-                    <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
+                  <span className="inline-flex items-center gap-1.5">
+                    <StageMark state="running" size={12} />
                     Updating
                   </span>
                 ) : (
-                  `${suggestions.length} suggested`
+                  <>
+                    <CountUp value={suggestions.length} duration={0.4} /> suggested
+                  </>
                 )
               }
             >
@@ -544,8 +553,8 @@ export default function PanelAppSuggestSection({
               );
             })}
             {suggestions.length > 0 && topScore > 0 ? (
-              <p className="px-2 pb-1 pt-1.5 text-2xs text-muted-foreground">
-                Bars compare each panel with the best match. A short bar means a weak match.
+              <p className="px-3 pb-1 pt-1.5 text-xs text-muted-foreground">
+                Bars and percentages compare each panel with the best match (100%). A low figure means a weak match.
               </p>
             ) : null}
           </div>
@@ -553,8 +562,8 @@ export default function PanelAppSuggestSection({
 
         {noSuggestions && !searching ? (
           <div className="px-3 py-4 text-center">
-            <p className="text-xs font-medium text-foreground">No panels matched these findings</p>
-            <p className="mt-0.5 text-2xs text-muted-foreground">
+            <p className="text-[13px] font-medium text-foreground">No panels matched these findings</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {isAutomatic
                 ? 'Ranking will run without a panel boost.'
                 : 'Search above to pick a panel, or continue without a boost.'}
@@ -563,7 +572,7 @@ export default function PanelAppSuggestSection({
         ) : null}
 
         {!searching && selectedExtras.length > 0 ? (
-          <div className="border-t border-border px-1 pb-1">
+          <div className="mt-1 border-t border-[hsl(var(--wb-line))] pt-0.5">
             <GroupHeader>Also selected</GroupHeader>
             {selectedExtras.map((s) => (
               <PanelRow
@@ -581,23 +590,25 @@ export default function PanelAppSuggestSection({
         ) : null}
 
         {searching ? (
-          <div className="max-h-80 overflow-y-auto px-1 pb-1">
+          <div className="max-h-80 overflow-y-auto">
             <GroupHeader
               aside={
                 searchLoading ? (
-                  <span className="inline-flex items-center gap-1">
-                    <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
+                  <span className="inline-flex items-center gap-1.5">
+                    <StageMark state="running" size={12} />
                     Searching
                   </span>
                 ) : (
-                  `${searchRows.length} result${searchRows.length === 1 ? '' : 's'}`
+                  <>
+                    <CountUp value={searchRows.length} duration={0.3} /> result{searchRows.length === 1 ? '' : 's'}
+                  </>
                 )
               }
             >
               All panels matching &ldquo;{q}&rdquo;
             </GroupHeader>
             {!searchLoading && searchRows.length === 0 && !error ? (
-              <p className="px-2 py-3 text-xs text-muted-foreground">
+              <p className="px-3 py-3 text-[13px] text-muted-foreground">
                 No panels matched &ldquo;{q}&rdquo;. Try a shorter name.
               </p>
             ) : null}
@@ -619,7 +630,7 @@ export default function PanelAppSuggestSection({
             })}
           </div>
         ) : !isAutomatic && !showSkeleton ? (
-          <p className="border-t border-border px-3 py-2 text-2xs text-muted-foreground">
+          <p className="mt-1 border-t border-[hsl(var(--wb-line))] px-3 py-2 text-xs text-muted-foreground">
             Not listed? Search to browse all panels.
           </p>
         ) : null}
@@ -627,31 +638,58 @@ export default function PanelAppSuggestSection({
 
       {selectedIds.size > 0 ? (
         <div
-          className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 shadow-sm"
+          className="wb-rise sticky bottom-0 z-10 space-y-2 rounded-2xl border border-[hsl(var(--brand-300))] bg-[hsl(var(--wb-card))] px-3 py-2 shadow-sm"
           role="status"
         >
-          <span className="text-xs tabular-nums text-foreground">
-            <span className="font-medium">
-              {selectedIds.size} panel{selectedIds.size === 1 ? '' : 's'}
-            </span>
-            {geneCount > 0 ? ` · ${fmt(geneCount)} genes` : ''}
-            {saving ? (
-              <span className="ml-1.5 inline-flex items-center gap-1 text-muted-foreground">
-                <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
-                Saving
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[13px] tabular-nums text-foreground">
+              <span className="font-medium">
+                <CountUp value={selectedIds.size} duration={0.3} /> panel{selectedIds.size === 1 ? '' : 's'}
               </span>
-            ) : null}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            onClick={clearSelection}
-            disabled={busy}
-            className="max-md:h-9"
-          >
-            Clear
-          </Button>
+              {geneCount > 0 ? (
+                <>
+                  {' · '}
+                  <CountUp value={geneCount} duration={0.5} /> genes
+                </>
+              ) : null}
+              {saving ? (
+                <span className="ml-2 inline-flex items-center gap-1.5 text-muted-foreground">
+                  <StageMark state="running" size={12} />
+                  Saving
+                </span>
+              ) : null}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              onClick={clearSelection}
+              disabled={busy}
+              className="max-md:h-9"
+            >
+              Clear all
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <ChipList>
+              {selectedPanelChips.map((chip) => (
+                <PopIn key={chip.id} className="max-w-full">
+                  <span className="wb-chip max-w-full gap-1 !pr-1" data-tone="brand">
+                    <span className="truncate">{chip.name}</span>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => togglePanel(chip.id)}
+                      aria-label={`Remove ${chip.name}`}
+                      className="inline-flex size-4 shrink-0 items-center justify-center rounded-full outline-none transition-colors hover:bg-[hsl(var(--brand-200))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:opacity-50"
+                    >
+                      <X className="size-3" aria-hidden />
+                    </button>
+                  </span>
+                </PopIn>
+              ))}
+            </ChipList>
+          </div>
         </div>
       ) : null}
     </div>

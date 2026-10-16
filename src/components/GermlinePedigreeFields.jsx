@@ -64,7 +64,7 @@ export default function GermlinePedigreeFields({ value, onChange, Select = Wizar
         step={1}
         value={v[name] ?? ''}
         onChange={(e) => set({ [name]: e.target.value })}
-        className={`${TEXT_INPUT_CLASS} border-border tabular-nums`}
+        className={`${TEXT_INPUT_CLASS} tabular-nums`}
         placeholder="0"
       />
     </Field>

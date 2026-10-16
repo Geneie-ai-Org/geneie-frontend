@@ -7,16 +7,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 const VARIANTS = {
-  success: { Icon: CheckCircle2, color: 'var(--success)' },
-  error: { Icon: AlertCircle, color: 'var(--error)' },
-  info: { Icon: Info, color: 'var(--info)' },
+  success: { Icon: CheckCircle2, tone: 'text-[var(--success)] bg-[var(--success-soft)]' },
+  error: { Icon: AlertCircle, tone: 'text-[var(--error)] bg-[var(--error-soft)]' },
+  info: { Icon: Info, tone: 'text-[var(--info)] bg-[var(--info-soft)]' },
 };
 
 /**
  * Short confirm/notice dialog: a status icon, the title, one paragraph, and at most two actions
- * (a quiet dismiss and one primary call to action).
+ * (a quiet dismiss and one primary call to action). The dismiss is "Close"; with a call to action
+ * it is "Not now", so neither button is an OK/Cancel pair.
  */
 const AnnovarMessageModal = ({ modal, onClose }) => {
   const variant = modal ? VARIANTS[modal.variant] : null;
@@ -27,60 +29,41 @@ const AnnovarMessageModal = ({ modal, onClose }) => {
       {modal && (
         <DialogContent
           showCloseButton={false}
-          className="max-w-md w-[calc(100%-2rem)] p-0 gap-0 overflow-hidden rounded-xl ring-0 border"
-          style={{
-            backgroundColor: 'var(--bg-surface-raised)',
-            borderColor: 'var(--border-default)',
-            boxShadow: 'var(--shadow-lg)',
-          }}
+          className="max-w-md w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 ring-0"
         >
           <div className="p-5">
             <DialogHeader className="flex-row items-start justify-between gap-3 space-y-0">
               <div className="flex min-w-0 items-start gap-3">
-                {Icon && <Icon className="mt-0.5 size-5 shrink-0" style={{ color: variant.color }} aria-hidden />}
-                <div className="min-w-0">
-                  <DialogTitle className="text-base font-semibold leading-snug" style={{ color: 'var(--text-primary)' }}>
+                {Icon && (
+                  <span
+                    className={`wb-pop mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full ${variant.tone}`}
+                    aria-hidden
+                  >
+                    <Icon className="size-4" />
+                  </span>
+                )}
+                <div className="min-w-0 pt-0.5">
+                  <DialogTitle className="text-base font-semibold leading-snug text-foreground">
                     {modal.title}
                   </DialogTitle>
-                  <DialogDescription className="mt-1.5 text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                  <DialogDescription className="mt-1.5 text-[13px] leading-relaxed text-[var(--text-secondary)]">
                     {modal.message}
                   </DialogDescription>
                 </div>
               </div>
-              <DialogClose
-                render={
-                  <button
-                    type="button"
-                    className="-mr-1 -mt-1 inline-flex size-8 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-surface-hover)] [@media(pointer:coarse)]:size-11"
-                    aria-label="Close"
-                    style={{ color: 'var(--text-secondary)' }}
-                  />
-                }
-              >
+              <DialogClose render={<button type="button" className="wb-iconbtn -mr-1" aria-label="Close" />}>
                 <X className="size-4" />
               </DialogClose>
             </DialogHeader>
 
             <div className="mt-5 flex justify-end gap-2">
-              <DialogClose
-                render={
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium transition-colors hover:bg-[var(--bg-surface-hover)] [@media(pointer:coarse)]:h-11"
-                    style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
-                  />
-                }
-              >
-                {modal.ctaLabel ? 'Dismiss' : 'OK'}
+              <DialogClose render={<Button type="button" variant="outline" size="lg" />}>
+                {modal.ctaLabel ? 'Not now' : 'Close'}
               </DialogClose>
               {modal.ctaLabel && (
-                <button
-                  type="button"
-                  onClick={() => modal.onCta?.()}
-                  className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 [@media(pointer:coarse)]:h-11"
-                >
+                <Button type="button" size="lg" onClick={() => modal.onCta?.()}>
                   {modal.ctaLabel}
-                </button>
+                </Button>
               )}
             </div>
           </div>

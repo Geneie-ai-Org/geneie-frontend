@@ -285,18 +285,258 @@
 @media (prefers-reduced-motion: reduce) { .wb-spring-check [data-slot='checkbox-indicator'] svg { animation: none; } }
 
 
-/* ---- App-wide overlay surfaces: same shapes as the workbench (pill actions, rounded cards) ---- */
+/* ---- Overlays: ONE surface, ONE motion, ONE item language (menus, selects, popovers, hover cards, tooltips, dialogs, sheets) ----
+ * Classes used by src/components/ui: .ov-popup (menu/select popup), .ov-item (row), .ov-check, .ov-label, .ov-sep,
+ * .ov-kbd, .ov-pill (sliding highlight, highlight-pill.jsx), .ov-trigger/.ov-chev (select trigger), .ov-arrow, .ov-scroll.
+ * Base rules sit in :where() so a caller's utility classes (px-2, h-10, rounded-full ...) still win. */
+:root {
+  --ov-in: 160ms;
+  --ov-out: 100ms;
+  --ov-scrim: 182 26% 9% / 0.42;
+  --ov-pill: var(--brand-100);
+  --ov-shadow: 0 1px 2px hsl(180 10% 10% / 0.05), 0 14px 34px -12px hsl(180 20% 12% / 0.24);
+  --ov-shadow-lg: 0 2px 6px hsl(180 10% 10% / 0.06), 0 28px 72px -24px hsl(180 30% 10% / 0.4);
+}
+.dark {
+  --ov-scrim: 180 16% 3% / 0.64;
+  --ov-pill: 177 18% 22%;
+  --ov-shadow: 0 1px 2px hsl(0 0% 0% / 0.4), 0 14px 36px -12px hsl(0 0% 0% / 0.65);
+  --ov-shadow-lg: 0 2px 6px hsl(0 0% 0% / 0.4), 0 28px 72px -24px hsl(0 0% 0% / 0.75);
+}
+
+/* Surface: a white hairline card with a soft, teal-gray shadow. */
+.ov-popup,
+[data-slot='popover-content'],
+[data-slot='hover-card-content'],
+[data-slot='tooltip-content'] {
+  background-color: hsl(var(--wb-card));
+  color: hsl(var(--popover-foreground));
+  border: 1px solid hsl(var(--wb-line));
+  border-radius: 16px;
+  box-shadow: var(--ov-shadow);
+}
+[data-slot='tooltip-content'] { border-radius: 10px; padding: 6px 10px; font-size: 12px; line-height: 16px; box-shadow: var(--ov-shadow); }
 [data-slot='dialog-content'],
 [data-slot='alert-dialog-content'],
-[data-slot='sheet-content'] { border: 1px solid hsl(var(--wb-line)); }
+[data-slot='sheet-content'] { border: 1px solid hsl(var(--wb-line)); box-shadow: var(--ov-shadow-lg); }
 [data-slot='dialog-content'],
 [data-slot='alert-dialog-content'] { border-radius: 20px; }
+
+/* Popup list: comfortable padding, scroll with a soft edge fade (only when there is more to scroll). */
+.ov-popup { position: relative; }
+:where(.ov-popup) {
+  padding: 6px;
+  max-height: min(var(--available-height, 30rem), 30rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--wb-line-strong)) transparent;
+}
+@keyframes ov-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ov-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@supports (animation-timeline: scroll()) {
+  .ov-scroll::before,
+  .ov-scroll::after {
+    content: '';
+    display: block;
+    position: sticky;
+    height: 16px;
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0;
+    animation: linear both;
+    animation-timeline: scroll(self block);
+  }
+  .ov-scroll::before {
+    top: -6px;
+    margin: -6px -6px -10px;
+    background: linear-gradient(hsl(var(--wb-card)), hsl(var(--wb-card) / 0));
+    animation-name: ov-fade-in;
+    animation-range: 0 28px;
+  }
+  .ov-scroll::after {
+    bottom: -6px;
+    margin: -10px -6px -6px;
+    background: linear-gradient(hsl(var(--wb-card) / 0), hsl(var(--wb-card)));
+    animation-name: ov-fade-out;
+    animation-range: calc(100% - 28px) 100%;
+  }
+}
+
+/* Rows: 36px, rounded, transparent. The sliding pill (or, without JS, nothing) carries the fill. */
+:where(.ov-item) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  line-height: 1.3;
+}
+.ov-item {
+  position: relative;
+  z-index: 1;
+  color: hsl(var(--popover-foreground));
+  cursor: default;
+  user-select: none;
+  outline: none;
+  transition: color 120ms var(--ease-out), transform 90ms var(--ease-out);
+}
+.ov-item:focus-visible { outline: none; }
+.ov-item svg { flex-shrink: 0; width: 16px; height: 16px; color: hsl(var(--muted-foreground)); transition: color 120ms var(--ease-out); pointer-events: none; }
+.ov-item[data-highlighted],
+.ov-item[data-popup-open] { color: hsl(var(--brand-700)); }
+.ov-item[data-highlighted] svg,
+.ov-item[data-popup-open] svg { color: currentColor; }
+.ov-item:active:not([data-disabled]) { transform: scale(0.98); }
+.ov-item[data-disabled] { opacity: 0.45; pointer-events: none; }
+/* Destructive rows are plain until the pointer or keyboard lands on them, then pick up the status colour. */
+.ov-item[data-variant='destructive'][data-highlighted] { color: var(--error); }
+.ov-item[data-variant='destructive'][data-highlighted] svg { color: var(--error); }
+[data-slot='select-item'][data-selected] { font-weight: 500; }
+
+/* Hand-rolled menus that are not ui/dropdown-menu (e.g. the composer + menu) still get a filled highlight, never an outline box. */
+:is([role='menuitem'], [role='menuitemradio'], [role='menuitemcheckbox'], [role='option']):not(.ov-item):focus-visible {
+  outline: none;
+  background-color: hsl(var(--brand-100));
+}
+
+/* Selected mark: pops in. */
+.ov-check { position: absolute; right: 12px; top: 50%; margin-top: -8px; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.ov-check svg { color: hsl(var(--brand-700)); animation: wb-tick 240ms var(--ease-out) both; }
+.ov-item[data-highlighted] .ov-check svg { color: currentColor; }
+
+[data-slot='checkbox-indicator'] svg { animation: wb-tick 240ms var(--ease-out) both; }
+@media (prefers-reduced-motion: reduce) { [data-slot='checkbox-indicator'] svg { animation: none; } }
+
+/* Group labels and separators. */
+:where(.ov-label) { padding: 10px 12px 4px; }
+.ov-label { font-size: 12px; font-weight: 500; letter-spacing: 0.05em; font-variant-caps: all-small-caps; color: hsl(var(--muted-foreground)); user-select: none; }
+.ov-sep { height: 1px; margin: 6px 8px; background-color: hsl(var(--wb-line)); }
+.ov-kbd {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--wb-line));
+  background-color: hsl(var(--wb-pill));
+  font: 500 11px/16px ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: 0.02em;
+  color: hsl(var(--muted-foreground));
+}
+.ov-item[data-highlighted] .ov-kbd { border-color: hsl(var(--brand-200)); color: hsl(var(--brand-700)); background-color: hsl(var(--wb-card) / 0.6); }
+
+/* The sliding highlight. */
+.ov-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  border-radius: 10px;
+  background-color: hsl(var(--ov-pill));
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 170ms var(--ease-out), width 170ms var(--ease-out), height 170ms var(--ease-out), opacity 110ms var(--ease-out), background-color 120ms var(--ease-out);
+}
+.ov-pill[data-show='true'] { opacity: 1; }
+.ov-pill[data-tone='destructive'] { background-color: var(--error-soft); }
+
+/* Select: pill trigger, chevron turns while open, list matches the trigger width. */
+.ov-trigger { transition: border-color 150ms var(--ease-out), background-color 150ms var(--ease-out), color 150ms var(--ease-out); }
+.ov-trigger:hover:not(:disabled):not([data-disabled]):not([aria-invalid='true']) { border-color: hsl(var(--brand-300)); }
+.ov-trigger[data-popup-open],
+.ov-trigger[aria-expanded='true'] { border-color: hsl(var(--brand-500)); background-color: hsl(var(--brand-50)); }
+.ov-trigger .ov-chev { transition: transform 200ms var(--ease-out), color 150ms var(--ease-out); }
+.ov-trigger[data-popup-open] .ov-chev,
+.ov-trigger[aria-expanded='true'] .ov-chev { transform: rotate(180deg); color: hsl(var(--brand-700)); }
+.ov-arrow { position: sticky; z-index: 3; display: flex; align-items: center; justify-content: center; height: 20px; background-color: hsl(var(--wb-card)); color: hsl(var(--muted-foreground)); cursor: default; }
+.ov-arrow svg { width: 14px; height: 14px; }
+.ov-arrow:not([data-visible]) { display: none; }
+
+/* Command palette rows (cmdk marks the active row with data-selected="true"). */
+[data-slot='command-item'][data-selected='true'] { background-color: hsl(var(--brand-100)); color: hsl(var(--brand-700)); }
+[cmdk-group-heading] { font-size: 12px; font-weight: 500; letter-spacing: 0.05em; font-variant-caps: all-small-caps; color: hsl(var(--muted-foreground)); }
+
+/* Scrims: calm, teal-tinted ink with a touch of blur instead of flat grey. */
+[data-slot='dialog-overlay'],
+[data-slot='alert-dialog-overlay'],
+[data-slot='sheet-overlay'] {
+  background-color: hsl(var(--ov-scrim));
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  transition: opacity 180ms var(--ease-out);
+}
+
+/* Motion. Base UI sets data-starting-style / data-ending-style; enter is slower than exit (160 / 100ms). */
+.ov-popup,
 [data-slot='popover-content'],
-[data-slot='dropdown-menu-content'],
-[data-slot='select-content'],
-[data-slot='hover-card-content'] { border: 1px solid hsl(var(--wb-line)); border-radius: 16px; }
-[data-slot='dropdown-menu-item']:focus-visible,
-[data-slot='dropdown-menu-item'][data-highlighted],
-[data-slot='select-item'][data-highlighted] { background-color: hsl(var(--brand-50)); color: hsl(var(--brand-700)); }
+[data-slot='hover-card-content'],
+[data-slot='tooltip-content'] {
+  transform-origin: var(--transform-origin, center);
+  transition: opacity var(--ov-in) var(--ease-out), transform var(--ov-in) var(--ease-out);
+}
+.ov-popup[data-starting-style], .ov-popup[data-ending-style],
+[data-slot='popover-content'][data-starting-style], [data-slot='popover-content'][data-ending-style],
+[data-slot='hover-card-content'][data-starting-style], [data-slot='hover-card-content'][data-ending-style],
+[data-slot='tooltip-content'][data-starting-style], [data-slot='tooltip-content'][data-ending-style] {
+  opacity: 0;
+  transform: scale(0.96);
+}
+[data-side='top'][data-starting-style], [data-side='top'][data-ending-style] { transform: translateY(4px) scale(0.96); }
+[data-side='bottom'][data-starting-style], [data-side='bottom'][data-ending-style] { transform: translateY(-4px) scale(0.96); }
+[data-side='left'][data-starting-style], [data-side='left'][data-ending-style],
+[data-side='inline-start'][data-starting-style], [data-side='inline-start'][data-ending-style] { transform: translateX(4px) scale(0.96); }
+[data-side='right'][data-starting-style], [data-side='right'][data-ending-style],
+[data-side='inline-end'][data-starting-style], [data-side='inline-end'][data-ending-style] { transform: translateX(-4px) scale(0.96); }
+.ov-popup[data-ending-style],
+[data-slot='popover-content'][data-ending-style],
+[data-slot='hover-card-content'][data-ending-style],
+[data-slot='tooltip-content'][data-ending-style],
+[data-slot='dialog-overlay'][data-ending-style],
+[data-slot='alert-dialog-overlay'][data-ending-style],
+[data-slot='sheet-overlay'][data-ending-style] { transition-duration: var(--ov-out); }
+/* A tooltip that follows another one in the same group (Base UI marks it data-instant) never animates. */
+[data-slot='tooltip-content'][data-instant] { transition-duration: 0ms; }
+
+[data-slot='dialog-overlay'][data-starting-style], [data-slot='dialog-overlay'][data-ending-style],
+[data-slot='alert-dialog-overlay'][data-starting-style], [data-slot='alert-dialog-overlay'][data-ending-style],
+[data-slot='sheet-overlay'][data-starting-style], [data-slot='sheet-overlay'][data-ending-style] { opacity: 0; }
+
+/* Dialogs: scale in with a slight rise (180ms), leave faster (110ms). The centring translate comes from the utilities. */
+[data-slot='dialog-content'],
+[data-slot='alert-dialog-content'] { transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out); }
+[data-slot='dialog-content'][data-starting-style], [data-slot='dialog-content'][data-ending-style],
+[data-slot='alert-dialog-content'][data-starting-style], [data-slot='alert-dialog-content'][data-ending-style] {
+  opacity: 0;
+  transform: translate(-50%, calc(var(--tw-translate-y, -50%) + 8px)) scale(0.97);
+}
+[data-slot='dialog-content'][data-ending-style],
+[data-slot='alert-dialog-content'][data-ending-style] { transition-duration: 110ms; }
+
+/* Sheets slide in from their edge. */
+[data-slot='sheet-content'] { transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms var(--ease-out); }
+[data-slot='sheet-content'][data-ending-style] { transition-duration: 180ms; }
+[data-slot='sheet-content'][data-starting-style], [data-slot='sheet-content'][data-ending-style] { opacity: 0.6; }
+[data-slot='sheet-content'][data-side='right'][data-starting-style], [data-slot='sheet-content'][data-side='right'][data-ending-style] { transform: translateX(100%); }
+[data-slot='sheet-content'][data-side='left'][data-starting-style], [data-slot='sheet-content'][data-side='left'][data-ending-style] { transform: translateX(-100%); }
+[data-slot='sheet-content'][data-side='top'][data-starting-style], [data-slot='sheet-content'][data-side='top'][data-ending-style] { transform: translateY(-100%); }
+[data-slot='sheet-content'][data-side='bottom'][data-starting-style], [data-slot='sheet-content'][data-side='bottom'][data-ending-style] { transform: translateY(100%); }
+
+/* Close button on dialogs / sheets: a pill icon button. */
+[data-slot='dialog-content'] > [data-slot='dialog-close'],
+[data-slot='sheet-content'] > [data-slot='sheet-close'] { border-radius: 9999px; color: hsl(var(--muted-foreground)); }
+[data-slot='dialog-content'] > [data-slot='dialog-close']:hover,
+[data-slot='sheet-content'] > [data-slot='sheet-close']:hover { background-color: hsl(var(--wb-pill)); color: hsl(var(--foreground)); }
+
+.ov-popup:focus-visible { outline: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ov-popup, [data-slot='popover-content'], [data-slot='hover-card-content'], [data-slot='tooltip-content'],
+  [data-slot='dialog-overlay'], [data-slot='alert-dialog-overlay'], [data-slot='sheet-overlay'],
+  [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'],
+  .ov-item, .ov-pill, .ov-trigger, .ov-trigger .ov-chev { transition: none; }
+  .ov-check svg { animation: none; }
+  .ov-item:active:not([data-disabled]) { transform: none; }
+}
 /* Pages outside the chat shell opt in with className="wb-scope" on their root. */
 .wb-scope { background-color: hsl(var(--wb-bg)); }

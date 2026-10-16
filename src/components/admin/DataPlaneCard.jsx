@@ -7,7 +7,8 @@ import {
 } from '@/services/infraApi';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Banner, HelpBody, HelpPopover, Panel, StatusChip, inputCls, selectCls, toneText, DANGER_BTN } from './adminUi';
+import { Banner, HelpBody, HelpPopover, Panel, StatusChip, inputCls, toneText, DANGER_BTN } from './adminUi';
+import AdminSelect from './AdminSelect';
 import { ChangeLine, Field, fmtRelative, fmtTime, Stat, Unavailable } from './infraShared';
 import { CanaryEditor, depth, ToggleRow } from './routingShared';
 import { SECTION_HELP } from './infraHelp';
@@ -98,9 +99,9 @@ function BackendRow({ build, backendKey, releaseKey, dataplane, blocked, onReque
       <div className="min-w-0">
         <Field label="Who serves new jobs">
           <span className="flex flex-wrap items-center gap-2">
-            <select value={chosen} disabled={disabled} onChange={(e) => setPick(e.target.value)} className={cn(selectCls, 'max-md:h-10')}>
+            <AdminSelect value={chosen} disabled={disabled} onChange={(e) => setPick(e.target.value)} className="max-md:h-10">
               {DATAPLANE_BACKENDS.map((b) => <option key={b} value={b}>{b}</option>)}
-            </select>
+            </AdminSelect>
             <Button
               variant="outline"
               size="sm"

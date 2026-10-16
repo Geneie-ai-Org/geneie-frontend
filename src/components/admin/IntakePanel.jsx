@@ -8,7 +8,8 @@ import {
 } from '@/services/infraApi';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Banner, StatusChip, inputCls, selectCls, DANGER_BTN } from './adminUi';
+import { Banner, StatusChip, inputCls, DANGER_BTN } from './adminUi';
+import AdminSelect from './AdminSelect';
 import {
   ChangeLine,
   Field,
@@ -95,16 +96,16 @@ function IntakeCard({ kind, entry, hoursMax, blocked, onRequest }) {
           {formOpen ? (
             <div className="flex flex-col gap-2">
               <Field label="Pause for">
-                <select
+                <AdminSelect
                   value={hours}
                   disabled={disabled}
                   onChange={(e) => setHours(e.target.value)}
-                  className={cn(selectCls, 'w-full max-md:h-10')}
+                  className="w-full max-md:h-10"
                 >
                   {DURATIONS.filter((d) => d >= INTAKE_HOURS_MIN && d <= hoursMax).map((d) => (
                     <option key={d} value={String(d)}>{fmtHours(d)}</option>
                   ))}
-                </select>
+                </AdminSelect>
               </Field>
               <Field label="Reason" hint="required">
                 <input

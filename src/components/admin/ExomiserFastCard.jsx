@@ -11,7 +11,8 @@ import {
 } from '@/services/infraApi';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Banner, HelpBody, HelpPopover, Panel, StatusChip, inputCls, selectCls, toneText } from './adminUi';
+import { Banner, HelpBody, HelpPopover, Panel, StatusChip, inputCls, toneText } from './adminUi';
+import AdminSelect from './AdminSelect';
 import { ChangeLine, fmtRelative, fmtTime, Stat, Unavailable } from './infraShared';
 import { CanaryEditor, depth, ToggleRow } from './routingShared';
 import { SECTION_HELP } from './infraHelp';
@@ -71,15 +72,15 @@ function PathRow({ exomiser, blocked, onRequest }) {
       <h3 className="mb-1 text-[13px] font-medium text-foreground">Who serves new Exomiser jobs</h3>
       <div className="flex flex-wrap items-center gap-2">
         <StatusChip tone={backend === 'classic' ? 'muted' : 'info'}>{backend}</StatusChip>
-        <select
+        <AdminSelect
           value={chosen}
           disabled={Boolean(blocked)}
           aria-label="Exomiser path"
           onChange={(e) => setPick(e.target.value)}
-          className={cn(selectCls, 'max-md:h-10')}
+          className="max-md:h-10"
         >
           {options.map((b) => <option key={b} value={b}>{b}</option>)}
-        </select>
+        </AdminSelect>
         <Button variant="outline" size="sm" disabled={Boolean(blocked) || chosen === backend} onClick={save} className="max-md:h-10">Apply…</Button>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">{BACKEND_TEXT[backend] || backend}</p>
@@ -311,9 +312,9 @@ export default function ExomiserFastCard({ exomiser, errors, blockedReason, onRe
           parse={(t) => (EXOMISER_OUTPUT_FORMATS.includes(t) ? { value: t } : { error: 'Choose all or tsv_variant.' })}
           help={'"all" keeps every Exomiser output file; "tsv_variant" writes only the table the app reads.'}
           input={({ text, setText, disabled, label }) => (
-            <select value={text} disabled={disabled} aria-label={label} onChange={(e) => setText(e.target.value)} className={cn(selectCls, 'max-md:h-10')}>
+            <AdminSelect value={text} disabled={disabled} aria-label={label} onChange={(e) => setText(e.target.value)} className="max-md:h-10">
               {EXOMISER_OUTPUT_FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
-            </select>
+            </AdminSelect>
           )}
         />
       </div>

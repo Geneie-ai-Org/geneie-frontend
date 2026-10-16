@@ -2,7 +2,8 @@ import { RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { CountUp } from '@/components/motion';
-import { Bar, CopyIcon, HelpBody, HelpPopover, ScrollBox, StateBlock, StatusChip, selectSmCls, tdCls, thCls, useRowNav } from './adminUi';
+import { Bar, CopyIcon, HelpBody, HelpPopover, ScrollBox, StateBlock, StatusChip, tdCls, thCls, useRowNav } from './adminUi';
+import AdminSelect from './AdminSelect';
 
 /** One key number, one line of context, one action. Paragraphs live in the "?" popover. */
 function StatCard({ label, value, sub, help, action, children, loading }) {
@@ -183,15 +184,16 @@ export function WaitlistTable({ waitlist, busy, onReload, onStatus, onDelete, er
                 </td>
                 <td className={cn(tdCls, 'text-muted-foreground')}>{entry.source || '–'}</td>
                 <td className={tdCls}>
-                  <select
+                  <AdminSelect
                     value={entry.status || 'new'}
                     disabled={busy}
                     aria-label={`Status for ${entry.email}`}
                     onChange={(e) => onStatus(entry, e.target.value)}
-                    className={selectSmCls}
+                    size="sm"
+                    className="min-w-[7rem]"
                   >
                     {WAITLIST_STATUSES.map((st) => <option key={st} value={st}>{st}</option>)}
-                  </select>
+                  </AdminSelect>
                 </td>
                 <td className={cn(tdCls, 'text-right')}>
                   <Button

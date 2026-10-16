@@ -11,7 +11,8 @@ import {
 } from '@/services/infraApi';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { HelpBody, HelpPopover, Panel, StatusChip, inputCls, selectCls } from './adminUi';
+import { HelpBody, HelpPopover, Panel, StatusChip, inputCls } from './adminUi';
+import AdminSelect from './AdminSelect';
 import {
   ChangeLine,
   Field,
@@ -239,16 +240,16 @@ function InstanceTypesLever({ current, allowlist, blocked, onRequest }) {
         ))}
       </ol>
       <div className="flex flex-wrap items-center gap-2">
-        <select
+        <AdminSelect
           value=""
           disabled={disabled || remaining.length === 0}
           aria-label="Add a GPU instance type"
           onChange={(e) => e.target.value && setDraft([...list, e.target.value])}
-          className={cn(selectCls, 'max-md:h-10')}
+          className="max-md:h-10"
         >
           <option value="">{remaining.length ? 'Add a type…' : 'All allowed types added'}</option>
           {remaining.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
+        </AdminSelect>
         <Button variant="outline" disabled={disabled || !dirty} onClick={save} className="max-md:h-10">Save order…</Button>
         {draft !== null && (
           <Button variant="ghost" onClick={() => { setDraft(null); setError(null); }} className="max-md:h-10">Discard</Button>

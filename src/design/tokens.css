@@ -32,7 +32,7 @@
 
   --border: 60 4% 90.5%;
   --input: 60 3% 60%;
-  --ring: 177 40% 30%;
+  --ring: 175 32% 40%;                  /* focus ring: soft teal, 4.3:1 on white (the old 30% lightness read heavy) */
 
   --chart-1: 173 72% 30%;
   --chart-2: 217 70% 52%;
@@ -277,10 +277,32 @@ html, body {
   border-color: hsl(var(--border));
 }
 
+/* ONE keyboard focus indicator: a soft 2px teal outline, 2px off the edge, following the element's
+ * radius (3:1 or better on white and on the dark canvas). Everything else is made to defer to it:
+ *  - utility rings (focus-visible:ring-*) on an element that still shows this outline are cancelled,
+ *    so the two never stack. Elements that switch the outline off (focus-visible:outline-none) and
+ *    draw their own ring keep that ring; nothing loses its indicator.
+ *  - popups themselves never get a ring; their items carry a filled highlight instead (workbench.css). */
 :focus-visible {
-  outline: 2px solid hsl(var(--signal));
+  outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }
+:is([class*='focus-visible:ring'], [class*='focus:ring']):focus-visible:not([class*='focus-visible:outline-none']) {
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+}
+[role='menu']:focus-visible,
+[role='listbox']:focus-visible,
+[role='dialog']:focus-visible,
+[role='alertdialog']:focus-visible,
+[data-slot='dropdown-menu-content']:focus-visible,
+[data-slot='select-content']:focus-visible,
+[data-slot='popover-content']:focus-visible,
+[data-slot='hover-card-content']:focus-visible,
+[data-slot='tooltip-content']:focus-visible,
+[data-slot='dialog-content']:focus-visible,
+[data-slot='alert-dialog-content']:focus-visible,
+[data-slot='sheet-content']:focus-visible { outline: none; }
 
 ::selection {
   background: hsl(var(--signal) / 0.22);

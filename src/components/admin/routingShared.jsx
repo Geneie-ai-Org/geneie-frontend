@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { parseCanaryUsers } from '@/services/infraApi';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { StatusChip, areaCls, selectCls, DANGER_BTN } from './adminUi';
+import { StatusChip, areaCls, DANGER_BTN } from './adminUi';
+import AdminSelect from './AdminSelect';
 import { Field } from './infraShared';
 
 /* Pieces the Data plane and Exomiser fast-path cards have in common. Neither writes anything:
@@ -64,9 +65,9 @@ export function CanaryEditor({ users, backend, options, blocked, intro, dangerVa
           />
         </Field>
         <Field label="Path for these accounts">
-          <select value={chosen} disabled={disabled} onChange={(e) => setPick(e.target.value)} className={cn(selectCls, 'max-md:h-10')}>
+          <AdminSelect value={chosen} disabled={disabled} onChange={(e) => setPick(e.target.value)} className="max-md:h-10">
             {options.map((b) => <option key={b} value={b}>{b}</option>)}
-          </select>
+          </AdminSelect>
         </Field>
         <div className="flex flex-col gap-1.5 pt-[18px]">
           <Button variant="outline" size="sm" disabled={disabled || same} onClick={() => onSaveUsers(users, list)}>Save accounts…</Button>

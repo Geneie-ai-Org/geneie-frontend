@@ -143,7 +143,7 @@ export default function ExportVariantsButton({
         ? 'Counts out of sync. Refresh'
         : canExport
           ? annotatedOnly
-            ? `Download ${rowCount.toLocaleString()} annotated variants`
+            ? 'Download annotated'
             : `Download ${rowCount.toLocaleString()} variants`
           : isLoading && !eligibility
             ? 'Checking export…'
@@ -168,7 +168,7 @@ export default function ExportVariantsButton({
     : gateBlocked
       ? downloadGate?.message || 'A job is still running'
       : canExport
-        ? `Download ${rowCount.toLocaleString()} variants as TSV`
+        ? `Download ${rowCount.toLocaleString()}${annotatedOnly ? ' annotated' : ''} variants as TSV`
         : message;
 
   // Working states carry a small dot (status), never a spinner beside a label that says otherwise.

@@ -34,9 +34,16 @@ import { toast } from 'sonner';
 import { apiErrorDetailToMessage as sharedApiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
 import { groupColumns, OTHER_GROUP } from '@/lib/variantColumnGroups';
 import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
-import { CountUp, Collapse, Turn, ChipList, PopIn, SelectionMarker, StateButton, Dismissible, undoToast, SPRING } from '@/components/motion';
+import AcmgModePanel from '@/components/tabs/AcmgModePanel';
+import { PhenotypeLockedPreview, PhenotypeNext, PhenotypeSummary } from '@/components/tabs/PhenotypeModePanel';
+import { Collapse, Turn, SelectionMarker, StateButton, Dismissible, undoToast, SPRING } from '@/components/motion';
 import { useDoneFlash } from '@/components/motion/useDoneFlash';
 import { sampleHasPhenotype } from '@/components/PhenotypeInputPanel';
+import AddFilterCommand, { KindGlyph } from '@/components/variants/AddFilterCommand';
+import FilterBar from '@/components/variants/FilterBar';
+import ApplyStatus, { describeDiff } from '@/components/variants/ApplyStatus';
+import { RangeHistogram } from '@/components/variants/Histogram';
+import { useVariantSample, sampleCaption } from '@/components/variants/useVariantSample';
 import {
   PHENOTYPE_FILTER_DISPLAY_NAME,
   PHENOTYPE_FILTER_DESCRIPTION,
@@ -196,6 +203,20 @@ function filterPayloadsEquivalent(current, appliedRaw) {
   return true;
 }
 
+/** How a new payload differs from the applied one, by column: { added, removed, changed }. */
+function diffFilterPayloads(prevRaw, next) {
+  const prev = normalizeAppliedFiltersForCompare(prevRaw);
+  let added = 0;
+  let removed = 0;
+  let changed = 0;
+  for (const k of Object.keys(next)) {
+    if (!(k in prev)) added += 1;
+    else if (!filterPayloadsEquivalent({ [k]: next[k] }, { [k]: prev[k] })) changed += 1;
+  }
+  for (const k of Object.keys(prev)) if (!(k in next)) removed += 1;
+  return { added, removed, changed };
+}
+
 /* ------------------------------------------------------------------ */
 /* Small presentational helpers (workspace tab "Variants")             */
 /* ------------------------------------------------------------------ */
@@ -339,7 +360,7 @@ const MINI_ICON_BTN =
   'inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-[hsl(var(--brand-100))] hover:text-[hsl(var(--brand-700))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] disabled:opacity-50 max-md:size-9';
 
 /** Dual-handle range slider + min/max fields for numeric column filters. */
-function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinChange, onMaxChange, disabled, onEnterApply = null, flashKey = 0 }) {
+function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinChange, onMaxChange, disabled, onEnterApply = null, flashKey = 0, histogram = null }) {
   const uid = useId();
   const reduceMotion = useReducedMotion();
   // A quick-pick changes both fields at once: ring them in teal for a moment so the change reads.
@@ -547,6 +568,52 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
 
   return (
     <div className="space-y-2 select-none">
+      {histogram && (
+        <RangeHistogram values={histogram.values} rangeMin={rangeMin} rangeMax={rangeMax} lo={lo} hi={hi} />
+      )}
+      <div
+        ref={trackRef}
+        className={`relative flex h-6 items-center ${disabled ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}
+        onPointerDown={onTrackPointerDown}
+        role="presentation"
+      >
+        <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[hsl(var(--brand-200))]" />
+        <div
+          className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[hsl(var(--brand-500))]"
+          style={{ left: `${loPct}%`, width: `${Math.max(hiPct - loPct, 0)}%` }}
+        />
+        <button
+          type="button"
+          role="slider"
+          data-range-thumb="1"
+          aria-label="Minimum value"
+          aria-valuemin={rangeMin}
+          aria-valuemax={hi}
+          aria-valuenow={lo}
+          disabled={disabled}
+          onPointerDown={(e) => onThumbDown('low', e)}
+          onKeyDown={(e) => onThumbKeyDown('low', e)}
+          className={thumbClass(dragging === 'low')}
+          style={{ left: `${loPct}%`, top: '50%', transform: thumbTransform(dragging === 'low'), touchAction: 'none' }}
+        />
+        <button
+          type="button"
+          role="slider"
+          data-range-thumb="1"
+          aria-label="Maximum value"
+          aria-valuemin={lo}
+          aria-valuemax={rangeMax}
+          aria-valuenow={hi}
+          disabled={disabled}
+          onPointerDown={(e) => onThumbDown('high', e)}
+          onKeyDown={(e) => onThumbKeyDown('high', e)}
+          className={thumbClass(dragging === 'high')}
+          style={{ left: `${hiPct}%`, top: '50%', transform: thumbTransform(dragging === 'high'), touchAction: 'none' }}
+        />
+      </div>
+      <p id={`${uid}-range`} className="text-[12px] text-muted-foreground tabular-nums">
+        Data range {formatBound(rangeMin)} to {formatBound(rangeMax)}.{histogram?.caption ? ` Bars show ${histogram.caption}.` : ''}
+      </p>
       <div className="grid grid-cols-2 items-start gap-2">
         {[
           { which: 'min', label: 'Min', draft: minDraft, setDraft: setMinDraft, error: minError, setError: setMinError, value: minInputValue, placeholder: formatBound(rangeMin), current: currentMin, aria: 'Minimum filter value' },
@@ -597,49 +664,7 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
           );
         })}
       </div>
-      <div
-        ref={trackRef}
-        className={`relative flex h-6 items-center ${disabled ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}
-        onPointerDown={onTrackPointerDown}
-        role="presentation"
-      >
-        <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[hsl(var(--brand-200))]" />
-        <div
-          className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[hsl(var(--brand-500))]"
-          style={{ left: `${loPct}%`, width: `${Math.max(hiPct - loPct, 0)}%` }}
-        />
-        <button
-          type="button"
-          role="slider"
-          data-range-thumb="1"
-          aria-label="Minimum value"
-          aria-valuemin={rangeMin}
-          aria-valuemax={hi}
-          aria-valuenow={lo}
-          disabled={disabled}
-          onPointerDown={(e) => onThumbDown('low', e)}
-          onKeyDown={(e) => onThumbKeyDown('low', e)}
-          className={thumbClass(dragging === 'low')}
-          style={{ left: `${loPct}%`, top: '50%', transform: thumbTransform(dragging === 'low'), touchAction: 'none' }}
-        />
-        <button
-          type="button"
-          role="slider"
-          data-range-thumb="1"
-          aria-label="Maximum value"
-          aria-valuemin={lo}
-          aria-valuemax={rangeMax}
-          aria-valuenow={hi}
-          disabled={disabled}
-          onPointerDown={(e) => onThumbDown('high', e)}
-          onKeyDown={(e) => onThumbKeyDown('high', e)}
-          className={thumbClass(dragging === 'high')}
-          style={{ left: `${hiPct}%`, top: '50%', transform: thumbTransform(dragging === 'high'), touchAction: 'none' }}
-        />
-      </div>
-      <p id={`${uid}-range`} className="text-[12px] text-muted-foreground tabular-nums">
-        Data range {formatBound(rangeMin)} to {formatBound(rangeMax)}. Press Enter to apply.
-      </p>
+      <p className="text-[12px] text-muted-foreground">Press Enter in a field to apply.</p>
     </div>
   );
 }
@@ -647,7 +672,7 @@ function NumericRangeSlider({ rangeMin, rangeMax, currentMin, currentMax, onMinC
 const CATEGORY_RENDER_CAP = 200;
 
 /** Searchable multi-select; two-value yes/no style columns become Any / A / B. */
-function CategoricalEditor({ values, selected, disabled, onChange }) {
+function CategoricalEditor({ values, selected, disabled, onChange, counts = null, caption = '' }) {
   const [query, setQuery] = useState('');
   const segId = useId();
   const reduceMotion = useReducedMotion();
@@ -718,7 +743,12 @@ function CategoricalEditor({ values, selected, disabled, onChange }) {
   }
 
   const q = query.trim().toLowerCase();
-  const matches = q ? all.filter((v) => String(v).toLowerCase().includes(q)) : all;
+  const matchedAll = q ? all.filter((v) => String(v).toLowerCase().includes(q)) : all;
+  // With a loaded sample the most common values come first; without one the file's own order is kept.
+  const matches = counts
+    ? [...matchedAll].sort((a, b) => (String(a) === 'Empty') - (String(b) === 'Empty') || (counts.get(String(b)) || 0) - (counts.get(String(a)) || 0))
+    : matchedAll;
+  const topCount = counts ? Math.max(1, ...matches.map((v) => counts.get(String(v)) || 0)) : 0;
   const shown = matches.slice(0, CATEGORY_RENDER_CAP);
   const toggle = (value, checked) => {
     if (disabled) return;
@@ -784,6 +814,14 @@ function CategoricalEditor({ values, selected, disabled, onChange }) {
                   <span className="min-w-0 flex-1 truncate" title={String(value)}>
                     {String(value) === 'Empty' ? 'Empty' : String(value)}
                   </span>
+                  {counts && (
+                    <span className="flex shrink-0 items-center gap-1.5 text-[12px] tabular-nums text-muted-foreground">
+                      <span aria-hidden className="relative h-1 w-10 overflow-hidden rounded-full bg-[hsl(var(--brand-100))]">
+                        <span className="absolute inset-y-0 left-0 rounded-full bg-[hsl(var(--brand-500)/0.7)]" style={{ width: `${Math.round(((counts.get(String(value)) || 0) / topCount) * 100)}%` }} />
+                      </span>
+                      <span className="min-w-[1.6rem] text-right">{(counts.get(String(value)) || 0).toLocaleString()}</span>
+                    </span>
+                  )}
                 </label>
               </li>
             ))}
@@ -795,6 +833,7 @@ function CategoricalEditor({ values, selected, disabled, onChange }) {
           Showing the first {CATEGORY_RENDER_CAP} of {matches.length.toLocaleString()}. Search to narrow the list.
         </p>
       )}
+      {counts && caption && <p className="text-[11.5px] leading-snug text-muted-foreground">Counts from {caption}.</p>}
     </div>
   );
 }
@@ -813,6 +852,7 @@ function ColumnFilterEditor({
   onCategoricalChange,
   onClear,
   onEnterApply = null,
+  sample = null,
 }) {
   const [flashKey, setFlashKey] = useState(0);
   if (notFilterableReason) {
@@ -874,6 +914,10 @@ function ColumnFilterEditor({
           onMaxChange={(v) => onNumericChange('Max', v)}
           onEnterApply={onEnterApply}
           flashKey={flashKey}
+          histogram={(() => {
+            const values = sample?.status === 'ready' ? sample.numbers(colName) : null;
+            return values ? { values, caption: sampleCaption(sample) } : null;
+          })()}
         />
       </div>
     );
@@ -885,6 +929,8 @@ function ColumnFilterEditor({
         selected={selectedValues}
         disabled={disabled}
         onChange={onCategoricalChange}
+        counts={sample?.status === 'ready' ? sample.counts(colName) : null}
+        caption={sampleCaption(sample)}
       />
     );
   }
@@ -948,6 +994,8 @@ const VariantFilterSidebar = ({
   onGuestRefreshMetadata = null,
   chatEligibility = null,
   onEditSampleInfo = null,
+  // Optional: opens the upgrade / top-up / sign-up flow for a blocked ACMG or Phenotype run.
+  onRequestUpgrade = null,
   onClinicalReportOpen = null,
   gaTriageStatus = '',
   gaTriageUpdatedAt = null,
@@ -996,6 +1044,10 @@ const VariantFilterSidebar = ({
     }
   };
   const [openFilterPopup, setOpenFilterPopup] = useState(null); // Column whose filter editor is expanded inline
+  const [commandOpen, setCommandOpen] = useState(false); // The Add-filter command popover
+  const [applyDiff, setApplyDiff] = useState(null); // { from, to, added, changed, removed } for the last manual Apply
+  const [undoApplyPending, setUndoApplyPending] = useState(false); // Undo of a Reset: re-apply once the reset settles
+  const rootRef = useRef(null);
   const [expandedGroups, setExpandedGroups] = useState({}); // groupName -> open (unset = default)
   const [initializedConversationId, setInitializedConversationId] = useState(null); // Prevent re-initializing filters on polling updates
   const [savedFilterPresets, setSavedFilterPresets] = useState([]);
@@ -1395,6 +1447,7 @@ const VariantFilterSidebar = ({
         if (Number.isFinite(tc) && tc > 0) {
           setFilterWorkingSetCount(tc);
         }
+        setApplyDiff({ ...diffFilterPayloads(appliedFilters, filterObject), from: underConsiderationCount, to: Number.isFinite(fc) ? fc : 0 });
         setAppliedFilters(filterObject);
         // Manual Apply invalidates any previously applied preset (filters no longer match a saved entry)
         setAppliedPresetId(null);
@@ -1479,7 +1532,7 @@ const VariantFilterSidebar = ({
     }
   };
 
-  const resetFilters = async () => {
+  const resetFilters = async ({ quiet = false } = {}) => {
     if (!conversationId || !userId) return;
     if (pipelineBusy) return;
     beginPipelineWork();
@@ -1506,6 +1559,7 @@ const VariantFilterSidebar = ({
     setAppliedFilters(null);
     setFilteredCount(null);
     setAppliedPresetId(null);
+    setApplyDiff(null);
 
     // Clear proprietary filter state
     setActiveProprietaryFilter(null);
@@ -1548,8 +1602,8 @@ const VariantFilterSidebar = ({
         // Clear applied filters
         setAppliedFilters(null);
 
-        // Show notification
-        if (data.total_count > 0) {
+        // Show notification (skipped when an Undo toast speaks for the reset)
+        if (data.total_count > 0 && !quiet) {
           notify({
             message: `Filters reset: All ${data.total_count.toLocaleString()} variants are now under consideration`,
             type: 'success'
@@ -1754,6 +1808,7 @@ const VariantFilterSidebar = ({
       setGardenApplyMissingColumns([]);
       const payload = data.active_filters || {};
       applyFilterPayloadToInputs(payload);
+      setApplyDiff({ ...diffFilterPayloads(appliedFilters, payload), from: underConsiderationCount, to: Number(data.filtered_count) || 0 });
       setAppliedFilters(payload);
       setFilteredCount(data.filtered_count ?? null);
       setAppliedPresetId(presetId);
@@ -2061,6 +2116,14 @@ const VariantFilterSidebar = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applyRequest]);
 
+  // Undo of a Reset restores the inputs, then re-applies as soon as the reset request has finished.
+  useEffect(() => {
+    if (!undoApplyPending || isApplying || pipelineBusy) return;
+    setUndoApplyPending(false);
+    if (hasUnappliedFilterChanges) applyFilters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [undoApplyPending, isApplying, pipelineBusy, hasUnappliedFilterChanges]);
+
   const hasAppliedManualFilters = useMemo(() => {
     const normalized = normalizeAppliedFiltersForCompare(appliedFilters);
     return Object.keys(normalized).length > 0;
@@ -2130,6 +2193,23 @@ const VariantFilterSidebar = ({
     ok: activeProprietaryFilter === 'filter_3',
   });
   const { done: annotateDone } = useDoneFlash(isRunningAnnovar, { armed: !acmgFilterCanApply, ok: !!acmgFilterCanApply });
+
+  // An editor that opens below the fold scrolls just far enough to show itself (the footer is a sibling, so
+  // it never covers the field).
+  useEffect(() => {
+    if (!openFilterPopup) return undefined;
+    const t = setTimeout(() => {
+      document.getElementById(`filter-col-${safeId(openFilterPopup)}`)?.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+    }, 260);
+    return () => clearTimeout(t);
+  }, [openFilterPopup, reduceMotion]);
+
+  // A read-only sample of the variants in scope, loaded only once an editor is open (histograms and value counts).
+  const sample = useVariantSample({
+    conversationId,
+    enabled: filterMode === 'manual' && !isGuest && (commandOpen || openFilterPopup != null),
+    scopeKey: `${JSON.stringify(normalizeAppliedFiltersForCompare(appliedFilters))}|${filteredCount ?? ''}`,
+  });
 
   // Plain content for the workspace "Variants" tab. The workspace supplies the header and close
   // button; `isOpen` / `onToggle` are still accepted so existing callers keep working, and only an
@@ -2270,10 +2350,24 @@ const VariantFilterSidebar = ({
   const setCategoricalSelection = (colName, values) => {
     setCategoricalFilters((prev) => ({ ...prev, [colName]: values }));
   };
+  /** Reset with an Undo when the filters were manual only: Undo puts every filter back and applies it again. */
+  const resetWithUndo = () => {
+    const manualOnly = hasAppliedManualFilters && !activeProprietaryFilter;
+    const snapshot = manualOnly ? { ...pendingFilterPayload } : null;
+    const before = underConsiderationCount;
+    const hasUndo = !!snapshot && Object.keys(snapshot).length > 0;
+    resetFilters({ quiet: hasUndo });
+    if (hasUndo) {
+      undoToast(`Filters reset, all ${displayTotalVariants.toLocaleString()} variants back in scope (was ${before.toLocaleString()}).`, () => {
+        applyFilterPayloadToInputs(snapshot);
+        setUndoApplyPending(true);
+      });
+    }
+  };
   const clearAllFilters = () => {
     if (hasAppliedManualFilters || activeProprietaryFilter) {
-      // Applied filters are reset on the server; putting them back would be a new apply, so no Undo here.
-      resetFilters();
+      // Applied filters are reset on the server; Undo re-applies them as a new apply.
+      resetWithUndo();
       return;
     }
     // Draft-only: every selection is local, so Undo can restore all of them.
@@ -2353,7 +2447,7 @@ const VariantFilterSidebar = ({
     modeStatus = exoIsActive
       ? { tone: 'success', word: 'Active', detail: 'Variants are ranked against the phenotype.' }
       : phenotypeMissing
-        ? { tone: 'warning', word: 'Locked', detail: 'Needs a phenotype description. Everything else runs without one.' }
+        ? { tone: 'muted', word: 'Locked', detail: 'Needs a phenotype description. Everything else runs without one.' }
         : exoRunning
           ? { tone: 'info', word: 'Running', detail: 'This can take several minutes. You can leave this tab open.', pulse: true }
           : exoFailed
@@ -2394,6 +2488,58 @@ const VariantFilterSidebar = ({
     ? allColumns.filter((c) => c.toLowerCase().includes(columnQuery))
     : null;
 
+  /** The column's type for glyphs: number, category, or a yes/no value. */
+  const columnKindOf = (colName) => {
+    if (columnIsNumeric(colName)) return 'number';
+    const vals = categoricalValuesFor(colName).map(String).filter((v) => v !== 'Empty');
+    if (vals.length > 0 && vals.length <= 2 && vals.every((v) => BOOLISH.test(v))) return 'boolean';
+    return 'category';
+  };
+  const columnHintOf = (colName) => {
+    const rowRange = columnIsNumeric(colName) ? ranges[colName] : null;
+    if (rowRange) return `${formatBound(rowRange.min)} to ${formatBound(rowRange.max)}`;
+    if (categoricalColumns[colName] && categoricalValuesFor(colName).length > 0) return `${categoricalValuesFor(colName).length.toLocaleString()} values`;
+    return null;
+  };
+
+  /** The value editor for one column, shared by the catalog rows and the Add-filter popover. */
+  const renderEditor = (colName) => {
+    const spec = pendingFilterPayload[colName];
+    const summary = describeFilterSpec(spec);
+    const reason = notFilterableReasonFor(colName);
+    const loadingSample = sample.status === 'loading' && columnIsNumeric(colName) && !reason;
+    return (
+      <>
+        {loadingSample && <div aria-hidden className="wb-shimmer mb-2 h-10 w-full rounded-lg" />}
+        <ColumnFilterEditor
+          colName={colName}
+          notFilterableReason={reason}
+          range={columnIsNumeric(colName) ? ranges[colName] : null}
+          filter={filters[colName] || {}}
+          catData={categoricalColumns[colName] ? { ...categoricalColumns[colName], values: categoricalValuesFor(colName) } : undefined}
+          selectedValues={categoricalFilters[colName] || []}
+          disabled={isManualFiltersDisabled}
+          hasFilter={!!summary}
+          onNumericChange={(type, value) => handleFilterChange(colName, type, value)}
+          onCategoricalChange={(values) => setCategoricalSelection(colName, values)}
+          onClear={() => removeColumnFilter(colName)}
+          onEnterApply={requestApply}
+          sample={sample}
+        />
+      </>
+    );
+  };
+
+  /** Set one column's draft from a typed condition such as `qual > 100`. */
+  const quickSetFilter = (colName, spec) => {
+    if (spec.values) {
+      setCategoricalSelection(colName, spec.values);
+      return;
+    }
+    if ('min' in spec) handleFilterChange(colName, 'Min', spec.min);
+    if ('max' in spec) handleFilterChange(colName, 'Max', spec.max);
+  };
+
   const renderColumnRow = (colName, { showGroup = false } = {}) => {
     const spec = pendingFilterPayload[colName];
     const summary = describeFilterSpec(spec);
@@ -2404,21 +2550,22 @@ const VariantFilterSidebar = ({
     const reason = notFilterableReasonFor(colName);
     const isExpanded = openFilterPopup === colName;
     const rowRange = columnIsNumeric(colName) ? ranges[colName] : null;
-    const rowHint = reason
-      ? null
-      : rowRange
-        ? `${formatBound(rowRange.min)} to ${formatBound(rowRange.max)}`
-        : categoricalColumns[colName] && categoricalValuesFor(colName).length > 0
-          ? `${categoricalValuesFor(colName).length.toLocaleString()} values`
-          : null;
+    const rowHint = reason ? null : columnHintOf(colName);
+    // Where the chosen span sits inside the data range, as a tiny track (numeric filters only).
+    const trackSpan = rowRange && spec && ('min' in spec || 'max' in spec) && rowRange.max > rowRange.min
+      ? {
+          l: Math.max(0, Math.min(100, (((spec.min ?? rowRange.min) - rowRange.min) / (rowRange.max - rowRange.min)) * 100)),
+          r: Math.max(0, Math.min(100, (((spec.max ?? rowRange.max) - rowRange.min) / (rowRange.max - rowRange.min)) * 100)),
+        }
+      : null;
     return (
-      <div key={colName}>
+      <div key={colName} id={`filter-row-${safeId(colName)}`}>
         <button
           type="button"
           aria-expanded={isExpanded}
           aria-controls={`filter-col-${safeId(colName)}`}
           onClick={() => setOpenFilterPopup(isExpanded ? null : colName)}
-          className={`group/row relative flex min-h-9 w-full items-center gap-2 rounded-full border px-3.5 py-1 text-left text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:min-h-11 ${
+          className={`group/row relative flex min-h-9 w-full items-center gap-2 rounded-full border px-3 py-1 text-left text-[13px] outline-none transition-colors max-md:min-h-11 ${
             isExpanded
               ? 'border-[hsl(var(--brand-200))]'
               : 'border-transparent hover:border-[hsl(var(--brand-200))] hover:bg-[hsl(var(--brand-50))]'
@@ -2426,6 +2573,9 @@ const VariantFilterSidebar = ({
         >
           {/* Only one editor is open at a time, so one tint glides to whichever row is open. */}
           {isExpanded && <SelectionMarker group="filter-row" bar={false} />}
+          {reason
+            ? <span aria-hidden className="relative inline-flex size-3.5 shrink-0 items-center justify-center text-muted-foreground/60"><Lock className="size-3" /></span>
+            : <KindGlyph kind={columnKindOf(colName)} className={`relative ${summary ? 'text-[hsl(var(--brand-700))]' : 'text-muted-foreground'}`} />}
           <span className="relative min-w-0 flex-1">
             <span className={`block truncate ${reason ? 'text-muted-foreground' : 'text-foreground'} ${summary || isExpanded ? 'font-medium' : ''}`}>{colName}</span>
             {showGroup && groupOfColumn[colName] && (
@@ -2448,26 +2598,18 @@ const VariantFilterSidebar = ({
           ) : rowHint ? (
             <span className="relative shrink-0 text-[12px] tabular-nums text-muted-foreground">{rowHint}</span>
           ) : null}
+          {trackSpan && !isExpanded ? (
+            <span aria-hidden className="relative -ml-1 h-1 w-9 shrink-0 overflow-hidden rounded-full bg-[hsl(var(--brand-200))]">
+              <span className="absolute inset-y-0 rounded-full bg-[hsl(var(--brand-500))]" style={{ left: `${trackSpan.l}%`, width: `${Math.max(6, trackSpan.r - trackSpan.l)}%` }} />
+            </span>
+          ) : null}
           <Turn open={isExpanded} className="relative shrink-0">
             <ChevronRight className={`wb-chev size-3.5 text-muted-foreground ${isExpanded ? '' : 'group-hover/row:translate-x-0.5 group-hover/row:text-[hsl(var(--brand-700))]'}`} aria-hidden />
           </Turn>
         </button>
         <Collapse open={isExpanded} id={`filter-col-${safeId(colName)}`}>
           <div className="mx-1 mb-1.5 mt-1 rounded-2xl border border-[hsl(var(--brand-100))] bg-[hsl(var(--brand-50))] p-3">
-            <ColumnFilterEditor
-              colName={colName}
-              notFilterableReason={reason}
-              range={columnIsNumeric(colName) ? ranges[colName] : null}
-              filter={filters[colName] || {}}
-              catData={categoricalColumns[colName] ? { ...categoricalColumns[colName], values: categoricalValuesFor(colName) } : undefined}
-              selectedValues={categoricalFilters[colName] || []}
-              disabled={isManualFiltersDisabled}
-              hasFilter={!!summary}
-              onNumericChange={(type, value) => handleFilterChange(colName, type, value)}
-              onCategoricalChange={(values) => setCategoricalSelection(colName, values)}
-              onClear={() => removeColumnFilter(colName)}
-              onEnterApply={requestApply}
-            />
+            {renderEditor(colName)}
           </div>
         </Collapse>
       </div>
@@ -2535,6 +2677,12 @@ const VariantFilterSidebar = ({
     />
   ) : null;
 
+  // A blocked ACMG / Phenotype run on this plan: offer the upgrade, when the host gave us a handler.
+  const upgradeAction =
+    acmgQuotaBlocked && acmgExomiserGate?.cta && typeof onRequestUpgrade === 'function'
+      ? { label: acmgExomiserGate.cta.label || 'Upgrade', onClick: () => onRequestUpgrade(acmgExomiserGate.cta.kind) }
+      : null;
+
   // Where a blocked Phenotype reason can be fixed in one click, when the host gave us a handler.
   const reasonAction = (reason) => {
     if (reason === 'annovar_required') return runAnnotationButton;
@@ -2578,13 +2726,31 @@ const VariantFilterSidebar = ({
       return (
         <StateButton
           state={state}
-          labels={{ idle: 'Apply', running: 'Applying…', done: 'Applied' }}
+          labels={{ idle: applyLabel, running: 'Applying…', done: 'Applied' }}
           icon={ListFilter}
           onClick={applyFilters}
+          title="Apply filters (Ctrl or Cmd + Enter)"
           disabled={isManualFiltersDisabled || !hasUnappliedFilterChanges}
           aria-describedby="filter-apply-status"
           className={`h-9 flex-1 max-md:h-11 ${settled(state)}`}
         />
+      );
+    }
+    // A blocked plan: the way forward is the upgrade, when the host gave us a handler.
+    if ((filterMode === 'acmg' || filterMode === 'exomiser') && acmgQuotaBlocked && upgradeAction && !(filterMode === 'acmg' ? activeProprietaryFilter === 'filter_1' : exoIsActive)) {
+      return (
+        <Button type="button" onClick={upgradeAction.onClick} aria-describedby="filter-apply-status" className="h-9 flex-1 max-md:h-11">
+          {upgradeAction.label}
+        </Button>
+      );
+    }
+    // Locked Phenotype: the primary action is the one that unlocks it, not a dead Run button.
+    if (filterMode === 'exomiser' && phenotypeMissing && onEditSampleInfo && !exoIsActive) {
+      return (
+        <Button type="button" onClick={onEditSampleInfo} aria-describedby="filter-apply-status" className="h-9 flex-1 max-md:h-11">
+          <PencilLine aria-hidden />
+          Add a phenotype
+        </Button>
       );
     }
     if (filterMode === 'acmg') {
@@ -2657,13 +2823,121 @@ const VariantFilterSidebar = ({
     if (modeStatus.word === 'Running') return { tone: 'info', text: 'Running. The count updates when it finishes.', pulse: true };
     if (modeStatus.word === 'Ready') return { tone: 'muted', text: 'Ready. Apply it to update the count.' };
     if (modeStatus.word === 'Checking') return { tone: 'muted', text: 'Checking eligibility…' };
+    if (filterMode === 'exomiser' && phenotypeMissing) return { tone: 'muted', text: 'Add a phenotype in sample info to run this.' };
+    if (filterMode === 'acmg') return { tone: modeStatus.tone, text: `${modeStatus.word}. See what is needed above.` };
     return { tone: modeStatus.tone, text: `${modeStatus.word}. See the note above.` };
   })();
 
   const footerQuiet = footerStatus.tone === 'muted' || footerStatus.tone === 'success';
 
+  // ---- The pinned filter bar: pieces that depend on this render's state ----
+  const barInfo = (
+    variantData?.sample_only_ingest && (
+      <Popover>
+        <PopoverTrigger
+          className="wb-iconbtn outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:size-11"
+          aria-label="About this file"
+        >
+          <Info className="size-3.5" />
+        </PopoverTrigger>
+        <PopoverContent
+          side="bottom"
+          align="end"
+          sideOffset={6}
+          className="w-72 p-3 text-xs leading-relaxed text-muted-foreground"
+        >
+          {variantData.s3_line_count_status === 'pending' || variantData.s3_line_count_status === 'running' ? (
+            <>
+              Counting all variant rows in your file on the server (very large files can take several minutes).
+              Column mapping already used the first {variantData.interpretation_sample_rows || 50} rows.
+            </>
+          ) : annotatedRowBaseline > 0 ? (
+            variantData?.annotated_row_count || variantData?.sample_only_ingest ? (
+              <>
+                Annotated variant file ({annotatedRowBaseline.toLocaleString()} rows). Each Apply re-scans this full annotated file on S3 (all active filters combined). Uploaded VCF may list more rows before annotation.
+              </>
+            ) : (
+              <>
+                Full file on cloud storage ({annotatedRowBaseline.toLocaleString()} data rows). Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only and is not loaded into the database yet. Run annotation, then apply the ACMG filter (or apply filters once) to load a working set. Use Clear all to remove filters and start over from the full file.
+              </>
+            )
+          ) : (
+            <>
+              Full file on cloud storage. Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only. Run annotation, then apply the ACMG filter. Use Clear all to reload the full file row count.
+            </>
+          )}
+        </PopoverContent>
+      </Popover>
+    )
+  );
+  const barWarning = (
+    <Dismissible
+      show={
+        !!hasActiveManualFilters &&
+        filterWorkingSetCount != null &&
+        filteredCount === 1 &&
+        filterWorkingSetCount === 1 &&
+        fileTotalVariants > 100
+      }
+    >
+      <div className="mt-3">
+        <InlineNotice tone="warning" title="Only 1 variant is loaded" role="status">
+          Press Reset, then apply ACMG or your first filter again to reload a larger working set.
+        </InlineNotice>
+      </div>
+    </Dismissible>
+  );
+  const barNotice =
+    chatEligibility?.allowed !== true && chatEligibility?.message ? (
+      <p
+        id="variant-eligibility-note"
+        className="wb-rise mt-3 flex items-start gap-2 border-t border-[hsl(var(--wb-line))] pt-2.5 text-[12px] leading-snug text-muted-foreground"
+      >
+        <Info aria-hidden className="mt-px size-3.5 shrink-0 text-[var(--info)]" />
+        <span>{chatEligibility.message}</span>
+      </p>
+    ) : null;
+  const barChips = filterChips.map((chip) => ({ ...chip, kind: columnKindOf(chip.col) }));
+  // Columns the Add-filter command can offer: only those that can be filtered by hand.
+  const commandColumns = columnGroups.flatMap(([group, cols]) =>
+    cols
+      .filter((c) => !notFilterableReasonFor(c))
+      .map((c) => ({
+        name: c,
+        group,
+        kind: columnKindOf(c),
+        hint: columnHintOf(c),
+        active: !!pendingFilterPayload[c],
+        values: columnIsNumeric(c) ? null : categoricalValuesFor(c),
+      }))
+  );
+  const editFilterFromChip = (col) => {
+    if (filterMode !== 'manual') return;
+    setColumnSearchQuery('');
+    const g = groupOfColumn[col];
+    if (g) setExpandedGroups((prev) => ({ ...prev, [g]: true }));
+    setOpenFilterPopup(col);
+  };
+  const applyPhase = isApplying ? 'applying' : hasUnappliedFilterChanges ? 'dirty' : applyDiff || hasAppliedManualFilters ? 'applied' : 'clean';
+  const pendingDiff = diffFilterPayloads(appliedFilters, pendingFilterPayload);
+  const applyLabel = unappliedCount > 0 ? `Apply ${unappliedCount} change${unappliedCount === 1 ? '' : 's'}` : 'Apply';
+  const onRootKeyDown = (e) => {
+    if (e.defaultPrevented || filterMode !== 'manual') return;
+    const t = e.target;
+    const typing = t?.tagName === 'INPUT' || t?.tagName === 'TEXTAREA' || t?.tagName === 'SELECT' || t?.isContentEditable;
+    if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey && !isManualFiltersDisabled && allColumns.length > 0) {
+      e.preventDefault();
+      setCommandOpen(true);
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && hasUnappliedFilterChanges && !isApplying && !isManualFiltersDisabled) {
+      e.preventDefault();
+      applyFilters();
+    }
+  };
+
   return (
-    <div className="variant-filter-sidebar flex h-full min-h-0 w-full min-w-0 flex-col text-foreground [&_input::placeholder]:!text-muted-foreground [&_textarea::placeholder]:!text-muted-foreground">
+    <div ref={rootRef} onKeyDown={onRootKeyDown} className="variant-filter-sidebar flex h-full min-h-0 w-full min-w-0 flex-col text-foreground [&_input::placeholder]:!text-muted-foreground [&_textarea::placeholder]:!text-muted-foreground">
       {/* Confirmation dialogs (short, focused) */}
       <AlertDialog open={removeFileDialogOpen} onOpenChange={setRemoveFileDialogOpen}>
         <AlertDialogContent>
@@ -2701,176 +2975,56 @@ const VariantFilterSidebar = ({
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* ---------------- Pinned filter bar: count, active filters, Add filter, saved filters ---------------- */}
+      {fileTotalVariants > 0 && (
+        <div className="max-h-[46%] shrink-0 overflow-y-auto overscroll-contain px-4 pb-1 pt-3">
+          <FilterBar
+            scopeCount={underConsiderationCount}
+            totalCount={displayTotalVariants}
+            filteredOut={filteredOutCount}
+            scopePct={scopePct}
+            chips={barChips}
+            proprietaryLabel={proprietaryChipLabel}
+            onEditChip={editFilterFromChip}
+            onRemoveChip={removeColumnFilter}
+            onRemoveProprietary={removeProprietaryChip}
+            removeDisabled={isManualFiltersDisabled}
+            proprietaryDisabled={isApplyingProprietaryFilter || pipelineBusy}
+            onResetAll={clearAllFilters}
+            resetDisabled={isApplying}
+            addFilter={
+              filterMode === 'manual' && commandColumns.length > 0 ? (
+                <AddFilterCommand
+                  open={commandOpen}
+                  onOpenChange={setCommandOpen}
+                  columns={commandColumns}
+                  renderEditor={renderEditor}
+                  onQuickSet={quickSetFilter}
+                  disabled={isManualFiltersDisabled}
+                />
+              ) : null
+            }
+            saved={
+              filterMode === 'manual' && !isGuest
+                ? {
+                    presets: savedFilterPresets,
+                    appliedId: appliedPresetId,
+                    busyId: isApplyingPreset ? selectedPresetId : null,
+                    disabled: isApplying || isApplyingPreset || isManualFiltersDisabled,
+                    onApply: handleApplySelectedGarden,
+                    onDeactivate: resetWithUndo,
+                  }
+                : null
+            }
+            info={barInfo}
+            warning={barWarning}
+            notice={barNotice}
+          />
+        </div>
+      )}
+
       {/* ---------------- Scrolling body ---------------- */}
       <div className="min-h-0 flex-1 scroll-py-3 space-y-3 overflow-y-auto overscroll-contain px-4 pb-4 pt-3">
-        {/* Scope: how many variants remain, and the filters doing it */}
-        {fileTotalVariants > 0 && (
-          <section aria-label="Filter summary" className="wb-card p-4">
-            <div className="flex items-start justify-between gap-2">
-              <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 tabular-nums">
-                <span className="text-[28px] font-semibold leading-none text-foreground">
-                  <CountUp value={underConsiderationCount} />
-                </span>
-                <span className="text-[13px] text-muted-foreground">
-                  of {displayTotalVariants.toLocaleString()} variants in scope
-                </span>
-              </p>
-              <div className="flex shrink-0 items-center gap-1.5">
-                {filteredOutCount > 0 && (
-                  <span className="wb-chip tabular-nums">{filteredOutCount.toLocaleString()} filtered out</span>
-                )}
-                {variantData?.sample_only_ingest && (
-                  <Popover>
-                    <PopoverTrigger
-                      className="wb-iconbtn outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.5)] max-md:size-11"
-                      aria-label="About this file"
-                    >
-                      <Info className="size-3.5" />
-                    </PopoverTrigger>
-                    <PopoverContent
-                      side="bottom"
-                      align="end"
-                      sideOffset={6}
-                      className="w-72 p-3 text-xs leading-relaxed text-muted-foreground"
-                    >
-                      {variantData.s3_line_count_status === 'pending' || variantData.s3_line_count_status === 'running' ? (
-                        <>
-                          Counting all variant rows in your file on the server (very large files can take several minutes).
-                          Column mapping already used the first {variantData.interpretation_sample_rows || 50} rows.
-                        </>
-                      ) : annotatedRowBaseline > 0 ? (
-                        variantData?.annotated_row_count || variantData?.sample_only_ingest ? (
-                          <>
-                            Annotated variant file ({annotatedRowBaseline.toLocaleString()} rows). Each Apply re-scans this full annotated file on S3 (all active filters combined). Uploaded VCF may list more rows before annotation.
-                          </>
-                        ) : (
-                          <>
-                            Full file on cloud storage ({annotatedRowBaseline.toLocaleString()} data rows). Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only and is not loaded into the database yet. Run annotation, then apply the ACMG filter (or apply filters once) to load a working set. Use Clear all to remove filters and start over from the full file.
-                          </>
-                        )
-                      ) : (
-                        <>
-                          Full file on cloud storage. Column mapping used the first {variantData.interpretation_sample_rows || 50} rows only. Run annotation, then apply the ACMG filter. Use Clear all to reload the full file row count.
-                        </>
-                      )}
-                    </PopoverContent>
-                  </Popover>
-                )}
-              </div>
-            </div>
-            {/* A real progressbar for assistive tech; the sentence beside the count is its text equivalent. */}
-            {displayTotalVariants > 0 && (
-              <div
-                role="progressbar"
-                aria-label="Variants in scope after filters"
-                aria-valuemin={0}
-                aria-valuemax={displayTotalVariants}
-                aria-valuenow={Math.max(0, Math.min(displayTotalVariants, underConsiderationCount))}
-                aria-valuetext={`${underConsiderationCount.toLocaleString()} of ${displayTotalVariants.toLocaleString()} variants in scope`}
-                className="wb-track mt-3"
-              >
-                <div className="wb-fill transition-[width] duration-300 ease-out motion-reduce:transition-none" style={{ width: `${scopePct}%` }} />
-              </div>
-            )}
-
-            <Dismissible
-              show={
-                !!hasActiveManualFilters &&
-                filterWorkingSetCount != null &&
-                filteredCount === 1 &&
-                filterWorkingSetCount === 1 &&
-                fileTotalVariants > 100
-              }
-            >
-              <div className="mt-3">
-                <InlineNotice tone="warning" title="Only 1 variant is loaded" role="status">
-                  Press Reset, then apply ACMG or your first filter again to reload a larger working set.
-                </InlineNotice>
-              </div>
-            </Dismissible>
-
-            {/* Active filters: removable pills with one Reset all */}
-            <div className="mt-3.5 border-t border-[hsl(var(--wb-line))] pt-3">
-              <CardHeader title="Active filters" count={hasAnyChip ? (filterChips.length + (proprietaryChipLabel ? 1 : 0)) : null}>
-                {!hasAnyChip && <span className="wb-fade text-[12px] text-muted-foreground">None yet</span>}
-                {hasAnyChip && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={clearAllFilters}
-                    disabled={isApplying}
-                    className="wb-pop h-7 px-3 text-[12px] max-md:h-11"
-                  >
-                    <RotateCcw aria-hidden />
-                    Reset all
-                  </Button>
-                )}
-              </CardHeader>
-              {/* The row stays mounted so the last chip can shrink out and the empty state can settle in. */}
-              <div className={`relative flex flex-wrap items-center gap-1.5 ${hasAnyChip ? 'mt-2' : ''}`} role="group" aria-label="Active filters">
-                <ChipList>
-                  {proprietaryChipLabel && (
-                    <PopIn
-                      key="__proprietary"
-                      className="inline-flex h-7 max-w-full items-center rounded-full border border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] pl-3 pr-1 text-[13px] font-medium text-[hsl(var(--brand-700))]"
-                    >
-                      <span className="truncate">{proprietaryChipLabel}</span>
-                      <button
-                        type="button"
-                        onClick={removeProprietaryChip}
-                        disabled={isApplyingProprietaryFilter || pipelineBusy}
-                        aria-label={`Remove ${proprietaryChipLabel}`}
-                        className={`ml-1 ${MINI_ICON_BTN} !size-5 hover:!bg-[hsl(var(--brand-200))]`}
-                      >
-                        <X className="size-3" aria-hidden />
-                      </button>
-                    </PopIn>
-                  )}
-                  {filterChips.map((chip) => (
-                    <PopIn
-                      key={chip.col}
-                      className={`inline-flex h-7 max-w-full items-center rounded-full border pl-3 pr-1 text-[13px] transition-colors duration-200 ${
-                        chip.pending
-                          ? 'border-dashed border-[var(--warning)] bg-[hsl(var(--wb-card))] text-foreground'
-                          : 'border-[hsl(var(--brand-200))] bg-[hsl(var(--brand-100))] text-[hsl(var(--brand-700))]'
-                      }`}
-                      title={chip.pending ? `${chip.col}: ${chip.label} (not applied yet)` : `${chip.col}: ${chip.label}`}
-                    >
-                      <span className="truncate">
-                        <span className="font-medium">{chip.col}</span>
-                        <span className="tabular-nums"> {chip.label}</span>
-                        {chip.pending && <span className="sr-only"> (not applied yet)</span>}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeColumnFilter(chip.col)}
-                        disabled={isManualFiltersDisabled}
-                        aria-label={`Remove ${chip.col} filter`}
-                        className={`ml-1 ${MINI_ICON_BTN} !size-5 hover:!bg-[hsl(var(--brand-200))]`}
-                      >
-                        <X className="size-3" aria-hidden />
-                      </button>
-                    </PopIn>
-                  ))}
-                </ChipList>
-              </div>
-            </div>
-
-            {/* The chat-eligibility sentence lives here once. Download and report controls below only
-              * carry short state labels, so the same sentence is never repeated. */}
-            {chatEligibility?.allowed !== true && chatEligibility?.message && (
-              <p
-                id="variant-eligibility-note"
-                className="wb-rise mt-3 flex items-start gap-2 rounded-2xl bg-[hsl(var(--brand-50))] px-3.5 py-2.5 text-[12px] leading-snug text-muted-foreground"
-              >
-                <StatusDot tone="info" className="mt-[7px]" />
-                <span>{chatEligibility.message}</span>
-              </p>
-            )}
-          </section>
-        )}
-
         {/* Mode: Manual | ACMG | Phenotype, as a pill segmented control */}
         <div>
           <div
@@ -2933,20 +3087,18 @@ const VariantFilterSidebar = ({
           className="space-y-3 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500)/0.4)]"
         >
           {/* What this mode does and whether it is ready */}
-          {!(filterMode === 'manual' && modeStatus.word === 'Ready') && (
+          {!(filterMode === 'manual' && modeStatus.word !== 'Locked') && filterMode !== 'acmg' && !(filterMode === 'exomiser' && phenotypeMissing) && (
           <section key={filterMode} className="wb-card wb-fade p-4" aria-label="About this filter mode">
             <div className="flex items-start justify-between gap-3">
               <p className="min-w-0 text-[13px] leading-snug text-muted-foreground">{modeBlurb}</p>
               <StatusPill tone={modeStatus.tone}>{modeStatus.word}</StatusPill>
             </div>
 
-            {/* Manual: nothing to add while ready. Phenotype locked: the notice below carries the reason. */}
+            {/* Manual: nothing to add while ready. */}
             {!(filterMode === 'manual' && modeStatus.word === 'Ready') &&
               !(filterMode === 'exomiser' && (phenotypeMissing || (!exoRunning && !exoFailed && !exoIsActive && !exoCanRun && exoReasons.length > 0))) &&
-              !(filterMode === 'exomiser' && exoFailed && exoFailureDetail) &&
-              !(filterMode === 'acmg' && modeStatus.word === 'Needs annotation') && (
+              !(filterMode === 'exomiser' && exoFailed && exoFailureDetail) && (
                 <p
-                  id={filterMode === 'exomiser' && phenotypeMissing ? 'filter-mode-lock-reason' : undefined}
                   className="mt-2 text-[13px] leading-snug text-foreground"
                   role="status"
                 >
@@ -2954,62 +3106,7 @@ const VariantFilterSidebar = ({
                 </p>
               )}
 
-            {/* ACMG: needs annotation, with the single next action inline */}
-            {filterMode === 'acmg' && modeStatus.word === 'Needs annotation' && (
-              <div className="mt-3">
-                <InlineNotice
-                  tone="warning"
-                  title="This file needs annotation first"
-                  action={runAnnotationButton}
-                  role="status"
-                >
-                  {annovarQuotaBlocked ? (
-                    <span className="text-[var(--error)]">{annovarGate.reason}</span>
-                  ) : (
-                    <>Run annotation, then come back to apply the ACMG filter.{annovarMeterLabel ? ` ${annovarMeterLabel}.` : ''}</>
-                  )}
-                </InlineNotice>
-              </div>
-            )}
-            <Dismissible show={filterMode === 'acmg' && modeStatus.word === 'Blocked'}>
-              <div className="mt-3">
-                <InlineNotice
-                  tone="warning"
-                  title="Manual filters are active"
-                  action={
-                    <Button type="button" variant="outline" size="sm" onClick={resetFilters} disabled={isApplying} className={pillBtn}>
-                      <RotateCcw aria-hidden />
-                      Reset manual filters
-                    </Button>
-                  }
-                >
-                  The ACMG filter and manual filters cannot run together.
-                </InlineNotice>
-              </div>
-            </Dismissible>
-            {filterMode === 'acmg' && proprietaryFilterPreviews?.filter_1?.preview_pending && activeProprietaryFilter !== 'filter_1' && (
-              <p className="mt-2 text-[12px] text-muted-foreground">The match count appears after you apply.</p>
-            )}
-
             {/* Phenotype */}
-            <Dismissible show={filterMode === 'exomiser' && phenotypeMissing}>
-              <div className="mt-3">
-                <InlineNotice
-                  tone="warning"
-                  title="Add a phenotype description to unlock this"
-                  action={
-                    onEditSampleInfo ? (
-                      <Button type="button" variant="outline" size="sm" onClick={onEditSampleInfo} className={pillBtn}>
-                        <PencilLine aria-hidden />
-                        Add a phenotype in sample info
-                      </Button>
-                    ) : null
-                  }
-                >
-                  Everything else on this page works without one.
-                </InlineNotice>
-              </div>
-            </Dismissible>
             {filterMode === 'exomiser' && !phenotypeMissing && (
               <div className="space-y-3 empty:hidden">
                 {exoRunning && (
@@ -3066,6 +3163,45 @@ const VariantFilterSidebar = ({
           </section>
           )}
 
+          {/* ACMG: the rule drawn out, the yield, and what is still needed */}
+          {filterMode === 'acmg' && (
+            <div key="acmg-mode" className="wb-fade">
+              <AcmgModePanel
+                status={modeStatus}
+                active={activeProprietaryFilter === 'filter_1'}
+                canApply={acmgFilterCanApply}
+                manualBlocked={hasAppliedManualFilters}
+                onResetManual={resetFilters}
+                resetDisabled={isApplying}
+                quotaBlocked={acmgQuotaBlocked}
+                quotaReason={acmgExomiserGate?.reason}
+                meterLabel={acmgMeterLabel}
+                annotationAction={annovarQuotaBlocked ? <span className="text-[12px] text-[var(--error)]">{annovarGate.reason}</span> : runAnnotationButton}
+                preview={proprietaryFilterPreviews?.filter_1 || null}
+                total={displayTotalVariants}
+                kept={underConsiderationCount}
+              />
+            </div>
+          )}
+
+          {/* Phenotype: locked preview, or what is saved and what happens next */}
+          {filterMode === 'exomiser' && phenotypeMissing && (
+            <div key="pheno-locked" className="wb-fade">
+              <PhenotypeLockedPreview status={modeStatus} upgrade={upgradeAction} canEdit={!!onEditSampleInfo} />
+            </div>
+          )}
+          {filterMode === 'exomiser' && !phenotypeMissing && !exoIsActive && (
+            <div key="pheno-summary" className="wb-fade space-y-3">
+              <PhenotypeSummary meta={currentDocument?.sample_metadata} onEdit={onEditSampleInfo} />
+              {!exoRunning && <PhenotypeNext />}
+            </div>
+          )}
+          {filterMode === 'exomiser' && !phenotypeMissing && exoIsActive && (
+            <div key="pheno-summary-active" className="wb-fade">
+              <PhenotypeSummary meta={currentDocument?.sample_metadata} onEdit={onEditSampleInfo} />
+            </div>
+          )}
+
           {/* ---- Manual ---- */}
           {filterMode === 'manual' && allColumns.length > 0 && (
             <>
@@ -3090,7 +3226,7 @@ const VariantFilterSidebar = ({
                     <Turn open={isGardenExpanded} className="shrink-0">
                       <ChevronRight className={`wb-chev size-3.5 text-muted-foreground ${isGardenExpanded ? '' : 'group-hover/row:translate-x-0.5 group-hover/row:text-[hsl(var(--brand-700))]'}`} aria-hidden />
                     </Turn>
-                    <span className="font-medium">Saved filters</span>
+                    <span className="font-medium">Manage saved filters</span>
                     <span className="wb-tab-badge text-muted-foreground">{savedFilterPresets.length}</span>
                     {selectedPreset && (
                       <span className="wb-chip ml-auto max-w-[10rem]" data-tone="brand">
@@ -3304,7 +3440,7 @@ const VariantFilterSidebar = ({
               {/* Column search */}
               <div>
                 <CardHeader title="Columns" count={allColumns.length.toLocaleString()}>
-                  <span className="text-[12px] text-muted-foreground">{modeBlurb}</span>
+                  <span className="text-[12px] text-muted-foreground">Pick one to set a filter</span>
                 </CardHeader>
                 <div className="relative mt-1.5">
                   <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
@@ -3392,28 +3528,41 @@ const VariantFilterSidebar = ({
         * so this bar never overlaps a focused control. */}
       <div className="shrink-0 space-y-2 border-t border-[hsl(var(--wb-line))] bg-[hsl(var(--wb-card))] px-4 pb-3 pt-2.5">
         <div id="filter-apply-status" role="status" className="space-y-0.5">
-          {fileTotalVariants > 0 && (
-            <p className="flex items-baseline justify-between gap-2 tabular-nums">
-              <span>
-                <span className="text-[15px] font-semibold text-foreground"><CountUp value={underConsiderationCount} /></span>
-                <span className="text-[13px] text-muted-foreground"> of {displayTotalVariants.toLocaleString()} variants in scope</span>
-              </span>
-              {filteredOutCount > 0 && (
-                <span className="text-[12px] text-muted-foreground">{filteredOutCount.toLocaleString()} filtered out</span>
+          {/* Manual mode shows the apply state machine (Draft, Applying, Applied) with the diff. The count itself
+            * lives in the pinned filter bar above, so it is not repeated here. */}
+          {filterMode === 'manual' ? (
+            <>
+              <p className="sr-only">{footerStatus.text}</p>
+              {fileTotalVariants > 0 && !isManualFiltersDisabled && (
+                <ApplyStatus phase={applyPhase} pending={pendingDiff} diff={applyDiff} scopeNow={underConsiderationCount} />
               )}
-            </p>
+              {isManualFiltersDisabled && (
+                <p className="flex items-start gap-1.5 pt-0.5 text-[12px] leading-snug text-muted-foreground">
+                  <StatusDot tone={footerStatus.tone} pulse={footerStatus.pulse} className="mt-[5px]" />
+                  <span>{footerStatus.text}</span>
+                </p>
+              )}
+              {applyPhase === 'clean' && !isManualFiltersDisabled && allColumns.length > 0 && (
+                <p className="hidden pt-1 text-[12px] leading-snug text-muted-foreground md:block">
+                  Press <kbd className="ov-kbd !ml-0 !mr-0.5">/</kbd> to add a filter, <kbd className="ov-kbd !ml-0 !mr-0.5">⌘</kbd><kbd className="ov-kbd !ml-0 !mr-0.5">↵</kbd> to apply.
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Idle and success states are spoken to assistive tech but not repeated visually: the count
+                * above already shows the result. Anything that needs attention is written out. */}
+              {footerQuiet && <p className="sr-only">{footerStatus.text}</p>}
+              {/* The attention line slides open and shut. The footer is anchored to the bottom, so the
+                * buttons stay where they are while the content above glides up. */}
+              <Collapse open={!footerQuiet}>
+                <p className="flex items-start gap-1.5 pt-0.5 text-[12px] leading-snug text-muted-foreground">
+                  <StatusDot tone={footerStatus.tone} pulse={footerStatus.pulse} className="mt-[5px]" />
+                  <span>{footerStatus.text}</span>
+                </p>
+              </Collapse>
+            </>
           )}
-          {/* Idle and success states are spoken to assistive tech but not repeated visually: the count
-            * above already shows the result. Anything that needs attention is written out. */}
-          {footerQuiet && <p className="sr-only">{footerStatus.text}</p>}
-          {/* The attention line slides open and shut. The footer is anchored to the bottom, so the
-            * buttons stay where they are while the count above glides up. */}
-          <Collapse open={!footerQuiet}>
-            <p className="flex items-start gap-1.5 pt-0.5 text-[12px] leading-snug text-muted-foreground">
-              <StatusDot tone={footerStatus.tone} pulse={footerStatus.pulse} className="mt-[5px]" />
-              <span>{footerStatus.text}</span>
-            </p>
-          </Collapse>
         </div>
 
         <div className="flex gap-2">
@@ -3421,7 +3570,7 @@ const VariantFilterSidebar = ({
           <Button
             type="button"
             variant="outline"
-            onClick={resetFilters}
+            onClick={resetWithUndo}
             disabled={isApplying}
             aria-label="Reset all filters"
             title={

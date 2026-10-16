@@ -13,43 +13,43 @@
 .chat-shell-right { background-color: hsl(var(--wb-bg)); }
 
 /* ---- Buttons from the shared primitive become pills inside the workbench --------------------- */
-.chat-shell-right [data-slot='button'] { border-radius: 9999px; }
-.chat-shell-right [data-slot='button'][data-size='sm'],
-.chat-shell-right [data-slot='button'][data-size='default'] { padding-inline: 0.875rem; }
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='button'] { border-radius: 9999px; }
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='button'][data-size='sm'],
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='button'][data-size='default'] { padding-inline: 0.875rem; }
 
-.chat-shell-right [data-slot='button'][data-variant='default'] {
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='button'][data-variant='default'] {
   background-color: hsl(var(--brand-solid));
   color: hsl(var(--on-brand));
   border-color: transparent;
 }
-.chat-shell-right [data-slot='button'][data-variant='default']:hover { background-color: hsl(var(--brand-solid-hover)); }
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='button'][data-variant='default']:hover { background-color: hsl(var(--brand-solid-hover)); }
 
-.chat-shell-right [data-slot='button'][data-variant='outline'],
-.chat-shell-right [data-slot='button'][data-variant='secondary'] {
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='button'][data-variant='outline'],
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='button'][data-variant='secondary'] {
   background-color: hsl(var(--wb-card));
   border-color: hsl(var(--wb-line-strong));
   color: hsl(var(--foreground));
 }
-.chat-shell-right [data-slot='button'][data-variant='outline']:hover,
-.chat-shell-right [data-slot='button'][data-variant='secondary']:hover {
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='button'][data-variant='outline']:hover,
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='button'][data-variant='secondary']:hover {
   background-color: hsl(var(--brand-50));
   border-color: hsl(var(--brand-300));
   color: hsl(var(--brand-700));
 }
-.chat-shell-right [data-slot='button'][data-variant='ghost']:hover { background-color: hsl(var(--wb-pill)); }
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='button'][data-variant='ghost']:hover { background-color: hsl(var(--wb-pill)); }
 
-.chat-shell-right [data-slot='button'][data-variant='destructive'] { border-color: hsl(var(--destructive) / 0.25); }
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='button'][data-variant='destructive'] { border-color: hsl(var(--destructive) / 0.25); }
 
 /* Badges, inputs and select triggers share the pill silhouette. */
-.chat-shell-right [data-slot='badge'] { border-radius: 9999px; }
-.chat-shell-right [data-slot='input'],
-.chat-shell-right [data-slot='select-trigger'] {
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='badge'] { border-radius: 9999px; }
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='input'],
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='select-trigger'] {
   border-radius: 9999px;
   background-color: hsl(var(--wb-card));
   border-color: hsl(var(--wb-line-strong));
 }
-.chat-shell-right [data-slot='input']:hover,
-.chat-shell-right [data-slot='select-trigger']:hover { border-color: hsl(var(--brand-300)); }
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='input']:hover,
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='select-trigger']:hover { border-color: hsl(var(--brand-300)); }
 
 /* ---- Tabs ------------------------------------------------------------------------------------- */
 .wb-tab {
@@ -233,7 +233,7 @@
 }
 
 /* Press feedback on every pill button in the panel. */
-.chat-shell-right [data-slot='button']:active:not(:disabled) { transform: scale(0.97); }
+:is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='button']:active:not(:disabled) { transform: scale(0.97); }
 .wb-row:hover .wb-chev { transform: translateX(2px); color: hsl(var(--brand-700)); }
 .wb-chev { transition: transform 150ms var(--ease-out), color 150ms var(--ease-out); }
 
@@ -260,7 +260,7 @@
   .wb-spin { animation: none; }
   .wb-draw { animation: none; stroke-dashoffset: 0; }
   .wb-fill, .wb-chev { transition: none; }
-  .chat-shell-right [data-slot='button']:active:not(:disabled) { transform: none; }
+  :is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='button']:active:not(:disabled) { transform: none; }
 }
 
 /* Primitive helpers (motion.jsx). */
@@ -283,3 +283,20 @@
 @keyframes wb-tick { 0% { opacity: 0; transform: scale(0.2); } 60% { opacity: 1; transform: scale(1.18); } 100% { opacity: 1; transform: scale(1); } }
 .wb-spring-check [data-slot='checkbox-indicator'] svg { animation: wb-tick 260ms var(--ease-out) both; }
 @media (prefers-reduced-motion: reduce) { .wb-spring-check [data-slot='checkbox-indicator'] svg { animation: none; } }
+
+
+/* ---- App-wide overlay surfaces: same shapes as the workbench (pill actions, rounded cards) ---- */
+[data-slot='dialog-content'],
+[data-slot='alert-dialog-content'],
+[data-slot='sheet-content'] { border: 1px solid hsl(var(--wb-line)); }
+[data-slot='dialog-content'],
+[data-slot='alert-dialog-content'] { border-radius: 20px; }
+[data-slot='popover-content'],
+[data-slot='dropdown-menu-content'],
+[data-slot='select-content'],
+[data-slot='hover-card-content'] { border: 1px solid hsl(var(--wb-line)); border-radius: 16px; }
+[data-slot='dropdown-menu-item']:focus-visible,
+[data-slot='dropdown-menu-item'][data-highlighted],
+[data-slot='select-item'][data-highlighted] { background-color: hsl(var(--brand-50)); color: hsl(var(--brand-700)); }
+/* Pages outside the chat shell opt in with className="wb-scope" on their root. */
+.wb-scope { background-color: hsl(var(--wb-bg)); }

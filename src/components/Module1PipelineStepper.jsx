@@ -11,7 +11,7 @@ import { MODULE1_CPU_TYPICAL_MIN, formatMinutesRange } from '@/components/Module
 import RunTimer from '@/components/ui/RunTimer';
 import { useRunTimer } from '@/hooks/useRunTimer';
 import { Button } from '@/components/ui/button';
-import { Collapse, HoldButton } from '@/components/workspace/motion';
+import { Collapse, HoldButton } from '@/components/motion';
 import Module1QcSection, { module1HasQcArtifacts } from '@/components/Module1QcSection';
 import PipelineJobCard, { ActionButton, BrailleSpinner, splitJobMessage } from '@/components/PipelineJobCard';
 

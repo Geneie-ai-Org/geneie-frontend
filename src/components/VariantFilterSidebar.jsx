@@ -34,8 +34,8 @@ import { toast } from 'sonner';
 import { apiErrorDetailToMessage as sharedApiErrorDetailToMessage, humanizeError } from '@/lib/humanizeError';
 import { groupColumns, OTHER_GROUP } from '@/lib/variantColumnGroups';
 import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
-import { CountUp, Collapse, Turn, ChipList, PopIn, SelectionMarker, StateButton, Dismissible, undoToast, SPRING } from '@/components/workspace/motion';
-import { useDoneFlash } from '@/hooks/useDoneFlash';
+import { CountUp, Collapse, Turn, ChipList, PopIn, SelectionMarker, StateButton, Dismissible, undoToast, SPRING } from '@/components/motion';
+import { useDoneFlash } from '@/components/motion/useDoneFlash';
 import { sampleHasPhenotype } from '@/components/PhenotypeInputPanel';
 import {
   PHENOTYPE_FILTER_DISPLAY_NAME,

@@ -9,11 +9,11 @@ ux-copy, frontend-design). This file keeps only what applies to a **dense app** 
 own text is for lookup. Where they conflict, the reference wins. Tuning dials (taste pack): **variance 2, motion 3, density 7**.
 
 ## A. Principles (ranked)
-1. **Colour is a role, never decoration.** Tokens only (`--background/--card/--muted/--border/--primary/--signal` + status pairs).
-   One gray family. One accent (`--signal`) under 5% of any screen, used for links, selection and progress, never on headings or icons.
+1. **Colour is a role, never decoration.** Tokens only (`--background/--card/--muted/--border/--primary/--signal/--brand-*` + status pairs).
+   One gray family. One accent: the muted pastel teal (`--brand-*`; `--signal` is the same hue for links and the focus ring). Used for selection, progress and the one primary action (`--brand-solid`); status colours carry meaning only.
 2. **Hierarchy by size, weight and space.** Max 5 type sizes per screen; muted text is the same face in `--muted-foreground`, never lighter weight.
-3. **Flat.** No shadow at rest. Shadow only on floating layers (menus, popovers, dialogs) and the composer. No gradients, glass, noise, glow.
-4. **Cards only when they carry hierarchy.** No card inside a card; group with `divide-y`, `border-t` or space. Result cards and code cards are the exceptions.
+3. **Pills and hairlines, not heavy borders.** Actions, tabs, chips and statuses are pill shapes you can see the edge of (1px hairline `--wb-line`). Surfaces are white cards on the faint teal-gray canvas (`--wb-bg`). No shadow at rest; shadow only on floating layers (menus, popovers, dialogs) and the composer. No gradients, glass, noise, glow.
+4. **Cards group related things.** One level of card (`.wb-card`), no card inside a card; inside a card separate with `divide-y`, a tinted inset or space.
 5. **Every surface has every state:** default, hover, focus-visible, pressed, disabled, loading, empty, error, success. Skeletons match content size.
 6. **Motion answers a user action.** Never on typing/keyboard-heavy actions; reduced-motion honoured; only `transform`/`opacity`.
 7. **Honest status.** One vocabulary (queued, running, done, failed); never a spinner next to a contradicting label; colour always paired with text/icon.
@@ -62,7 +62,7 @@ Numbers: thousands separators, units adjacent, ranges "0.0023 to 0.9995", durati
 Marketing: hero/CTA rules, scroll-reveal/parallax/shutter, bento grids, py-24+ section gaps, imagery floors, GSAP pinning, AIDA, FAQ accordions, logo walls, serif display headlines,
 double-bezel / 2rem+ radii / floating glass nav, pill buttons with nested icon circles, "variance mandate", gradients/noise/grain/glow/neon, ambient blobs, uppercase wide-tracked badges.
 Native/mobile: 44pt as a universal target, safe areas, Dynamic Type, haptics, swipe, pull-to-refresh, bottom nav, 16px mobile body, 375/landscape testing (mobile is deferred).
-Look conflicts: bans on Inter/Lucide (the reference products use similar), brutalist zero-radius/ASCII/scanlines, "no hairlines" (we use hairlines), 1200px container (we use full-bleed panes).
+Look conflicts: bans on Inter/Lucide (the reference products use similar), brutalist zero-radius/ASCII/scanlines, "no hairlines" (we use hairlines), 1200px container (we use full-bleed panes), pill buttons (we DO use pills; only the nested icon-circle pill is ignored).
 
 ## F. Pre-delivery checklist (run on screenshots + code, light AND dark, desktop)
 - [ ] Contrast measured for every text/background pair incl. muted and placeholder; icons/borders ≥3:1.
@@ -76,3 +76,10 @@ Look conflicts: bans on Inter/Lucide (the reference products use similar), bruta
 - [ ] Motion only transform/opacity, tokens above, reduced-motion respected, nothing blocks input.
 - [ ] Copy follows section D. No other company's product name anywhere in code, comments, docs, commits or filenames.
 - [ ] Critique pass (`design:design-critique` questions): first impression, usability, hierarchy, consistency, accessibility; fix Critical and Moderate before reporting.
+
+## G. v1.2 system (supersedes any older "flat, no borders" wording above)
+**Look.** Pill shapes for every action, tab, chip and status; white hairline cards on the faint teal-gray canvas; deep muted teal for the single primary action per view; teal tint for "selected"; status colours only for meaning.
+**Where it lives.** Tokens `src/design/tokens.css` (`--brand-50..700`, `--brand-solid`, `--wb-bg/--wb-card/--wb-line/--wb-line-strong/--wb-pill`, `--signal` = brand teal). Classes `src/design/workbench.css`: `.wb-card`, `.wb-card-title`, `.wb-chip[data-tone=brand]`, `.wb-status[data-state=done|running|failed|pending]`, `.wb-row`, `.wb-track/.wb-fill`, `.wb-iconbtn`, `.wb-tab/.wb-tab--slide/.wb-tab-pill`, `.wb-pop/.wb-rise/.wb-fade`. The shared `Button`, `Badge`, `Input`, `SelectTrigger` become pills automatically inside `.chat-shell-right`, `.wb-scope` (put it on a page root) and every dialog, alert dialog, sheet, popover, dropdown and select.
+**Interactions** (`src/components/motion`): `CountUp`, `StageMark`, `Collapse`, `Turn`, `ChipList`/`PopIn`, `SelectionMarker`, `StateButton` (idle to running to done morph), `CopyButton`, `HoldButton` (hold to confirm; use for destructive actions), `undoToast`, `Dismissible`, `useDoneFlash`. Rules: 120-250ms, opacity/transform/height only, springs only for chips, markers and pills, nothing bounces more than once, reduced motion renders the final state, never animate typing or keyboard-heavy actions.
+**Destructive actions** always get a confirm: `HoldButton` (preferred) or a dialog whose confirm is a `HoldButton`; reversible removals get `undoToast`.
+**Screens** need light AND dark checks, every state (default, hover, focus-visible, pressed, disabled, loading, empty, error, success), and `npm run build` must pass.

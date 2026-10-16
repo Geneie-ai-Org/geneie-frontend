@@ -12,7 +12,7 @@ import {
 } from '@/lib/module1PipelinePhases';
 import Module1QcSection, { module1HasQcArtifacts } from '@/components/Module1QcSection';
 import PipelineJobCard, { ActionButton } from '@/components/PipelineJobCard';
-import { HoldButton } from '@/components/workspace/motion';
+import { HoldButton } from '@/components/motion';
 import { Button } from '@/components/ui/button';
 import {
   PIPELINE_STEP_DEFS,

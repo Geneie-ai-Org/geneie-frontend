@@ -22,7 +22,7 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 import { AlertCircle, ChevronRight } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '@/lib/utils';
-import { Collapse, CountUp, StageMark, StateButton, Turn } from '@/components/workspace/motion';
+import { Collapse, CountUp, StageMark, StateButton, Turn } from '@/components/motion';
 
 // Full-alpha 2px ring (the global one is 45% alpha, under 3:1 on white).
 const FOCUS =

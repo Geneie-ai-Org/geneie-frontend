@@ -2,7 +2,7 @@ import React, { useState, useEffect, useId, useRef } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { CheckCircle2, AlertCircle, ArrowRight, ChevronRight, ClipboardCheck, FileText, Info, Trash2, Filter, Stethoscope, Tags, X } from 'lucide-react';
 import { usePopOnChange } from '@/components/PipelineJobCard';
-import { Collapse, CountUp, HoldButton, StateButton, Turn } from '@/components/workspace/motion';
+import { Collapse, CountUp, HoldButton, StateButton, Turn } from '@/components/motion';
 import PhenotypeAiLabel from '@/components/PhenotypeAiLabel';
 import { formatAcmgPhenotypeMeterLabel } from '@/lib/filterDisplayNames';
 import { Button } from '@/components/ui/button';

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Download, RefreshCw } from 'lucide-react';
-import { StateButton } from '@/components/workspace/motion';
-import { useDoneFlash } from '@/hooks/useDoneFlash';
+import { StateButton } from '@/components/motion';
+import { useDoneFlash } from '@/components/motion/useDoneFlash';
 import { getExportEligibility, exportVariants } from '@/services/backendApi';
 
 /** Status dot for the working states: a small pulse, never a spinner beside a label that says otherwise. */

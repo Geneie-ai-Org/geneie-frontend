@@ -22,7 +22,7 @@ import { exportVariants, getAuthHeaders, parseApiErrorDetail } from '@/services/
 import { apiUrl } from '@/config/api';
 import { readTsvStream } from '@/lib/tsvStream';
 import { cn } from '@/lib/utils';
-import { ChipList, CopyButton, CountUp, PopIn, SPRING, Turn } from '@/components/workspace/motion';
+import { ChipList, CopyButton, CountUp, PopIn, SPRING, Turn } from '@/components/motion';
 
 const MAX_ROWS = 500;
 const COLS_KEY = 'geneie-results-cols-v1';

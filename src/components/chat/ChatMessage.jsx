@@ -365,8 +365,11 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, showRe
           </p>
         )}
 
+        {/* Always shown, not revealed on hover: touch screens have no hover and keyboard focus
+          * would land on an invisible button. Nothing to copy until the reply has text. */}
+        {text && (
         <TooltipProvider>
-          <div className="flex items-center gap-0.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <div className="flex items-center gap-0.5 mt-1.5">
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -382,7 +385,7 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, showRe
                   </Button>
                 }
               />
-              <TooltipContent>{copied ? 'Copied!' : 'Copy'}</TooltipContent>
+              <TooltipContent side="bottom">{copied ? 'Copied!' : 'Copy'}</TooltipContent>
             </Tooltip>
             {showRegenerate && onRegenerate && (
               <Tooltip>
@@ -401,11 +404,12 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, showRe
                     </Button>
                   }
                 />
-                <TooltipContent>Regenerate</TooltipContent>
+                <TooltipContent side="bottom">Regenerate</TooltipContent>
               </Tooltip>
             )}
           </div>
         </TooltipProvider>
+        )}
       </div>
     </div>
   );

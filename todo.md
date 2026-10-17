@@ -177,6 +177,36 @@ Fix (needs sidecar + FE):
   GENERIC persona, `main.py` `generic_model()`) instead of refusing. Keep the refusal for
   genuinely off-topic requests, with better copy.
 
+## DONE — Message Copy / Regenerate buttons are invisible until hover
+
+Applied: the action row in `ChatMessage.jsx` no longer uses `opacity-0 group-hover:opacity-100`,
+so it's always visible. It isn't rendered while the reply has no text yet. Tooltips open below
+(`side="bottom"`), so they don't cover "Thought for…". Regenerate still shows only on the last
+reply, as before. Checked locally.
+
+
+Seen locally 2026-10-17. Under each AI reply the Copy (and Regenerate) buttons only show when
+the pointer is over the message: `src/components/chat/ChatMessage.jsx:369` renders the row as
+`opacity-0 group-hover:opacity-100`.
+
+Problems:
+- Touch devices have no hover, so on phone/tablet the buttons never show (they're still
+  tappable, but invisible).
+- Keyboard: Tab lands on an invisible button. Nothing reveals the row on focus.
+- `opacity-0` hides the row but it still takes space. That's part of the gap in the Explore
+  entry above.
+- The tooltip opens upward and covers the "Thought for 2s" line.
+
+Fix (decided 2026-10-17): the action row is always visible on every AI reply. No hover
+reveal, so touch and keyboard users get it for free.
+- Drop `opacity-0 group-hover:opacity-100` from the row at `ChatMessage.jsx:369`. Keep it
+  quiet (tertiary icon color, hover background only) so it doesn't add noise.
+- Keep `focus-visible` rings on the buttons.
+- Open the tooltip below or to the side (`side="bottom"`), or put the Thought-for line on
+  the same row as the buttons so nothing overlaps.
+- While a reply is still streaming with no text yet, don't render the row (see the Explore
+  gap entry).
+
 ## TODO — Tuning mode belongs in profile settings, not floating over the chat
 
 The "Tuning mode" pill (toggle + Edit config / Run comparison / Copy config / Reset) floats

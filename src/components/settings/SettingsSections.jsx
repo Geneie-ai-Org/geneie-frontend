@@ -26,7 +26,7 @@ import {
   getDefaultPipelineRunMode,
   setDefaultPipelineRunMode,
 } from '@/components/PipelineRunModeToggle';
-import { readTuningActive, writeTuningActive } from '@/hooks/useTuningCompare';
+import { writeTuningActive } from '@/hooks/useTuningCompare';
 import SubscriptionPage from '@/components/SubscriptionPage';
 import { version as appVersion } from '../../../package.json';
 import {
@@ -436,7 +436,7 @@ export function AccountSection() {
         </SettingsRow>
       )}
       <SettingsNote tone={resetNote.tone}>{resetNote.text}</SettingsNote>
-      <SettingsRow label="Sign out" description="Sign out of Geneie on this device.">
+      <SettingsRow label="This device" description="You're signed in on this browser.">
         <SettingsButton onClick={() => performLogout(navigate)}>
           <LogOut className="w-3.5 h-3.5" aria-hidden />
           Sign out
@@ -450,7 +450,7 @@ export function AccountSection() {
         description="Permanently deletes your conversations, uploaded files, variants and saved filters. This can't be undone."
       >
         {!confirming && (
-          <SettingsButton tone="danger" onClick={() => setConfirming(true)}>Delete account</SettingsButton>
+          <SettingsButton tone="danger" onClick={() => setConfirming(true)}>Delete…</SettingsButton>
         )}
       </SettingsRow>
       {confirming && (
@@ -484,21 +484,22 @@ export function AccountSection() {
 /* ── Tuning (admins only) ────────────────────────────────────────────────────── */
 
 export function TuningSection() {
-  const [tuning, setTuning] = useState(readTuningActive);
+  const navigate = useNavigate();
   return (
     <SettingsSection title="Tuning" description="Only visible to admins.">
       <SettingsRow
-        label="Tuning mode"
-        description="Shows the tuning controls in chat: edit config overrides and compare answers side by side."
+        label="Compare prompts and models"
+        description="Opens the Tuning panel in chat. You can also open it from the Tuning button at the top of any chat."
       >
-        <SettingsSwitch
-          label="Tuning mode"
-          checked={tuning}
-          onChange={(v) => {
-            setTuning(v);
-            writeTuningActive(v);
+        <SettingsButton
+          tone="primary"
+          onClick={() => {
+            writeTuningActive(true);
+            navigate('/app');
           }}
-        />
+        >
+          Open
+        </SettingsButton>
       </SettingsRow>
     </SettingsSection>
   );

@@ -64,7 +64,7 @@ export default function TuningCompareColumns({ acc, running, error, question }) 
     <div className="w-full">
       {question ? (
         <div className="mb-2 text-xs text-[var(--text-tertiary)]">
-          Tuning compare for: <span className="text-[var(--text-secondary)]">“{question}”</span>
+          <span className="font-medium text-[var(--text-secondary)]">Tuning comparison</span> · “<span className="text-[var(--text-primary)]">{question}</span>”
         </div>
       ) : null}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

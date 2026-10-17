@@ -8,6 +8,9 @@
  *
  * It only EDITS the session override set (same `overrides` the compare sends). It never writes global
  * config; promotion stays the separate admin PUT. Closing the modal keeps overrides + tuning state.
+ *
+ * Edits save as you type — there is no separate Apply. An empty value, or one identical to the
+ * baseline, means "use the global config" and is not counted as a change.
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -34,6 +37,7 @@ function nsOf(key) {
 export default function TuningConfigModal({
   open,
   onClose,
+  initialKey = null,  // open on this key (from the panel's Edit link); otherwise the first listed key
   baseline,          // { keys: [...], byKey: {key: {value, description, type}} }
   configError,
   reloadConfig,
@@ -45,6 +49,7 @@ export default function TuningConfigModal({
   const [draft, setDraft] = useState('');
   const searchRef = useRef(null);
   const textareaRef = useRef(null);
+  const listRef = useRef(null);
 
   const keys = baseline?.keys || [];
 
@@ -56,11 +61,6 @@ export default function TuningConfigModal({
     const t = setTimeout(() => searchRef.current?.focus(), 50);
     return () => { window.removeEventListener('keydown', onKey); clearTimeout(t); };
   }, [open, onClose]);
-
-  // Default-select the first key once config loads.
-  useEffect(() => {
-    if (open && !selected && keys.length) setSelected(keys[0]);
-  }, [open, selected, keys]);
 
   // When the selected key changes, load its current override (or fall back to empty = "use baseline").
   useEffect(() => {
@@ -83,6 +83,23 @@ export default function TuningConfigModal({
     return GROUPS.map(([ns, label]) => [label, byNs[ns] || []]).filter(([, arr]) => arr.length);
   }, [filtered]);
 
+  // On open: the requested key, else the first key as listed (Models first), so the selection
+  // is always the one you can see at the top of the list.
+  const firstListedKey = grouped[0]?.[1]?.[0] || null;
+  useEffect(() => {
+    if (!open) {
+      setSelected(null);
+      return;
+    }
+    if (!selected && keys.length) setSelected(initialKey && keys.includes(initialKey) ? initialKey : firstListedKey);
+  }, [open, keys, initialKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep the selected key in view in the list.
+  useEffect(() => {
+    if (!selected || !listRef.current) return;
+    listRef.current.querySelector(`[data-key="${CSS.escape(selected)}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [selected]);
+
   const modifiedCount = useMemo(
     () => keys.filter((k) => (overrides[k] ?? '') !== '').length,
     [keys, overrides],
@@ -93,15 +110,21 @@ export default function TuningConfigModal({
   const b = selected ? baseline?.byKey?.[selected] : null;
   const baselineStr = b ? fmtVal(b.value) : '';
   const isModified = selected ? (overrides[selected] ?? '') !== '' : false;
-  const dirtyDraft = selected ? draft !== (overrides[selected] ?? '') : false;
 
-  const commit = () => { if (selected) setOverride(selected, draft); };
+  // Save as you type. Matching the baseline exactly is the same as no change.
+  const changeDraft = (next) => {
+    setDraft(next);
+    if (selected) setOverride(selected, next === baselineStr ? '' : next);
+  };
   const revert = () => { if (selected) { setOverride(selected, ''); setDraft(''); } };
-  const resetToBaseline = () => setDraft(baselineStr); // load baseline text to edit from
+  const startFromBaseline = () => {
+    setDraft(baselineStr); // equal to baseline, so not saved as a change until edited
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  };
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[10010] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label="Tuning config editor"
@@ -111,9 +134,15 @@ export default function TuningConfigModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-4 py-3">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-[var(--text-primary)]">Tuning config</h2>
-            <span className="rounded-full bg-[var(--bg-surface-sunken)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">
-              {modifiedCount} modified
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">Edit config</h2>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                modifiedCount
+                  ? 'bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]'
+                  : 'bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]'
+              }`}
+            >
+              {modifiedCount ? `${modifiedCount} changed` : 'No changes'}
             </span>
           </div>
           <button
@@ -162,7 +191,7 @@ export default function TuningConfigModal({
                   {filtered.length} of {keys.length} keys
                 </div>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-2">
                 {grouped.map(([label, arr]) => (
                   <div key={label} className="mb-3">
                     <div className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
@@ -175,6 +204,7 @@ export default function TuningConfigModal({
                         return (
                           <button
                             key={k}
+                            data-key={k}
                             type="button"
                             onClick={() => setSelected(k)}
                             className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left font-mono text-[11px] transition-colors ${
@@ -204,11 +234,15 @@ export default function TuningConfigModal({
                   <div className="border-b border-[var(--border-subtle)] px-4 py-3">
                     <div className="flex items-center gap-2">
                       <code className="break-all font-mono text-sm font-semibold text-[var(--text-primary)]">{selected}</code>
-                      {isModified ? (
-                        <span className="rounded-full bg-[var(--accent-teal-soft)] px-2 py-0.5 text-[10px] font-medium text-[var(--accent-teal)]">
-                          overridden
-                        </span>
-                      ) : null}
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          isModified
+                            ? 'bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]'
+                            : 'bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]'
+                        }`}
+                      >
+                        {isModified ? 'Changed' : 'Unchanged'}
+                      </span>
                     </div>
                     {b.description ? (
                       <p className="mt-1 text-xs text-[var(--text-secondary)]">{b.description}</p>
@@ -219,17 +253,9 @@ export default function TuningConfigModal({
                     {/* baseline (read-only) */}
                     <div className="flex min-h-0 flex-col border-b border-[var(--border-subtle)] md:border-b-0 md:border-r">
                       <div className="flex items-center justify-between px-4 py-2">
-                        <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
-                          Baseline (global)
+                        <span className="text-xs font-medium text-[var(--text-secondary)]">
+                          Global config <span className="font-normal text-[var(--text-tertiary)]">· read-only</span>
                         </span>
-                        <button
-                          type="button"
-                          onClick={resetToBaseline}
-                          className="text-[11px] text-[var(--text-secondary)] transition-colors hover:text-[var(--accent-teal)]"
-                          title="Copy the baseline text into your editor to tweak from it"
-                        >
-                          Edit from this →
-                        </button>
                       </div>
                       <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words px-4 pb-4 font-mono text-[12px] leading-relaxed text-[var(--text-secondary)]">
                         {baselineStr || <span className="italic opacity-60">(empty)</span>}
@@ -239,21 +265,30 @@ export default function TuningConfigModal({
                     {/* your value (editable) */}
                     <div className="flex min-h-0 flex-col">
                       <div className="flex items-center justify-between px-4 py-2">
-                        <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
-                          Your value
-                        </span>
+                        <span className="text-xs font-medium text-[var(--text-primary)]">Your version</span>
                         <span className="text-[11px] text-[var(--text-tertiary)]">
-                          {draft.length} chars{draft === '' ? ' · using baseline' : ''}
+                          {draft === '' ? '' : `${draft.length} chars`}
                         </span>
                       </div>
+                      {draft === '' ? (
+                        <div className="mx-4 mb-2 flex items-center justify-between gap-3 rounded-lg border border-dashed border-[var(--border-default)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+                          <span>Empty, so this key uses the global config.</span>
+                          <button
+                            type="button"
+                            onClick={startFromBaseline}
+                            className="shrink-0 font-medium text-[var(--accent-teal)] underline-offset-2 hover:underline"
+                          >
+                            Start from global
+                          </button>
+                        </div>
+                      ) : null}
                       <textarea
                         ref={textareaRef}
                         value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
-                        onBlur={commit}
-                        placeholder={baselineStr}
+                        onChange={(e) => changeDraft(e.target.value)}
+                        placeholder="…or type your own version here"
                         spellCheck={false}
-                        className="min-h-0 flex-1 resize-none border-0 bg-[var(--bg-input)] px-4 py-2 font-mono text-[12px] leading-relaxed text-[var(--text-primary)] outline-none focus:bg-[var(--bg-input-focus)]"
+                        className="min-h-0 flex-1 resize-none border-0 bg-[var(--bg-input)] px-4 py-2 font-mono text-[12px] leading-relaxed text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] focus:bg-[var(--bg-input-focus)]"
                       />
                     </div>
                   </div>
@@ -261,27 +296,23 @@ export default function TuningConfigModal({
                   {/* Footer actions */}
                   <div className="flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] px-4 py-2.5">
                     <div className="text-[11px] text-[var(--text-tertiary)]">
-                      Leave blank to use the baseline. Changes apply to the candidate column when you run a comparison.
+                      {isModified ? 'Saved. Used the next time you run a comparison.' : 'Saves as you type.'}
                     </div>
                     <div className="flex items-center gap-2">
-                      {dirtyDraft ? (
-                        <span className="text-[11px] text-[var(--text-tertiary)]">unsaved — click Apply or tab out</span>
-                      ) : null}
                       <button
                         type="button"
                         onClick={revert}
                         disabled={!isModified && draft === ''}
                         className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--border-default)] px-3 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-30"
                       >
-                        <RotateCcw className="h-3.5 w-3.5" /> Revert
+                        <RotateCcw className="h-3.5 w-3.5" /> Revert to global
                       </button>
                       <button
                         type="button"
-                        onClick={commit}
-                        disabled={!dirtyDraft}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[var(--accent-teal)] px-4 text-xs font-medium text-[var(--accent-teal-contrast)] transition-colors hover:bg-[var(--accent-teal-hover)] disabled:opacity-40"
+                        onClick={onClose}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[var(--accent-teal)] px-4 text-xs font-medium text-[var(--accent-teal-contrast)] transition-colors hover:bg-[var(--accent-teal-hover)]"
                       >
-                        <Check className="h-3.5 w-3.5" /> Apply
+                        <Check className="h-3.5 w-3.5" /> Done
                       </button>
                     </div>
                   </div>

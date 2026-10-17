@@ -269,6 +269,42 @@ Backend follow-ups (newprod), most useful first:
 5. Nice to have: per-user defaults for genome, capture BED and sequencing type to
    pre-fill the FASTQ form.
 
+## DONE — Tuning mode: one place, opened from chat
+
+Before: turning tuning on meant three hops (Settings switch → back to chat → floating pill →
+Edit config). The pill floated over the drawer and composer. "Run comparison" silently used
+the chat box text. In the editor, an empty value showed the baseline as placeholder text, so
+it looked filled; Apply and save-on-blur competed; it opened on an off-screen key; and every
+heading was the same uppercase grey.
+
+Now (frontend only):
+- An admin-only **Tuning** button in the chat header opens a panel docked on the right. The
+  chat makes room for it instead of sliding under it (`--tuning-panel-width`). A badge counts
+  the active changes. The open/closed state is persisted.
+- Panel sections:
+  - Your changes: each with Edit / Revert, plus Edit config.
+  - Compare: its own question box, prefilled from the chat box, with Run comparison / Stop
+    and ⌘/Ctrl+Enter.
+  - Footer: Copy config, and Reset all (click twice to confirm).
+- Editor:
+  - Opens on the first listed key, or on the key you clicked Edit on.
+  - An empty value shows "Empty, so this key uses the global config" with a Start from global
+    link.
+  - Edits save as you type; matching the baseline counts as no change.
+  - Footer buttons are Revert to global and Done.
+  - Clearer heading hierarchy, and Changed / Unchanged badges.
+- Compare columns are labelled "Global config" / "Your changes".
+- Settings → Tuning is now one row with an Open button that takes you to chat with the panel
+  open.
+- Removed repeated headings and labels: the panel's visible "Question" label, the editor's
+  "empty · uses global" counter, and the badge that repeated "Global config". In Settings,
+  the Sign out and Delete account rows no longer repeat their own button text, and the Tuning
+  row no longer says "tuning" three times.
+
+Not done: comparisons still send `conversationId: null`, so they never use the open chat's
+file. Passing the conversation would need a check that the compare endpoint doesn't save
+messages into it.
+
 ## TODO — Annotation status shown 5 times in one card
 
 Seen on geneie.chat 2026-10-17 while EB_4_S2 was annotating. The pipeline drawer says the

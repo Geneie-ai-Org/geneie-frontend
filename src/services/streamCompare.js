@@ -30,8 +30,8 @@ import { apiUrl } from '@/config/api';
 export const COLUMNS = ['baseline', 'candidate'];
 
 export const COLUMN_LABELS = {
-  baseline: 'Baseline (global config)',
-  candidate: 'Your config (session overrides)',
+  baseline: 'Global config',
+  candidate: 'Your changes',
 };
 
 /** The tunable namespaces the backend allow-lists. Anything else is dropped server-side anyway. */

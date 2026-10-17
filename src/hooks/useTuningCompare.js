@@ -21,7 +21,7 @@ import { streamCompare, createColumnState } from '@/services/streamCompare';
 import { getDeviceId } from '@/lib/deviceId';
 
 const PANEL_KEY = 'geneie.tuning.overrides.v1';
-/** On/off, set from Settings → Admin. Persisted so the choice survives reloads and navigation. */
+/** Whether the Tuning panel is open in chat. Persisted so it survives reloads and navigation. */
 export const TUNING_ACTIVE_KEY = 'geneie.tuning.active.v1';
 
 export function readTuningActive() {
@@ -109,11 +109,13 @@ export function useTuningCompare({ question } = {}) {
     [overrides],
   );
 
-  const run = useCallback(async () => {
-    if (!question?.trim()) return;
+  // The panel passes its own question; without one, fall back to the composer text.
+  const run = useCallback(async (questionOverride) => {
+    const q = (questionOverride ?? question ?? '').trim();
+    if (!q) return;
     setRunning(true);
     setError(null);
-    setLastQuestion(question.trim());
+    setLastQuestion(q);
     const next = createColumnState();
     setAcc(next);
     const controller = new AbortController();
@@ -122,7 +124,7 @@ export function useTuningCompare({ question } = {}) {
       const authHeaders = await getAuthHeaders();
       await streamCompare({
         path: '/api/chat/stream/compare',
-        body: { message: question, conversationId: null },
+        body: { message: q, conversationId: null },
         overrides,
         authHeaders,
         deviceId: getDeviceId(),

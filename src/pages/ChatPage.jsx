@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown } from 'lucide-react';
+import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
 import { toast } from 'sonner';
@@ -73,7 +73,6 @@ const ChatPage = () => {
 
   // Conversation state
   const [conversations, setConversations] = useState([]);
-  // Open by default on desktop; on mobile it is an overlay, so it starts closed.
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => !isMobile);
   const [clinicalReportOpen, setClinicalReportOpen] = useState(false);
   const autoOpenedReportForConvRef = useRef(null);
@@ -1711,6 +1710,31 @@ const ChatPage = () => {
                   >
                     {conversationHeaderTitle}
                   </h1>
+                  {/* Admin-only: opens the Tuning panel. The dot counts active config changes. */}
+                  {tuning.isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => tuning.setActive((v) => !v)}
+                      aria-pressed={tuning.active}
+                      className="chat-chrome-btn inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 h-8 text-xs font-medium transition-colors hover:bg-[var(--bg-surface-hover)]"
+                      style={{
+                        color: tuning.active ? 'var(--accent-teal)' : 'var(--text-secondary)',
+                        backgroundColor: tuning.active ? 'var(--accent-teal-soft)' : undefined,
+                      }}
+                      title="Compare answers with your own prompts and models (admin only)"
+                    >
+                      <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+                      Tuning
+                      {tuning.dirtyKeys.length > 0 && (
+                        <span
+                          className="ml-0.5 rounded-full px-1.5 text-[10px] font-semibold leading-4"
+                          style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
+                        >
+                          {tuning.dirtyKeys.length}
+                        </span>
+                      )}
+                    </button>
+                  )}
                 </div>
               </header>}
 
@@ -2298,7 +2322,12 @@ const ChatPage = () => {
           and while it is off it changes nothing: no header, no compare endpoint, no second
           column. The CONTROLS float here; the side-by-side ANSWER renders inline in the thread
           above (see TuningCompareColumns). The normal single-column chat path is untouched. */}
-      <TuningMode tuning={tuning} />
+      <TuningMode
+        tuning={tuning}
+        open={tuning.active}
+        onClose={() => tuning.setActive(false)}
+        composerText={input}
+      />
     </div>
   );
 };

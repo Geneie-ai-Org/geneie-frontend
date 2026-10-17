@@ -28,7 +28,6 @@ import SubscriptionPage from '../components/SubscriptionPage';
 import ConversationSidebar from '../components/ConversationSidebar';
 import DocumentUpload from '../components/DocumentUpload';
 import VariantFilterSidebar from '../components/VariantFilterSidebar';
-import ProfileManagement from '../components/ProfileManagement';
 import SubscriptionSuccess from '../components/SubscriptionSuccess';
 import SubscriptionCanceled from '../components/SubscriptionCanceled';
 import ColumnInterpretationResults from '../components/ColumnInterpretationResults';
@@ -99,7 +98,6 @@ const ChatPage = () => {
     }
   }, [currentDocument, isVariantSidebarOpen]);
 
-  const [showProfileModal, setShowProfileModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false); // Center modal for variant file upload on landing
   const [metadataFormOpen, setMetadataFormOpen] = useState(false);
   const [activeFileTypeTab, setActiveFileTypeTab] = useState('tabular'); // Track active tab for modal color
@@ -1551,7 +1549,7 @@ const ChatPage = () => {
             onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
             userTier={userTier}
             userId={userId}
-            onOpenProfile={() => setShowProfileModal(true)}
+            onOpenProfile={() => navigate('/settings/general')}
           />
         )}
       </aside>
@@ -2128,17 +2126,6 @@ const ChatPage = () => {
           gateMeterDetail={formatMeterDetail(limits, module1.module1EntryGate?.meter)}
           capacity={module1Capacity.capacity}
           capacityStatus={module1Capacity.status}
-        />
-      )}
-
-      {/* Profile Management Modal */}
-      {userTier !== 'guest' && (
-        <ProfileManagement
-          isOpen={showProfileModal}
-          onClose={() => setShowProfileModal(false)}
-          userTier={userTier}
-          userId={userId}
-          conversations={conversations}
         />
       )}
 

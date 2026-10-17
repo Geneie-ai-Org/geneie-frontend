@@ -29,6 +29,7 @@ import {
 } from '@/components/germlinePedigreeOptions';
 import PipelineRunModeToggle, {
   PIPELINE_RUN_MANUAL,
+  defaultRunModeFields,
   normalizePipelineRunMode,
   applyPipelineRunModeChange,
 } from '@/components/PipelineRunModeToggle';
@@ -166,8 +167,7 @@ const DocumentUpload = ({
     phenotype_findings: '',
     phenotype_disease: '',
     phenotype_note_clean: '',
-    phenotype_run_mode: PIPELINE_RUN_MANUAL,
-    pipeline_run_mode: PIPELINE_RUN_MANUAL,
+    ...defaultRunModeFields(),
     phenotype_hpo: null,
     tumorType: '' // Free text (only for Somatic/Tumor-Normal Paired/Tumor-Only)
   });
@@ -707,8 +707,7 @@ const DocumentUpload = ({
       phenotype_findings: '',
       phenotype_disease: '',
       phenotype_note_clean: '',
-      phenotype_run_mode: PIPELINE_RUN_MANUAL,
-      pipeline_run_mode: PIPELINE_RUN_MANUAL,
+      ...defaultRunModeFields(),
       phenotype_hpo: null,
       tumorType: ''
     });

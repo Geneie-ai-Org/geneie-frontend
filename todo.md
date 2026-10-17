@@ -207,40 +207,65 @@ reveal, so touch and keyboard users get it for free.
 - While a reply is still streaming with no text yet, don't render the row (see the Explore
   gap entry).
 
-## TODO — Tuning mode belongs in profile settings, not floating over the chat
+## DONE (frontend) — Settings page, modelled on Qwen's settings
 
-The "Tuning mode" pill (toggle + Edit config / Run comparison / Copy config / Reset) floats
-at the bottom-right of the chat and overlaps the Module 1 card and the composer
-(screenshot 2026-10-17). It's newprod `src/components/TuningMode.jsx`, mounted at
-`ChatPage.jsx:2330`, admin-only (renders nothing unless `tuning.isAdmin`).
+Replaces two earlier entries: "Tuning mode belongs in profile settings" and "Profile settings:
+use the Claude / ChatGPT settings window pattern". On 2026-10-17 we went with Qwen's pattern
+instead of a centred modal: a full page per section with its own URL, which leaves room for
+plan/usage and a usage history.
 
-Tuning mode is a per-user (admin) preference, not part of the conversation, so:
-- Move the on/off toggle into profile settings (see the next entry), under an admin-only
-  section.
-- When it's on, show its controls (Edit config / Run comparison / Copy / Reset) in a place
-  that doesn't cover chat content, e.g. a compact bar in the header or anchored to the
-  composer, not a floating pill.
-- When it's off, nothing should render in the chat.
-- The Standard / Explore switch below it is a different control (per-chat mode). Leave it
-  where it is unless we decide otherwise.
+Reference (chat.qwen.ai, read on 2026-10-17):
+- The avatar menu has email, Upgrade Plan, Settings, Archived Chats, Customer Service and
+  Log out.
+- Settings is a full page at `/settings/<section>` with a "← Settings" header and a left
+  rail: General, Usage & Billing, Interface, Models, Chats, Personalization, Account, About.
+- Each section is a narrow centred column of rows (label left, control right, hairline
+  between rows), with no cards.
 
-## TODO — Profile settings: use the Claude / ChatGPT (Codex) settings window pattern
+Built on `feat/newprod-ui-todos` with frontend changes only. Everything uses endpoints that
+already exist on `bio-lab-project` `feat/newprod-baseline`:
+- Route `/settings/:section` (`src/pages/SettingsPage.jsx`), protected and behind the
+  consent gate. Sections live in `src/components/settings/SettingsSections.jsx`; the row,
+  switch and segmented primitives are in `SettingsUI.jsx`. On narrow screens the left rail
+  becomes a scrolling tab row.
+- General:
+  - Theme: System / Light / Dark. `useTheme` now stores a preference and follows the OS
+    for System; the boot script in `index.html` understands it too.
+  - Chat mode: Standard / Explore (the existing `geneie_exploratory_mode` key).
+  - Default analysis mode: Manual / Automatic. Stored in `geneie_default_analysis_mode`;
+    both upload forms start on it.
+- Plan & usage: plan badge, Upgrade (free plans, opens `SubscriptionPage`), the tracked
+  meters from `useLimits`, and conversation / file counts from `GET /api/conversations`.
+- Notifications: the two switches, on `GET/PUT /api/user/notification-preferences`.
+- Integrations: NCBI API key — save, replace, remove (`GET/POST/DELETE /api/user/ncbi-key`;
+  these existed in the backend but no screen used them).
+- Account:
+  - Email, name, sign-in method, member since.
+  - Reset password, for password accounts only (Firebase reset email).
+  - Sign out.
+  - Delete account behind a typed DELETE confirmation. It calls `DELETE /api/account`, then
+    tries Firebase `deleteUser`; if that needs a recent sign-in, it signs out instead.
+- Admin (admins only): the Tuning mode switch, now persisted in
+  `geneie.tuning.active.v1`. When it's off the floating tuning pill doesn't render at all;
+  the pill's own switch still turns it off. Also links to the admin and infra pages.
+- About: version, Terms, Privacy.
+- The sidebar avatar menu's "Settings" now opens `/settings/general`. The old profile
+  popover (`ProfileManagement.jsx`) is removed: its stats and notification switches moved
+  into Settings, and Upgrade moved to Plan & usage.
 
-Profile settings today: newprod `src/components/ProfileManagement.jsx` (portal modal opened
-from the sidebar profile chip, `ChatPage.jsx:2154`), covering plan / usage, notifications
-and logout.
-
-Rebuild it on the pattern Claude and ChatGPT/Codex use:
-- A centered modal over a dimmed backdrop (not a full page, not a drawer), opened from the
-  account chip at the bottom of the sidebar.
-- A left rail of sections with the selected section's content on the right. Each section
-  is a list of rows: label + description on the left, control (switch / select / button)
-  on the right.
-- Close with the X, Esc and a backdrop click. Remember the last open section.
-- On narrow screens, collapse the left rail into a top tab list or a drill-in list.
-- Sections, first pass: General (theme, default chat mode Standard/Explore), Account
-  (name, email, logout), Plan & usage (the current subscription / meters), Notifications
-  (existing prefs), Admin (Tuning mode toggle, admin-only).
+Backend follow-ups (newprod), most useful first:
+1. Account-level preferences: `PUT /api/user/preferences` for theme, chat mode and default
+   analysis mode, so they follow the user across devices instead of living in one browser.
+   This could extend the notification-preferences document.
+2. Chats section (Qwen has one): delete all, export all, archive / unarchive. Only
+   single-chat delete exists today (`DELETE /api/conversation/{id}`).
+3. Usage history: `GET /api/usage/history` with one row per run (FASTQ → VCF, annotation,
+   Exomiser) — date, sample, credit used. Qwen shows a credits history.
+4. Account delete: `DELETE /api/account` erases the data but not the Firebase sign-in.
+   Delete it server-side with the Admin SDK so the frontend doesn't depend on a recent
+   sign-in.
+5. Nice to have: per-user defaults for genome, capture BED and sequencing type to
+   pre-fill the FASTQ form.
 
 ## TODO — Annotation status shown 5 times in one card
 

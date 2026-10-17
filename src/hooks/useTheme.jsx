@@ -8,46 +8,74 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
  * (tailwind.config.js runs `darkMode: ['class']`), so every `dark:` utility and the
  * `.dark` token block in index.css switch off the same flag.
  *
- * The initial class is set by the inline script in index.html to avoid a flash of the
- * wrong theme before React mounts; this hook keeps it in sync afterwards.
+ * The stored value is the user's preference ('system' | 'light' | 'dark'); `theme` is what
+ * it resolves to right now. The initial class is set by the inline script in index.html to
+ * avoid a flash of the wrong theme before React mounts; this hook keeps it in sync afterwards.
  */
 export const THEME_STORAGE_KEY = 'geneie-theme';
-const DEFAULT_THEME = 'dark';
+const DEFAULT_PREFERENCE = 'dark';
+const PREFERENCES = new Set(['system', 'light', 'dark']);
 
 const ThemeContext = createContext(null);
 
-function readStoredTheme() {
+/** What the user chose: 'system' follows the OS, 'light' / 'dark' pin it. */
+function readStoredPreference() {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    return stored === 'light' || stored === 'dark' ? stored : DEFAULT_THEME;
+    return PREFERENCES.has(stored) ? stored : DEFAULT_PREFERENCE;
   } catch {
-    return DEFAULT_THEME;
+    return DEFAULT_PREFERENCE;
   }
 }
 
+function systemTheme() {
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: light)').matches
+    ? 'light'
+    : 'dark';
+}
+
 export function ThemeProvider({ children }) {
-  const [theme, setThemeState] = useState(readStoredTheme);
+  const [preference, setPreferenceState] = useState(readStoredPreference);
+  const [systemValue, setSystemValue] = useState(systemTheme);
+
+  // Track OS changes; only matters while the preference is 'system'.
+  useEffect(() => {
+    const mql = window.matchMedia?.('(prefers-color-scheme: light)');
+    if (!mql) return undefined;
+    const onChange = () => setSystemValue(mql.matches ? 'light' : 'dark');
+    mql.addEventListener?.('change', onChange);
+    return () => mql.removeEventListener?.('change', onChange);
+  }, []);
+
+  const theme = preference === 'system' ? systemValue : preference;
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
+
+  useEffect(() => {
     try {
-      localStorage.setItem(THEME_STORAGE_KEY, theme);
+      localStorage.setItem(THEME_STORAGE_KEY, preference);
     } catch {
       // Private browsing / storage disabled — theme still applies for this session.
     }
-  }, [theme]);
+  }, [preference]);
+
+  const setPreference = useCallback((next) => {
+    setPreferenceState(PREFERENCES.has(next) ? next : DEFAULT_PREFERENCE);
+  }, []);
 
   const setTheme = useCallback((next) => {
-    setThemeState(next === 'light' ? 'light' : 'dark');
+    setPreferenceState(next === 'light' ? 'light' : 'dark');
   }, []);
 
   const toggleTheme = useCallback(() => {
-    setThemeState((prev) => (prev === 'dark' ? 'light' : 'dark'));
-  }, []);
+    setPreferenceState(theme === 'dark' ? 'light' : 'dark');
+  }, [theme]);
 
   const value = useMemo(
-    () => ({ theme, isDark: theme === 'dark', setTheme, toggleTheme }),
-    [theme, setTheme, toggleTheme]
+    () => ({ theme, isDark: theme === 'dark', preference, setPreference, setTheme, toggleTheme }),
+    [theme, preference, setPreference, setTheme, toggleTheme]
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

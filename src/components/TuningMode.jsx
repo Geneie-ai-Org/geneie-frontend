@@ -58,6 +58,9 @@ export default function TuningMode({ tuning, onClose }) {
   const [copied, setCopied] = useState(false);
 
   if (!isAdmin) return null; // non-admins never see this at all
+  // Off = nothing in the chat. It is switched on from Settings → Admin; the switch below
+  // turns it back off from here.
+  if (!active && !editorOpen) return null;
 
   // This panel is a DIRECT child of .chat-app-shell (a 3-column CSS grid). position:fixed takes it
   // out of the grid entirely so it can never reflow the chat shell — same escape hatch

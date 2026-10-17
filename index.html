@@ -119,7 +119,9 @@
     (function () {
       try {
         var stored = localStorage.getItem('geneie-theme');
-        document.documentElement.classList.toggle('dark', stored !== 'light');
+        var light = stored === 'light' ||
+          (stored === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
+        document.documentElement.classList.toggle('dark', !light);
       } catch (e) { /* storage blocked — keep the dark class from the markup */ }
     })();
   </script>

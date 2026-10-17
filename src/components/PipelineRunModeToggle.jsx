@@ -14,6 +14,31 @@ export function normalizePipelineRunMode(value) {
   return value === PIPELINE_RUN_AUTOMATIC ? PIPELINE_RUN_AUTOMATIC : PIPELINE_RUN_MANUAL;
 }
 
+/** Settings → General → "Default analysis mode": what new upload forms start on. */
+export const DEFAULT_ANALYSIS_MODE_KEY = 'geneie_default_analysis_mode';
+
+export function getDefaultPipelineRunMode() {
+  try {
+    return normalizePipelineRunMode(localStorage.getItem(DEFAULT_ANALYSIS_MODE_KEY));
+  } catch {
+    return PIPELINE_RUN_MANUAL;
+  }
+}
+
+export function setDefaultPipelineRunMode(mode) {
+  try {
+    localStorage.setItem(DEFAULT_ANALYSIS_MODE_KEY, normalizePipelineRunMode(mode));
+  } catch {
+    /* storage blocked — the forms fall back to Manual */
+  }
+}
+
+/** The run-mode fields of a fresh sample-metadata object, from the user's default. */
+export function defaultRunModeFields() {
+  const mode = getDefaultPipelineRunMode();
+  return { phenotype_run_mode: mode, pipeline_run_mode: mode };
+}
+
 /** Clear phenotype interpret/selection state; keeps unrelated sample fields. */
 export function clearPhenotypeMetadataFields(prev = {}) {
   return {

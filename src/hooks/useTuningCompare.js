@@ -21,6 +21,25 @@ import { streamCompare, createColumnState } from '@/services/streamCompare';
 import { getDeviceId } from '@/lib/deviceId';
 
 const PANEL_KEY = 'geneie.tuning.overrides.v1';
+/** On/off, set from Settings → Admin. Persisted so the choice survives reloads and navigation. */
+export const TUNING_ACTIVE_KEY = 'geneie.tuning.active.v1';
+
+export function readTuningActive() {
+  try {
+    return localStorage.getItem(TUNING_ACTIVE_KEY) === 'on';
+  } catch {
+    return false;
+  }
+}
+
+export function writeTuningActive(on) {
+  try {
+    if (on) localStorage.setItem(TUNING_ACTIVE_KEY, 'on');
+    else localStorage.removeItem(TUNING_ACTIVE_KEY);
+  } catch {
+    /* storage blocked — the switch still works for this page */
+  }
+}
 
 function loadSaved() {
   try {
@@ -32,7 +51,8 @@ function loadSaved() {
 
 export function useTuningCompare({ question } = {}) {
   const [isAdmin, setIsAdmin] = useState(false);
-  const [active, setActive] = useState(false);
+  const [active, setActive] = useState(readTuningActive);
+  useEffect(() => writeTuningActive(active), [active]);
   const [overrides, setOverrides] = useState(loadSaved);
   const [baseline, setBaseline] = useState(null);
   const [acc, setAcc] = useState(() => createColumnState());

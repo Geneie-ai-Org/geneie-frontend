@@ -152,6 +152,8 @@ export default function PipelineRunModeToggle({
           <ModeInfoButton automatic={isAutomatic} />
         </div>
         <PillToggle
+          // Opaque pills so the dotted background doesn't show through them.
+          surface="var(--bg-input)"
           value={mode}
           onChange={(next) => {
             if (disabled) return;

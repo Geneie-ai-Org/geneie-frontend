@@ -1710,17 +1710,14 @@ const ChatPage = () => {
                   >
                     {conversationHeaderTitle}
                   </h1>
-                  {/* Admin-only: opens the Tuning panel. The dot counts active config changes. */}
-                  {tuning.isAdmin && (
+                  {/* Admin-only: opens the Tuning panel; the badge counts active config changes.
+                    * Hidden while the panel is open — the panel carries the title and its own close. */}
+                  {tuning.isAdmin && !tuning.active && (
                     <button
                       type="button"
-                      onClick={() => tuning.setActive((v) => !v)}
-                      aria-pressed={tuning.active}
-                      className="chat-chrome-btn inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 h-8 text-xs font-medium transition-colors hover:bg-[var(--bg-surface-hover)]"
-                      style={{
-                        color: tuning.active ? 'var(--accent-teal)' : 'var(--text-secondary)',
-                        backgroundColor: tuning.active ? 'var(--accent-teal-soft)' : undefined,
-                      }}
+                      onClick={() => tuning.setActive(true)}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 h-8 text-xs font-medium transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+                      style={{ color: 'var(--text-secondary)' }}
                       title="Compare answers with your own prompts and models (admin only)"
                     >
                       <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />

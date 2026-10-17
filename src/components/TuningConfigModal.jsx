@@ -228,12 +228,17 @@ export default function TuningConfigModal({
                 </div>
               </div>
               <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-2">
-                {grouped.map(([label, arr]) => (
-                  <div key={label} className="mb-3">
-                    <div className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
-                      {label} ({arr.length})
+                {/* Hierarchy: group = bright sans-serif heading with a count pill, sticky while its keys
+                  * scroll; key = indented, muted monospace. Size, weight, color and indent all differ. */}
+                {grouped.map(([label, arr], gi) => (
+                  <div key={label} className={gi ? 'mt-2 border-t border-[var(--border-subtle)] pt-2' : ''}>
+                    <div className="sticky top-0 z-[1] -mx-2 mb-1 flex items-center justify-between bg-[var(--bg-app)] px-3 py-1.5">
+                      <span className="text-xs font-semibold text-[var(--text-primary)]">{label}</span>
+                      <span className="rounded-full bg-[var(--bg-surface-hover)] px-1.5 text-[10px] font-medium leading-4 tabular-nums text-[var(--text-tertiary)]">
+                        {arr.length}
+                      </span>
                     </div>
-                    <div className="space-y-0.5">
+                    <div className="space-y-px pl-2">
                       {arr.map((k) => {
                         const mod = (overrides[k] ?? '') !== '';
                         const active = k === selected;
@@ -243,9 +248,10 @@ export default function TuningConfigModal({
                             data-key={k}
                             type="button"
                             onClick={() => setSelected(k)}
-                            className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left font-mono text-[11px] transition-colors ${
+                            aria-current={active ? 'true' : undefined}
+                            className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-left font-mono text-[11.5px] transition-colors ${
                               active
-                                ? 'bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]'
+                                ? 'bg-[var(--accent-teal-soft)] font-medium text-[var(--accent-teal)]'
                                 : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]'
                             }`}
                           >

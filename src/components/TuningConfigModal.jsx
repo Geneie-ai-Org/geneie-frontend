@@ -9,8 +9,9 @@
  * It only EDITS the session override set (same `overrides` the compare sends). It never writes global
  * config; promotion stays the separate admin PUT. Closing the modal keeps overrides + tuning state.
  *
- * Edits save as you type — there is no separate Apply. An empty value, or one identical to the
- * baseline, means "use the global config" and is not counted as a change.
+ * One editor, prefilled with the global value: you edit the real text, never a blank box. Edits
+ * save as you type; text identical to the global value (or cleared) is not counted as a change.
+ * "Show changes" swaps the editor for a line diff against the global value.
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -18,6 +19,37 @@ import { createPortal } from 'react-dom';
 import { Search, X, RotateCcw, Check, Loader2, AlertCircle } from 'lucide-react';
 
 const fmtVal = (v) => (typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v ?? ''));
+
+/** Line diff (LCS) between the global value and yours: [{ type: 'same' | 'del' | 'add', text }]. */
+function lineDiff(before, after) {
+  const a = before.split('\n');
+  const b = after.split('\n');
+  const m = a.length;
+  const n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Uint32Array(n + 1));
+  for (let i = m - 1; i >= 0; i--) {
+    for (let j = n - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const out = [];
+  let i = 0;
+  let j = 0;
+  while (i < m && j < n) {
+    if (a[i] === b[j]) { out.push({ type: 'same', text: a[i] }); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push({ type: 'del', text: a[i] }); i++; }
+    else { out.push({ type: 'add', text: b[j] }); j++; }
+  }
+  while (i < m) out.push({ type: 'del', text: a[i++] });
+  while (j < n) out.push({ type: 'add', text: b[j++] });
+  return out;
+}
+
+const DIFF_STYLES = {
+  same: { mark: ' ', className: 'text-[var(--text-secondary)]' },
+  del: { mark: '−', className: 'bg-[var(--error-soft)] text-[var(--error)]' },
+  add: { mark: '+', className: 'bg-[var(--success-soft)] text-[var(--success)]' },
+};
 
 // Plain-language group labels + order, keyed by namespace.
 const GROUPS = [
@@ -47,6 +79,7 @@ export default function TuningConfigModal({
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(null);
   const [draft, setDraft] = useState('');
+  const [showDiff, setShowDiff] = useState(false);
   const searchRef = useRef(null);
   const textareaRef = useRef(null);
   const listRef = useRef(null);
@@ -62,11 +95,12 @@ export default function TuningConfigModal({
     return () => { window.removeEventListener('keydown', onKey); clearTimeout(t); };
   }, [open, onClose]);
 
-  // When the selected key changes, load its current override (or fall back to empty = "use baseline").
+  // When the selected key changes, load your version if you have one, else the global value.
   useEffect(() => {
     if (!selected) return;
-    setDraft(overrides[selected] ?? '');
-  }, [selected]); // eslint-disable-line react-hooks/exhaustive-deps
+    setDraft(overrides[selected] ?? fmtVal(baseline?.byKey?.[selected]?.value));
+    setShowDiff(false);
+  }, [selected, baseline]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -111,16 +145,18 @@ export default function TuningConfigModal({
   const baselineStr = b ? fmtVal(b.value) : '';
   const isModified = selected ? (overrides[selected] ?? '') !== '' : false;
 
-  // Save as you type. Matching the baseline exactly is the same as no change.
+  // Save as you type. Matching the global value (or clearing it) is the same as no change.
   const changeDraft = (next) => {
     setDraft(next);
     if (selected) setOverride(selected, next === baselineStr ? '' : next);
   };
-  const revert = () => { if (selected) { setOverride(selected, ''); setDraft(''); } };
-  const startFromBaseline = () => {
-    setDraft(baselineStr); // equal to baseline, so not saved as a change until edited
-    setTimeout(() => textareaRef.current?.focus(), 0);
+  const revert = () => {
+    if (!selected) return;
+    setOverride(selected, '');
+    setDraft(baselineStr);
+    setShowDiff(false);
   };
+  const diff = showDiff && isModified ? lineDiff(baselineStr, draft) : null;
 
   return createPortal(
     <div
@@ -249,60 +285,64 @@ export default function TuningConfigModal({
                     ) : null}
                   </div>
 
-                  <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 md:grid-cols-2">
-                    {/* baseline (read-only) */}
-                    <div className="flex min-h-0 flex-col border-b border-[var(--border-subtle)] md:border-b-0 md:border-r">
-                      <div className="flex items-center justify-between px-4 py-2">
-                        <span className="text-xs font-medium text-[var(--text-secondary)]">
-                          Global config <span className="font-normal text-[var(--text-tertiary)]">· read-only</span>
-                        </span>
-                      </div>
-                      <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words px-4 pb-4 font-mono text-[12px] leading-relaxed text-[var(--text-secondary)]">
-                        {baselineStr || <span className="italic opacity-60">(empty)</span>}
-                      </pre>
-                    </div>
-
-                    {/* your value (editable) */}
-                    <div className="flex min-h-0 flex-col">
-                      <div className="flex items-center justify-between px-4 py-2">
-                        <span className="text-xs font-medium text-[var(--text-primary)]">Your version</span>
-                        <span className="text-[11px] text-[var(--text-tertiary)]">
-                          {draft === '' ? '' : `${draft.length} chars`}
-                        </span>
-                      </div>
-                      {draft === '' ? (
-                        <div className="mx-4 mb-2 flex items-center justify-between gap-3 rounded-lg border border-dashed border-[var(--border-default)] px-3 py-2 text-xs text-[var(--text-secondary)]">
-                          <span>Empty, so this key uses the global config.</span>
+                  <div className="flex min-h-0 flex-1 flex-col">
+                    <div className="flex items-center justify-between gap-3 px-4 py-2">
+                      <span className="text-xs text-[var(--text-secondary)]">
+                        {showDiff && isModified
+                          ? 'Your changes against the global value'
+                          : isModified
+                            ? 'Your version'
+                            : baselineStr
+                              ? 'Global value — edit it to make your version'
+                              : 'No global value — type a value'}
+                      </span>
+                      <span className="flex items-center gap-3">
+                        <span className="text-[11px] tabular-nums text-[var(--text-tertiary)]">{draft.length} chars</span>
+                        {isModified ? (
                           <button
                             type="button"
-                            onClick={startFromBaseline}
-                            className="shrink-0 font-medium text-[var(--accent-teal)] underline-offset-2 hover:underline"
+                            onClick={() => setShowDiff((v) => !v)}
+                            aria-pressed={showDiff}
+                            className="text-[11px] font-medium text-[var(--text-secondary)] underline-offset-2 hover:text-[var(--text-primary)] hover:underline"
                           >
-                            Start from global
+                            {showDiff ? 'Back to editing' : 'Show changes'}
                           </button>
-                        </div>
-                      ) : null}
+                        ) : null}
+                      </span>
+                    </div>
+                    {diff ? (
+                      <div className="min-h-0 flex-1 overflow-auto border-t border-[var(--border-subtle)] bg-[var(--bg-input)] py-2 font-mono text-[12px] leading-relaxed">
+                        {diff.map((line, idx) => (
+                          <div key={idx} className={`flex gap-2 px-4 ${DIFF_STYLES[line.type].className}`}>
+                            <span className="w-3 shrink-0 select-none" aria-hidden>{DIFF_STYLES[line.type].mark}</span>
+                            <span className="min-w-0 whitespace-pre-wrap break-words">{line.text || ' '}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
                       <textarea
                         ref={textareaRef}
                         value={draft}
                         onChange={(e) => changeDraft(e.target.value)}
-                        placeholder="…or type your own version here"
+                        aria-label={`Value for ${selected}`}
                         spellCheck={false}
-                        className="min-h-0 flex-1 resize-none border-0 bg-[var(--bg-input)] px-4 py-2 font-mono text-[12px] leading-relaxed text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] focus:bg-[var(--bg-input-focus)]"
+                        className="min-h-0 flex-1 resize-none border-0 border-t border-[var(--border-subtle)] bg-[var(--bg-input)] px-4 py-2 font-mono text-[12px] leading-relaxed text-[var(--text-primary)] outline-none focus:bg-[var(--bg-input-focus)]"
                       />
-                    </div>
+                    )}
                   </div>
 
                   {/* Footer actions */}
                   <div className="flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] px-4 py-2.5">
                     <div className="text-[11px] text-[var(--text-tertiary)]">
-                      {isModified ? 'Saved. Used the next time you run a comparison.' : 'Saves as you type.'}
+                      {isModified
+                        ? 'Saved · used in your next comparison.'
+                        : 'Same as global, so not counted as a change.'}
                     </div>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={revert}
-                        disabled={!isModified && draft === ''}
+                        disabled={!isModified}
                         className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--border-default)] px-3 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-30"
                       >
                         <RotateCcw className="h-3.5 w-3.5" /> Revert to global

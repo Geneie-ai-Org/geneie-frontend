@@ -288,9 +288,10 @@ Now (frontend only):
   - Footer: Copy config, and Reset all (click twice to confirm).
 - Editor:
   - Opens on the first listed key, or on the key you clicked Edit on.
-  - An empty value shows "Empty, so this key uses the global config" with a Start from global
-    link.
-  - Edits save as you type; matching the baseline counts as no change.
+  - One editor prefilled with the global value (option A, 2026-10-17). It replaced the
+    global | yours columns and the "empty means global" state.
+  - Edits save as you type. Text identical to global, or cleared, is not counted as a change.
+  - "Show changes" switches to a line diff against the global value.
   - Footer buttons are Revert to global and Done.
   - Clearer heading hierarchy, and Changed / Unchanged badges.
 - Compare columns are labelled "Global config" / "Your changes".

@@ -948,7 +948,7 @@ const DocumentUpload = ({
       const result = await urlPreflight({
         fileUrl: url,
         fileName: urlFilenameOverride.trim() || undefined,
-        conversationId: conversationId || 'guest-session',
+        conversationId,
         isGuest,
       });
 
@@ -1011,7 +1011,7 @@ const DocumentUpload = ({
 
     try {
       const response = await uploadFromUrl({
-        conversationId: conversationId || 'guest-session',
+        conversationId,
         fileUrl: importUrlMeta.file_url,
         fileName: importUrlMeta.file_name,
         sampleMetadata: metadata,

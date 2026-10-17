@@ -296,7 +296,7 @@ export function useChatMessaging({
           const requestBody = {
             message: userMessageText,
             history: historyPayload,
-            conversationId: activeConversationId || (userTier === 'guest' ? 'guest-session' : null),
+            conversationId: activeConversationId,
             hasUploadedFile: userTier === 'guest' && currentDocument !== null,
           };
           // Always attempt a fresh token: optionalIdToken() returns null iff genuinely not signed in
@@ -393,7 +393,7 @@ export function useChatMessaging({
         const requestBody = {
           message: userMessageText,
           history: historyPayload,
-          conversationId: activeConversationId || (userTier === 'guest' ? 'guest-session' : null),
+          conversationId: activeConversationId,
           hasUploadedFile: userTier === 'guest' && currentDocument !== null,
         };
         const token = userTier === 'guest' ? null : await optionalIdToken();
@@ -599,7 +599,7 @@ export function useChatMessaging({
             // planning / verifying -> a plain step line, in-order
             if (evt.label) pushTrace('step', evt.label);
           }
-        }, ac.signal, activeConversationId || 'guest-session',
+        }, ac.signal, activeConversationId,
            { ...(token && { Authorization: `Bearer ${token}` }), 'X-Device-Id': getDeviceId() });
 
         if (cutHandling && !exploreSawDone && finalAnswer.trim()) markExploreCut();

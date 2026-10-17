@@ -1,23 +1,13 @@
 import React, { useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import {
-  ArrowRight,
-  ChevronDown,
-  Dna,
-  FileUp,
-  Filter,
-  MessageSquareText,
-  ScanSearch,
-  ShieldCheck,
-  Sheet,
-  Stethoscope,
-} from 'lucide-react';
+import { ArrowRight, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Collapse, Dismissible, StageMark, StateButton, Turn } from '@/components/motion';
 import BrandLogo from '@/components/public/BrandLogo';
 import Reveal from '@/components/public/Reveal';
+import ProductTour from '@/components/public/ProductTour';
 import HeroGenome from '@/components/public/HeroGenome';
 import { useBetaSeats } from '@/hooks/useBetaSeats';
 import { joinWaitlist } from '@/services/backendApi';
@@ -25,55 +15,17 @@ import { useSeo } from '@/hooks/useSeo';
 
 /* ------------------------------------------------------------------ content */
 
-const STEPS = [
-  {
-    icon: FileUp,
-    title: 'Upload a variant file',
-    body: 'Start from a whole-genome or whole-exome VCF. Tabular variant exports can be converted to VCF in the app. Geneie checks the file for the columns each step needs and tells you what is missing.',
-  },
-  {
-    icon: Filter,
-    title: 'Annotate and filter',
-    body: 'Unannotated files are annotated with ANNOVAR. Then narrow the set with ACMG classification (ClinVar or InterVar plus gnomAD frequency) or phenotype-driven ranking with Exomiser.',
-  },
-  {
-    icon: MessageSquareText,
-    title: 'Ask and export',
-    body: 'Ask questions about the filtered variants in plain language and get answers tied to the underlying rows. Copy insights or export a variant table for your report.',
-  },
+const PIPELINES = [
+  ['Annotation', 'Functional consequence, population frequency and clinical significance, added with ANNOVAR.'],
+  ['ACMG classification', 'ClinVar or InterVar classification together with gnomAD allele frequency.'],
+  ['Phenotype ranking', 'HPO terms from the clinical picture, ranked for germline candidates with Exomiser.'],
+  ['Filters and exports', 'Saved filters you can reopen and undo, and variant tables exported to Excel.'],
 ];
 
-const CAPABILITIES = [
-  {
-    icon: Dna,
-    title: 'Annotation',
-    body: 'Functional consequence, population frequency and clinical significance added with ANNOVAR.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'ACMG classification',
-    body: 'Filter by ClinVar or InterVar classification together with gnomAD allele frequency.',
-  },
-  {
-    icon: Stethoscope,
-    title: 'Phenotype-driven ranking',
-    body: 'Describe the clinical picture in free text. HPO terms are derived and Exomiser ranks germline candidates.',
-  },
-  {
-    icon: ScanSearch,
-    title: 'Deterministic by design',
-    body: 'The language model translates your question into filters and lookups. Scoring and classification run in established pipelines, not in the model.',
-  },
-  {
-    icon: MessageSquareText,
-    title: 'Plain-language questions',
-    body: 'Ask about genes, consequences, inheritance or frequency without writing a query.',
-  },
-  {
-    icon: Sheet,
-    title: 'Export for reports',
-    body: 'Copy insights or export filtered variant tables to Excel for clinical reports and publications.',
-  },
+const MODEL = [
+  ['Reads your question', 'Turns “which are rare and pathogenic?” into filters and lookups on your file.'],
+  ['Explains what it finds', 'Describes the rows that come back, tied to the underlying data, and says when the file cannot answer.'],
+  ['Never scores', 'It does not classify, score or rank variants. Those results come only from the pipelines.'],
 ];
 
 const FAQS = [
@@ -472,21 +424,10 @@ const LandingPage = () => {
           <section id="how-it-works" aria-labelledby="how-title" className="scroll-mt-14">
             <div className={SECTION}>
               <Reveal>
-                <h2 id="how-title" className={H2}>How it works</h2>
-                <p className="mt-2 max-w-xl text-muted-foreground">Three steps from a raw file to answers you can cite.</p>
+                <h2 id="how-title" className={H2}>From a raw file to answers you can cite</h2>
+                <p className="mt-2 max-w-xl text-muted-foreground">Pick a step to see what it looks like.</p>
               </Reveal>
-              <ol className="mt-8 grid gap-4 md:grid-cols-3">
-                {STEPS.map((step, i) => (
-                  <Reveal as="li" key={step.title} delay={i * 60} className="wb-card pub-card pub-lift p-5">
-                    <div className="pub-pill">
-                      <span className="pub-pill-dot">{i + 1}</span>
-                      <step.icon className="h-4 w-4 text-[hsl(var(--brand-500))]" aria-hidden="true" strokeWidth={1.75} />
-                    </div>
-                    <h3 className="mt-4 text-base font-semibold">{step.title}</h3>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{step.body}</p>
-                  </Reveal>
-                ))}
-              </ol>
+              <ProductTour />
             </div>
           </section>
           </div>
@@ -497,22 +438,35 @@ const LandingPage = () => {
           <section id="capabilities" aria-labelledby="cap-title" className="scroll-mt-14">
             <div className={`${SECTION} !pt-8`}>
               <Reveal>
-                <h2 id="cap-title" className={H2}>What you get</h2>
-                <p className="mt-2 max-w-xl text-muted-foreground">
-                  Established tools for the analysis, a language interface for the questions.
+                <h2 id="cap-title" className={H2}>What the model does, and what it does not</h2>
+                <p className="mt-2 max-w-2xl text-muted-foreground">
+                  Scoring and classification run in established pipelines. The language model only translates and explains, so each result traces back to the data.
                 </p>
               </Reveal>
-              <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {CAPABILITIES.map((c, i) => (
-                  <Reveal as="li" key={c.title} delay={(i % 3) * 60} className="wb-card pub-card pub-lift p-5">
-                    <span className="pub-pill pub-pill--icon">
-                      <c.icon className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.75} />
-                    </span>
-                    <h3 className="mt-4 text-base font-semibold">{c.title}</h3>
-                    <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{c.body}</p>
-                  </Reveal>
-                ))}
-              </ul>
+              <div className="mt-8 grid gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+                <Reveal className="wb-card pub-card p-5 sm:p-6" style={{ borderRadius: 20 }}>
+                  <h3 className="text-base font-semibold">Runs in established pipelines</h3>
+                  <dl className="mt-4 grid gap-x-8 gap-y-5 sm:grid-cols-2">
+                    {PIPELINES.map(([k, v]) => (
+                      <div key={k}>
+                        <dt className="text-sm font-medium">{k}</dt>
+                        <dd className="mt-1 text-sm leading-6 text-muted-foreground">{v}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </Reveal>
+                <Reveal delay={70} className="wb-card pub-card p-5 sm:p-6" style={{ borderRadius: 20, background: 'hsl(var(--brand-50))' }}>
+                  <h3 className="text-base font-semibold">The language model</h3>
+                  <dl className="mt-4 space-y-5">
+                    {MODEL.map(([k, v]) => (
+                      <div key={k}>
+                        <dt className="text-sm font-medium">{k}</dt>
+                        <dd className="mt-1 text-sm leading-6 text-muted-foreground">{v}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </Reveal>
+              </div>
             </div>
           </section>
           </div>

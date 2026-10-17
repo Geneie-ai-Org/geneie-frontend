@@ -19,14 +19,41 @@ import { adminWhoAmI, getAuthHeaders } from '@/services/backendApi';
 import { fetchTunableConfig } from '@/services/tuningConfig';
 import { streamCompare, createColumnState } from '@/services/streamCompare';
 import { getDeviceId } from '@/lib/deviceId';
+import { toast } from 'sonner';
 
 const PANEL_KEY = 'geneie.tuning.overrides.v1';
-/** Whether the Tuning panel is open in chat. Persisted so it survives reloads and navigation. */
+/** Whether tuning is on (composer chip, comparisons). Persisted so it survives reloads and navigation. */
 export const TUNING_ACTIVE_KEY = 'geneie.tuning.active.v1';
 
 export function readTuningActive() {
   try {
     return localStorage.getItem(TUNING_ACTIVE_KEY) === 'on';
+  } catch {
+    return false;
+  }
+}
+
+const TUNING_PANEL_REQUEST_KEY = 'geneie.tuning.openPanel';
+const TUNING_PANEL_REQUEST_TTL_MS = 10_000;
+
+/**
+ * Ask the chat page to open with the Tuning panel showing (Settings → Tuning → Open).
+ * Stored as a timestamp rather than read-once: /app redirects to /app/<conversation>, which
+ * remounts the chat page, and both mounts must see the request.
+ */
+export function requestTuningPanel() {
+  try {
+    sessionStorage.setItem(TUNING_PANEL_REQUEST_KEY, String(Date.now()));
+  } catch {
+    /* storage blocked — the chip is still there to open it */
+  }
+}
+
+/** Whether a request was made in the last few seconds. Pure, so safe in a state initializer. */
+export function hasTuningPanelRequest() {
+  try {
+    const at = Number(sessionStorage.getItem(TUNING_PANEL_REQUEST_KEY));
+    return Boolean(at) && Date.now() - at < TUNING_PANEL_REQUEST_TTL_MS;
   } catch {
     return false;
   }
@@ -136,7 +163,11 @@ export function useTuningCompare({ question } = {}) {
         },
       });
     } catch (e) {
-      if (e.name !== 'AbortError') setError(e.message);
+      if (e.name !== 'AbortError') {
+        setError(e.message);
+        // Nothing else shows a failure that happens before any column has output.
+        toast.error('Comparison failed', { description: e.message });
+      }
     } finally {
       setRunning(false);
       abortRef.current = null;

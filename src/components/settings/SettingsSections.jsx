@@ -26,7 +26,7 @@ import {
   getDefaultPipelineRunMode,
   setDefaultPipelineRunMode,
 } from '@/components/PipelineRunModeToggle';
-import { writeTuningActive } from '@/hooks/useTuningCompare';
+import { writeTuningActive, requestTuningPanel } from '@/hooks/useTuningCompare';
 import SubscriptionPage from '@/components/SubscriptionPage';
 import { version as appVersion } from '../../../package.json';
 import {
@@ -489,12 +489,13 @@ export function TuningSection() {
     <SettingsSection title="Tuning" description="Only visible to admins.">
       <SettingsRow
         label="Compare prompts and models"
-        description="Opens the Tuning panel in chat. You can also open it from the Tuning button at the top of any chat."
+        description="Opens the tuning editor in chat. You can also open it from the Tuning button in the chat box."
       >
         <SettingsButton
           tone="primary"
           onClick={() => {
             writeTuningActive(true);
+            requestTuningPanel();
             navigate('/app');
           }}
         >

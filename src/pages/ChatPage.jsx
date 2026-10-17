@@ -1,13 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown, SlidersHorizontal } from 'lucide-react';
+import { Loader2, FileText, User, X, CheckCircle2, AlertCircle, MessageSquare, Bot, Menu, ChevronDown } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import * as mongodbApi from '../services/mongodbApi';
 import { toast } from 'sonner';
 import ExploratoryModeToggle from '../components/ExploratoryModeToggle';
 import TuningMode from '../components/TuningMode';
 import TuningCompareColumns from '../components/chat/TuningCompareColumns';
-import { useTuningCompare } from '@/hooks/useTuningCompare';
+import { useTuningCompare, hasTuningPanelRequest } from '@/hooks/useTuningCompare';
 
 import { useStickToBottom } from 'use-stick-to-bottom';
 import { Markdown } from '../components/chat/ChatMarkdown';
@@ -406,6 +406,9 @@ const ChatPage = () => {
   // panel; the ANSWER renders inline in the thread as two markdown columns (TuningCompareColumns).
   // Gates on /api/admin/whoami internally, so it is a no-op render for non-admins.
   const tuning = useTuningCompare({ question: input });
+  // Tuning on/off is `tuning.active` (Compare button in the chat box, comparison columns); the
+  // Tuning window opens and closes on its own. Settings → Tuning → Open asks for it via storage.
+  const [tuningPanelOpen, setTuningPanelOpen] = useState(hasTuningPanelRequest);
 
   const syncAfterColumnInterpretation = useCallback(
     async (conversationId, columnInterpretation) => {
@@ -1514,6 +1517,19 @@ const ChatPage = () => {
     isVariantSidebarOpen,
     onToggleVariantSidebar: () => setIsVariantSidebarOpen(!isVariantSidebarOpen),
     hasDocument: !!currentDocument,
+    tuning: tuning.isAdmin
+      ? {
+          on: tuning.active,
+          changeCount: tuning.dirtyKeys.length,
+          running: tuning.running,
+          onOpen: () => {
+            tuning.setActive(true);
+            setTuningPanelOpen(true);
+          },
+          onCompare: (q) => tuning.run(q),
+          onStopCompare: () => tuning.abort(),
+        }
+      : null,
     pipelineDrawer: (
       <>
         {automaticPipelineBanner}
@@ -1710,28 +1726,6 @@ const ChatPage = () => {
                   >
                     {conversationHeaderTitle}
                   </h1>
-                  {/* Admin-only: opens the Tuning panel; the badge counts active config changes.
-                    * Hidden while the panel is open — the panel carries the title and its own close. */}
-                  {tuning.isAdmin && !tuning.active && (
-                    <button
-                      type="button"
-                      onClick={() => tuning.setActive(true)}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 h-8 text-xs font-medium transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
-                      style={{ color: 'var(--text-secondary)' }}
-                      title="Compare answers with your own prompts and models (admin only)"
-                    >
-                      <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
-                      Tuning
-                      {tuning.dirtyKeys.length > 0 && (
-                        <span
-                          className="ml-0.5 rounded-full px-1.5 text-[10px] font-semibold leading-4"
-                          style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
-                        >
-                          {tuning.dirtyKeys.length}
-                        </span>
-                      )}
-                    </button>
-                  )}
                 </div>
               </header>}
 
@@ -1878,32 +1872,32 @@ const ChatPage = () => {
                     )}
                   </div>
                 </div>
-                {/* The scroll port now runs under the dock, so this has to clear it. */}
-                <div
-                  className="sticky flex justify-center pointer-events-none"
-                  style={{ zIndex: 10, bottom: 'calc(var(--composer-dock-height, 0px) - 6rem)' }}
-                >
+              </div>
+
+              {/* Bottom input — conversation mode. Absolutely placed so it overlaps the
+                  scroll region; nothing rectangular clips the messages any more. */}
+              <div ref={composerDockRef} className="chat-column-inner chat-composer-dock pb-3 pt-0.5">
+                {/* Scroll-to-bottom sits just above the dock's top-right corner, so it never lands on
+                  * the answer text however tall the dock gets (the pipeline drawer grows it). The dock
+                  * is click-through; the button turns pointer events back on for itself. */}
+                <div className="absolute right-3 -top-12 z-10">
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
                     onClick={() => chatScrollToBottom()}
                     aria-label="Scroll to bottom"
-                    className={`h-10 w-10 rounded-full transition-all duration-150 ease-out pointer-events-auto shadow-lg ${
+                    tabIndex={chatIsAtBottom ? -1 : 0}
+                    className={`h-9 w-9 rounded-full transition-all duration-150 ease-out shadow-lg ${
                       !chatIsAtBottom
-                        ? 'translate-y-0 scale-100 opacity-100'
-                        : 'pointer-events-none translate-y-4 scale-95 opacity-0'
+                        ? 'pointer-events-auto translate-y-0 scale-100 opacity-100'
+                        : 'pointer-events-none translate-y-2 scale-95 opacity-0'
                     }`}
                     style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
                   >
                     <ChevronDown className="size-5" />
                   </Button>
                 </div>
-              </div>
-
-              {/* Bottom input — conversation mode. Absolutely placed so it overlaps the
-                  scroll region; nothing rectangular clips the messages any more. */}
-              <div ref={composerDockRef} className="chat-column-inner chat-composer-dock pb-3 pt-0.5">
                 {/* The only guest usage counter in a conversation: next to where the next message
                   * is typed. On the last free message it gets bolder and the CTA changes, instead of
                   * a banner up top. */}
@@ -2321,9 +2315,12 @@ const ChatPage = () => {
           above (see TuningCompareColumns). The normal single-column chat path is untouched. */}
       <TuningMode
         tuning={tuning}
-        open={tuning.active}
-        onClose={() => tuning.setActive(false)}
-        composerText={input}
+        open={tuning.active && tuningPanelOpen}
+        onClose={() => setTuningPanelOpen(false)}
+        onTurnOff={() => {
+          tuning.setActive(false);
+          setTuningPanelOpen(false);
+        }}
       />
     </div>
   );

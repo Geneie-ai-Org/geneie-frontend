@@ -16,7 +16,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, X, RotateCcw, Check, Loader2, AlertCircle } from 'lucide-react';
+import { Search, X, RotateCcw, Check, Loader2, AlertCircle, SlidersHorizontal } from 'lucide-react';
 
 const fmtVal = (v) => (typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v ?? ''));
 
@@ -75,6 +75,7 @@ export default function TuningConfigModal({
   reloadConfig,
   overrides,         // { key: string }
   setOverride,       // (key, value) => void
+  headerActions = null, // tuning-wide actions (Copy config, Reset all, Turn off), shown by the close button
 }) {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(null);
@@ -86,14 +87,18 @@ export default function TuningConfigModal({
 
   const keys = baseline?.keys || [];
 
-  // Esc closes; focus search on open.
+  // Esc closes; focus the search box once, when the editor opens. `onClose` is read through a
+  // ref: callers pass an inline function, so depending on it re-ran this effect on every render
+  // (every keystroke saves, which re-renders) and pulled focus out of the editor into search.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     if (!open) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e) => { if (e.key === 'Escape') onCloseRef.current(); };
     window.addEventListener('keydown', onKey);
     const t = setTimeout(() => searchRef.current?.focus(), 50);
     return () => { window.removeEventListener('keydown', onKey); clearTimeout(t); };
-  }, [open, onClose]);
+  }, [open]);
 
   // When the selected key changes, load your version if you have one, else the global value.
   useEffect(() => {
@@ -163,32 +168,39 @@ export default function TuningConfigModal({
       className="fixed inset-0 z-[10010] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label="Tuning config editor"
+      aria-label="Tuning"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[var(--border-default)] bg-[var(--bg-app)] shadow-[var(--shadow-xl)]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-4 py-3">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-[var(--text-primary)]">Edit config</h2>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                modifiedCount
-                  ? 'bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]'
-                  : 'bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]'
-              }`}
-            >
-              {modifiedCount ? `${modifiedCount} changed` : 'No changes'}
+            <SlidersHorizontal className="h-4 w-4 text-[var(--accent-teal)]" aria-hidden />
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">Tuning</h2>
+            <span className="rounded-full bg-[var(--bg-surface-hover)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-secondary)]">
+              Admin only
             </span>
+            {modifiedCount ? (
+              <span
+                className="rounded-full bg-[var(--accent-teal-soft)] px-1.5 text-[11px] font-semibold leading-5 tabular-nums text-[var(--accent-teal)]"
+                aria-label={`${modifiedCount} changed`}
+                title={`${modifiedCount} changed`}
+              >
+                {modifiedCount}
+              </span>
+            ) : null}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            {headerActions}
+            <button
+              type="button"
+              onClick={onClose}
+              className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         {configError ? (
@@ -276,15 +288,13 @@ export default function TuningConfigModal({
                   <div className="border-b border-[var(--border-subtle)] px-4 py-3">
                     <div className="flex items-center gap-2">
                       <code className="break-all font-mono text-sm font-semibold text-[var(--text-primary)]">{selected}</code>
+                      {/* Same dot as the key list: edited keys are marked, the text never changes. */}
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                          isModified
-                            ? 'bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]'
-                            : 'bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]'
-                        }`}
-                      >
-                        {isModified ? 'Changed' : 'Unchanged'}
-                      </span>
+                        className={`h-2 w-2 shrink-0 rounded-full transition-opacity ${isModified ? 'bg-[var(--accent-teal)] opacity-100' : 'opacity-0'}`}
+                        role="img"
+                        aria-label={isModified ? 'Edited' : 'Not edited'}
+                        title={isModified ? 'Edited' : undefined}
+                      />
                     </div>
                     {b.description ? (
                       <p className="mt-1 text-xs text-[var(--text-secondary)]">{b.description}</p>
@@ -293,31 +303,24 @@ export default function TuningConfigModal({
 
                   <div className="flex min-h-0 flex-1 flex-col">
                     <div className="flex items-center justify-between gap-3 px-4 py-2">
-                      <span className="text-xs text-[var(--text-secondary)]">
-                        {showDiff && isModified
-                          ? 'Your changes against the global value'
-                          : isModified
-                            ? 'Your version'
-                            : baselineStr
-                              ? 'Global value — edit it to make your version'
-                              : 'No global value — type a value'}
-                      </span>
+                      <span className="text-xs text-[var(--text-secondary)]">Value</span>
                       <span className="flex items-center gap-3">
                         <span className="text-[11px] tabular-nums text-[var(--text-tertiary)]">{draft.length} chars</span>
-                        {isModified ? (
-                          <button
-                            type="button"
-                            onClick={() => setShowDiff((v) => !v)}
-                            aria-pressed={showDiff}
-                            className="text-[11px] font-medium text-[var(--text-secondary)] underline-offset-2 hover:text-[var(--text-primary)] hover:underline"
-                          >
-                            {showDiff ? 'Back to editing' : 'Show changes'}
-                          </button>
-                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => setShowDiff((v) => !v)}
+                          aria-pressed={showDiff}
+                          disabled={!isModified}
+                          className={`text-[11px] font-medium underline-offset-2 hover:text-[var(--text-primary)] hover:underline disabled:cursor-default disabled:opacity-40 disabled:hover:no-underline ${
+                            showDiff ? 'text-[var(--text-primary)] underline' : 'text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          Show changes
+                        </button>
                       </span>
                     </div>
                     {diff ? (
-                      <div className="min-h-0 flex-1 overflow-auto border-t border-[var(--border-subtle)] bg-[var(--bg-input)] py-2 font-mono text-[12px] leading-relaxed">
+                      <div className="min-h-0 flex-1 overflow-auto border-t border-[var(--border-subtle)] bg-[var(--bg-input)] py-2 font-mono text-[12px] leading-relaxed shadow-[inset_0_0_0_1px_var(--accent-teal)]">
                         {diff.map((line, idx) => (
                           <div key={idx} className={`flex gap-2 px-4 ${DIFF_STYLES[line.type].className}`}>
                             <span className="w-3 shrink-0 select-none" aria-hidden>{DIFF_STYLES[line.type].mark}</span>
@@ -332,19 +335,20 @@ export default function TuningConfigModal({
                         onChange={(e) => changeDraft(e.target.value)}
                         aria-label={`Value for ${selected}`}
                         spellCheck={false}
-                        className="min-h-0 flex-1 resize-none border-0 border-t border-[var(--border-subtle)] bg-[var(--bg-input)] px-4 py-2 font-mono text-[12px] leading-relaxed text-[var(--text-primary)] outline-none focus:bg-[var(--bg-input-focus)]"
+                        className={`min-h-0 flex-1 resize-none border-0 border-t border-[var(--border-subtle)] bg-[var(--bg-input)] px-4 py-2 font-mono text-[12px] leading-relaxed text-[var(--text-primary)] outline-none transition-shadow focus:bg-[var(--bg-input-focus)] ${
+                          isModified ? 'shadow-[inset_0_0_0_1px_var(--accent-teal)]' : ''
+                        }`}
                       />
                     )}
                   </div>
 
                   {/* Footer actions */}
                   <div className="flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] px-4 py-2.5">
-                    <div className="text-[11px] text-[var(--text-tertiary)]">
-                      {isModified
-                        ? 'Saved · used in your next comparison.'
-                        : 'Same as global, so not counted as a change.'}
+                    <div className="min-w-0 truncate text-[11px] text-[var(--text-tertiary)]">
+                      Saves as you type · test it with{' '}
+                      <span className="font-medium text-[var(--text-secondary)]">Compare</span> in the chat box
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
                       <button
                         type="button"
                         onClick={revert}

@@ -173,9 +173,6 @@
   background-color: var(--bg-app);
   color: var(--text-primary);
   grid-template-columns: var(--shell-left-col) minmax(0, 1fr) var(--shell-right-col);
-  /* The admin Tuning panel is fixed on the right; while it is open the chat makes room for
-   * it instead of sliding under it (TuningMode sets --tuning-panel-width on <html>). */
-  padding-right: var(--tuning-panel-width, 0px);
   /* This one animates layout, which no transform can stand in for: collapsing the rail
    * is a real reflow — the sidebar swaps labels for icons and the message column takes
    * the width back. Kept short and on the movement curve so the layout passes are few

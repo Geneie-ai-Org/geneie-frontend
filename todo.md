@@ -269,38 +269,40 @@ Backend follow-ups (newprod), most useful first:
 5. Nice to have: per-user defaults for genome, capture BED and sequencing type to
    pre-fill the FASTQ form.
 
-## DONE — Tuning mode: one place, opened from chat
+## DONE — Tuning mode: opened from the chat box
 
 Before: turning tuning on meant three hops (Settings switch → back to chat → floating pill →
-Edit config). The pill floated over the drawer and composer. "Run comparison" silently used
-the chat box text. In the editor, an empty value showed the baseline as placeholder text, so
-it looked filled; Apply and save-on-blur competed; it opened on an off-screen key; and every
-heading was the same uppercase grey.
+Edit config). The pill covered the drawer and composer, and "Run comparison" silently used
+the chat box text. The editor was confusing too: an empty value looked filled, Apply and
+save-on-blur competed, and every heading looked the same.
 
-Now (frontend only):
-- An admin-only **Tuning** button in the chat header opens a panel docked on the right. The
-  chat makes room for it instead of sliding under it (`--tuning-panel-width`). A badge counts
-  the active changes. The open/closed state is persisted.
-- Panel sections:
-  - Your changes: each with Edit / Revert, plus Edit config.
-  - Compare: its own question box, prefilled from the chat box, with Run comparison / Stop
-    and ⌘/Ctrl+Enter.
-  - Footer: Copy config, and Reset all (click twice to confirm).
-- Editor:
-  - Opens on the first listed key, or on the key you clicked Edit on.
-  - One editor prefilled with the global value (option A, 2026-10-17). It replaced the
-    global | yours columns and the "empty means global" state.
-  - Edits save as you type. Text identical to global, or cleared, is not counted as a change.
+Final shape (frontend only), after several rounds on 2026-10-17:
+- Entry point: an admin-only Tuning icon in the chat box, just left of the variant-sidebar
+  toggle. It turns teal with a change count while tuning is on, and clicking it opens the
+  tuning editor directly. It is not in the + menu, which stays for adding data.
+- Editor (a modal):
+  - Header: "Tuning · Admin only", then Copy config, Reset all (click twice) and Turn off.
+  - Key list: groups as bright headings with a count pill; keys indented in monospace;
+    teal dots on changed keys.
+  - One editor prefilled with the global value. It saves as you type, and text identical
+    to global counts as no change.
+  - Copy doesn't change while you edit. An edit shows as a dot by the key name, a teal
+    outline on the editor, and Revert to global / Show changes becoming clickable.
   - "Show changes" switches to a line diff against the global value.
-  - Footer buttons are Revert to global and Done.
-  - Clearer heading hierarchy, and Changed / Unchanged badges.
-- Compare columns are labelled "Global config" / "Your changes".
-- Settings → Tuning is now one row with an Open button that takes you to chat with the panel
-  open.
-- Removed repeated headings and labels: the panel's visible "Question" label, the editor's
-  "empty · uses global" counter, and the badge that repeated "Global config". In Settings,
-  the Sign out and Delete account rows no longer repeat their own button text, and the Tuning
-  row no longer says "tuning" three times.
+  - The search box only takes focus when the editor opens. A re-run effect used to pull
+    focus out of the editor on every keystroke.
+- Compare: a Compare button next to send appears while tuning is on and there's text in
+  the chat box. It turns into Stop while a comparison runs.
+- Result: one answer block at chat width with a Global config | Your changes switch. Each
+  side shows its status, and the shown side's time and word count appear next to the
+  switch. It opens on Your changes.
+- Override header: non-ASCII text (curly quotes, emoji) is sent as JSON \u escapes,
+  because browsers refused to send it and Compare did nothing. A clear error appears above
+  16 KB (load-balancer limit), and comparison failures now show a toast.
+- The scroll-to-bottom arrow moved above the composer dock's top-right corner, so it no
+  longer sits on the answer text.
+- Settings → Tuning → Open turns tuning on and opens the editor. The request survives the
+  /app → /app/<conversation> redirect.
 
 Not done: comparisons still send `conversationId: null`, so they never use the open chat's
 file. Passing the conversation would need a check that the compare endpoint doesn't save

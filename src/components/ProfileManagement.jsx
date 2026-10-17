@@ -213,7 +213,7 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations })
               <div className="flex items-center justify-between py-2">
                 <div className="flex items-center gap-2.5">
                   <FileText className="w-4 h-4" style={{ color: 'var(--text-disabled)' }} />
-                  <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Files</span>
+                  <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Files uploaded</span>
                 </div>
                 <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{filesUploaded}</span>
               </div>
@@ -230,10 +230,10 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations })
               <div className="flex items-center justify-between py-2 gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Mail className="w-4 h-4 shrink-0" style={{ color: 'var(--text-disabled)' }} />
-                  <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Email when a job finishes</span>
+                  <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Email me when a run is done</span>
                 </div>
                 <Switch
-                  label="Email notifications"
+                  label="Email me when a run is done"
                   checked={prefs ? prefs.email !== false : true}
                   disabled={!prefs || prefsSaving}
                   onChange={(v) => changePref('email', v)}
@@ -242,10 +242,10 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations })
               <div className="flex items-center justify-between py-2 gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Bell className="w-4 h-4 shrink-0" style={{ color: 'var(--text-disabled)' }} />
-                  <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>In-app alerts (bell)</span>
+                  <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Show alerts in Geneie</span>
                 </div>
                 <Switch
-                  label="In-app notifications"
+                  label="Show alerts in Geneie"
                   checked={prefs ? prefs.in_app !== false : true}
                   disabled={!prefs || prefsSaving}
                   onChange={(v) => changePref('in_app', v)}
@@ -287,7 +287,7 @@ const ProfileManagement = ({ isOpen, onClose, userTier, userId, conversations })
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
               >
                 <LogOut className="w-3.5 h-3.5" />
-                Sign Out
+                Sign out
               </button>
             </div>
           </>

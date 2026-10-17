@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Info } from 'lucide-react';
 import { PillToggle } from '@/components/ui/pill-toggle';
+import { BorderBeam } from '@/components/ui/border-beam';
 
 export const PIPELINE_RUN_MANUAL = 'manual';
 export const PIPELINE_RUN_AUTOMATIC = 'automatic';
@@ -117,10 +118,14 @@ export default function PipelineRunModeToggle({
   const isAutomatic = mode === PIPELINE_RUN_AUTOMATIC;
   return (
     <div
-      className={`p-3 rounded-lg ${className}`}
-      // Same surface in both modes: the selected pill already says which mode is on.
+      className={`relative p-3 rounded-lg ${className}`}
       style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)' }}
     >
+      {/* Automatic is early access and runs on its own: a beam travelling round the box
+        * marks it as live without changing the layout (Magic UI Border Beam). */}
+      {isAutomatic && (
+        <BorderBeam size={60} duration={4} colorFrom="var(--accent-teal)" colorTo="var(--info)" />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex items-center gap-1.5">
           <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>

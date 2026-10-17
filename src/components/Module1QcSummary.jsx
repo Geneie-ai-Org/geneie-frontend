@@ -245,7 +245,12 @@ export default function Module1QcSummary({ conversationId, enabled = true, surfa
     setState((p) => ({ status: 'loading', data: p.data, error: null }));
     fetchModule1QcSummary(conversationId)
       .then((data) => { if (!cancelled) setState({ status: 'done', data, error: null }); })
-      .catch((err) => { if (!cancelled) setState((p) => ({ status: 'error', data: p.data, error: err?.message || 'Could not load the QC summary.' })); });
+      .catch((err) => {
+        if (cancelled) return;
+        // An older backend has no /qc-summary route: that is "no summary here", not an error to retry.
+        if (err?.status === 404 || err?.status === 405) setState({ status: 'done', data: null, error: null });
+        else setState((p) => ({ status: 'error', data: p.data, error: err?.message || 'Could not load the QC summary.' }));
+      });
     return () => { cancelled = true; };
   }, [conversationId, enabled, attempt]);
 

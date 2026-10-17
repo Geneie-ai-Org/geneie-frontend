@@ -205,7 +205,11 @@ export default function TuningConfigModal({
                     </div>
                   ))}
                   {filtered.length === 0 ? (
-                    <div className="px-2 py-4 text-center text-[13px] text-muted-foreground">No keys match &ldquo;{query}&rdquo;.</div>
+                    <div className="px-2 py-4 text-center text-[13px] text-muted-foreground">
+                      {keys.length === 0
+                        ? 'No tunable config on this server yet. The global config has not been seeded.'
+                        : <>No keys match &ldquo;{query}&rdquo;.</>}
+                    </div>
                   ) : null}
                 </div>
               </div>

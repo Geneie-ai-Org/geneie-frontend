@@ -512,7 +512,7 @@ const ConversationSidebar = ({
             >
                 {renaming ? (
                     <div className="flex h-8 items-center gap-2 rounded-full border border-[hsl(var(--brand-300))] bg-[var(--bg-surface)] px-2.5 shadow-[0_0_0_3px_hsl(var(--brand-100)/0.7)] max-md:h-11">
-                        <Icon {...ICON} className="size-4 shrink-0 text-[var(--text-secondary)]" />
+                        <Icon {...ICON} className={cn('size-4 shrink-0 text-[var(--text-secondary)]', row.kind === 'chat' && 'opacity-60')} />
                         <input
                             autoFocus
                             value={renameValue}
@@ -552,7 +552,7 @@ const ConversationSidebar = ({
                                     />
                                 }
                             >
-                                <Icon {...ICON} className={cn('size-4 shrink-0', active ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]')} />
+                                <Icon {...ICON} className={cn('size-4 shrink-0', active ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]', row.kind === 'chat' && !active && 'opacity-60')} />
                                 {row.kind !== 'chat' && <span className="sr-only">{kindLabel}: </span>}
                                 <span data-label className="min-w-0 flex-1 truncate">{row.label}</span>
                                 {savedId === key ? (
@@ -624,8 +624,9 @@ const ConversationSidebar = ({
             >
 
                 {/* Chrome strip (same height as the thread header): collapse toggle only, no logo block */}
-                <div className={cn('flex h-11 shrink-0 items-center', expanded ? 'px-2' : 'justify-center', isMobile && 'h-14 justify-between pl-4')}>
+                <div className={cn('flex h-11 shrink-0 items-center', expanded ? 'justify-between px-2' : 'justify-center', isMobile && 'h-14 justify-between pl-4')}>
                     {isMobile && <span className="font-brand text-[15px] text-[var(--text-primary)]">Geneie</span>}
+                    {expanded && !isMobile && <span aria-hidden="true" className="order-last mr-2 font-brand text-[15px] text-[var(--text-primary)]">Geneie</span>}
                     <Tip
                         label={isMobile ? 'Close' : expanded ? 'Collapse sidebar' : 'Expand sidebar'}
                         render={
@@ -833,7 +834,7 @@ const ConversationSidebar = ({
                         </div>
                     ) : (
                         <div className="flex flex-col items-center gap-0.5 py-2">
-                            {showMeter && (
+                            {showMeter && used / chatMeter.limit >= 0.75 && (
                                 <Tip
                                     label={meterSummary}
                                     render={<div role="img" aria-label={meterSummary} className="mb-1 w-7 py-1.5" />}

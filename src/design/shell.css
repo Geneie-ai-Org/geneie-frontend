@@ -441,6 +441,13 @@ html[data-resizing] .chat-app-shell {
 /* Rail: light neutral panel. */
 .chat-shell-left { background-color: hsl(var(--sidebar)); }
 
+/* The list scrollbar stays out of sight until the pointer is over the rail (touch keeps its own overlay scrollbar). */
+@media (hover: hover) {
+  .chat-shell-left [data-slot='scroll-area-scrollbar'] { opacity: 0; transition: opacity 160ms ease; }
+  .chat-shell-left:hover [data-slot='scroll-area-scrollbar'],
+  .chat-shell-left:focus-within [data-slot='scroll-area-scrollbar'] { opacity: 1; }
+}
+
 /* Overlay motion, surfaces and item states (menus, selects, popovers, tooltips, dialogs, sheets) live in workbench.css, section "Overlays". */
 
 /* ======================================================================================================

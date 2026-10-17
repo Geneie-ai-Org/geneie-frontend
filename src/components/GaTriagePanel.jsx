@@ -7,6 +7,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { downloadGaTriageArtifact, fetchGaTriage } from '@/services/backendApi';
+import { locusFromVariantFields } from '@/lib/module1IgvLocus';
+import { requestModule1IgvOpen } from '@/lib/module1IgvBus';
 
 function shortText(val, max = 80) {
   const s = String(val || '').trim();
@@ -93,6 +95,7 @@ export default function GaTriagePanel({
   variantData = null,
   /** Changes when filter/enrichment eligibility updates — restarts peek after ACMG re-runs GA. */
   refreshKey = null,
+  canViewInIgv = false,
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -309,6 +312,13 @@ export default function GaTriagePanel({
                   const change = formatChange(row.variant);
                   const gaRec = humanGaLabel(row.label);
                   const conflict = row.ga_conflict || row.conflicts;
+                  const igvLocus = canViewInIgv
+                    ? locusFromVariantFields({
+                        coordKey: row.coord_key,
+                        variantId: row.variant_id,
+                        id: row.variant_id,
+                      })
+                    : null;
                   return (
                     <li
                       key={`${row.gene || 'g'}-${row.variant_id || row.variant || index}`}
@@ -338,6 +348,20 @@ export default function GaTriagePanel({
                             >
                               {change.primary}
                             </span>
+                            {canViewInIgv ? (
+                              <button
+                                type="button"
+                                disabled={!igvLocus}
+                                onClick={() => {
+                                  if (!igvLocus) return;
+                                  requestModule1IgvOpen({ conversationId, locus: igvLocus });
+                                }}
+                                title={igvLocus ? 'Open alignment at this variant' : 'No genomic coordinates for IGV'}
+                                className="text-2xs font-medium text-[var(--accent-teal)] hover:underline disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed"
+                              >
+                                View in IGV
+                              </button>
+                            ) : null}
                           </div>
                           <div className="flex flex-wrap gap-1.5">
                             <MetaChip

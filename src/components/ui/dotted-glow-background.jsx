@@ -1,15 +1,3 @@
-/**
- * Dotted glow background — a canvas grid of dots that each pulse at their own pace, the
- * brightest ones glowing.
- *
- * Ported from Aceternity UI's DottedGlowBackground
- * (https://ui.aceternity.com/components/dotted-glow-background). Same drawing loop and props.
- * Changes: JSX; colors are given as CSS custom properties and resolved through a probe
- * element (the app's tokens can be `hsl(var(--primary))`, which a canvas can't parse);
- * under reduced motion it draws one still frame instead of animating.
- * Place it first inside a `position: relative` container and give the content after it
- * `position: relative` so it paints above the canvas.
- */
 import { useEffect, useRef, useState } from 'react';
 import { useReducedMotion } from 'motion/react';
 

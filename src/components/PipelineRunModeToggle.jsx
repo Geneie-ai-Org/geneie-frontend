@@ -49,10 +49,12 @@ export function applyPipelineRunModeChange(prev = {}, mode) {
   return { ...next, ...clearPhenotypeMetadataFields(prev) };
 }
 
+const MANUAL_INFO = 'Manual: you start each step yourself — annotation, filters and phenotype prioritization.';
+
 const AUTOMATIC_INFO =
   'Early access. Automatic advances annotation and phenotype prioritization when ready, and pre-selects strong disease matches (score ≥ 0.90) plus high-confidence findings. Review before clinical use.';
 
-function AutomaticInfoButton() {
+function ModeInfoButton({ automatic }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
 
@@ -78,7 +80,7 @@ function AutomaticInfoButton() {
         type="button"
         className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors hover:text-[var(--text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
         style={{ color: open ? 'var(--text-secondary)' : 'var(--text-tertiary)' }}
-        aria-label="About Automatic mode"
+        aria-label={automatic ? 'About Automatic mode' : 'About Manual mode'}
         aria-expanded={open}
         onClick={(e) => {
           e.preventDefault();
@@ -98,7 +100,7 @@ function AutomaticInfoButton() {
             borderColor: 'var(--border-default)',
           }}
         >
-          {AUTOMATIC_INFO}
+          {automatic ? AUTOMATIC_INFO : MANUAL_INFO}
         </div>
       ) : null}
     </span>
@@ -115,7 +117,7 @@ export default function PipelineRunModeToggle({
   const isAutomatic = mode === PIPELINE_RUN_AUTOMATIC;
   return (
     <div
-      className={`p-3 rounded-lg space-y-1.5 ${className}`}
+      className={`p-3 rounded-lg ${className}`}
       // Same surface in both modes: the selected pill already says which mode is on.
       style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)' }}
     >
@@ -124,7 +126,7 @@ export default function PipelineRunModeToggle({
           <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
             Analysis mode
           </p>
-          {isAutomatic && <AutomaticInfoButton />}
+          <ModeInfoButton automatic={isAutomatic} />
         </div>
         <PillToggle
           value={mode}
@@ -138,9 +140,6 @@ export default function PipelineRunModeToggle({
           ]}
         />
       </div>
-      <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-        {isAutomatic ? 'Runs the full analysis for you.' : 'You control each step.'}
-      </p>
     </div>
   );
 }

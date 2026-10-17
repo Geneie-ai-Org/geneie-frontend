@@ -79,7 +79,7 @@ export default function SettingsPage() {
       <div className="flex-1 flex flex-col md:flex-row min-h-0">
         <nav
           aria-label="Settings sections"
-          className="shrink-0 md:w-56 md:border-r md:py-3 md:px-2 border-b md:border-b-0 overflow-x-auto"
+          className="shrink-0 md:w-[var(--sidebar-left-width)] md:border-r md:py-3 md:px-2 border-b md:border-b-0 overflow-x-auto"
           style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-sidebar)' }}
         >
           <ul className="flex md:flex-col gap-0.5 px-2 py-2 md:p-0 min-w-max md:min-w-0">

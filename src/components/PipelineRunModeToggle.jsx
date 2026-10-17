@@ -133,8 +133,8 @@ export default function PipelineRunModeToggle({
               WebkitMaskImage: 'linear-gradient(to left, #000 0%, rgba(0,0,0,0.6) 45%, transparent 85%)',
               maskImage: 'linear-gradient(to left, #000 0%, rgba(0,0,0,0.6) 45%, transparent 85%)',
             }}
-            gap={10}
-            radius={1}
+            gap={12}
+            radius={1.6}
             color="var(--accent-teal)"
             glowColor="var(--info)"
             opacity={0.55}

@@ -42,6 +42,7 @@ import Module1ComputeChoice, {
 } from '@/components/Module1ComputeChoice';
 import PipelineRunModeToggle, {
   PIPELINE_RUN_MANUAL,
+  defaultRunModeFields,
   normalizePipelineRunMode,
   applyPipelineRunModeChange,
 } from '@/components/PipelineRunModeToggle';
@@ -312,7 +313,7 @@ const Module1UploadForm = ({
   const [isValidatingBed, setIsValidatingBed] = useState(false);
   const [sourceMode, setSourceMode] = useState('file'); // 'file' | 'url'
   const [urlState, setUrlState] = useState(EMPTY_URL_STATE);
-  const [sampleMetadata, setSampleMetadata] = useState(EMPTY_SAMPLE_METADATA);
+  const [sampleMetadata, setSampleMetadata] = useState(() => ({ ...EMPTY_SAMPLE_METADATA, ...defaultRunModeFields() }));
   const [validationAttempted, setValidationAttempted] = useState(false);
   /** Germline wizard: sample (+ files) → germline fields → phenotype. Non-Germline stays one page. */
   const [metadataStep, setMetadataStep] = useState('sample'); // 'sample' | 'analysis' | 'phenotype'
@@ -334,7 +335,7 @@ const Module1UploadForm = ({
     setCustomBedPrecheck(null);
     setSourceMode('file');
     setUrlState(EMPTY_URL_STATE);
-    setSampleMetadata(EMPTY_SAMPLE_METADATA);
+    setSampleMetadata({ ...EMPTY_SAMPLE_METADATA, ...defaultRunModeFields() });
     setValidationAttempted(false);
     setMetadataStep('sample');
     setComputeChoice(null);

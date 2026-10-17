@@ -30,8 +30,8 @@ import { apiUrl } from '@/config/api';
 export const COLUMNS = ['baseline', 'candidate'];
 
 export const COLUMN_LABELS = {
-  baseline: 'Baseline (global config)',
-  candidate: 'Your config (session overrides)',
+  baseline: 'Global config',
+  candidate: 'Your changes',
 };
 
 /** The tunable namespaces the backend allow-lists. Anything else is dropped server-side anyway. */
@@ -44,13 +44,25 @@ export function isTunableKey(key) {
   return TUNABLE_PREFIXES.some((p) => key.startsWith(p));
 }
 
+/**
+ * Header values must be ISO-8859-1, so a prompt with curly quotes or an emoji made fetch() throw
+ * before the request left the browser. Escape every non-ASCII character as a JSON \uXXXX escape:
+ * the header is plain ASCII and the backend's json.loads decodes it back to the same text.
+ */
+function asciiJson(value) {
+  return JSON.stringify(value).replace(/[\u007f-\uffff]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
+/** Load balancers reject a single header much over 16 KB, well below the backend's own 64 KB cap. */
+export const MAX_OVERRIDE_HEADER_BYTES = 16 * 1024;
+
 /** Build the X-Config-Overrides header value, or null when there is nothing to send. */
 export function buildOverridesHeader(overrides) {
   const clean = {};
   for (const [k, v] of Object.entries(overrides || {})) {
     if (isTunableKey(k) && v !== undefined && v !== null && v !== '') clean[k] = v;
   }
-  return Object.keys(clean).length ? JSON.stringify(clean) : null;
+  return Object.keys(clean).length ? asciiJson(clean) : null;
 }
 
 /**
@@ -64,6 +76,11 @@ export async function streamCompare({ path, body, overrides, authHeaders = {}, d
   const headers = { 'Content-Type': 'application/json', ...authHeaders };
   if (deviceId) headers['X-Device-Id'] = deviceId;
   const overrideHeader = buildOverridesHeader(overrides);
+  if (overrideHeader && overrideHeader.length > MAX_OVERRIDE_HEADER_BYTES) {
+    throw new Error(
+      `Your changes are too large to send (${Math.round(overrideHeader.length / 1024)} KB, limit 16 KB). Revert some keys and try again.`,
+    );
+  }
   if (overrideHeader) headers['X-Config-Overrides'] = overrideHeader;
 
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
@@ -105,8 +122,9 @@ export async function streamCompare({ path, body, overrides, authHeaders = {}, d
  * `allFinished()` on the terminal untagged done.
  */
 export function createColumnState() {
-  const state = { baseline: { text: '', meta: null, sources: null, error: null, done: false },
-                  candidate: { text: '', meta: null, sources: null, error: null, done: false } };
+  const startedAt = Date.now(); // both columns start together; finishedAt is per column
+  const state = { baseline: { text: '', meta: null, sources: null, error: null, done: false, startedAt, finishedAt: null },
+                  candidate: { text: '', meta: null, sources: null, error: null, done: false, startedAt, finishedAt: null } };
   return {
     state,
     apply(evt) {
@@ -116,8 +134,8 @@ export function createColumnState() {
       if (evt.type === 'delta') c.text += evt.text || '';
       else if (evt.type === 'sources') c.sources = evt.sources;
       else if (evt.type === 'meta') c.meta = evt;
-      else if (evt.type === 'error') { c.error = evt.detail || evt; c.done = true; }
-      else if (evt.type === 'done') { c.done = true; if (evt.response) c.text = evt.response; }
+      else if (evt.type === 'error') { c.error = evt.detail || evt; c.done = true; c.finishedAt = Date.now(); }
+      else if (evt.type === 'done') { c.done = true; c.finishedAt = Date.now(); if (evt.response) c.text = evt.response; }
     },
     differ() {
       return state.baseline.text !== state.candidate.text;

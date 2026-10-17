@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, Plus, Trash2, ChevronLeft, ChevronRight, Settings, LogOut, Sun, Moon } from 'lucide-react';
+import { MessageSquare, Plus, Trash2, ChevronLeft, ChevronRight, Settings, LogOut, Sun, Moon, Shield } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import { performLogout } from '@/lib/logout';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -40,7 +40,8 @@ const ConversationSidebar = ({
     onToggle,
     userTier,
     userId,
-    onOpenProfile
+    onOpenProfile,
+    isAdmin = false
 }) => {
     const isMobile = useIsMobile();
     const navigate = useNavigate();
@@ -233,6 +234,11 @@ const ConversationSidebar = ({
                                         <DropdownMenuItem onClick={onOpenProfile}>
                                             <Settings /> Settings
                                         </DropdownMenuItem>
+                                        {isAdmin && (
+                                            <DropdownMenuItem onClick={() => navigate('/admin-haha')}>
+                                                <Shield /> Admin panel
+                                            </DropdownMenuItem>
+                                        )}
                                         <DropdownMenuSeparator />
                                         <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
                                             <LogOut /> Sign out
@@ -272,6 +278,11 @@ const ConversationSidebar = ({
                                     <DropdownMenuItem onClick={onOpenProfile}>
                                         <Settings /> Settings
                                     </DropdownMenuItem>
+                                    {isAdmin && (
+                                        <DropdownMenuItem onClick={() => navigate('/admin-haha')}>
+                                            <Shield /> Admin panel
+                                        </DropdownMenuItem>
+                                    )}
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
                                         <LogOut /> Sign out

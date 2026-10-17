@@ -22,6 +22,7 @@ const ChatPage = React.lazy(() => import('./pages/ChatPage'));
 const AdminPage = React.lazy(() => import('./pages/AdminPage'));
 const AdminInfraPage = React.lazy(() => import('./pages/AdminInfraPage'));
 const LegalDocPage = React.lazy(() => import('./pages/LegalDocPage'));
+const SettingsPage = React.lazy(() => import('./pages/SettingsPage'));
 const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage'));
 const LegalConsentGate = React.lazy(() => import('./components/LegalConsentGate'));
 
@@ -93,6 +94,17 @@ root.render(
               <ProtectedRoute>
                 <LegalConsentGate>
                   <ChatPage />
+                </LegalConsentGate>
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+          <Route
+            path="/settings/:section"
+            element={
+              <ProtectedRoute>
+                <LegalConsentGate>
+                  <SettingsPage />
                 </LegalConsentGate>
               </ProtectedRoute>
             }

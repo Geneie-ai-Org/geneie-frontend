@@ -85,8 +85,11 @@ export function getModule1IngestFailureMessage(job) {
   return curated || MODULE1_INGEST_FAILED_FALLBACK;
 }
 
+/** Running-status text: the backend's message unless it reads like infrastructure detail. */
 export function getModule1PhaseMessage(phase, backendMessage) {
-  return backendMessage || MODULE1_PHASE_MESSAGES[phase] || 'Processing…';
+  const raw = String(backendMessage || '').trim();
+  if (raw && !INFRA_DETAIL_RE.test(raw)) return raw;
+  return MODULE1_PHASE_MESSAGES[phase] || 'Processing…';
 }
 
 /** Pipeline + VCF ingest landed — don't leave the last node spinning forever. */

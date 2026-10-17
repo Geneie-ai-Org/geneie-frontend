@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import ExploratoryModeToggle from '../components/ExploratoryModeToggle';
 import TuningMode from '../components/TuningMode';
 import TuningCompareColumns from '../components/chat/TuningCompareColumns';
-import { useTuningCompare } from '@/hooks/useTuningCompare';
+import { useTuningCompare, hasTuningPanelRequest } from '@/hooks/useTuningCompare';
 
 import { useStickToBottom } from 'use-stick-to-bottom';
 import { Markdown } from '../components/chat/ChatMarkdown';
@@ -28,13 +28,11 @@ import SubscriptionPage from '../components/SubscriptionPage';
 import ConversationSidebar from '../components/ConversationSidebar';
 import DocumentUpload from '../components/DocumentUpload';
 import VariantFilterSidebar from '../components/VariantFilterSidebar';
-import ProfileManagement from '../components/ProfileManagement';
 import SubscriptionSuccess from '../components/SubscriptionSuccess';
 import SubscriptionCanceled from '../components/SubscriptionCanceled';
 import ColumnInterpretationResults from '../components/ColumnInterpretationResults';
 import PipelineDrawer from '../components/PipelineDrawer';
 import Module1UploadForm from '../components/Module1UploadForm';
-import Module1PipelineStepper from '../components/Module1PipelineStepper';
 import SessionLoadingScreen from '@/components/SessionLoadingScreen';
 import VariantUploadLoadingModal from '@/components/VariantUploadLoadingModal';
 import ThinkingIndicator from '@/components/chat/ThinkingIndicator';
@@ -47,7 +45,6 @@ import { conversationPath, isValidConversationId } from '@/lib/conversationRoute
 import { getDeviceId } from '@/lib/deviceId';
 import { useVariantPipeline } from '@/hooks/useVariantPipeline';
 import { useModule1Pipeline } from '@/hooks/useModule1Pipeline';
-import { module1FinishedSuccessfully } from '@/lib/module1PipelinePhases';
 import { useModule1Capacity } from '@/hooks/useModule1Capacity';
 import { useAutomaticPipelineConductor } from '@/hooks/useAutomaticPipelineConductor';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -76,7 +73,7 @@ const ChatPage = () => {
 
   // Conversation state
   const [conversations, setConversations] = useState([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => !isMobile);
   const [clinicalReportOpen, setClinicalReportOpen] = useState(false);
   const autoOpenedReportForConvRef = useRef(null);
   const [currentDocument, setCurrentDocument] = useState(null);
@@ -101,7 +98,6 @@ const ChatPage = () => {
     }
   }, [currentDocument, isVariantSidebarOpen]);
 
-  const [showProfileModal, setShowProfileModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false); // Center modal for variant file upload on landing
   const [metadataFormOpen, setMetadataFormOpen] = useState(false);
   const [activeFileTypeTab, setActiveFileTypeTab] = useState('tabular'); // Track active tab for modal color
@@ -410,6 +406,9 @@ const ChatPage = () => {
   // panel; the ANSWER renders inline in the thread as two markdown columns (TuningCompareColumns).
   // Gates on /api/admin/whoami internally, so it is a no-op render for non-admins.
   const tuning = useTuningCompare({ question: input });
+  // Tuning on/off is `tuning.active` (Compare button in the chat box, comparison columns); the
+  // Tuning window opens and closes on its own. Settings → Tuning → Open asks for it via storage.
+  const [tuningPanelOpen, setTuningPanelOpen] = useState(hasTuningPanelRequest);
 
   const syncAfterColumnInterpretation = useCallback(
     async (conversationId, columnInterpretation) => {
@@ -1238,32 +1237,16 @@ const ChatPage = () => {
     [runAnnovarForCurrentConversation]
   );
 
-  // A FASTQ run reads as the first phase ("Reads → VCF") of the same pipeline card as its VCF —
-  // main's phase-pill drawer — once the run has finished and the VCF is in this conversation.
-  // Until then (queued, running, stopping, cancelled, failed, importing) newprod's stepper owns
-  // the job: only it carries the GPU/CPU chip, queue position and Leave queue / Stop run /
-  // Switch to CPU.
+  // A FASTQ run is the first phase ("Reads → VCF") of the same pipeline drawer as its VCF, from
+  // the moment it is queued: the drawer carries the GPU/CPU chip, queue position and the Leave
+  // queue / Stop run / Switch to CPU links on its status line.
   const showModule1Phase = Boolean(
-    showAnalysisPipeline &&
-      module1.module1Job &&
-      !module1.module1JobActive &&
-      module1.module1ArtifactsVisible &&
-      module1FinishedSuccessfully(module1.module1Job)
+    module1.module1Job &&
+      (module1.module1JobActive ||
+        module1.module1ArtifactsVisible ||
+        module1.module1CancelledVisible ||
+        module1.module1StoppingVisible)
   );
-  const module1PipelineBlock =
-    !showModule1Phase &&
-    (module1.module1JobActive ||
-      module1.module1ArtifactsVisible ||
-      module1.module1CancelledVisible ||
-      module1.module1StoppingVisible) ? (
-      <Module1PipelineStepper
-        job={module1.module1Job}
-        onStartOver={module1.openModule1Form}
-        onCancel={module1.cancelModule1Run}
-        onSwitchCompute={module1.switchModule1Compute}
-        cpuEstimateMin={module1Capacity.status === 'ok' ? module1Capacity.capacity?.est_cpu_total_min ?? null : null}
-      />
-    ) : null;
 
 
   // --- MAIN RENDER GATING LOGIC ---
@@ -1456,10 +1439,13 @@ const ChatPage = () => {
         })
       : null;
 
-  const pipelineDrawer = showAnalysisPipeline ? (
+  const pipelineDrawer = showAnalysisPipeline || showModule1Phase ? (
     <PipelineDrawer
       module1Job={showModule1Phase ? module1.module1Job : null}
       onModule1StartOver={module1.openModule1Form}
+      onModule1Cancel={module1.cancelModule1Run}
+      onModule1SwitchCompute={module1.switchModule1Compute}
+      module1CpuEstimateMin={module1Capacity.status === 'ok' ? module1Capacity.capacity?.est_cpu_total_min ?? null : null}
       fileName={currentDocument?.name ?? currentDocument?.file_name}
       conversationId={activeConversationId}
       expanded={pipelineExpanded}
@@ -1531,12 +1517,22 @@ const ChatPage = () => {
     isVariantSidebarOpen,
     onToggleVariantSidebar: () => setIsVariantSidebarOpen(!isVariantSidebarOpen),
     hasDocument: !!currentDocument,
-    // Module 1's stepper shares the drawer slot with the variant pipeline; only one of
-    // the two is ever non-null for a given conversation.
+    tuning: tuning.isAdmin
+      ? {
+          on: tuning.active,
+          changeCount: tuning.dirtyKeys.length,
+          running: tuning.running,
+          onOpen: () => {
+            tuning.setActive(true);
+            setTuningPanelOpen(true);
+          },
+          onCompare: (q) => tuning.run(q),
+          onStopCompare: () => tuning.abort(),
+        }
+      : null,
     pipelineDrawer: (
       <>
         {automaticPipelineBanner}
-        {module1PipelineBlock}
         {pipelineDrawer}
       </>
     ),
@@ -1569,7 +1565,8 @@ const ChatPage = () => {
             onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
             userTier={userTier}
             userId={userId}
-            onOpenProfile={() => setShowProfileModal(true)}
+            onOpenProfile={() => navigate('/settings/general')}
+            isAdmin={tuning.isAdmin}
           />
         )}
       </aside>
@@ -1875,32 +1872,32 @@ const ChatPage = () => {
                     )}
                   </div>
                 </div>
-                {/* The scroll port now runs under the dock, so this has to clear it. */}
-                <div
-                  className="sticky flex justify-center pointer-events-none"
-                  style={{ zIndex: 10, bottom: 'calc(var(--composer-dock-height, 0px) - 6rem)' }}
-                >
+              </div>
+
+              {/* Bottom input — conversation mode. Absolutely placed so it overlaps the
+                  scroll region; nothing rectangular clips the messages any more. */}
+              <div ref={composerDockRef} className="chat-column-inner chat-composer-dock pb-3 pt-0.5">
+                {/* Scroll-to-bottom sits just above the dock's top-right corner, so it never lands on
+                  * the answer text however tall the dock gets (the pipeline drawer grows it). The dock
+                  * is click-through; the button turns pointer events back on for itself. */}
+                <div className="absolute right-3 -top-12 z-10">
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
                     onClick={() => chatScrollToBottom()}
                     aria-label="Scroll to bottom"
-                    className={`h-10 w-10 rounded-full transition-all duration-150 ease-out pointer-events-auto shadow-lg ${
+                    tabIndex={chatIsAtBottom ? -1 : 0}
+                    className={`h-9 w-9 rounded-full transition-all duration-150 ease-out shadow-lg ${
                       !chatIsAtBottom
-                        ? 'translate-y-0 scale-100 opacity-100'
-                        : 'pointer-events-none translate-y-4 scale-95 opacity-0'
+                        ? 'pointer-events-auto translate-y-0 scale-100 opacity-100'
+                        : 'pointer-events-none translate-y-2 scale-95 opacity-0'
                     }`}
                     style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
                   >
                     <ChevronDown className="size-5" />
                   </Button>
                 </div>
-              </div>
-
-              {/* Bottom input — conversation mode. Absolutely placed so it overlaps the
-                  scroll region; nothing rectangular clips the messages any more. */}
-              <div ref={composerDockRef} className="chat-column-inner chat-composer-dock pb-3 pt-0.5">
                 {/* The only guest usage counter in a conversation: next to where the next message
                   * is typed. On the last free message it gets bolder and the CTA changes, instead of
                   * a banner up top. */}
@@ -2149,17 +2146,6 @@ const ChatPage = () => {
         />
       )}
 
-      {/* Profile Management Modal */}
-      {userTier !== 'guest' && (
-        <ProfileManagement
-          isOpen={showProfileModal}
-          onClose={() => setShowProfileModal(false)}
-          userTier={userTier}
-          userId={userId}
-          conversations={conversations}
-        />
-      )}
-
       {/* Subscription Success Modal */}
       {showSubscriptionSuccess && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
@@ -2327,7 +2313,15 @@ const ChatPage = () => {
           and while it is off it changes nothing: no header, no compare endpoint, no second
           column. The CONTROLS float here; the side-by-side ANSWER renders inline in the thread
           above (see TuningCompareColumns). The normal single-column chat path is untouched. */}
-      <TuningMode tuning={tuning} />
+      <TuningMode
+        tuning={tuning}
+        open={tuning.active && tuningPanelOpen}
+        onClose={() => setTuningPanelOpen(false)}
+        onTurnOff={() => {
+          tuning.setActive(false);
+          setTuningPanelOpen(false);
+        }}
+      />
     </div>
   );
 };

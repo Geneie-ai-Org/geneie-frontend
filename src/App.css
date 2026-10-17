@@ -33,10 +33,6 @@
   --accent-teal-soft: hsl(var(--primary) / 0.12);
   --accent-teal-hover: color-mix(in srgb, hsl(var(--primary)) 85%, #000);
   --accent-teal-contrast: #FFFFFF;
-  /* Early access — primary blue → stronger teal so the thin border reads as a gradient. */
-  --early-access-from: hsl(var(--primary));
-  --early-access-to: hsl(174 52% 34%);
-  --early-access-gradient: linear-gradient(135deg, var(--early-access-from), var(--early-access-to));
   --code-inline: #111827;
   --code-inline-bg: #F3F4F6;
 
@@ -126,10 +122,6 @@
   --accent-teal-soft: rgba(77,182,172,0.10);
   --accent-teal-hover: #80CBC4;
   --accent-teal-contrast: #0F0F0F;
-  /* Early access — teal → info blue (existing dark tokens). */
-  --early-access-from: var(--accent-teal);
-  --early-access-to: var(--info);
-  --early-access-gradient: linear-gradient(135deg, var(--early-access-from), var(--early-access-to));
 
   --code-inline: #8AB4F8;
   --code-inline-bg: var(--bg-app);
@@ -955,4 +947,38 @@ textarea:-webkit-autofill {
   background-color: var(--warning-soft);
   border-color: var(--warning);
   color: var(--warning);
+}
+
+/* Aceternity GlowingEffect (src/components/ui/glowing-effect.jsx): the border ring, lit only in
+ * a conic slice that points at the pointer. Colors are the app's teal and info blue. */
+.glowing-effect-glow::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--glowingeffect-border-width));
+  border-radius: inherit;
+  border: var(--glowingeffect-border-width) solid transparent;
+  background:
+    radial-gradient(circle, var(--accent-teal) 10%, transparent 20%),
+    radial-gradient(circle at 40% 40%, var(--info) 5%, transparent 15%),
+    radial-gradient(circle at 60% 60%, var(--accent-teal) 10%, transparent 20%),
+    radial-gradient(circle at 40% 60%, var(--info) 10%, transparent 20%),
+    repeating-conic-gradient(
+      from 236.84deg at 50% 50%,
+      var(--accent-teal) 0%,
+      var(--info) calc(25% / var(--repeating-conic-gradient-times)),
+      var(--accent-teal) calc(50% / var(--repeating-conic-gradient-times)),
+      var(--info) calc(75% / var(--repeating-conic-gradient-times)),
+      var(--accent-teal) calc(100% / var(--repeating-conic-gradient-times))
+    );
+  background-attachment: fixed;
+  opacity: var(--active);
+  transition: opacity 300ms;
+  -webkit-mask-clip: padding-box, border-box;
+  mask-clip: padding-box, border-box;
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  -webkit-mask-image: linear-gradient(#0000, #0000),
+    conic-gradient(from calc((var(--start) - var(--spread)) * 1deg), #00000000 0deg, #fff, #00000000 calc(var(--spread) * 2deg));
+  mask-image: linear-gradient(#0000, #0000),
+    conic-gradient(from calc((var(--start) - var(--spread)) * 1deg), #00000000 0deg, #fff, #00000000 calc(var(--spread) * 2deg));
 }

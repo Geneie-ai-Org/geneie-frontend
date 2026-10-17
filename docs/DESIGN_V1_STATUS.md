@@ -1,6 +1,6 @@
 # Design v1: status (local, `redesign/fe`, nothing pushed)
 
-Spec: `docs/DESIGN_V1.md`. Agent brief used for the build: `docs/AGENT_BRIEF.md`.
+Spec: `docs/DESIGN_V1.md`.
 
 ## What v1 is
 - **Tokens and theme:** `src/design/tokens.css` (light default, dark peer, one teal accent, status colours kept

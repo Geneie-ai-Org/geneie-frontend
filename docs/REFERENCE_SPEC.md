@@ -1,7 +1,7 @@
 # Reference spec: agent-workbench look (measured from real product frames)
 
 Reference frames (outside the repo, view them with the image Read tool before you design):
-`/Users/ausaf/Desktop/geneie_repos/_wt/redesign-stack/refs/`
+`refs/` (local reference frames, not in the repo)
 - `codex-proactive-teammate-v2-t12.png`  thread + composer, full width
 - `codex-data-analysis-fraud-spike-t12.png`  window chrome, thread left, tabbed pane right (Summary | Browser), cards
 - `codex-draft-prds-from-slack-linear-docs-t4.png`, `...-t12.png`, `codex-data-analysis-fraud-spike-t4.png`

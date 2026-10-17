@@ -198,6 +198,9 @@ export default function TuningMode({ tuning, onClose }) {
       reloadConfig={reloadConfig}
       overrides={overrides}
       setOverride={setOverride}
+      onRun={run}
+      canRun={canRun}
+      running={running}
     />
    </>
   );

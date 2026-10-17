@@ -49,17 +49,6 @@ export function applyPipelineRunModeChange(prev = {}, mode) {
   return { ...next, ...clearPhenotypeMetadataFields(prev) };
 }
 
-/** Gradient border that respects border-radius (padding-box + border-box). */
-function earlyAccessSurface(paddingBg = 'var(--bg-input)') {
-  const padLayer = /gradient|color-mix/i.test(paddingBg)
-    ? paddingBg
-    : `linear-gradient(${paddingBg}, ${paddingBg})`;
-  return {
-    border: '1.5px solid transparent',
-    background: `${padLayer} padding-box, var(--early-access-gradient) border-box`,
-  };
-}
-
 const AUTOMATIC_INFO =
   'Early access. Automatic advances annotation and phenotype prioritization when ready, and pre-selects strong disease matches (score ≥ 0.90) plus high-confidence findings. Review before clinical use.';
 
@@ -87,14 +76,8 @@ function AutomaticInfoButton() {
     <span className="relative inline-flex" ref={wrapRef}>
       <button
         type="button"
-        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
-        style={{
-          color: 'var(--early-access-from)',
-          borderColor: 'color-mix(in srgb, var(--early-access-from) 45%, transparent)',
-          background: open
-            ? 'color-mix(in srgb, var(--early-access-from) 18%, transparent)'
-            : 'color-mix(in srgb, var(--early-access-from) 10%, transparent)',
-        }}
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors hover:text-[var(--text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+        style={{ color: open ? 'var(--text-secondary)' : 'var(--text-tertiary)' }}
         aria-label="About Automatic mode"
         aria-expanded={open}
         onClick={(e) => {
@@ -103,7 +86,7 @@ function AutomaticInfoButton() {
           setOpen((v) => !v);
         }}
       >
-        <Info className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+        <Info className="h-3.5 w-3.5" aria-hidden />
       </button>
       {open ? (
         <div
@@ -133,14 +116,8 @@ export default function PipelineRunModeToggle({
   return (
     <div
       className={`p-3 rounded-lg space-y-1.5 ${className}`}
-      style={
-        isAutomatic
-          ? earlyAccessSurface('var(--bg-input)')
-          : {
-              border: '1px solid var(--border-default)',
-              background: 'var(--bg-input)',
-            }
-      }
+      // Same surface in both modes: the selected pill already says which mode is on.
+      style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)' }}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex items-center gap-1.5">

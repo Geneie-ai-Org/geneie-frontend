@@ -30,6 +30,8 @@ function test(name, fn) {
   }
 }
 
+let _loadCounter = 0;
+
 async function loadInitialComponents(allowImages = false) {
   const srcPath = path.join(import.meta.dirname, 'ChatMarkdown.jsx');
   let src = readFileSync(srcPath, 'utf8');
@@ -48,11 +50,16 @@ async function loadInitialComponents(allowImages = false) {
   );
   const result = await transformWithOxc(src, 'ChatMarkdown.jsx', { jsx: { runtime: 'automatic' } });
   // Written next to the real source (not /tmp) so node_modules resolution (react, react-markdown)
-  // works the normal way; deleted immediately after import.
-  const outFile = path.join(import.meta.dirname, `.ChatMarkdown.transformed.${process.pid}.mjs`);
+  // works the normal way; deleted immediately after import. Each call gets its own filename AND a
+  // monotonic cache-busting query param -- Date.now() alone can return the same millisecond on two
+  // back-to-back calls, which would make the allowImages=true load resolve to the cached
+  // allowImages=false module instead (the exact bug this comment is here to prevent a regression
+  // of -- caught in analytics.test.mjs's identical pattern).
+  _loadCounter += 1;
+  const outFile = path.join(import.meta.dirname, `.ChatMarkdown.transformed.${process.pid}.${_loadCounter}.mjs`);
   writeFileSync(outFile, result.code);
   try {
-    const mod = await import(`file://${outFile}?t=${Date.now()}`);
+    const mod = await import(`file://${outFile}?v=${_loadCounter}`);
     return mod.INITIAL_COMPONENTS;
   } finally {
     unlinkSync(outFile);

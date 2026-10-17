@@ -22,6 +22,63 @@ function enqueue(method, args) {
   }
 }
 
+// SECURITY (S-060, 17 Oct 2026 fix): with a PostHog key set, $current_url (and friends) used to
+// send the full URL -- including the password-reset oobCode query param and a conversation id in
+// the path (/app/<uuid>) -- to PostHog US. Build-time kill switch
+// VITE_SECURITY_POSTHOG_RAW_URLS (unset = scrubbed, the safe default).
+const POSTHOG_RAW_URLS_ALLOWED = import.meta.env.VITE_SECURITY_POSTHOG_RAW_URLS === 'true';
+const URL_PROPERTIES = ['$current_url', '$referrer', '$initial_current_url', '$pathname'];
+
+/** Strip query string + fragment, then generalise /app/<id> -> /app/:id. Pure function so it's
+ * directly testable without the PostHog SDK. */
+export function scrubUrlValue(raw) {
+  if (typeof raw !== 'string' || !raw) return raw;
+  let url;
+  try {
+    // Absolute or relative (only a path/query/hash) -- give it a dummy base if relative.
+    url = new URL(raw, 'https://scrub.invalid');
+  } catch {
+    return raw;
+  }
+  const path = url.pathname.replace(/\/app\/[^/]+/, '/app/:id');
+  return raw.startsWith('http') ? `${url.origin}${path}` : path;
+}
+
+/** True when this pageview/event is on the password-reset / email-action route -- the whole
+ * event is dropped, not just the URL scrubbed, since the oobCode query param is the one piece of
+ * data whose mere presence (even truncated or hashed) could matter. */
+export function isAuthActionEvent(properties) {
+  const candidates = [
+    properties?.$current_url, properties?.$pathname, properties?.current_url, properties?.pathname,
+  ].filter((v) => typeof v === 'string');
+  return candidates.some((v) => {
+    try {
+      return new URL(v, 'https://scrub.invalid').pathname.startsWith('/auth/action');
+    } catch {
+      return v.startsWith('/auth/action');
+    }
+  });
+}
+
+/** PostHog before_send hook: drops auth-action events entirely, scrubs URL-bearing properties on
+ * everything else. Exported standalone (not inlined into posthog.init) so it's unit-testable.
+ *
+ * The auth-action drop is UNCONDITIONAL -- not gated by VITE_SECURITY_POSTHOG_RAW_URLS. That kill
+ * switch exists for local URL-hygiene debugging (seeing real /app/<id> paths in a dev PostHog
+ * project), not for re-exposing a password-reset oobCode, which is a live secret, not just a path
+ * we'd rather generalise. */
+export function scrubPostHogEvent(event) {
+  if (!event || !event.properties) return event;
+  if (isAuthActionEvent(event.properties)) return null;
+  if (POSTHOG_RAW_URLS_ALLOWED) return event;
+  for (const key of URL_PROPERTIES) {
+    if (key in event.properties) {
+      event.properties[key] = scrubUrlValue(event.properties[key]);
+    }
+  }
+  return event;
+}
+
 export function initAnalytics() {
   if (started || !import.meta.env.PROD || !isPostHogConfigured()) return;
   started = true;
@@ -41,6 +98,16 @@ export function initAnalytics() {
       autocapture: false,
       disable_session_recording: true,
       enable_heatmaps: false,
+      // SECURITY (S-060, 17 Oct 2026 fix): these default to capturing on PostHog's own side
+      // (exceptions, dead clicks, web vitals, surveys, feature-flag requests) -- none of them
+      // were explicitly pinned off before, so a PostHog SDK/defaults-bundle update could turn any
+      // of them on silently.
+      capture_exceptions: false,
+      capture_dead_clicks: false,
+      capture_performance: false,
+      disable_surveys: true,
+      advanced_disable_flags: true,
+      before_send: scrubPostHogEvent,
     });
     posthog = loaded;
     for (const [method, args] of pending.splice(0)) {

@@ -130,11 +130,11 @@ export default function PipelineRunModeToggle({
           <DottedGlowBackground
             className="rounded-[inherit] overflow-hidden"
             style={{
-              WebkitMaskImage: 'linear-gradient(to left, #000 0%, rgba(0,0,0,0.6) 45%, transparent 85%)',
-              maskImage: 'linear-gradient(to left, #000 0%, rgba(0,0,0,0.6) 45%, transparent 85%)',
+              WebkitMaskImage: 'linear-gradient(to left, #000 0%, rgba(0,0,0,0.7) 55%, transparent 95%)',
+              maskImage: 'linear-gradient(to left, #000 0%, rgba(0,0,0,0.7) 55%, transparent 95%)',
             }}
-            gap={12}
-            radius={1.6}
+            gap={8}
+            radius={2}
             color="var(--accent-teal)"
             glowColor="var(--info)"
             opacity={0.55}

@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Info } from 'lucide-react';
 import { PillToggle } from '@/components/ui/pill-toggle';
-import { BorderBeam } from '@/components/ui/border-beam';
+import { GlowingEffect } from '@/components/ui/glowing-effect';
 
 export const PIPELINE_RUN_MANUAL = 'manual';
 export const PIPELINE_RUN_AUTOMATIC = 'automatic';
@@ -121,10 +121,9 @@ export default function PipelineRunModeToggle({
       className={`relative p-3 rounded-lg ${className}`}
       style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)' }}
     >
-      {/* Automatic is early access and runs on its own: a beam travelling round the box
-        * marks it as live without changing the layout (Magic UI Border Beam). */}
+      {/* Automatic: the border lights up toward the pointer (Aceternity Glowing Effect). */}
       {isAutomatic && (
-        <BorderBeam size={60} duration={4} colorFrom="var(--accent-teal)" colorTo="var(--info)" />
+        <GlowingEffect spread={40} glow disabled={false} proximity={64} inactiveZone={0.01} borderWidth={2} />
       )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex items-center gap-1.5">

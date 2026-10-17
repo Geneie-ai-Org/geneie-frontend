@@ -245,9 +245,11 @@ already exist on `bio-lab-project` `feat/newprod-baseline`:
   - Sign out.
   - Delete account behind a typed DELETE confirmation. It calls `DELETE /api/account`, then
     tries Firebase `deleteUser`; if that needs a recent sign-in, it signs out instead.
-- Admin (admins only): the Tuning mode switch, now persisted in
+- Tuning (admins only): the Tuning mode switch, now persisted in
   `geneie.tuning.active.v1`. When it's off the floating tuning pill doesn't render at all;
-  the pill's own switch still turns it off. Also links to the admin and infra pages.
+  the pill's own switch still turns it off. The admin panel, which changes plans for every
+  user, is not part of Settings, since Settings is per-user. It is an "Admin panel" item in
+  the sidebar avatar menu, shown to admins only.
 - About: version, Terms, Privacy.
 - The sidebar avatar menu's "Settings" now opens `/settings/general`. The old profile
   popover (`ProfileManagement.jsx`) is removed: its stats and notification switches moved

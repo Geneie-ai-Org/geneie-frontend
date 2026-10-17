@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Navigate, NavLink, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Bell, CreditCard, Info, Plug, Settings2, Shield, User } from 'lucide-react';
+import { ArrowLeft, Bell, CreditCard, Info, Plug, Settings2, SlidersHorizontal, User } from 'lucide-react';
 import { adminWhoAmI } from '@/services/backendApi';
 import {
   GeneralSection,
@@ -15,7 +15,7 @@ import {
   NotificationsSection,
   IntegrationsSection,
   AccountSection,
-  AdminSection,
+  TuningSection,
   AboutSection,
 } from '@/components/settings/SettingsSections';
 
@@ -25,7 +25,7 @@ const SECTIONS = [
   { id: 'notifications', label: 'Notifications', icon: Bell, Component: NotificationsSection },
   { id: 'integrations', label: 'Integrations', icon: Plug, Component: IntegrationsSection },
   { id: 'account', label: 'Account', icon: User, Component: AccountSection },
-  { id: 'admin', label: 'Admin', icon: Shield, Component: AdminSection, adminOnly: true },
+  { id: 'tuning', label: 'Tuning', icon: SlidersHorizontal, Component: TuningSection, adminOnly: true },
   { id: 'about', label: 'About', icon: Info, Component: AboutSection },
 ];
 
@@ -49,7 +49,7 @@ export default function SettingsPage() {
   const current = SECTIONS.find((s) => s.id === section);
 
   if (!current) return <Navigate to="/settings/general" replace />;
-  // Wait for the admin check before bouncing someone off /settings/admin.
+  // Wait for the admin check before bouncing someone off an admin-only section.
   if (current.adminOnly && adminChecked && !isAdmin) return <Navigate to="/settings/general" replace />;
 
   const { Component } = current;

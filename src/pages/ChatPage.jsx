@@ -1550,6 +1550,7 @@ const ChatPage = () => {
             userTier={userTier}
             userId={userId}
             onOpenProfile={() => navigate('/settings/general')}
+            isAdmin={tuning.isAdmin}
           />
         )}
       </aside>

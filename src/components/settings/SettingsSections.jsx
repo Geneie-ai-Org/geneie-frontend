@@ -481,12 +481,12 @@ export function AccountSection() {
   );
 }
 
-/* ── Admin (admins only) ─────────────────────────────────────────────────────── */
+/* ── Tuning (admins only) ────────────────────────────────────────────────────── */
 
-export function AdminSection() {
+export function TuningSection() {
   const [tuning, setTuning] = useState(readTuningActive);
   return (
-    <SettingsSection title="Admin" description="Only visible to admins.">
+    <SettingsSection title="Tuning" description="Only visible to admins.">
       <SettingsRow
         label="Tuning mode"
         description="Shows the tuning controls in chat: edit config overrides and compare answers side by side."
@@ -499,16 +499,6 @@ export function AdminSection() {
             writeTuningActive(v);
           }}
         />
-      </SettingsRow>
-      <SettingsRow label="Admin panel" description="Users, plans, beta seats and the waitlist.">
-        <Link to="/admin-haha" className="text-xs font-medium underline underline-offset-2" style={{ color: 'var(--text-secondary)' }}>
-          Open
-        </Link>
-      </SettingsRow>
-      <SettingsRow label="Infrastructure" description="Workers, queues and runtime config.">
-        <Link to="/admin-haha/infra" className="text-xs font-medium underline underline-offset-2" style={{ color: 'var(--text-secondary)' }}>
-          Open
-        </Link>
       </SettingsRow>
     </SettingsSection>
   );

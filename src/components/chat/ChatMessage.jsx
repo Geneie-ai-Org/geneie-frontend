@@ -369,7 +369,9 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, showRe
           * would land on an invisible button. Nothing to copy until the reply has text. */}
         {text && (
         <TooltipProvider>
-          <div className="flex items-center gap-0.5 mt-1.5">
+          {/* Icons match the reply text: same color, 16px against 14px type, and the row is pulled
+            * left so the first glyph lines up with the text edge. */}
+          <div className="flex items-center gap-1 mt-2 -ml-2">
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -378,10 +380,11 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, showRe
                     variant="ghost"
                     size="icon"
                     onClick={handleCopy}
-                    className="chat-chrome-btn-sm rounded-[0.375rem]"
+                    className="chat-chrome-btn-sm rounded-md"
+                    style={{ color: 'var(--text-primary)' }}
                     aria-label={copied ? 'Copied!' : 'Copy'}
                   >
-                    {copied ? <CheckCircle2 style={{ color: 'var(--success)' }} /> : <Copy />}
+                    {copied ? <CheckCircle2 className="size-4" style={{ color: 'var(--success)' }} /> : <Copy className="size-4" />}
                   </Button>
                 }
               />
@@ -397,10 +400,11 @@ const ChatMessage = React.memo(({ role, text, sources, durationMs = null, showRe
                       size="icon"
                       onClick={onRegenerate}
                       disabled={regenerateDisabled}
-                      className="chat-chrome-btn-sm rounded-[0.375rem] disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="chat-chrome-btn-sm rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ color: 'var(--text-primary)' }}
                       aria-label="Regenerate"
                     >
-                      <RotateCw />
+                      <RotateCw className="size-4" />
                     </Button>
                   }
                 />

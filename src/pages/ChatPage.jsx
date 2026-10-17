@@ -73,7 +73,8 @@ const ChatPage = () => {
 
   // Conversation state
   const [conversations, setConversations] = useState([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Open by default on desktop; on mobile it is an overlay, so it starts closed.
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => !isMobile);
   const [clinicalReportOpen, setClinicalReportOpen] = useState(false);
   const autoOpenedReportForConvRef = useRef(null);
   const [currentDocument, setCurrentDocument] = useState(null);

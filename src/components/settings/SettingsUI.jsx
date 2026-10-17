@@ -84,14 +84,18 @@ export function SettingsSwitch({ checked, disabled, onChange, label }) {
   );
 }
 
-/** Segmented control: one track, the chosen option raised on it (System | Light | Dark). */
+/**
+ * Segmented control: one track, the chosen option raised on it (System | Light | Dark).
+ * Same treatment as the chat's Standard / Explore switch — muted track, background-colored
+ * chip with a shadow — so the choice reads clearly in both themes.
+ */
 export function SettingsSegmented({ value, onChange, options, label }) {
   return (
     <div
       role="radiogroup"
       aria-label={label}
       className="inline-flex items-center gap-0.5 p-0.5 rounded-lg"
-      style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-default)' }}
+      style={{ backgroundColor: 'hsl(var(--muted))', border: '1px solid hsl(var(--border))' }}
     >
       {options.map((opt) => {
         const active = opt.value === value;
@@ -104,9 +108,9 @@ export function SettingsSegmented({ value, onChange, options, label }) {
             onClick={() => onChange(opt.value)}
             className="px-3 py-1 rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
             style={{
-              backgroundColor: active ? 'var(--bg-surface-raised)' : 'transparent',
-              color: active ? 'var(--text-primary)' : 'var(--text-tertiary)',
-              boxShadow: active ? 'var(--shadow-sm)' : 'none',
+              backgroundColor: active ? 'hsl(var(--background))' : 'transparent',
+              color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+              boxShadow: active ? '0 1px 2px rgba(0,0,0,0.15)' : 'none',
             }}
           >
             {opt.label}

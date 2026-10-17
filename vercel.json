@@ -2,5 +2,32 @@
   "outputDirectory": "build",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'sha256-BO+eXwThadh9qF+zj9vkgSfNStos+m8nAZ/lt0argxI=' 'sha256-blHXLyy+QViiXFGVfukBePgi6S3Yga6XtnFpwUhZid0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://geneie-newprod-variant-files.s3.ap-south-1.amazonaws.com; connect-src 'self' https://api-newprod.geneie.chat https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://geneie-newprod-variant-files.s3.ap-south-1.amazonaws.com https://us.i.posthog.com https://jbrowse.org https://ipapi.co; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(), payment=()"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
+        }
+      ]
+    }
   ]
 }

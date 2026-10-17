@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Info } from 'lucide-react';
 import { PillToggle } from '@/components/ui/pill-toggle';
 import { GlowingEffect } from '@/components/ui/glowing-effect';
+import { DottedGlowBackground } from '@/components/ui/dotted-glow-background';
 
 export const PIPELINE_RUN_MANUAL = 'manual';
 export const PIPELINE_RUN_AUTOMATIC = 'automatic';
@@ -121,11 +122,29 @@ export default function PipelineRunModeToggle({
       className={`relative p-3 rounded-lg ${className}`}
       style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)' }}
     >
-      {/* Automatic: the border lights up toward the pointer (Aceternity Glowing Effect). */}
+      {/* Automatic: teal dots shimmer behind the row (Aceternity Dotted Glow Background), fading
+        * out toward the title so it stays readable, and the border lights up toward the pointer
+        * (Aceternity Glowing Effect). Both use the app's teal / info tokens. */}
       {isAutomatic && (
-        <GlowingEffect spread={40} glow disabled={false} proximity={64} inactiveZone={0.01} borderWidth={2} />
+        <>
+          <DottedGlowBackground
+            className="rounded-[inherit] overflow-hidden"
+            style={{
+              WebkitMaskImage: 'linear-gradient(to left, #000 0%, rgba(0,0,0,0.6) 45%, transparent 85%)',
+              maskImage: 'linear-gradient(to left, #000 0%, rgba(0,0,0,0.6) 45%, transparent 85%)',
+            }}
+            gap={10}
+            radius={1}
+            color="var(--accent-teal)"
+            glowColor="var(--info)"
+            opacity={0.55}
+            speedMin={0.3}
+            speedMax={1.1}
+          />
+          <GlowingEffect spread={40} glow disabled={false} proximity={64} inactiveZone={0.01} borderWidth={2} />
+        </>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="relative flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex items-center gap-1.5">
           <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
             Analysis mode

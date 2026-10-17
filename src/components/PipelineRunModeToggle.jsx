@@ -137,7 +137,7 @@ export default function PipelineRunModeToggle({
             radius={2}
             color="var(--accent-teal)"
             glowColor="var(--info)"
-            opacity={0.55}
+            opacity={0.35}
             speedMin={0.3}
             speedMax={1.1}
           />
@@ -152,8 +152,10 @@ export default function PipelineRunModeToggle({
           <ModeInfoButton automatic={isAutomatic} />
         </div>
         <PillToggle
-          // Opaque pills so the dotted background doesn't show through them.
+          // Opaque pills so the dots don't show through, and a filled active pill so the
+          // chosen mode is the brightest thing in the box — the dots stay background.
           surface="var(--bg-input)"
+          solid
           value={mode}
           onChange={(next) => {
             if (disabled) return;

@@ -7,9 +7,11 @@
  * but it does not scale on press, since nothing is going to happen.
  *
  * Pills are see-through by default. Pass `surface` (a CSS color) when something busy sits
- * behind them: it becomes an opaque backing under the active tint.
+ * behind them: it becomes an opaque backing under the active tint. `solid` fills the active
+ * pill with the accent (contrast text) instead of a tint, for when it must read as the
+ * clear choice against a busy background.
  */
-export function PillToggle({ options, value, onChange, className = '', surface = null }) {
+export function PillToggle({ options, value, onChange, className = '', surface = null, solid = false }) {
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       {options.map((opt) => {
@@ -28,9 +30,11 @@ export function PillToggle({ options, value, onChange, className = '', surface =
               color: opt.disabled
                 ? 'var(--text-tertiary)'
                 : active
-                  ? 'var(--accent-teal)'
+                  ? solid ? 'var(--accent-teal-contrast)' : 'var(--accent-teal)'
                   : 'var(--text-secondary)',
-              background: surface
+              background: solid && active
+                ? 'var(--accent-teal)'
+                : surface
                 ? active
                   ? `linear-gradient(var(--accent-teal-soft), var(--accent-teal-soft)), ${surface}`
                   : surface

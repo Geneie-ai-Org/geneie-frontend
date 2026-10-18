@@ -133,6 +133,20 @@ test('script-src allows apis.google.com and www.gstatic.com for Firebase Google 
   assert.ok(scriptSrc.includes('https://www.gstatic.com'), 'script-src must include https://www.gstatic.com for the gapi loader');
 });
 
+test('frame-src and connect-src allow the Firebase auth iframe helper host', () => {
+  // signInWithPopup (Google AND Microsoft -- shared Firebase plumbing, not provider-specific)
+  // embeds a hidden cross-origin iframe at https://<authDomain>/__/auth/iframe to relay the
+  // popup's result back to the opener tab. With no frame-src/child-src set, that fell back to
+  // default-src 'self' and silently blocked the iframe -- every popup sign-in failed with
+  // "Sign-in cancelled", even after apis.google.com was added to script-src (that fix alone
+  // only covers the gapi script load, not this separate iframe embed).
+  const directives = cspDirectives();
+  const authDomainHost = 'https://scholarai-3690b.firebaseapp.com';
+  assert.ok(directives['frame-src'], 'missing frame-src directive');
+  assert.ok(directives['frame-src'].includes(authDomainHost), `frame-src must include ${authDomainHost}`);
+  assert.ok(directives['connect-src'].includes(authDomainHost), `connect-src must include ${authDomainHost}`);
+});
+
 test('the allow-listed script hashes actually match index.html\'s inline scripts today', () => {
   // A stale hash fails CLOSED -- CSP silently blocks the script with no visible error for most
   // users -- so this must be verified against the real file, not assumed from the hash existing.

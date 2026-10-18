@@ -120,6 +120,19 @@ test('script-src only allows self and specific hashes, never unsafe-inline', () 
   assert.ok(hashSources.length >= 2, 'expected at least 2 sha256 hash sources for the inline scripts in index.html');
 });
 
+test('script-src allows apis.google.com and www.gstatic.com for Firebase Google sign-in', () => {
+  // signInWithPopup(auth, new GoogleAuthProvider()) (AuthForm.jsx) loads the GSI client library
+  // from apis.google.com -- S-071's original script-src (self + two hashes only) blocked that load
+  // silently and signInWithPopup failed with the generic auth/internal-error, breaking every
+  // Google sign-in in prod. gstatic.com covers the gapi loader's secondary script some auth library
+  // versions pull. The popup window itself (accounts.google.com) is a separate browsing context
+  // governed by Google's own CSP, not ours, so it does not belong in this page's script-src.
+  const directives = cspDirectives();
+  const scriptSrc = directives['script-src'];
+  assert.ok(scriptSrc.includes('https://apis.google.com'), 'script-src must include https://apis.google.com for Firebase Google sign-in');
+  assert.ok(scriptSrc.includes('https://www.gstatic.com'), 'script-src must include https://www.gstatic.com for the gapi loader');
+});
+
 test('the allow-listed script hashes actually match index.html\'s inline scripts today', () => {
   // A stale hash fails CLOSED -- CSP silently blocks the script with no visible error for most
   // users -- so this must be verified against the real file, not assumed from the hash existing.

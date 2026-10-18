@@ -15,10 +15,15 @@ export default class ErrorBoundary extends React.Component {
     console.error('[ErrorBoundary] Uncaught render error:', error, errorInfo);
     // Match the app's convention: surface broken renders in analytics the way
     // NotFoundPage reports bad routes, so these stop being invisible.
+    //
+    // SECURITY (S-060, 17 Oct 2026 fix): used to send the error message text (which can embed a
+    // bad value from a rendered variant/patient field) and the raw pathname (which can be
+    // /app/<conversation-id>). Error class only -- it's enough to find and dedupe the crash in
+    // analytics; the full message and stack are already in the console log above for a dev to pull
+    // from the user's own report, not shipped off-box automatically.
     try {
       capture('render_error', {
-        message: String(error?.message || error).slice(0, 300),
-        path: typeof window !== 'undefined' ? window.location?.pathname : undefined,
+        error_class: error?.constructor?.name || error?.name || 'Error',
       });
     } catch {
       /* analytics must never mask the original error */

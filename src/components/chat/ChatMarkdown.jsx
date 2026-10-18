@@ -18,6 +18,17 @@ function extractLanguage(className) {
   return match ? match[1] : 'plaintext';
 }
 
+// SECURITY (S-021, 17 Oct 2026 fix): model answers render text we don't control (literature
+// chunks, file headers, INFO values, URL-imported files); react-markdown's default URL transform
+// allows https:, so an image URL in that text used to render a live <img> AND emit a
+// <link rel="preload" as="image"> hint that fetches the URL even if the <img> itself never paints.
+// Blocked entirely -- no CSP exists yet to rely on instead (S-071). Build-time kill switch
+// VITE_SECURITY_ALLOW_MARKDOWN_IMAGES (unset = blocked, matching the spec's convention of
+// defaulting to the fixed/safe behaviour). The key is omitted entirely rather than set to
+// `undefined` when images are allowed -- react-markdown throws if a components key is explicitly
+// undefined instead of simply absent.
+const MARKDOWN_IMAGES_ALLOWED = import.meta.env.VITE_SECURITY_ALLOW_MARKDOWN_IMAGES === 'true';
+
 const INITIAL_COMPONENTS = {
   code: function CodeComponent({ className, children, ...props }) {
     const isInline =
@@ -43,6 +54,7 @@ const INITIAL_COMPONENTS = {
   pre: function PreComponent({ children }) {
     return <>{children}</>;
   },
+  ...(MARKDOWN_IMAGES_ALLOWED ? {} : { img: () => null }),
 };
 
 const MemoizedMarkdownBlock = memo(

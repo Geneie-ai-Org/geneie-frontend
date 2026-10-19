@@ -11,6 +11,8 @@ import {
   fetchClinicalReportCandidates,
   generateClinicalReport,
 } from '@/services/backendApi';
+import { bamExpiryCopy, locusFromVariantFields } from '@/lib/module1IgvLocus';
+import { requestModule1IgvOpen } from '@/lib/module1IgvBus';
 
 const INCLUDE = 'clinical_result';
 const ADDITIONAL = 'additional_finding';
@@ -52,6 +54,9 @@ export default function ClinicalReportAssignModal({
   onOpenChange,
   conversationId,
   automaticMode = false,
+  /** When true, show View in IGV on rows with parseable coords (Module 1 BAM retained). */
+  canViewInIgv = false,
+  bamExpiresAt = null,
 }) {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -244,6 +249,15 @@ export default function ClinicalReportAssignModal({
                 const badge = (row.badge || '').trim();
                 const suggested = Boolean(row.suggested_section);
                 const preselected = selected === INCLUDE || selected === ADDITIONAL;
+                const igvLocus = canViewInIgv
+                  ? locusFromVariantFields({
+                      id: row.id,
+                      row_key: row.row_key,
+                      chrom: row.chrom,
+                      start: row.start,
+                      pos: row.pos,
+                    })
+                  : null;
                 return (
                   <li
                     key={key}
@@ -296,6 +310,24 @@ export default function ClinicalReportAssignModal({
                       <span className="flex-shrink-0 min-w-[3.25rem]" />
                     )}
                     <div className="flex-shrink-0 flex items-center gap-1.5 text-xs">
+                      {canViewInIgv ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!igvLocus) return;
+                            requestModule1IgvOpen({ conversationId, locus: igvLocus });
+                          }}
+                          disabled={!igvLocus}
+                          title={
+                            igvLocus
+                              ? 'Open alignment at this variant'
+                              : bamExpiryCopy(bamExpiresAt, { hasBam: false })
+                          }
+                          className="h-7 px-2 rounded-md border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          View in IGV
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => setBucket(key, INCLUDE)}

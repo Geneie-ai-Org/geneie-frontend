@@ -57,10 +57,12 @@ export default function DualLaneSummary({ conversationId, open }) {
         in both: {data.in_both_count ?? 0}
       </p>
       <p className="mt-1">
-        Only in the filtered set: {data.only_filtered_count ?? 0}
+        Not in the GA shortlist: {data.only_filtered_count ?? 0}
         {onlyFiltered.length ? ` — ${names(onlyFiltered)}` : ''}
+        {data.only_filtered_truncated ? ' (list truncated)' : ''}
       </p>
       <p className="mt-1 text-[var(--text-tertiary)]">
+        The GA count is the stored shortlist, not every variant GA scored.
         Neither list is the diagnosis. Include suggestions are unchanged.
       </p>
     </div>

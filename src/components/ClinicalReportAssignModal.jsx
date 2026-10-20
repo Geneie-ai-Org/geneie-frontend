@@ -6,6 +6,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog';
+import DualLaneSummary from '@/components/DualLaneSummary';
 import {
   downloadGaTriageArtifact,
   fetchClinicalReportCandidates,
@@ -223,6 +224,8 @@ export default function ClinicalReportAssignModal({
             </p>
           ) : null}
         </div>
+
+        <DualLaneSummary conversationId={conversationId} open={open} />
 
         <div className="flex-1 overflow-y-auto px-4 py-2">
           {loading && (

@@ -8,9 +8,11 @@ import { formatDuration } from '@/lib/formatDuration';
 import {
   MODULE1_STAGE_GROUPS,
   getModule1FailureMessage,
+  getModule1PhaseMessage,
   getModule1StageGroup,
   module1FinishedSuccessfully,
 } from '@/lib/module1PipelinePhases';
+import { MODULE1_CPU_TYPICAL_MIN, formatMinutesRange } from '@/components/Module1ComputeChoice';
 import Module1QcSection, { module1HasQcArtifacts } from '@/components/Module1QcSection';
 import {
   PIPELINE_STEP_DEFS,
@@ -221,6 +223,218 @@ function PhasePill({ label, status, fillPct, ms, open, onToggle, action, waiting
   );
 }
 
+const MODULE1_LANES = new Set(['gpu', 'cpu']);
+
+/** Which lane the job is on or headed for: actual compute, else the user's preference, else the queue lane. */
+function module1Lane(job) {
+  if (MODULE1_LANES.has(job.compute)) return job.compute;
+  if (MODULE1_LANES.has(job.computePreference)) return job.computePreference;
+  if (MODULE1_LANES.has(job.queueLane)) return job.queueLane;
+  return null;
+}
+
+/** GPU / CPU / "CPU (no GPU available)" — null when the backend sent no compute info. */
+function module1ComputeChip(job) {
+  if (job.compute === 'cpu' && job.computeReason === 'gpu_capacity_unavailable') {
+    return { label: 'CPU (no GPU available)', amber: true };
+  }
+  const lane = module1Lane(job);
+  if (!lane) return null;
+  return { label: lane === 'gpu' ? 'GPU' : 'CPU', amber: false };
+}
+
+/** Where a Module 1 job is: queued, running, stopping, cancelled — or none of those. */
+function module1RunState(job) {
+  if (!job) return null;
+  if (job.status === 'cancelled') return 'cancelled';
+  if (job.phase === 'cancelling') return 'cancelling';
+  if (job.status === 'failed') return null;
+  // "launching" (GPU box booting) has left the queue even if status still says queued.
+  if (job.phase !== 'launching' && (job.status === 'queued' || job.phase === 'waiting_gpu')) return 'queued';
+  if (job.status === 'running' || job.phase === 'launching') return 'running';
+  return null;
+}
+
+const MODULE1_CONFIRM_COPY = {
+  leave: {
+    question: 'Leave the queue? Your files stay and no run credit is used.',
+    keep: 'Keep waiting',
+    confirm: 'Leave queue',
+  },
+  stopGpu: {
+    question: 'Stop this run? The GPU machine shuts down and progress is lost. No run credit is used.',
+    keep: 'Keep running',
+    confirm: 'Stop run',
+  },
+  stopCpu: {
+    question: 'Stop this run? The CPU job stops and progress is lost. No run credit is used.',
+    keep: 'Keep running',
+    confirm: 'Stop run',
+  },
+};
+
+const MODULE1_LINK_CLASS =
+  'shrink-0 text-2xs font-medium inline-flex items-center gap-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]';
+
+/**
+ * The status line under the Reads → VCF steps while a run is in flight. Leave queue / Stop run
+ * and Switch to CPU are quiet text links at its right end — no panel of their own — and the
+ * Stop confirm takes over the same line rather than opening something new.
+ */
+function Module1RunLine({ job, onCancel, onSwitchCompute, cpuEstimateMin }) {
+  const [confirm, setConfirm] = useState(null); // 'leave' | 'stop' | null
+  const [busy, setBusy] = useState(null); // 'cancel' | 'switch' | null
+  const triggerRef = useRef(null);
+  const safeRef = useRef(null);
+  const restoreFocusRef = useRef(false);
+
+  useEffect(() => {
+    if (confirm) {
+      safeRef.current?.focus();
+    } else if (restoreFocusRef.current) {
+      restoreFocusRef.current = false;
+      triggerRef.current?.focus();
+    }
+  }, [confirm]);
+
+  const state = module1RunState(job);
+  if (!state) return null;
+
+  const queued = state === 'queued';
+  const running = state === 'running';
+  const lane = module1Lane(job);
+  const confirmMode = queued ? 'leave' : running ? 'stop' : null;
+  const activeConfirm = confirm && confirm === confirmMode ? confirm : null;
+  const confirmCopy = activeConfirm === 'leave'
+    ? MODULE1_CONFIRM_COPY.leave
+    : activeConfirm === 'stop'
+      ? (lane === 'cpu' ? MODULE1_CONFIRM_COPY.stopCpu : MODULE1_CONFIRM_COPY.stopGpu)
+      : null;
+  // Controls appear only when the backend says they apply, so older backends show none.
+  const canCancel = job.cancellable === true && confirmMode != null && typeof onCancel === 'function';
+  const canSwitch = queued && job.switchable === true && typeof onSwitchCompute === 'function';
+
+  const closeConfirm = () => {
+    restoreFocusRef.current = true;
+    setConfirm(null);
+  };
+  const runCancel = async () => {
+    setBusy('cancel');
+    let ok = false;
+    try {
+      ok = await onCancel();
+    } finally {
+      setBusy(null);
+      restoreFocusRef.current = !ok;
+      setConfirm(null);
+    }
+  };
+  const runSwitch = async (next) => {
+    setBusy('switch');
+    try {
+      await onSwitchCompute(next);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (confirmCopy) {
+    return (
+      <div
+        role="group"
+        aria-labelledby="module1-confirm-question"
+        className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-0.5"
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && !busy) {
+            e.stopPropagation();
+            closeConfirm();
+          }
+        }}
+      >
+        <p id="module1-confirm-question" className="flex-1 min-w-0 text-2xs leading-relaxed" style={{ color: 'var(--text-primary)' }}>
+          {confirmCopy.question}
+        </p>
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            ref={safeRef}
+            type="button"
+            onClick={closeConfirm}
+            disabled={busy === 'cancel'}
+            className={`${MODULE1_LINK_CLASS} hover:text-[var(--text-primary)]`}
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            {confirmCopy.keep}
+          </button>
+          <button
+            type="button"
+            onClick={runCancel}
+            disabled={busy === 'cancel'}
+            className={`${MODULE1_LINK_CLASS} hover:brightness-110`}
+            style={{ color: 'var(--error)' }}
+          >
+            {busy === 'cancel' && <Loader2 className="w-3 h-3 animate-spin" aria-hidden />}
+            {confirmCopy.confirm}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const startText = formatMinutesRange(job.estStartMin);
+  const queueText = queued && job.queuePosition != null
+    ? [
+        lane === 'cpu' ? 'Waiting for a CPU slot' : 'Waiting for a GPU',
+        `#${job.queuePosition}${job.queueLength != null ? ` of ${job.queueLength}` : ''} in line`,
+        startText ? `est. start in ${startText}` : null,
+      ].filter(Boolean).join(' · ')
+    : null;
+  const text = state === 'cancelled'
+    ? 'Cancelled · you can start again from the upload button.'
+    : state === 'cancelling'
+      ? 'Stopping your run…'
+      : queueText || getModule1PhaseMessage(job.phase, job.message);
+  const cpuText = formatMinutesRange(cpuEstimateMin) || formatMinutesRange(MODULE1_CPU_TYPICAL_MIN);
+
+  return (
+    <div className="px-0.5 space-y-0.5">
+      <div className="flex items-baseline gap-3 min-w-0">
+        <p className="flex-1 min-w-0 text-2xs leading-relaxed truncate" style={{ color: 'var(--text-secondary)' }} title={text}>
+          {text}
+        </p>
+        {canSwitch && (
+          <button
+            type="button"
+            onClick={() => runSwitch(lane === 'cpu' ? 'gpu' : 'cpu')}
+            disabled={Boolean(busy)}
+            className={`${MODULE1_LINK_CLASS} hover:text-[var(--text-primary)]`}
+            style={{ color: 'var(--text-tertiary)' }}
+            title={lane === 'cpu' ? undefined : `CPU starts now and takes about ${cpuText}.`}
+          >
+            {busy === 'switch' && <Loader2 className="w-3 h-3 animate-spin" aria-hidden />}
+            {lane === 'cpu' ? 'Wait for GPU instead' : 'Switch to CPU now'}
+          </button>
+        )}
+        {canCancel && (
+          <button
+            ref={triggerRef}
+            type="button"
+            onClick={() => setConfirm(confirmMode)}
+            disabled={Boolean(busy)}
+            className={`${MODULE1_LINK_CLASS} text-[var(--text-tertiary)] hover:text-[var(--error)] focus-visible:text-[var(--error)]`}
+          >
+            {queued ? 'Leave queue' : 'Stop run'}
+          </button>
+        )}
+      </div>
+      {queued && (
+        <p className="text-2xs leading-relaxed" style={{ color: 'var(--text-tertiary)' }}>
+          Your place is kept if you close this tab. We&apos;ll notify you when it starts and when it finishes.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Pipeline state, rendered as a drawer that sits *behind* the chat composer.
  *
@@ -237,6 +451,9 @@ function PhasePill({ label, status, fillPct, ms, open, onToggle, action, waiting
 const PipelineDrawer = ({
   module1Job = null,
   onModule1StartOver,
+  onModule1Cancel,
+  onModule1SwitchCompute,
+  module1CpuEstimateMin = null,
   fileName,
   conversationId = null,
   expanded,
@@ -493,6 +710,9 @@ const PipelineDrawer = ({
     }
   );
   const module1Failed = module1Job?.status === 'failed';
+  const module1State = module1RunState(module1Job);
+  const module1Cancelled = module1State === 'cancelled';
+  const module1Chip = isFastqRoute && !module1Failed && !module1Cancelled ? module1ComputeChip(module1Job) : null;
   // Once the VCF is in the conversation the reads phase is behind us, even if the job
   // record still says it is importing.
   const module1Done = module1FinishedSuccessfully(module1Job) || (isFastqRoute && hasUploadedFile && !uploadInProgress);
@@ -511,7 +731,7 @@ const PipelineDrawer = ({
   const phase1 = isFastqRoute
     ? {
         label: 'Reads → VCF',
-        status: module1Failed ? 'failed' : module1Done ? 'done' : 'running',
+        status: module1Failed ? 'failed' : module1Done ? 'done' : module1Cancelled ? 'pending' : 'running',
         fillPct: module1Done
           ? 100
           : typeof module1Job.progressPercent === 'number'
@@ -588,6 +808,8 @@ const PipelineDrawer = ({
       return { text: 'Pipeline failed', loading: false, color: 'var(--error)' };
     }
     if (isFastqRoute && !hasUploadedFile) {
+      if (module1Cancelled) return { text: 'Cancelled', loading: false };
+      if (module1State === 'cancelling') return { text: 'Stopping…', loading: true };
       if (module1Job.status === 'complete') return { text: 'Importing VCF…', loading: true };
       const group = MODULE1_STAGE_GROUPS.find((g) => g.id === module1ActiveGroup);
       const pct = typeof module1Job.progressPercent === 'number' ? ` · ${Math.round(module1Job.progressPercent)}%` : '';
@@ -611,6 +833,16 @@ const PipelineDrawer = ({
           <span className="text-xs font-medium truncate min-w-0" style={{ color: 'var(--text-primary)' }} title={title}>
             {title}
           </span>
+          {module1Chip && (
+            <span
+              className="shrink-0 text-2xs font-semibold px-1.5 h-[18px] inline-flex items-center rounded-full"
+              style={module1Chip.amber
+                ? { backgroundColor: 'var(--warning-soft)', color: 'var(--warning)' }
+                : { backgroundColor: 'var(--accent-teal-soft)', color: 'var(--accent-teal)' }}
+            >
+              {module1Chip.label}
+            </span>
+          )}
           <span
             className={`ml-auto text-2xs truncate shrink min-w-0 text-right${header.loading ? ' pipeline-status-shimmer' : ''}`}
             style={header.loading ? undefined : { color: header.color || 'var(--text-tertiary)' }}
@@ -777,6 +1009,15 @@ const PipelineDrawer = ({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {isFastqRoute && !hasUploadedFile && (
+          <Module1RunLine
+            job={module1Job}
+            onCancel={onModule1Cancel}
+            onSwitchCompute={onModule1SwitchCompute}
+            cpuEstimateMin={module1CpuEstimateMin}
+          />
+        )}
 
         {module1Failed && (
           <div

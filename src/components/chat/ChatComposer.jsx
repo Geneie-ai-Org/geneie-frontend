@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { PanelRight, ArrowUp, Plus, Square, FileText, Dna } from 'lucide-react';
+import { PanelRight, ArrowUp, Plus, Square, FileText, Dna, SlidersHorizontal, GitCompareArrows, Loader2 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -59,6 +59,44 @@ const FileTypeDropdown = ({ showFileTypeDropdown, onSelectVariantFile, onSelectF
 };
 
 /**
+ * Admin-only Tuning button, beside the variant-sidebar toggle. Teal with a count while tuning
+ * is on; opens the Tuning window either way.
+ */
+const TuningButton = ({ tuning }) => (
+  <Tooltip>
+    <TooltipTrigger
+      render={
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            tuning.onOpen();
+          }}
+          className={`chat-chrome-btn relative size-9 rounded-[0.5rem] ${tuning.on ? 'is-active' : ''}`}
+          style={tuning.on ? { color: 'var(--accent-teal)' } : undefined}
+          aria-label={tuning.on ? `Tuning on${tuning.changeCount ? `, ${tuning.changeCount} changes` : ''}` : 'Tuning'}
+          aria-pressed={tuning.on}
+        >
+          <SlidersHorizontal className="size-5" />
+          {tuning.on && tuning.changeCount > 0 && (
+            <span
+              className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full px-1 text-[10px] font-semibold leading-4 tabular-nums"
+              style={{ backgroundColor: 'var(--accent-teal)', color: 'var(--accent-teal-contrast)' }}
+              aria-hidden
+            >
+              {tuning.changeCount}
+            </span>
+          )}
+        </Button>
+      }
+    />
+    <TooltipContent>{tuning.on ? 'Tuning is on' : 'Tuning'}</TooltipContent>
+  </Tooltip>
+);
+
+/**
  * The chat composer, and the primary object on the page.
  *
  * `layout` is the only difference between the two call sites: `stacked` puts the
@@ -93,6 +131,8 @@ const ChatComposer = ({
   onToggleVariantSidebar,
   hasDocument = false,
   pipelineDrawer = null,
+  // Admin tuning: null for everyone else. { on, changeCount, running, onOpen, onCompare(question), onStopCompare }
+  tuning = null,
 }) => {
   const isStacked = layout === 'stacked';
   // Two separate gates. Typing is only blocked by the hard gates (no auth, quota
@@ -203,6 +243,34 @@ const ChatComposer = ({
     </Tooltip>
   );
 
+  const tuningButton = tuning ? <TuningButton tuning={tuning} /> : null;
+
+  // While tuning is on: run the typed question as a comparison instead of sending it.
+  const compareButton = tuning?.on && (input.trim() || tuning.running) ? (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (tuning.running) tuning.onStopCompare();
+              else tuning.onCompare(input.trim());
+            }}
+            className="h-9 rounded-full px-3 text-xs font-medium inline-flex items-center gap-1.5 border"
+            style={{ borderColor: 'var(--accent-teal)', color: 'var(--accent-teal)' }}
+            aria-label={tuning.running ? 'Stop comparison' : 'Compare with your tuning changes'}
+          >
+            {tuning.running ? <Loader2 className="size-3.5 animate-spin" /> : <GitCompareArrows className="size-3.5" />}
+            {tuning.running ? 'Stop' : 'Compare'}
+          </Button>
+        }
+      />
+      <TooltipContent>{tuning.running ? 'Stop the comparison' : 'Run this question against the global config and your changes'}</TooltipContent>
+    </Tooltip>
+  ) : null;
+
   const sendOrStop = isCurrentlyActive ? (
     stopButton
   ) : (
@@ -232,7 +300,9 @@ const ChatComposer = ({
               <div className="flex items-center justify-between pt-1">
                 <div className="flex items-center gap-1">{uploadButton}</div>
                 <div className="flex items-center gap-1">
+                  {tuningButton}
                   {sidebarToggle}
+                  {compareButton}
                   <SendButton onClick={onSend} disabled={sendDisabled} style={sendButtonStyle} />
                 </div>
               </div>
@@ -242,7 +312,9 @@ const ChatComposer = ({
               {uploadButton}
               {textarea}
               <div className="flex items-center gap-0.5 mb-0.5">
+                {tuningButton}
                 {sidebarToggle}
+                {compareButton}
                 {sendOrStop}
               </div>
             </>

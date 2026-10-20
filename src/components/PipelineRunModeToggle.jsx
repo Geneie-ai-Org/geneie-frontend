@@ -4,12 +4,39 @@
 import { useEffect, useRef, useState } from 'react';
 import { Info } from 'lucide-react';
 import { PillToggle } from '@/components/ui/pill-toggle';
+import { GlowingEffect } from '@/components/ui/glowing-effect';
+import { DottedGlowBackground } from '@/components/ui/dotted-glow-background';
 
 export const PIPELINE_RUN_MANUAL = 'manual';
 export const PIPELINE_RUN_AUTOMATIC = 'automatic';
 
 export function normalizePipelineRunMode(value) {
   return value === PIPELINE_RUN_AUTOMATIC ? PIPELINE_RUN_AUTOMATIC : PIPELINE_RUN_MANUAL;
+}
+
+/** Settings → General → "Default analysis mode": what new upload forms start on. */
+export const DEFAULT_ANALYSIS_MODE_KEY = 'geneie_default_analysis_mode';
+
+export function getDefaultPipelineRunMode() {
+  try {
+    return normalizePipelineRunMode(localStorage.getItem(DEFAULT_ANALYSIS_MODE_KEY));
+  } catch {
+    return PIPELINE_RUN_MANUAL;
+  }
+}
+
+export function setDefaultPipelineRunMode(mode) {
+  try {
+    localStorage.setItem(DEFAULT_ANALYSIS_MODE_KEY, normalizePipelineRunMode(mode));
+  } catch {
+    /* storage blocked — the forms fall back to Manual */
+  }
+}
+
+/** The run-mode fields of a fresh sample-metadata object, from the user's default. */
+export function defaultRunModeFields() {
+  const mode = getDefaultPipelineRunMode();
+  return { phenotype_run_mode: mode, pipeline_run_mode: mode };
 }
 
 /** Clear phenotype interpret/selection state; keeps unrelated sample fields. */
@@ -49,21 +76,12 @@ export function applyPipelineRunModeChange(prev = {}, mode) {
   return { ...next, ...clearPhenotypeMetadataFields(prev) };
 }
 
-/** Gradient border that respects border-radius (padding-box + border-box). */
-function earlyAccessSurface(paddingBg = 'var(--bg-input)') {
-  const padLayer = /gradient|color-mix/i.test(paddingBg)
-    ? paddingBg
-    : `linear-gradient(${paddingBg}, ${paddingBg})`;
-  return {
-    border: '1.5px solid transparent',
-    background: `${padLayer} padding-box, var(--early-access-gradient) border-box`,
-  };
-}
+const MANUAL_INFO = 'Manual: you start each step yourself — annotation, filters and phenotype prioritization.';
 
 const AUTOMATIC_INFO =
   'Early access. Automatic advances annotation and phenotype prioritization when ready, and pre-selects strong disease matches (score ≥ 0.90) plus high-confidence findings. Review before clinical use.';
 
-function AutomaticInfoButton() {
+function ModeInfoButton({ automatic }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
 
@@ -87,15 +105,9 @@ function AutomaticInfoButton() {
     <span className="relative inline-flex" ref={wrapRef}>
       <button
         type="button"
-        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
-        style={{
-          color: 'var(--early-access-from)',
-          borderColor: 'color-mix(in srgb, var(--early-access-from) 45%, transparent)',
-          background: open
-            ? 'color-mix(in srgb, var(--early-access-from) 18%, transparent)'
-            : 'color-mix(in srgb, var(--early-access-from) 10%, transparent)',
-        }}
-        aria-label="About Automatic mode"
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors hover:text-[var(--text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+        style={{ color: open ? 'var(--text-secondary)' : 'var(--text-tertiary)' }}
+        aria-label={automatic ? 'About Automatic mode' : 'About Manual mode'}
         aria-expanded={open}
         onClick={(e) => {
           e.preventDefault();
@@ -103,7 +115,7 @@ function AutomaticInfoButton() {
           setOpen((v) => !v);
         }}
       >
-        <Info className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+        <Info className="h-3.5 w-3.5" aria-hidden />
       </button>
       {open ? (
         <div
@@ -115,7 +127,7 @@ function AutomaticInfoButton() {
             borderColor: 'var(--border-default)',
           }}
         >
-          {AUTOMATIC_INFO}
+          {automatic ? AUTOMATIC_INFO : MANUAL_INFO}
         </div>
       ) : null}
     </span>
@@ -132,24 +144,43 @@ export default function PipelineRunModeToggle({
   const isAutomatic = mode === PIPELINE_RUN_AUTOMATIC;
   return (
     <div
-      className={`p-3 rounded-lg space-y-1.5 ${className}`}
-      style={
-        isAutomatic
-          ? earlyAccessSurface('var(--bg-input)')
-          : {
-              border: '1px solid var(--border-default)',
-              background: 'var(--bg-input)',
-            }
-      }
+      className={`relative p-3 rounded-lg ${className}`}
+      style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)' }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {/* Automatic: teal dots shimmer behind the row (Aceternity Dotted Glow Background), fading
+        * out toward the title so it stays readable, and the border lights up toward the pointer
+        * (Aceternity Glowing Effect). Both use the app's teal / info tokens. */}
+      {isAutomatic && (
+        <>
+          <DottedGlowBackground
+            className="rounded-[inherit] overflow-hidden"
+            style={{
+              WebkitMaskImage: 'linear-gradient(to left, #000 0%, rgba(0,0,0,0.7) 55%, transparent 95%)',
+              maskImage: 'linear-gradient(to left, #000 0%, rgba(0,0,0,0.7) 55%, transparent 95%)',
+            }}
+            gap={8}
+            radius={2}
+            color="var(--accent-teal)"
+            glowColor="var(--info)"
+            opacity={0.35}
+            speedMin={0.3}
+            speedMax={1.1}
+          />
+          <GlowingEffect spread={40} glow disabled={false} proximity={64} inactiveZone={0.01} borderWidth={2} />
+        </>
+      )}
+      <div className="relative flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex items-center gap-1.5">
           <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
             Analysis mode
           </p>
-          {isAutomatic && <AutomaticInfoButton />}
+          <ModeInfoButton automatic={isAutomatic} />
         </div>
         <PillToggle
+          // Opaque pills so the dots don't show through, and a filled active pill so the
+          // chosen mode is the brightest thing in the box — the dots stay background.
+          surface="var(--bg-input)"
+          solid
           value={mode}
           onChange={(next) => {
             if (disabled) return;
@@ -161,9 +192,6 @@ export default function PipelineRunModeToggle({
           ]}
         />
       </div>
-      <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-        {isAutomatic ? 'Runs the full analysis for you.' : 'You control each step.'}
-      </p>
     </div>
   );
 }

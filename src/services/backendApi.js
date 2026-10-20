@@ -58,6 +58,50 @@ export async function setNotificationPrefs(patch) {
   return data;
 }
 
+/** Whether the user has a personal NCBI API key on file: { has_key }. The key itself is never returned. */
+export async function getNcbiKeyStatus() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl('/api/user/ncbi-key'), { headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(parseApiErrorDetail(data.detail) || 'Could not load your NCBI key status');
+  return data;
+}
+
+/** Store the user's NCBI API key (encrypted at rest by the backend). Returns { ok, has_key }. */
+export async function setNcbiKey(apiKey) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(apiUrl('/api/user/ncbi-key'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ api_key: apiKey }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(parseApiErrorDetail(data.detail) || 'Could not save your NCBI key');
+  return data;
+}
+
+/** Remove the user's NCBI key; enrichment falls back to the shared app key. */
+export async function clearNcbiKey() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl('/api/user/ncbi-key'), { method: 'DELETE', headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(parseApiErrorDetail(data.detail) || 'Could not remove your NCBI key');
+  return data;
+}
+
+/**
+ * Erase everything the backend holds for the signed-in user (conversations, files, variants,
+ * saved filters, profile). Returns the backend's report; `success` is false when some
+ * conversations could not be erased. Does not delete the Firebase sign-in itself.
+ */
+export async function deleteAccountData() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl('/api/account'), { method: 'DELETE', headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(parseApiErrorDetail(data.detail) || 'Could not delete your account');
+  return data;
+}
+
 export function parseApiErrorDetail(detail) {
   if (!detail) return null;
   if (typeof detail === 'string') return detail;

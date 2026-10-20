@@ -6,6 +6,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog';
+import DualLaneSummary from '@/components/DualLaneSummary';
 import {
   downloadGaTriageArtifact,
   fetchClinicalReportCandidates,
@@ -59,6 +60,7 @@ export default function ClinicalReportAssignModal({
   const [meta, setMeta] = useState(null);
   const [candidates, setCandidates] = useState([]);
   const [assignments, setAssignments] = useState({});
+  const [laneBReasons, setLaneBReasons] = useState({});
   const [downloadingTsv, setDownloadingTsv] = useState(false);
 
   const load = useCallback(async () => {
@@ -71,11 +73,13 @@ export default function ClinicalReportAssignModal({
       const rows = Array.isArray(data.candidates) ? data.candidates : [];
       setCandidates(rows);
       setAssignments(assignmentsFromSuggestions(rows));
+      setLaneBReasons({});
     } catch (err) {
       setError(err.message || 'Failed to load report candidates');
       setCandidates([]);
       setMeta(null);
       setAssignments({});
+      setLaneBReasons({});
     } finally {
       setLoading(false);
     }
@@ -133,8 +137,17 @@ export default function ClinicalReportAssignModal({
     setAssignments(assignmentsFromSuggestions(candidates));
   };
 
+  const laneBMissing = useMemo(() => {
+    return candidates.some((row, index) => {
+      if (!row.lane_b_only) return false;
+      const key = rowKeyOf(row, index);
+      if (assignments[key] !== INCLUDE) return false;
+      return String(laneBReasons[row.id] || '').trim().length < 10;
+    });
+  }, [candidates, assignments, laneBReasons]);
+
   const canProceed =
-    selectedIds.clinical.length >= 1 && !generating && !loading;
+    selectedIds.clinical.length >= 1 && !laneBMissing && !generating && !loading;
 
   const pfra = meta?.pfra || null;
   const pfraAvailable = Boolean(pfra?.suggestions_available);
@@ -163,9 +176,19 @@ export default function ClinicalReportAssignModal({
     setGenerating(true);
     setError(null);
     try {
+      const laneBIncludeReasons = {};
+      candidates.forEach((row, index) => {
+        const key = rowKeyOf(row, index);
+        if (!row.lane_b_only || assignments[key] !== INCLUDE || !row.id) return;
+        const text = String(laneBReasons[row.id] || '').trim();
+        if (text) laneBIncludeReasons[row.id] = text;
+      });
       await generateClinicalReport(conversationId, {
         clinical_result_variant_ids: selectedIds.clinical,
         additional_finding_variant_ids: selectedIds.additional,
+        ...(Object.keys(laneBIncludeReasons).length
+          ? { lane_b_include_reasons: laneBIncludeReasons }
+          : {}),
       });
       onOpenChange(false);
     } catch (err) {
@@ -224,6 +247,8 @@ export default function ClinicalReportAssignModal({
           ) : null}
         </div>
 
+        <DualLaneSummary conversationId={conversationId} open={open} />
+
         <div className="flex-1 overflow-y-auto px-4 py-2">
           {loading && (
             <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)] py-8 justify-center">
@@ -244,10 +269,11 @@ export default function ClinicalReportAssignModal({
                 const badge = (row.badge || '').trim();
                 const suggested = Boolean(row.suggested_section);
                 const preselected = selected === INCLUDE || selected === ADDITIONAL;
+                const needsReason = Boolean(row.lane_b_only) && selected === INCLUDE;
                 return (
                   <li
                     key={key}
-                    className="flex items-center gap-2 py-1.5 min-h-[2rem] px-1 rounded-md"
+                    className="py-1.5 px-1 rounded-md"
                     style={
                       preselected
                         ? {
@@ -257,6 +283,7 @@ export default function ClinicalReportAssignModal({
                         : undefined
                     }
                   >
+                  <div className="flex items-center gap-2 min-h-[2rem]">
                     <span
                       className="flex-1 min-w-0 text-xs font-mono text-[var(--text-primary)] truncate"
                       title={whyText(row)}
@@ -319,6 +346,26 @@ export default function ClinicalReportAssignModal({
                         Additional
                       </button>
                     </div>
+                  </div>
+                  {needsReason ? (
+                    <label className="block mt-1 mb-1 pl-1">
+                      <span className="text-2xs text-[var(--text-tertiary)]">
+                        Filtered-only variant. Write why it should be included. Automatic Include suggestions stay unchanged.
+                      </span>
+                      <textarea
+                        value={laneBReasons[row.id] || ''}
+                        onChange={(event) =>
+                          setLaneBReasons((prev) => ({
+                            ...prev,
+                            [row.id]: event.target.value.slice(0, 400),
+                          }))
+                        }
+                        rows={2}
+                        className="mt-1 w-full rounded-md border px-2 py-1 text-xs text-[var(--text-primary)] bg-transparent"
+                        style={{ borderColor: 'var(--border-subtle)' }}
+                      />
+                    </label>
+                  ) : null}
                   </li>
                 );
               })}

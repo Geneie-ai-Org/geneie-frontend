@@ -27,7 +27,7 @@ import {
 import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
 import { PillToggle } from '@/components/ui/pill-toggle';
-import { MODULE1_BED_MAX_BYTES, MODULE1_FASTQ_MAX_BYTES } from '@/services/backendApi';
+import { MODULE1_BED_MAX_BYTES, MODULE1_FASTQ_MAX_BYTES, fetchPublicConfig } from '@/services/backendApi';
 import { isRecognizedImportUrl, module1UrlErrorMessage, precheckBedChromStyle } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
 import PhenotypeInputPanel, { PHENOTYPE_MODE_NOTE } from '@/components/PhenotypeInputPanel';
@@ -303,6 +303,10 @@ const Module1UploadForm = ({
   const [sequencingType, setSequencingType] = useState('WES');
   const [r1File, setR1File] = useState(null);
   const [r2File, setR2File] = useState(null);
+  const [normalR1File, setNormalR1File] = useState(null);
+  const [normalR2File, setNormalR2File] = useState(null);
+  const [normalSampleName, setNormalSampleName] = useState('');
+  const [somaticEnabled, setSomaticEnabled] = useState(false);
   const [bedMode, setBedMode] = useState('catalog'); // 'catalog' | 'custom'
   const [bedCatalogId, setBedCatalogId] = useState('');
   const [customBedFile, setCustomBedFile] = useState(null);
@@ -326,6 +330,9 @@ const Module1UploadForm = ({
     setSequencingType('WES');
     setR1File(null);
     setR2File(null);
+    setNormalR1File(null);
+    setNormalR2File(null);
+    setNormalSampleName('');
     setBedMode('catalog');
     setBedCatalogId('');
     setCustomBedFile(null);
@@ -341,6 +348,22 @@ const Module1UploadForm = ({
     setPhenotypeDraft('');
     loadBedCatalog?.('hg38');
   }, [open, loadBedCatalog]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let cancelled = false;
+    fetchPublicConfig().then((cfg) => {
+      if (cancelled) return;
+      const on = Boolean(cfg?.flags?.module1Somatic);
+      setSomaticEnabled(on);
+      if (on) {
+        setSampleMetadata((prev) => (
+          prev.analysisType === 'Somatic' ? { ...prev, analysisType: '' } : prev
+        ));
+      }
+    });
+    return () => { cancelled = true; };
+  }, [open]);
 
   useEffect(() => {
     if (!open || bedMode !== 'catalog') return;
@@ -400,6 +423,9 @@ const Module1UploadForm = ({
     setSourceMode(next);
     setR1File(null);
     setR2File(null);
+    setNormalR1File(null);
+    setNormalR2File(null);
+    setNormalSampleName('');
     setUrlState(EMPTY_URL_STATE);
     urlRequestIdRef.current = { r1: 0, r2: 0, bed: 0 };
     setCustomBedFile(null);
@@ -442,7 +468,24 @@ const Module1UploadForm = ({
 
   const isUrlMode = sourceMode === 'url';
   const anyUrlChecking = isUrlMode && Object.values(urlState).some((row) => row.checking);
-  const readsResolved = isUrlMode ? !!urlState.r1.meta && !!urlState.r2.meta : !!r1File && !!r2File;
+  const isTumorOnly = sampleMetadata.analysisType === 'Tumor-Only';
+  const isMatched = sampleMetadata.analysisType === 'Tumor-Normal Paired';
+  const isSomaticChoice = isTumorOnly || isMatched;
+  const analysisOptions = ANALYSIS_TYPE_OPTIONS.flatMap((opt) => {
+    if (somaticEnabled && opt.value === 'Somatic') return [];
+    if (somaticEnabled && (opt.value === 'Tumor-Only' || opt.value === 'Tumor-Normal Paired')) {
+      return [{ value: opt.value, label: opt.label }];
+    }
+    return [opt];
+  });
+  const genomeOptions = GENOME_OPTIONS.map((opt) => (
+    isSomaticChoice && opt.value === 'hg19'
+      ? { ...opt, disabled: true, disabledReason: 'Somatic runs use hg38.' }
+      : opt
+  ));
+  const readsResolved = isUrlMode
+    ? !!urlState.r1.meta && !!urlState.r2.meta && !isMatched
+    : !!r1File && !!r2File && (!isMatched || (!!normalR1File && !!normalR2File && !!normalSampleName.trim()));
   const bedResolved =
     bedMode === 'catalog'
       ? !!bedCatalogId
@@ -507,6 +550,12 @@ const Module1UploadForm = ({
 
   const setAnalysisType = (val) => {
     setSampleMetadata((prev) => ({ ...prev, analysisType: val }));
+    if (val === 'Tumor-Only' || val === 'Tumor-Normal Paired') {
+      setGenome('hg38');
+    }
+    if (val === 'Tumor-Normal Paired' && sourceMode === 'url') {
+      handleSourceModeChange('file');
+    }
     // Leaving Germline drops the multi-step path; entering Germline starts at sample.
     if (val !== 'Germline') {
       setMetadataStep('sample');
@@ -585,6 +634,15 @@ const Module1UploadForm = ({
       bedCatalogId: bedMode === 'catalog' ? bedCatalogId : undefined,
       // "auto" only when live queue info is missing and the user left the cards alone.
       ...(isStaging ? {} : { computePreference: effectiveComputeChoice || 'auto' }),
+      ...(isSomaticChoice
+        ? {
+            analysis: 'somatic',
+            somaticMode: isMatched ? 'matched' : 'tumor_only',
+            ...(isMatched
+              ? { normalR1File, normalR2File, normalSampleName: normalSampleName.trim() }
+              : {}),
+          }
+        : {}),
     });
   };
 
@@ -695,7 +753,7 @@ const Module1UploadForm = ({
                   <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Genome <span style={{ color: 'var(--error)' }}>*</span>
                   </label>
-                  <SelectWithDisabledOptions value={genome} onChange={setGenome} placeholder="Choose one" options={GENOME_OPTIONS} />
+                  <SelectWithDisabledOptions value={genome} onChange={setGenome} placeholder="Choose one" options={genomeOptions} />
                 </div>
 
                 <div>
@@ -730,12 +788,17 @@ const Module1UploadForm = ({
                     value={sampleMetadata.analysisType}
                     onChange={setAnalysisType}
                     placeholder="Choose one"
-                    options={ANALYSIS_TYPE_OPTIONS}
+                    options={analysisOptions}
                     error={validationAttempted && analysisTypeMissing}
                   />
                   {validationAttempted && analysisTypeMissing && (
                     <p className="text-2xs mt-1" style={{ color: 'var(--error)' }}>
                       Select an analysis type.
+                    </p>
+                  )}
+                  {isSomaticChoice && (
+                    <p className="text-2xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
+                      hg38 only. Same GPU or CPU choice as germline. Phenotype is not used.
                     </p>
                   )}
                 </div>
@@ -764,7 +827,16 @@ const Module1UploadForm = ({
                   onChange={handleSourceModeChange}
                   options={[
                     { value: 'file', label: 'From computer' },
-                    { value: 'url', label: 'From URL' },
+                    {
+                      value: 'url',
+                      label: 'From URL',
+                      ...(isMatched
+                        ? {
+                            disabled: true,
+                            onDisabledClick: () => toast.info('A matched normal pair is uploaded from this computer.'),
+                          }
+                        : {}),
+                    },
                   ]}
                 />
                 {isUrlMode ? (
@@ -789,6 +861,7 @@ const Module1UploadForm = ({
                       Direct https links, Google Drive or Dropbox share links (
                       <span style={{ color: 'var(--text-secondary)' }}>&ldquo;Anyone with the link&rdquo;</span>), or
                       presigned S3 URLs. Files are copied server-side after you start the run.
+                      {isMatched ? ' A matched normal pair is uploaded from this computer.' : ''}
                     </p>
                   </>
                 ) : (
@@ -809,6 +882,37 @@ const Module1UploadForm = ({
                       progress={module1UploadProgress?.r2}
                       accept=".fastq.gz,.fastq,.fq.gz,.fq"
                     />
+                    {isMatched && (
+                      <>
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                            Normal sample name <span style={{ color: 'var(--error)' }}>*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={normalSampleName}
+                            onChange={(e) => setNormalSampleName(e.target.value)}
+                            className="w-full px-3 h-10 border rounded-lg text-sm"
+                            style={{ borderColor: 'var(--border-default)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+                            placeholder="Name of the matched normal"
+                          />
+                        </div>
+                        <FilePickerRow
+                          label="Normal forward read (R1)"
+                          placeholder="Choose normal R1…"
+                          file={normalR1File}
+                          onSelect={setNormalR1File}
+                          accept=".fastq.gz,.fastq,.fq.gz,.fq"
+                        />
+                        <FilePickerRow
+                          label="Normal reverse read (R2)"
+                          placeholder="Choose normal R2…"
+                          file={normalR2File}
+                          onSelect={setNormalR2File}
+                          accept=".fastq.gz,.fastq,.fq.gz,.fq"
+                        />
+                      </>
+                    )}
                   </div>
                 )}
               </div>

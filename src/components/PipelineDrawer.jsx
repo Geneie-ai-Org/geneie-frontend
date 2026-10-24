@@ -778,6 +778,12 @@ const PipelineDrawer = ({
           )}
         </AnimatePresence>
 
+        {typeof module1Job?.contaminationFraction === 'number' && (
+          <p className="text-2xs px-0.5" style={{ color: 'var(--text-tertiary)' }}>
+            Contamination {(module1Job.contaminationFraction * 100).toFixed(2)}%
+          </p>
+        )}
+
         {module1Failed && (
           <div
             className="p-2.5 rounded-lg border flex items-start justify-between gap-3"

@@ -463,10 +463,10 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
         <div className="w-full">
             {/* === Header: swaps with a quick fade when the mode changes === */}
             <div key={headerKey} className="wb-fade mb-6 text-center sm:mb-8">
-                <h2 className="text-2xl font-medium tracking-tight text-foreground sm:text-3xl">
+                <h2 className="text-2xl font-medium leading-8 tracking-[-0.01em] text-foreground sm:text-[2rem] sm:leading-10">
                     {showLinkingPrompt ? 'Link your account' : mainHeading}
                 </h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                <p className="mt-2 text-base leading-6 text-muted-foreground">
                     {showLinkingPrompt ? (
                         <>
                             An account already exists for <strong className="font-medium text-foreground">{linkingEmail}</strong>.

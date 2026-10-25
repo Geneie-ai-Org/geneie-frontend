@@ -96,10 +96,7 @@
 /* Header: translucent over the page so the band tones show through the hairline. */
 .pub-header { background-color: color-mix(in srgb, hsl(var(--wb-bg)) 88%, transparent); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 
-/* /auth: newprod's squarer form (6px controls, a centred submit at 60% width). Scoped so the
-   password-reset page and the in-app auth dialog keep the pill controls. */
-.wb-scope.auth-np [data-slot='button'],
-.wb-scope.auth-np [data-slot='input'] { border-radius: 6px; }
+/* /auth: the submit button is a centred 60% width. Scoped so the password-reset page and the in-app auth dialog keep full-width submits. */
 .wb-scope.auth-np form button[type='submit'] { display: flex; width: 60%; margin-inline: auto; }
 
 /* Landing tour: the auto-advance timer on the active step. */

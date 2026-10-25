@@ -7,7 +7,7 @@ conversation thread in the middle, a tabbed workspace on the right for everythin
 1. **Chat is the thread. Work lives in the workspace.** Results, filters, pipeline state, QC and reports
    open in the right panel as tabs. They are never modals stacked on the thread and never cards wedged
    above the composer.
-2. **One accent.** Teal (`--primary`) is the only brand colour: primary action, selected state, focus.
+2. **One accent.** The newprod palette: blue in light, teal in dark (`--primary`) is the only brand colour: primary action, selected state, focus.
    Status colours (`--success/--warning/--error/--info`) carry meaning only and are never decoration.
 3. **Hierarchy by size, weight and space, not colour.** Three text levels: primary, secondary, tertiary.
 4. **Flat and hairline.** 1px borders, almost no shadow (shadow only for floating layers: menus, dialogs).
@@ -43,7 +43,7 @@ conversation thread in the middle, a tabbed workspace on the right for everythin
 - Control height: 28 (dense), 32 (default), 40 (touch/primary). Minimum touch target 44px on mobile.
 - Motion: 120–200ms, ease-out for entering, never on layout properties except the shell grid.
   Respect `prefers-reduced-motion`.
-- Focus: 2px teal ring at 55%. Never remove it.
+- Focus: 2px primary-coloured ring at 55%. Never remove it.
 
 ## Rules for components
 - Use tokens (`bg-background`, `text-muted-foreground`, `border-border`, `bg-primary`) or the legacy

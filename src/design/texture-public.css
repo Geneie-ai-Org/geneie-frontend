@@ -9,13 +9,13 @@
   --pub-tint-deep: color-mix(in srgb, hsl(var(--brand-100)) 80%, hsl(var(--wb-bg)));
   --pub-plain: hsl(var(--wb-bg));
   --pub-card: hsl(var(--wb-card));
-  --pub-card-shadow: 0 1px 2px hsl(180 20% 20% / 0.05), 0 6px 18px -10px hsl(180 20% 20% / 0.10);
-  --pub-card-shadow-hover: 0 2px 4px hsl(180 20% 20% / 0.06), 0 14px 28px -14px hsl(180 25% 20% / 0.18);
+  --pub-card-shadow: 0 1px 2px hsl(220 30% 20% / 0.05), 0 6px 18px -10px hsl(220 30% 20% / 0.10);
+  --pub-card-shadow-hover: 0 2px 4px hsl(220 30% 20% / 0.06), 0 14px 28px -14px hsl(220 35% 20% / 0.18);
 }
 .dark .pub-scope {
   --pub-tint: color-mix(in srgb, hsl(var(--brand-100)) 38%, hsl(var(--wb-bg)));
   --pub-tint-deep: color-mix(in srgb, hsl(var(--brand-100)) 55%, hsl(var(--wb-bg)));
-  --pub-card: hsl(180 4% 14.5%);
+  --pub-card: hsl(0 0% 12.5%);
   --pub-card-shadow: 0 1px 2px hsl(0 0% 0% / 0.3), 0 8px 20px -12px hsl(0 0% 0% / 0.5);
   --pub-card-shadow-hover: 0 2px 4px hsl(0 0% 0% / 0.35), 0 16px 30px -14px hsl(0 0% 0% / 0.6);
 }
@@ -95,3 +95,13 @@
 
 /* Header: translucent over the page so the band tones show through the hairline. */
 .pub-header { background-color: color-mix(in srgb, hsl(var(--wb-bg)) 88%, transparent); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+
+/* /auth: newprod's squarer form (6px controls, a centred submit at 60% width). Scoped so the
+   password-reset page and the in-app auth dialog keep the pill controls. */
+.wb-scope.auth-np [data-slot='button'],
+.wb-scope.auth-np [data-slot='input'] { border-radius: 6px; }
+.wb-scope.auth-np form button[type='submit'] { display: flex; width: 60%; margin-inline: auto; }
+
+/* Landing tour: the auto-advance timer on the active step. */
+@keyframes tour-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.tour-fill { animation-name: tour-fill; animation-timing-function: linear; animation-fill-mode: forwards; }

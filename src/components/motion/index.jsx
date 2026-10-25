@@ -11,11 +11,12 @@ import { Button } from '@/components/ui/button';
  */
 
 /** A number that rolls to its new value (variants in scope after a filter, etc.). */
-export function CountUp({ value, startAt, duration = 0.7, className }) {
+export function CountUp({ value, startAt, duration = 0.7, decimals = 0, className }) {
   const reduce = useReducedMotion();
   const start = Number.isFinite(Number(startAt)) ? Number(startAt) : value;
   const [shown, setShown] = useState(Number.isFinite(Number(start)) ? Number(start) : 0);
   const from = useRef(shown);
+  const round = (v) => Number(v.toFixed(decimals));
   useEffect(() => {
     const to = Number(value);
     if (!Number.isFinite(to)) return undefined;
@@ -23,13 +24,13 @@ export function CountUp({ value, startAt, duration = 0.7, className }) {
     const controls = animate(from.current, to, {
       duration,
       ease: [0.22, 1, 0.36, 1],
-      onUpdate: (v) => setShown(Math.round(v)),
+      onUpdate: (v) => setShown(round(v)),
       onComplete: () => { from.current = to; setShown(to); },
     });
     return () => { from.current = shown; controls.stop(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, reduce, duration]);
-  return <span className={className}>{shown.toLocaleString()}</span>;
+  return <span className={className}>{shown.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}</span>;
 }
 
 /**
@@ -154,7 +155,7 @@ export function SelectionMarker({ group = 'sel', bar = true, tint = true }) {
  * small slide; done draws a check. The parent owns `state`. Wraps the shared pill Button.
  * labels: { idle, running, done, error }; icons: { idle } (a lucide component) optional.
  */
-export function StateButton({ state = 'idle', labels, icon: Icon, onClick, disabled, className, variant = 'default', size, ...rest }) {
+export function StateButton({ state = 'idle', labels, icon: Icon, hoverTurn = false, onClick, disabled, className, variant = 'default', size, ...rest }) {
   const reduce = useReducedMotion();
   const label = labels[state] ?? labels.idle;
   return (
@@ -168,20 +169,23 @@ export function StateButton({ state = 'idle', labels, icon: Icon, onClick, disab
       className={cn('gap-2 overflow-hidden', className)}
       {...rest}
     >
-      <span className="relative inline-flex size-4 items-center justify-center" aria-hidden="true">
-        <AnimatePresence mode="popLayout" initial={false}>
-          <motion.span
-            key={state}
-            className="inline-flex"
-            initial={reduce ? false : { opacity: 0, y: 8, scale: 0.8 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={reduce ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.8 }}
-            transition={{ duration: reduce ? 0 : 0.18 }}
-          >
-            {state === 'running' ? <span className="wb-spin-inline" /> : state === 'done' ? <Check className="size-4 wb-draw-lucide" strokeWidth={2.2} /> : state === 'error' ? <X className="size-4" /> : Icon ? <Icon className="size-4" /> : null}
-          </motion.span>
-        </AnimatePresence>
-      </span>
+      {/* Idle with no icon renders no slot, so the label stays centred instead of sitting 12px right of centre. */}
+      {(Icon || state !== 'idle') && (
+        <span className="relative inline-flex size-4 items-center justify-center" aria-hidden="true">
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span
+              key={state}
+              className="inline-flex"
+              initial={reduce ? false : { opacity: 0, y: 8, scale: 0.8 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={reduce ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.8 }}
+              transition={{ duration: reduce ? 0 : 0.18 }}
+            >
+              {state === 'running' ? <span className="wb-spin-inline" /> : state === 'done' ? <Check className="size-4 wb-draw-lucide" strokeWidth={2.2} /> : state === 'error' ? <X className="size-4" /> : Icon ? <Icon className={cn('size-4', hoverTurn && 'transition-transform duration-300 ease-[cubic-bezier(0.77,0,0.175,1)] motion-reduce:transition-none [@media(hover:hover)]:group-hover/button:-rotate-45 group-focus-visible/button:-rotate-45')} /> : null}
+            </motion.span>
+          </AnimatePresence>
+        </span>
+      )}
       <AnimatePresence mode="popLayout" initial={false}>
         <motion.span
           key={label}

@@ -1892,10 +1892,6 @@ const ChatPage = () => {
   const shellBothOpen =
     userTier !== 'guest' && isSidebarOpen && isVariantSidebarOpen;
 
-  // Time-aware greeting line for the empty state (local time; plain words, no name lookup).
-  const homeHour = new Date().getHours();
-  const homeGreeting = homeHour < 5 ? 'Working late' : homeHour < 12 ? 'Good morning' : homeHour < 18 ? 'Good afternoon' : 'Good evening';
-
   // --- RENDER CHAT INTERFACE WITH SIDEBAR ---
   return (
     <div
@@ -2039,7 +2035,6 @@ const ChatPage = () => {
                   <div className="chat-home__helix tx tx--helix" />
                   <span className="chat-home__mark"><span /></span>
                 </div>
-                <p className="chat-home__eyebrow">{homeGreeting}</p>
                 <h2 className={`font-display ${isMobile ? 'text-[26px]' : 'text-[34px]'}`} style={{ color: 'var(--text-primary)' }}>
                   What would you like to ask Geneie?
                 </h2>

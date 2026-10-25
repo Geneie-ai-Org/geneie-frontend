@@ -77,7 +77,6 @@ const SubscriptionSuccess = ({ onClose }) => {
             <StageMark state="done" size={32} />
           </span>
           <div role="status">
-            <span className="wb-chip mb-3" data-tone="brand">Pro plan</span>
             <h2 id={titleId} className="text-[18px] font-medium text-foreground">Pro is active</h2>
             <p className="mt-1.5 text-[14px] text-muted-foreground">
               You now have unlimited chat exchanges and access to bioinformatics pipelines.

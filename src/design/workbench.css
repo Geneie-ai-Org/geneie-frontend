@@ -292,13 +292,13 @@
 :root {
   --ov-in: 160ms;
   --ov-out: 100ms;
-  --ov-scrim: 182 26% 9% / 0.42;
+  --ov-scrim: 220 26% 9% / 0.42;
   --ov-pill: var(--brand-100);
-  --ov-shadow: 0 1px 2px hsl(180 10% 10% / 0.05), 0 14px 34px -12px hsl(180 20% 12% / 0.24);
-  --ov-shadow-lg: 0 2px 6px hsl(180 10% 10% / 0.06), 0 28px 72px -24px hsl(180 30% 10% / 0.4);
+  --ov-shadow: 0 1px 2px hsl(220 15% 10% / 0.05), 0 14px 34px -12px hsl(220 25% 12% / 0.24);
+  --ov-shadow-lg: 0 2px 6px hsl(220 15% 10% / 0.06), 0 28px 72px -24px hsl(220 35% 10% / 0.4);
 }
 .dark {
-  --ov-scrim: 180 16% 3% / 0.64;
+  --ov-scrim: 0 0% 3% / 0.64;
   --ov-pill: 177 18% 22%;
   --ov-shadow: 0 1px 2px hsl(0 0% 0% / 0.4), 0 14px 36px -12px hsl(0 0% 0% / 0.65);
   --ov-shadow-lg: 0 2px 6px hsl(0 0% 0% / 0.4), 0 28px 72px -24px hsl(0 0% 0% / 0.75);

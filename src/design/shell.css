@@ -256,8 +256,8 @@ html[data-resizing] .chat-app-shell {
 
 /* ---- Home: the empty conversation. A faint teal-gray canvas with the brand texture behind the greeting
  * only (never behind the composer or chips), faded at the edges. */
-:root { --home-canvas: hsl(180 12% 95.5%); }
-.dark { --home-canvas: hsl(180 7% 7%); }
+:root { --home-canvas: hsl(220 14% 95.5%); }
+.dark { --home-canvas: hsl(0 0% 7%); }
 .chat-shell-main:has(.chat-home) { background-color: var(--home-canvas); }
 .chat-home {
   position: relative;

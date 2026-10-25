@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { AlertCircle, Check, CheckCircle2, Eye, EyeOff, Info } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Eye, EyeOff, Info } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Dismissible, StateButton } from '@/components/motion';
 import { cn } from '@/lib/utils';
@@ -167,48 +167,62 @@ export function SubmitButton({ loading, loadingLabel, done, doneLabel = 'Done', 
   );
 }
 
-/** Live checklist for a new password, as pills that turn teal when met. Only the minimum length is enforced. */
+const STRENGTH = [
+  null,
+  { label: 'Okay', color: 'var(--warning)' },
+  { label: 'Good', color: 'hsl(var(--brand-700))' },
+  { label: 'Strong', color: 'var(--success)' },
+  { label: 'Very strong', color: 'var(--success)' },
+];
+
+/** What would help most right now, as one short sentence. Only the minimum length is enforced. */
+function nextTip(password, minLength) {
+  if (!(/[a-z]/.test(password) && /[A-Z]/.test(password))) return 'Mix upper and lower case letters';
+  if (!/\d/.test(password)) return 'Add a number';
+  if (password.length < 12) return 'Use 12 or more characters';
+  return 'Nice, that is hard to guess';
+}
+
+/**
+ * New-password feedback: a four-step bar and one line of text that changes as you type. Below the
+ * minimum it counts down the characters left; once the minimum is met it names the label and the
+ * single next thing that would strengthen it. Screen readers hear a stable summary, not every keystroke.
+ */
 export function PasswordRules({ password, minLength = 6 }) {
   const reduce = useReducedMotion();
-  const rules = [
-    { ok: password.length >= minLength, label: `At least ${minLength} characters`, required: true },
-    { ok: /[a-z]/.test(password) && /[A-Z]/.test(password), label: 'Upper and lower case letters' },
-    { ok: /\d/.test(password), label: 'A number' },
-  ];
+  const long = password.length >= minLength;
+  const mixed = /[a-z]/.test(password) && /[A-Z]/.test(password);
+  const score = long ? 1 + (mixed ? 1 : 0) + (/\d/.test(password) ? 1 : 0) + (password.length >= 12 ? 1 : 0) : 0;
+  const level = STRENGTH[score];
+  const left = minLength - password.length;
+  const tip = long ? nextTip(password, minLength) : null;
+  const text = long
+    ? tip
+    : password.length === 0
+      ? `Use at least ${minLength} characters`
+      : `${left} more character${left === 1 ? '' : 's'} to go`;
+
   return (
-    <ul className="flex flex-wrap gap-1.5" aria-label="Password rules">
-      {rules.map((r) => (
-        <li
-          key={r.label}
-          className="wb-chip"
-          data-tone={r.ok ? 'brand' : undefined}
-          style={{ transition: reduce ? 'none' : 'background-color 150ms, border-color 150ms, color 150ms' }}
-        >
-          <span className="relative inline-flex size-3 items-center justify-center" aria-hidden="true">
-            <AnimatePresence mode="popLayout" initial={false}>
-              {r.ok ? (
-                <motion.span
-                  key="ok"
-                  className="inline-flex"
-                  initial={reduce ? false : { scale: 0.4, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ type: 'spring', stiffness: 520, damping: 30 }}
-                >
-                  <Check className="size-3" strokeWidth={2.4} />
-                </motion.span>
-              ) : (
-                <motion.span key="no" className="inline-block size-2 rounded-full border border-current opacity-60" exit={{ opacity: 0 }} transition={{ duration: 0.1 }} />
-              )}
-            </AnimatePresence>
-          </span>
-          <span>
-            {r.label}
-            {!r.required && <span className="opacity-70"> (recommended)</span>}
-            <span className="sr-only">{r.ok ? ', met' : ', not met'}</span>
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-1.5 px-1" aria-label="Password strength">
+      <div className="flex gap-1.5" aria-hidden="true">
+        {[1, 2, 3, 4].map((n) => (
+          <span
+            key={n}
+            className="h-1 flex-1 rounded-full"
+            style={{
+              backgroundColor: n <= score ? level.color : 'hsl(var(--wb-line))',
+              transition: reduce ? 'none' : 'background-color 150ms',
+            }}
+          />
+        ))}
+      </div>
+      <p className="flex items-baseline justify-between gap-3 text-xs">
+        <span key={text} className="wb-fade text-muted-foreground">{text}</span>
+        {level ? <span className="shrink-0 font-medium" style={{ color: level.color }}>{level.label}</span> : null}
+      </p>
+      <span className="sr-only" role="status">
+        {long ? `Password strength: ${level.label}. ${tip}.` : `At least ${minLength} characters needed.`}
+      </span>
+    </div>
   );
 }

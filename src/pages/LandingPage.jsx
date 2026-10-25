@@ -1,14 +1,20 @@
-import React, { useId, useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowRight, ChevronDown } from 'lucide-react';
+import { ArrowRight, ArrowUp, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Collapse, Dismissible, StageMark, StateButton, Turn } from '@/components/motion';
+import { Dismissible, StageMark, StateButton } from '@/components/motion';
+import { BouncyAccordion } from '@/components/motion/bouncy-accordion';
+import { SharedLayoutBg } from '@/components/motion/shared-layout-bg';
+import { TextReveal } from '@/components/motion/text-reveal';
 import BrandLogo from '@/components/public/BrandLogo';
 import Reveal from '@/components/public/Reveal';
 import ProductTour from '@/components/public/ProductTour';
 import HeroGenome from '@/components/public/HeroGenome';
+import HelixDivider from '@/components/public/HelixDivider';
+import HalftoneWordmark from '@/components/public/HalftoneWordmark';
+import ThemeToggle from '@/components/public/ThemeToggle';
 import { useBetaSeats } from '@/hooks/useBetaSeats';
 import { joinWaitlist } from '@/services/backendApi';
 import { useSeo } from '@/hooks/useSeo';
@@ -25,7 +31,7 @@ const PIPELINES = [
 const MODEL = [
   ['Reads your question', 'Turns “which are rare and pathogenic?” into filters and lookups on your file.'],
   ['Explains what it finds', 'Describes the rows that come back, tied to the underlying data, and says when the file cannot answer.'],
-  ['Never scores', 'It does not classify, score or rank variants. Those results come only from the pipelines.'],
+  ['Never scores', 'It does not classify, score or rank variants. Those results come only from the pipelines.', 'no'],
 ];
 
 const FAQS = [
@@ -94,7 +100,7 @@ function confirmationFor(result, isFull) {
  * seat. A repeat email is a success rather than an error on the backend, so a second submit
  * shows the same confirmation instead of leaking whether an address is already listed.
  */
-function AccessRequest({ seats, source, onSignIn, idPrefix }) {
+function AccessRequest({ seats, source, idPrefix }) {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [joined, setJoined] = useState(null);
@@ -151,7 +157,7 @@ function AccessRequest({ seats, source, onSignIn, idPrefix }) {
     <div className="relative w-full max-w-md">
       <form onSubmit={handleSubmit} noValidate>
         <label htmlFor={inputId} className="px-1 text-[13px] font-medium text-muted-foreground">
-          {isFull ? 'Join the waitlist' : 'Request beta access'}
+          Work email
         </label>
         {/* One pill: the field and its action share an edge, and the whole pill takes the focus ring. */}
         <div
@@ -186,6 +192,7 @@ function AccessRequest({ seats, source, onSignIn, idPrefix }) {
             state={submitting ? 'running' : 'idle'}
             labels={{ idle: isFull ? 'Join waitlist' : 'Request access', running: 'Sending…' }}
             icon={ArrowRight}
+            hoverTurn
             className={`h-11 shrink-0 px-4 text-sm font-medium sm:h-9 ${submitting ? 'disabled:opacity-100' : ''}`}
           />
         </div>
@@ -195,7 +202,7 @@ function AccessRequest({ seats, source, onSignIn, idPrefix }) {
           </p>
         </Dismissible>
         {!error && (
-          <p id={`${inputId}-hint`} className="mt-2 px-1 text-xs leading-5 text-muted-foreground">
+          <p id={`${inputId}-hint`} className="mt-2 px-1 text-[13px] leading-5 text-muted-foreground">
             {seats?.total
               ? seats.remaining > 0
                 ? `${seats.remaining} of ${seats.total} beta seats left. `
@@ -205,13 +212,6 @@ function AccessRequest({ seats, source, onSignIn, idPrefix }) {
           </p>
         )}
       </form>
-      <button
-        type="button"
-        onClick={onSignIn}
-        className="-ml-3 mt-2 inline-flex h-11 items-center rounded-full px-3 text-sm sm:h-9 text-muted-foreground outline-none transition-colors duration-150 hover:bg-[hsl(var(--wb-pill))] hover:text-foreground focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))]"
-      >
-        Already have an account? Log in
-      </button>
     </div>
   );
 }
@@ -227,28 +227,24 @@ function ProductPreview() {
   ];
   return (
     <figure className="relative w-full" aria-label="Illustrative example of a Geneie conversation">
+      <div className="wb-rise" style={{ animationDelay: `${HERO_AT.frame}ms` }}>
+      <p className="mb-2 px-1 text-right text-[13px] leading-5 text-[var(--text-tertiary)]">Synthetic data</p>
       <div className="relative">
         <span aria-hidden="true" className="pub-sheet pub-sheet--2 hidden sm:block" />
         <span aria-hidden="true" className="pub-sheet pub-sheet--1 hidden sm:block" />
-      <div className="wb-card pub-card relative overflow-hidden" style={{ borderRadius: 20 }}>
-        <div className="flex items-center justify-between border-b border-[hsl(var(--wb-line))] px-4 py-2.5">
-          <span className="text-xs font-medium text-muted-foreground">Example conversation</span>
-          <span className="wb-chip">Synthetic data</span>
-        </div>
+      <div className="wb-card pub-card relative overflow-hidden" style={CARD_R}>
         <div className="space-y-4 p-4 sm:p-5">
-          <div className="wb-rise flex justify-end" style={{ animationDelay: '120ms' }}>
-            <p className="max-w-[88%] rounded-2xl rounded-br-md bg-[hsl(var(--brand-100))] px-3.5 py-2.5 text-sm leading-5 text-[hsl(var(--brand-700))]">
-              Which pathogenic variants fit infantile-onset seizures?
-            </p>
+          <div className="wb-rise flex justify-end" style={{ animationDelay: `${HERO_AT.bubble}ms` }}>
+            <div className="chat-user-bubble">Which pathogenic variants fit infantile-onset seizures?</div>
           </div>
-          <div className="space-y-3 text-sm leading-6">
-            <p className="wb-rise text-muted-foreground" style={{ animationDelay: '260ms' }}>
-              Filtered 1,284 annotated variants to <span className="font-medium text-foreground">3 candidates</span>:
+          <div className="space-y-3">
+            <p className="wb-rise text-[0.9375rem] leading-[1.65]" style={{ animationDelay: `${HERO_AT.answer}ms`, color: 'var(--text-primary)' }}>
+              Filtered 1,284 annotated variants to <strong className="font-semibold">3 candidates</strong>:
               ClinVar pathogenic or likely pathogenic, gnomAD allele frequency below 0.01, ranked against the HPO terms for the phenotype.
             </p>
-            <div className="overflow-x-auto rounded-2xl border border-[hsl(var(--wb-line))]">
+            <div className="wb-rise overflow-x-auto rounded-2xl border border-[hsl(var(--wb-line))]" style={{ animationDelay: `${HERO_AT.rows}ms` }}>
               <table className="w-full min-w-[19rem] text-left text-[0.8125rem]">
-                <thead className="bg-[hsl(var(--wb-pill))] text-xs text-muted-foreground">
+                <thead className="bg-[hsl(var(--wb-pill))] text-[13px] text-muted-foreground">
                   <tr>
                     <th scope="col" className="px-3 py-2 font-medium">Gene</th>
                     <th scope="col" className="px-3 py-2 font-medium">Variant</th>
@@ -257,7 +253,7 @@ function ProductPreview() {
                 </thead>
                 <tbody>
                   {rows.map((r, i) => (
-                    <tr key={r.gene} className="wb-rise border-t border-[hsl(var(--wb-line))]" style={{ animationDelay: `${380 + i * 70}ms` }}>
+                    <tr key={r.gene} className="wb-rise border-t border-[hsl(var(--wb-line))]" style={{ animationDelay: `${HERO_AT.rows + 150 + i * 70}ms` }}>
                       <td className="px-3 py-2 font-medium">{r.gene}</td>
                       <td className="px-3 py-2 font-mono text-xs">{r.variant}</td>
                       <td className="px-3 py-2"><span className="wb-chip" data-tone="brand">{r.cls}</span></td>
@@ -267,13 +263,15 @@ function ProductPreview() {
               </table>
             </div>
           </div>
+          <div className="wb-rise pipeline-composer [&&&]:!shadow-none flex items-center gap-2 py-2 pl-4 pr-2" style={{ animationDelay: `${HERO_AT.composer}ms` }} aria-hidden="true" inert>
+            <span className="min-w-0 flex-1 truncate text-[15px] leading-6 text-muted-foreground">Ask about your variants</span>
+            <span className="chat-tool chat-tool-send"><ArrowUp className="chat-send-arrow" /></span>
+          </div>
         </div>
       </div>
       </div>
-      <figcaption className="mt-2 px-1 text-xs text-[var(--text-tertiary)] sm:mt-9">
-        Illustration only. Not a real case.
-      </figcaption>
-      <HeroGenome className="mt-3 hidden h-auto w-full sm:block" />
+      <HeroGenome className="mt-9 hidden h-auto w-full sm:block" />
+      </div>
     </figure>
   );
 }
@@ -281,56 +279,63 @@ function ProductPreview() {
 /* --------------------------------------------------------------------- FAQ */
 
 /** Accordion rows: the answer opens with a height + fade, the chevron turns. Several can be open. */
-function FaqList() {
-  const base = useId();
-  const [open, setOpen] = useState(() => new Set());
-  const toggle = (i) =>
-    setOpen((prev) => {
-      const next = new Set(prev);
-      if (next.has(i)) next.delete(i);
-      else next.add(i);
-      return next;
-    });
+/** Tick for what a side does, cross for what it never does. Shape and colour both differ, so it reads without colour. */
+function Mark({ no = false }) {
+  const Icon = no ? X : Check;
   return (
-    <div className="wb-card pub-card divide-y divide-[hsl(var(--wb-line))] overflow-hidden" style={{ borderRadius: 20 }}>
-      {FAQS.map((item, i) => {
-        const isOpen = open.has(i);
-        const btnId = `${base}-q${i}`;
-        const panelId = `${base}-a${i}`;
-        return (
-          <div key={item.q}>
-            <h3>
-              <button
-                type="button"
-                id={btnId}
-                aria-expanded={isOpen}
-                aria-controls={panelId}
-                onClick={() => toggle(i)}
-                className="flex min-h-12 w-full items-center justify-between gap-4 px-5 py-3.5 text-left text-[0.9375rem] font-medium outline-none transition-colors duration-150 hover:bg-[hsl(var(--brand-50))] focus-visible:bg-[hsl(var(--brand-50))] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[hsl(var(--brand-500))]"
-              >
-                <span>{item.q}</span>
-                <Turn open={isOpen} deg={180} className="shrink-0 text-muted-foreground">
-                  <ChevronDown className="size-4" aria-hidden="true" />
-                </Turn>
-              </button>
-            </h3>
-            <Collapse open={isOpen} id={panelId}>
-              <div role="region" aria-labelledby={btnId} className="px-5 pb-4 pr-10 text-sm leading-6 text-muted-foreground">
-                {item.a}
-              </div>
-            </Collapse>
-          </div>
-        );
-      })}
+    <span
+      aria-hidden="true"
+      className="inline-flex size-4 shrink-0 items-center justify-center rounded-full"
+      style={{ background: no ? 'hsl(var(--foreground))' : 'hsl(var(--brand-solid))', color: no ? 'hsl(var(--background))' : 'hsl(var(--primary-foreground))' }}
+    >
+      <Icon className="size-3" strokeWidth={3} />
+    </span>
+  );
+}
+
+const FAQ_ITEMS = FAQS.map((item, i) => ({ id: `q${i}`, title: item.q, description: item.a }));
+
+const FAQ_CLASSES = {
+  item: 'wb-card pub-card !bg-[hsl(var(--wb-card))]',
+  trigger: 'focus-visible:bg-transparent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[hsl(var(--brand-500))]',
+  title: 'whitespace-normal py-3.5 text-base leading-6 lg:text-xl lg:leading-7',
+  description: 'pr-5 text-base leading-6',
+};
+
+/* From lg up the list reserves the height of its tallest open state, so opening a question never moves the
+ * divider and sections below it. The reservation is invisible copies of the list, one per question with that
+ * question open, stacked in the same grid cell as the real list: the cell is as tall as the tallest copy,
+ * whatever the width or copy. Below lg the page just flows. */
+function FaqList() {
+  return (
+    <div className="lg:grid lg:items-start">
+      <div className="lg:col-start-1 lg:row-start-1">
+        <BouncyAccordion items={FAQ_ITEMS} classNames={FAQ_CLASSES} />
+      </div>
+      {FAQ_ITEMS.map((item) => (
+        <div key={item.id} aria-hidden="true" inert className="pointer-events-none invisible hidden lg:col-start-1 lg:row-start-1 lg:block">
+          <BouncyAccordion items={FAQ_ITEMS} value={item.id} onValueChange={() => {}} classNames={FAQ_CLASSES} />
+        </div>
+      ))}
     </div>
   );
 }
 
 /* ---------------------------------------------------------------------- page */
 
-const SECTION = 'mx-auto max-w-6xl px-5 py-14 sm:px-8 lg:py-16';
-const H2 = 'text-2xl font-semibold tracking-tight sm:text-3xl';
-const NAV_PILL = 'wb-tab !hidden px-3.5 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] md:!flex';
+/* Hero entrance order, in ms after load: headline, subtext, form, then the empty preview box, then its text (bubble, answer, rows). */
+const HERO_AT = { sub: 550, form: 700, frame: 1000, bubble: 1250, answer: 1450, rows: 1600, composer: 2150 };
+// Body copy follows its heading by this much when a section scrolls in.
+const BODY_LAG = 90;
+
+const SECTION = 'mx-auto max-w-7xl px-5 py-16 sm:px-8 lg:px-10 sm:py-20 lg:py-24';
+// Bands that hang a 28px ruler from their top edge need less top padding, so the gap to the heading matches the others.
+const SECTION_RULED = `${SECTION} !pt-10 sm:!pt-12 lg:!pt-16`;
+// Type scale follows docs/MISTRAL_TYPE_SCALE.md: one step at lg, body fixed at 16/24.
+const H2 = 'text-2xl font-medium leading-7 tracking-[-0.01em] text-balance lg:text-[2.75rem] lg:leading-[3.25rem]';
+const CARD_R = { borderRadius: 20 };
+// The gliding pill in SharedLayoutBg is the only hover surface, so .wb-tab's own hover fill and border are switched off.
+const NAV_PILL = 'wb-tab !hidden !border-transparent hover:!bg-transparent px-3.5 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] md:!flex';
 const FOOT_LINK = 'inline-flex min-h-11 items-center rounded-full px-3 py-2 sm:min-h-0 text-muted-foreground transition-colors hover:bg-[hsl(var(--wb-pill))] hover:text-foreground';
 
 const LandingPage = () => {
@@ -367,21 +372,28 @@ const LandingPage = () => {
 
         {/* ------------------------------------------------------------- nav */}
         <header className="pub-header sticky top-0 z-40 border-b border-[hsl(var(--wb-line))]">
-          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-5 sm:px-8">
+          <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8 lg:px-10">
             <Link to="/" aria-label="Geneie home" className="inline-flex min-h-11 items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] sm:min-h-0">
               <BrandLogo className="h-8 w-auto" />
             </Link>
             <nav aria-label="Primary" className="flex items-center gap-1">
-              {NAV.map((item) => (
-                <a
-                  key={item.target}
-                  href={`#${item.target}`}
-                  onClick={(e) => scrollTo(e, item.target)}
-                  className={NAV_PILL}
-                >
-                  {item.label}
-                </a>
-              ))}
+              <SharedLayoutBg
+                inset={0}
+                className="hidden w-auto flex-row gap-1 md:flex"
+                pillClassName="rounded-full bg-[hsl(var(--wb-pill))]"
+              >
+                {NAV.map((item) => (
+                  <a
+                    key={item.target}
+                    href={`#${item.target}`}
+                    onClick={(e) => scrollTo(e, item.target)}
+                    className={NAV_PILL}
+                  >
+                    {item.label}
+                  </a>
+                ))}
+              </SharedLayoutBg>
+              <ThemeToggle className="ml-1" />
               <Button
                 type="button"
                 variant="outline"
@@ -396,38 +408,42 @@ const LandingPage = () => {
 
         <main id="main">
           {/* ------------------------------------------------------------ hero */}
-          <div className="pub-hero tx tx--lattice">
-          <section aria-labelledby="hero-title" className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)] items-center gap-12 px-5 pb-16 pt-14 sm:px-8 sm:pt-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:gap-16 lg:pb-20 lg:pt-20">
+          <div className="pub-hero" style={{ backgroundImage: 'radial-gradient(ellipse 60% 70% at 82% 30%, hsl(var(--brand-300) / 0.28), transparent 70%), radial-gradient(ellipse 45% 55% at 8% 0%, hsl(var(--brand-200) / 0.35), transparent 70%), linear-gradient(to bottom, var(--pub-tint) 0%, var(--pub-tint) 55%, var(--pub-plain) 100%)' }}>
+          <section aria-labelledby="hero-title" className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)] items-center gap-12 px-5 pb-12 pt-14 sm:px-8 lg:px-10 sm:pt-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,34rem)] lg:gap-16 lg:pb-16 lg:pt-24">
             <div>
-              <p className="wb-rise wb-chip h-7 px-3 text-[13px] font-medium" data-tone="brand">Clinical genomics, in conversation</p>
-              <h1 id="hero-title" className="wb-rise mt-5 max-w-xl text-[2.25rem] font-semibold leading-[1.1] tracking-tight text-balance sm:text-5xl" style={{ animationDelay: '60ms' }}>
-                From VCF to ranked variants you can question.
-              </h1>
-              <p className="wb-rise mt-5 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8" style={{ animationDelay: '120ms' }}>
+              <TextReveal
+                as="h1"
+                id="hero-title"
+                text="From VCF to ranked variants you can question."
+                stagger={0.045}
+                blur={8}
+                yOffset="30%"
+                delay={0.05}
+                className="max-w-xl text-[2.5rem] font-medium leading-[3rem] tracking-[-0.02em] text-balance lg:text-[4rem] lg:leading-[4.25rem]"
+              />
+              <p className="wb-rise mt-5 max-w-xl text-base leading-6 text-muted-foreground" style={{ animationDelay: `${HERO_AT.sub}ms` }}>
                 Upload a whole-genome or exome file. Geneie annotates it, applies ACMG and phenotype-driven
                 filters in deterministic pipelines, and lets you ask questions about the result in plain language.
               </p>
-              <div className="wb-rise mt-8" style={{ animationDelay: '180ms' }}>
-                <AccessRequest seats={seats} source="landing-hero" idPrefix="hero" onSignIn={() => navigate('/auth')} />
+              <div className="wb-rise mt-8" style={{ animationDelay: `${HERO_AT.form}ms` }}>
+                <AccessRequest seats={seats} source="landing-hero" idPrefix="hero" />
               </div>
-              <p className="wb-rise mt-8 text-sm text-muted-foreground" style={{ animationDelay: '240ms' }}>
-                For clinicians, researchers, genetic counselors and bioinformaticians working with WGS and WES data.
-              </p>
             </div>
             <ProductPreview />
           </section>
-          <div aria-hidden="true" className="pub-helix tx tx--helix" />
+          <HelixDivider />
           </div>
 
           {/* ---------------------------------------------------- how it works */}
           <div className="pub-band">
           <section id="how-it-works" aria-labelledby="how-title" className="scroll-mt-14">
             <div className={SECTION}>
-              <Reveal>
+              <Reveal className="mb-2">
                 <h2 id="how-title" className={H2}>From a raw file to answers you can cite</h2>
-                <p className="mt-2 max-w-xl text-muted-foreground">Pick a step to see what it looks like.</p>
               </Reveal>
-              <ProductTour />
+              <Reveal delay={BODY_LAG}>
+                <ProductTour />
+              </Reveal>
             </div>
           </section>
           </div>
@@ -436,32 +452,32 @@ const LandingPage = () => {
           <div className="pub-band pub-band--tint">
           <div aria-hidden="true" className="pub-rule tx tx--ticks" />
           <section id="capabilities" aria-labelledby="cap-title" className="scroll-mt-14">
-            <div className={`${SECTION} !pt-8`}>
+            <div className={SECTION_RULED}>
               <Reveal>
                 <h2 id="cap-title" className={H2}>What the model does, and what it does not</h2>
-                <p className="mt-2 max-w-2xl text-muted-foreground">
-                  Scoring and classification run in established pipelines. The language model only translates and explains, so each result traces back to the data.
+                <p className="mt-3 max-w-2xl text-muted-foreground">
+                  The pipelines do the scoring and classifying. The language model reads your question and explains what comes back, so every result traces to your data.
                 </p>
               </Reveal>
-              <div className="mt-8 grid gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-                <Reveal className="wb-card pub-card p-5 sm:p-6" style={{ borderRadius: 20 }}>
-                  <h3 className="text-base font-semibold">Runs in established pipelines</h3>
+              <div className="mt-10 grid gap-4 lg:mt-12 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+                <Reveal delay={BODY_LAG} className="wb-card pub-card p-5 sm:p-6" style={CARD_R}>
+                  <h3 className="text-xl font-medium leading-6 lg:text-2xl lg:leading-8">Runs in established pipelines</h3>
                   <dl className="mt-4 grid gap-x-8 gap-y-5 sm:grid-cols-2">
                     {PIPELINES.map(([k, v]) => (
                       <div key={k}>
-                        <dt className="text-sm font-medium">{k}</dt>
-                        <dd className="mt-1 text-sm leading-6 text-muted-foreground">{v}</dd>
+                        <dt className="text-base font-medium leading-6">{k}</dt>
+                        <dd className="mt-1 text-base leading-6 text-muted-foreground">{v}</dd>
                       </div>
                     ))}
                   </dl>
                 </Reveal>
-                <Reveal delay={70} className="wb-card pub-card p-5 sm:p-6" style={{ borderRadius: 20, background: 'hsl(var(--brand-50))' }}>
-                  <h3 className="text-base font-semibold">The language model</h3>
+                <Reveal delay={BODY_LAG + 60} className="wb-card pub-card p-5 sm:p-6" style={{ ...CARD_R, borderColor: 'hsl(var(--brand-300))' }}>
+                  <h3 className="text-xl font-medium leading-6 lg:text-2xl lg:leading-8">The language model</h3>
                   <dl className="mt-4 space-y-5">
-                    {MODEL.map(([k, v]) => (
+                    {MODEL.map(([k, v, no]) => (
                       <div key={k}>
-                        <dt className="text-sm font-medium">{k}</dt>
-                        <dd className="mt-1 text-sm leading-6 text-muted-foreground">{v}</dd>
+                        <dt className="flex items-center gap-2 text-base font-medium leading-6"><Mark no={Boolean(no)} />{k}</dt>
+                        <dd className="mt-1 text-base leading-6 text-muted-foreground">{v}</dd>
                       </div>
                     ))}
                   </dl>
@@ -475,12 +491,11 @@ const LandingPage = () => {
           <div className="pub-band">
           <div aria-hidden="true" className="pub-rule tx tx--ticks" />
           <section aria-labelledby="data-title">
-            <Reveal className={`${SECTION} grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16`}>
-              <div>
+            <div className={`${SECTION_RULED} grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16`}>
+              <Reveal>
                 <h2 id="data-title" className={H2}>Data handling</h2>
-                <p className="mt-2 text-muted-foreground">What to know before you upload.</p>
-              </div>
-              <dl className="wb-card pub-card divide-y divide-[hsl(var(--wb-line))] px-5 text-sm" style={{ borderRadius: 20 }}>
+              </Reveal>
+              <Reveal as="dl" delay={BODY_LAG} className="wb-card pub-card divide-y divide-[hsl(var(--wb-line))] px-5 text-base leading-6" style={CARD_R}>
                 {[
                   ['Closed beta', 'Use de-identified or synthetic data. Identifiable patient data needs a separate written agreement.'],
                   ['Where data lives', 'Application data is stored in AWS Mumbai (ap-south-1) and encrypted in transit.'],
@@ -497,8 +512,8 @@ const LandingPage = () => {
                   and{' '}
                   <Link to="/legal/terms" className="text-[hsl(var(--brand-700))] underline underline-offset-2">Terms of Use</Link>.
                 </div>
-              </dl>
-            </Reveal>
+              </Reveal>
+            </div>
           </section>
           </div>
 
@@ -506,10 +521,14 @@ const LandingPage = () => {
           <div className="pub-band pub-band--tint">
           <div aria-hidden="true" className="pub-rule tx tx--ticks" />
           <section id="faq" aria-labelledby="faq-title" className="scroll-mt-14">
-            <Reveal className={`${SECTION} grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16`}>
-              <h2 id="faq-title" className={H2}>Questions</h2>
-              <FaqList />
-            </Reveal>
+            <div className={`${SECTION_RULED} grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16`}>
+              <Reveal>
+                <h2 id="faq-title" className={H2}>Questions</h2>
+              </Reveal>
+              <Reveal delay={BODY_LAG}>
+                <FaqList />
+              </Reveal>
+            </div>
           </section>
           </div>
 
@@ -517,14 +536,14 @@ const LandingPage = () => {
           <div className="pub-band">
           <div aria-hidden="true" className="pub-rule tx tx--ticks" />
           <section aria-labelledby="cta-title">
-            <div className={`${SECTION} !pt-8`}>
-              <Reveal className="wb-card pub-card pub-cta tx tx--lattice px-6 py-10 sm:px-10" style={{ borderRadius: 20 }}>
-                <h2 id="cta-title" className="max-w-xl text-2xl font-semibold tracking-tight sm:text-3xl">
+            <div className={SECTION_RULED}>
+              <Reveal className="wb-card pub-card pub-cta px-6 py-12 sm:px-12 sm:py-16" style={CARD_R}>
+                <h2 id="cta-title" className={`max-w-2xl ${H2}`}>
                   Try Geneie on your own variant file.
                 </h2>
-                <div className="mt-6">
-                  <AccessRequest seats={seats} source="landing-pricing" idPrefix="cta" onSignIn={() => navigate('/auth')} />
-                </div>
+                <Reveal delay={BODY_LAG} className="mt-6">
+                  <AccessRequest seats={seats} source="landing-pricing" idPrefix="cta" />
+                </Reveal>
               </Reveal>
             </div>
           </section>
@@ -534,21 +553,38 @@ const LandingPage = () => {
         {/* ---------------------------------------------------------- footer */}
         <footer id="contact" className="pub-band pub-band--deep">
           <div aria-hidden="true" className="pub-rule tx tx--ticks" />
-          <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10 sm:px-8 md:flex-row md:items-start md:justify-between">
+          <div className="mx-auto flex max-w-7xl flex-col gap-10 px-5 py-12 sm:px-8 lg:px-10 md:flex-row md:items-start md:justify-between">
             <div className="max-w-xs">
-              <BrandLogo className="h-8 w-auto" />
+              <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Geneie by Omixir</p>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                Genomic variant analysis for researchers and clinicians. A decision-support tool, not a diagnostic device.
+                Ask your variant file questions in plain language. Geneie supports your decisions; it does not diagnose.
               </p>
             </div>
-            <nav aria-label="Footer" className="-ml-3 flex flex-wrap gap-x-1 gap-y-1 text-sm md:ml-0 md:max-w-md md:justify-end">
-              <Link to="/legal/terms" className={FOOT_LINK}>Terms of Use</Link>
-              <Link to="/legal/privacy" className={FOOT_LINK}>Privacy Policy</Link>
-              <a href="mailto:support@geneie.chat" className={FOOT_LINK}>support@geneie.chat</a>
-              <Link to="/auth" className={FOOT_LINK}>Log in</Link>
+            <nav aria-label="Footer" className="-ml-3 flex gap-x-10 text-sm md:ml-0">
+              <div>
+                <h3 className="px-3 text-xs font-normal uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Product</h3>
+                <ul className="mt-2 flex flex-col">
+                  <li><a href="#how-it-works" className={FOOT_LINK}>How it works</a></li>
+                  <li><a href="#capabilities" className={FOOT_LINK}>Capabilities</a></li>
+                  <li><a href="#faq" className={FOOT_LINK}>FAQ</a></li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="px-3 text-xs font-normal uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Legal</h3>
+                <ul className="mt-2 flex flex-col">
+                  <li><Link to="/legal/terms" className={FOOT_LINK}>Terms of Use</Link></li>
+                  <li><Link to="/legal/privacy" className={FOOT_LINK}>Privacy Policy</Link></li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="px-3 text-xs font-normal uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Contact</h3>
+                <ul className="mt-2 flex flex-col">
+                  <li><a href="mailto:support@geneie.chat" className={FOOT_LINK}>support@geneie.chat</a></li>
+                </ul>
+              </div>
             </nav>
           </div>
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 border-t border-[hsl(var(--wb-line))] px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-xs text-[var(--text-tertiary)] sm:px-8 sm:py-5">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 border-t border-[hsl(var(--wb-line))] px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-xs text-[var(--text-tertiary)] sm:px-8 lg:px-10 sm:py-5">
             <span>&copy; {new Date().getFullYear()} Geneie</span>
             <a
               href="https://omixir.com/"
@@ -558,6 +594,16 @@ const LandingPage = () => {
             >
               Powered by Omixir
             </a>
+            <button
+              type="button"
+              onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })}
+              className="inline-flex min-h-11 items-center gap-1.5 hover:text-foreground sm:min-h-0"
+            >
+              Back to top <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+          <div className="overflow-hidden px-2 sm:px-4">
+            <HalftoneWordmark text="Geneie" />
           </div>
         </footer>
       </div>

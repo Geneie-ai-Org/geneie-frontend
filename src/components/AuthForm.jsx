@@ -439,10 +439,8 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
     };
 
     // Contextual heading
-    let mainHeading = isLogin ? 'Log in to Geneie' : 'Create your account';
-    let subMessage = isLogin
-        ? 'Welcome back. Continue with your work account or email.'
-        : 'Start with your work account or email.';
+    let mainHeading = isLogin ? 'Log in to Geneie' : 'Create an account';
+    let subMessage = 'Connect to Geneie with:';
 
     if (resetMode) {
         mainHeading = 'Reset your password';
@@ -455,7 +453,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
     }
 
     const submitLabel = resetMode ? 'Send reset link' : isLogin ? 'Log in' : 'Create account';
-    const submitBusyLabel = resetMode ? 'Sending link…' : isLogin ? 'Logging in…' : 'Creating account…';
+    const submitBusyLabel = resetMode ? 'Sending link…' : isLogin ? 'Logging in' : 'Creating account…';
     const submitDoneLabel = resetMode ? 'Link sent' : 'Account created';
 
     const headerKey = showLinkingPrompt ? 'link' : resetMode ? 'reset' : isLogin ? 'login' : 'signup';
@@ -464,8 +462,8 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
     return (
         <div className="w-full">
             {/* === Header: swaps with a quick fade when the mode changes === */}
-            <div key={headerKey} className="wb-fade mb-6">
-                <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+            <div key={headerKey} className="wb-fade mb-6 text-center sm:mb-8">
+                <h2 className="text-2xl font-medium tracking-tight text-foreground sm:text-3xl">
                     {showLinkingPrompt ? 'Link your account' : mainHeading}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -532,18 +530,18 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
 
             {/* === Social sign-in: the fastest path, so it comes first === */}
             <Collapse open={showSocial} className="-mx-1 px-1">
-                <div className="space-y-2.5 pb-1">
+                <div className="grid grid-cols-2 gap-3 pb-1">
                     <ProviderButton busy={busy === 'google'} mark={<GoogleMark />} onClick={handleGoogleSignIn} disabled={loading}>
-                        Continue with Google
+                        Google
                     </ProviderButton>
                     <ProviderButton busy={busy === 'microsoft'} mark={<MicrosoftMark />} onClick={handleMicrosoftSignIn} disabled={loading}>
-                        Continue with Microsoft
+                        Microsoft
                     </ProviderButton>
                 </div>
 
                 <div className="my-6 flex items-center gap-3" role="separator" aria-label="or">
                     <div className="h-px flex-1 bg-[hsl(var(--wb-line))]" />
-                    <span className="wb-chip shrink-0 text-[var(--text-tertiary)]">or use email</span>
+                    <span className="shrink-0 text-xs text-[var(--text-tertiary)]">or continue with</span>
                     <div className="h-px flex-1 bg-[hsl(var(--wb-line))]" />
                 </div>
             </Collapse>

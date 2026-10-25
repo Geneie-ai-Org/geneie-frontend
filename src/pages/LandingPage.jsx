@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ArrowRight, ArrowUp, Check, X } from 'lucide-react';
@@ -11,13 +11,18 @@ import { TextReveal } from '@/components/motion/text-reveal';
 import BrandLogo from '@/components/public/BrandLogo';
 import Reveal from '@/components/public/Reveal';
 import ProductTour from '@/components/public/ProductTour';
+import WhoItsFor from '@/components/public/WhoItsFor';
+import DrawsTheLine from '@/components/public/DrawsTheLine';
+import PrinciplesSection from '@/components/public/PrinciplesSection';
 import HeroGenome from '@/components/public/HeroGenome';
 import HelixDivider from '@/components/public/HelixDivider';
 import HalftoneWordmark from '@/components/public/HalftoneWordmark';
+import { TiltCard } from '@/components/motion/tilt-card';
 import ThemeToggle from '@/components/public/ThemeToggle';
 import { useBetaSeats } from '@/hooks/useBetaSeats';
 import { joinWaitlist } from '@/services/backendApi';
 import { useSeo } from '@/hooks/useSeo';
+import { acquireLenis, releaseLenis } from '@/lib/smoothScroll';
 
 /* ------------------------------------------------------------------ content */
 
@@ -328,7 +333,7 @@ const HERO_AT = { sub: 550, form: 700, frame: 1000, bubble: 1250, answer: 1450, 
 // Body copy follows its heading by this much when a section scrolls in.
 const BODY_LAG = 90;
 
-const SECTION = 'mx-auto max-w-7xl px-5 py-16 sm:px-8 lg:px-10 sm:py-20 lg:py-24';
+const SECTION = 'mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-10 sm:py-20 lg:py-24';
 // Bands that hang a 28px ruler from their top edge need less top padding, so the gap to the heading matches the others.
 const SECTION_RULED = `${SECTION} !pt-10 sm:!pt-12 lg:!pt-16`;
 // Type scale follows docs/MISTRAL_TYPE_SCALE.md: one step at lg, body fixed at 16/24.
@@ -351,12 +356,25 @@ const LandingPage = () => {
    * simply omitted when the call is slow or fails. */
   const { seats } = useBetaSeats();
 
+  const lenisRef = useRef(null);
+  useEffect(() => {
+    lenisRef.current = acquireLenis();
+    return () => {
+      if (lenisRef.current) releaseLenis();
+      lenisRef.current = null;
+    };
+  }, []);
+
   const scrollTo = (e, target) => {
     e.preventDefault();
     const el = document.getElementById(target);
     if (!el) return;
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    // Lenis owns scrolling when it is running; its stylesheet switches native smooth scrolling off.
+    if (lenisRef.current) {
+      lenisRef.current.scrollTo(el, { offset: -56 }); // the sticky header, as scroll-mt-14 does for native scrolling
+      return;
+    }
+    el.scrollIntoView({ behavior: 'auto', block: 'start' });
   };
 
   return (
@@ -409,7 +427,7 @@ const LandingPage = () => {
         <main id="main">
           {/* ------------------------------------------------------------ hero */}
           <div className="pub-hero" style={{ backgroundImage: 'radial-gradient(ellipse 60% 70% at 82% 30%, hsl(var(--brand-300) / 0.28), transparent 70%), radial-gradient(ellipse 45% 55% at 8% 0%, hsl(var(--brand-200) / 0.35), transparent 70%), linear-gradient(to bottom, var(--pub-tint) 0%, var(--pub-tint) 55%, var(--pub-plain) 100%)' }}>
-          <section aria-labelledby="hero-title" className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)] items-center gap-12 px-5 pb-12 pt-14 sm:px-8 lg:px-10 sm:pt-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,34rem)] lg:gap-16 lg:pb-16 lg:pt-24">
+          <section aria-labelledby="hero-title" className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)] items-center gap-12 px-5 py-20 sm:px-8 lg:px-10 sm:pt-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,34rem)] lg:gap-16 lg:pb-16 lg:pt-24">
             <div>
               <TextReveal
                 as="h1"
@@ -444,6 +462,19 @@ const LandingPage = () => {
               <Reveal delay={BODY_LAG}>
                 <ProductTour />
               </Reveal>
+            </div>
+          </section>
+          </div>
+
+          {/* ------------------------------------------------------- who it's for */}
+          <div className="pub-band">
+          <section id="who-its-for" aria-labelledby="who-title" className="scroll-mt-14">
+            <div className={SECTION}>
+              <Reveal className="mb-8 lg:mb-12">
+                <h2 id="who-title" className={H2}>Who it’s for</h2>
+              </Reveal>
+              {/* Not wrapped in Reveal: it is several screens tall, so its visibility threshold would never be met reliably. */}
+              <WhoItsFor />
             </div>
           </section>
           </div>
@@ -487,32 +518,66 @@ const LandingPage = () => {
           </section>
           </div>
 
+          {/* ------------------------------------------------ where Geneie draws the line */}
+          <div className="pub-band">
+          <div aria-hidden="true" className="pub-rule tx tx--ticks" />
+          <section aria-labelledby="line-title">
+            <div className={SECTION_RULED}>
+              <Reveal>
+                <h2 id="line-title" className={H2}>Where Geneie draws the line</h2>
+                <p className="mt-3 max-w-2xl text-muted-foreground">Decisions we made on purpose.</p>
+              </Reveal>
+              <div className="mt-10 lg:mt-14">
+                <DrawsTheLine />
+              </div>
+            </div>
+          </section>
+          </div>
+
+          {/* ------------------------------------------------------ built to be checked */}
+          <div className="pub-band pub-band--tint">
+          <div aria-hidden="true" className="pub-rule tx tx--ticks" />
+          <section aria-labelledby="checked-title">
+            <div className={SECTION_RULED}>
+              <Reveal>
+                <h2 id="checked-title" className={H2}>Built to be checked</h2>
+                <p className="mt-3 max-w-2xl text-muted-foreground">Three properties you can verify yourself.</p>
+              </Reveal>
+              <div className="mt-10 lg:mt-14">
+                <PrinciplesSection />
+              </div>
+            </div>
+          </section>
+          </div>
+
           {/* ---------------------------------------------------- data handling */}
           <div className="pub-band">
           <div aria-hidden="true" className="pub-rule tx tx--ticks" />
           <section aria-labelledby="data-title">
-            <div className={`${SECTION_RULED} grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16`}>
+            <div className={SECTION_RULED}>
               <Reveal>
                 <h2 id="data-title" className={H2}>Data handling</h2>
-              </Reveal>
-              <Reveal as="dl" delay={BODY_LAG} className="wb-card pub-card divide-y divide-[hsl(var(--wb-line))] px-5 text-base leading-6" style={CARD_R}>
-                {[
-                  ['Closed beta', 'Use de-identified or synthetic data. Identifiable patient data needs a separate written agreement.'],
-                  ['Where data lives', 'Application data is stored in AWS Mumbai (ap-south-1) and encrypted in transit.'],
-                  ['AI processing', 'Prompts and derived text sent to language-model or literature tools may be processed outside India.'],
-                ].map(([k, v]) => (
-                  <div key={k} className="grid gap-1 py-4 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-6">
-                    <dt className="font-medium">{k}</dt>
-                    <dd className="leading-6 text-muted-foreground">{v}</dd>
-                  </div>
-                ))}
-                <div className="py-4 text-muted-foreground">
+                <p className="mt-3 text-muted-foreground">
                   Read the{' '}
                   <Link to="/legal/privacy" className="text-[hsl(var(--brand-700))] underline underline-offset-2">Privacy Policy</Link>{' '}
                   and{' '}
                   <Link to="/legal/terms" className="text-[hsl(var(--brand-700))] underline underline-offset-2">Terms of Use</Link>.
-                </div>
+                </p>
               </Reveal>
+              <div className="mt-10 grid gap-4 lg:mt-12 lg:grid-cols-3">
+                {[
+                  ['Closed beta', 'Use de-identified or synthetic data. Identifiable patient data needs a separate written agreement.'],
+                  ['Where data lives', 'Application data is stored in AWS Mumbai (ap-south-1) and encrypted in transit.'],
+                  ['AI processing', 'Prompts and derived text sent to language-model or literature tools may be processed outside India.'],
+                ].map(([k, v], i) => (
+                  <Reveal key={k} delay={BODY_LAG + i * 60} className="h-full">
+                    <TiltCard max={6} className="wb-card pub-card h-full rounded-[20px] p-5 sm:p-6">
+                      <h3 className="text-xl font-medium leading-6 lg:text-2xl lg:leading-8">{k}</h3>
+                      <p className="mt-2 text-base leading-6 text-muted-foreground">{v}</p>
+                    </TiltCard>
+                  </Reveal>
+                ))}
+              </div>
             </div>
           </section>
           </div>

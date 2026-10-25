@@ -103,10 +103,12 @@ export default {
         'wave-bars': { '0%, 100%': { transform: 'scaleY(0.4)' }, '50%': { transform: 'scaleY(1)' } },
         'text-blink': { '0%, 100%': { opacity: '1' }, '50%': { opacity: '0.3' } },
         'shimmer': { 'to': { backgroundPosition: '-200% center' } },
+        'marquee': { 'to': { transform: 'translateX(calc(-100% - var(--gap)))' } },
         'loading-dots': { '0%': { opacity: '0.2' }, '20%': { opacity: '1' }, '100%': { opacity: '0.2' } },
       },
       animation: {
         'spinner-fade': 'spinner-fade 1.2s linear infinite',
+        'marquee': 'marquee 30s linear infinite',
       },
     },
   },

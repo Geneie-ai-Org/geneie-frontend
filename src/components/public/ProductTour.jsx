@@ -114,7 +114,7 @@ function Tick({ value, decimals = 0, suffix = '', delay = 0, className }) {
 }
 
 /** A chart line that draws itself left to right when it appears. */
-function DrawPath({ delay = 0, ...props }) {
+export function DrawPath({ delay = 0, ...props }) {
   const ref = useRef(null);
   const reduce = useReducedMotion();
   const played = usePlayed(ref, delay);
@@ -172,7 +172,7 @@ function Stat({ label, value, note, num, delay = 450 }) {
 }
 
 /** Smooth-ish per-cycle quality curve: starts high, drifts down; read 2 sits a little lower. */
-function curve(x0, x1, y, drop, wobble) {
+export function curve(x0, x1, y, drop, wobble) {
   const pts = [];
   for (let i = 0; i <= 40; i += 1) {
     const t = i / 40;
@@ -185,10 +185,24 @@ function curve(x0, x1, y, drop, wobble) {
 /* ---------------------------------------------------------- step tiles */
 
 const checkContent = () => {
+  const cards = [
+    { label: 'Reads', value: '48.2 M', num: { value: 48.2, decimals: 1, suffix: ' M' }, note: 'paired-end' },
+    { label: 'Q30 bases', value: '94.1%', num: { value: 94.1, decimals: 1, suffix: '%' }, note: 'after filtering' },
+    { label: 'Kept', value: '97.6%', num: { value: 97.6, decimals: 1, suffix: '%' }, note: 'of all reads' },
+    { label: 'Duplication', value: '6.8%', num: { value: 6.8, decimals: 1, suffix: '%' }, note: 'estimated' },
+  ];
+  // All four numbers sit in a row of square cards above the chart, so this step skips the bento slots.
   return {
-    main: (
-      <>
-        <figure className="flex h-full flex-col">
+    full: (
+      <div className="flex h-full flex-col gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {cards.map((c, i) => (
+            <div key={c.label} className="rounded-2xl border px-3.5 py-3" style={{ borderColor: LINE, background: 'hsl(var(--wb-card))' }}>
+              <Stat label={c.label} value={c.value} num={c.num} delay={450 + i * 100} note={c.note} />
+            </div>
+          ))}
+        </div>
+        <figure className="flex min-h-0 flex-1 flex-col rounded-2xl border p-3.5 sm:p-4" style={{ borderColor: LINE, background: 'hsl(var(--wb-card))' }}>
           <figcaption className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
             <span>Quality along the read</span>
             <span className="inline-flex items-center gap-3">
@@ -196,7 +210,7 @@ const checkContent = () => {
               <span className="inline-flex items-center gap-1.5"><i className="inline-block h-0.5 w-4 rounded" style={{ background: 'hsl(var(--brand-300))' }} />Read 2</span>
             </span>
           </figcaption>
-          <svg viewBox="0 0 400 124" role="img" aria-label="Illustrative per-base quality curves for read 1 and read 2, read 2 drifting lower than read 1 toward the end" className="my-auto h-auto w-full text-foreground">
+          <svg viewBox="0 0 400 124" role="img" aria-label="Illustrative per-base quality curves for read 1 and read 2, read 2 drifting lower than read 1 toward the end" className="my-auto h-auto max-h-full w-full text-foreground">
             {[[16, 'Q40'], [56, 'Q30'], [96, 'Q20']].map(([y, l]) => (
               <g key={l}>
                 <line x1="30" x2="396" y1={y} y2={y} stroke={LINE} strokeDasharray={l === 'Q30' ? '4 4' : undefined} />
@@ -208,23 +222,9 @@ const checkContent = () => {
             <text x="30" y="118" fontSize="10" fill="currentColor" opacity="0.55">1</text>
             <text x="396" y="118" fontSize="10" textAnchor="end" fill="currentColor" opacity="0.55">150 bp</text>
           </svg>
-          <Caption>Quality is reported per cycle for each read.</Caption>
+          <Caption>Quality is reported per cycle for each read, next to the share of reads kept.</Caption>
         </figure>
-      </>
-    ),
-    a: (
-      <><Stat label="Reads" value="48.2 M" num={{ value: 48.2, decimals: 1, suffix: ' M' }} note="paired-end" /></>
-    ),
-    brand: (
-      <><BigNumber value="97.6%" num={{ value: 97.6, decimals: 1, suffix: '%' }} label="of all reads kept" /></>
-    ),
-    wide: (
-      <>
-        <div className="grid grid-cols-2 gap-4">
-          <Stat label="Q30 bases" value="94.1%" num={{ value: 94.1, decimals: 1, suffix: '%' }} delay={550} note="after filtering" />
-          <Stat label="Duplication" value="6.8%" num={{ value: 6.8, decimals: 1, suffix: '%' }} delay={650} note="estimated" />
-        </div>
-      </>
+      </div>
     ),
   };
 };
@@ -283,21 +283,34 @@ const rankContent = () => {
   return {
     main: (
       <>
-        <ul className="flex h-full flex-col justify-between gap-2.5">
-          {rows.map((r, i) => (
-            <li key={r.gene}>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-baseline gap-2">
-                  <span className="text-xs tabular-nums text-muted-foreground">{i + 1}</span>
-                  <span className="font-semibold">{r.gene}</span>
-                  <span className="truncate font-mono text-xs text-muted-foreground">{r.v}</span>
+        <div className="flex h-full flex-col gap-5">
+          <div className="flex items-baseline justify-between gap-3 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Ranked candidates</span>
+            <span>by Exomiser score</span>
+          </div>
+          <ol className="flex min-h-0 flex-1 flex-col justify-between gap-2.5">
+            {rows.map((r, i) => (
+              <li key={r.gene}>
+                <div className="flex items-center gap-3">
+                  <span
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums"
+                    style={i === 0 ? { background: 'hsl(var(--brand-solid))', color: 'hsl(var(--primary-foreground))' } : { border: `1px solid ${LINE}`, color: 'hsl(var(--muted-foreground))' }}
+                  >
+                    {i + 1}
+                  </span>
+                  <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-baseline gap-2">
+                      <span className="font-semibold">{r.gene}</span>
+                      <span className="truncate font-mono text-xs text-muted-foreground">{r.v}</span>
+                    </div>
+                    <span className="wb-chip shrink-0" data-tone={r.tone}>{r.label}</span>
+                  </div>
                 </div>
-                <span className="wb-chip shrink-0" data-tone={r.tone}>{r.label}</span>
-              </div>
-              <p className="mt-1 text-[0.8125rem] leading-5 text-muted-foreground">{r.why}</p>
-            </li>
-          ))}
-        </ul>
+                <p className="mt-1.5 text-[0.8125rem] leading-5 text-muted-foreground">{r.why}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
       </>
     ),
     a: (
@@ -307,7 +320,7 @@ const rankContent = () => {
       <><BigNumber value="SCN1A" label="primary candidate" /></>
     ),
     wide: (
-      <div className="flex h-full items-center"><Caption>Scores come from the established tools, with the reasons shown. Labels are decision support: an analyst confirms every candidate against the source evidence.</Caption></div>
+      <div className="flex h-full items-center"><Caption>Ranked by combined score, with the reasons shown; the order is a starting point. Labels are decision support: an analyst confirms every candidate against the source evidence.</Caption></div>
     ),
   };
 };
@@ -378,7 +391,7 @@ export default function ProductTour() {
   const [active, setActive] = useState(0);
   const [auto, setAuto] = useState(true); // steps advance on their own until the visitor takes over
   const [inView, setInView] = useState(false);
-  const [held, setHeld] = useState(false); // hover or focus inside pauses the timer
+  const [held, setHeld] = useState(false); // hover or focus on the step list (not the panel on the right) pauses the timer
   const refs = useRef([]);
   const root = useRef(null);
   const running = auto && inView && !held && !reduce;
@@ -417,16 +430,16 @@ export default function ProductTour() {
     <div
       ref={root}
       className="grid gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-8"
-      onMouseEnter={() => setHeld(true)}
-      onMouseLeave={() => setHeld(false)}
-      onFocusCapture={() => setHeld(true)}
-      onBlurCapture={() => setHeld(false)}
     >
       <div
         role="tablist"
         aria-label="Steps"
         aria-orientation="vertical"
         onKeyDown={onKeyDown}
+        onMouseEnter={() => setHeld(true)}
+        onMouseLeave={() => setHeld(false)}
+        onFocusCapture={() => setHeld(true)}
+        onBlurCapture={() => setHeld(false)}
         className="grid grid-cols-2 gap-2 lg:flex lg:flex-col lg:gap-0 lg:divide-y lg:overflow-hidden lg:rounded-2xl lg:border lg:divide-[hsl(var(--wb-line))] lg:border-[hsl(var(--wb-line))] lg:bg-[hsl(var(--wb-card))]"
       >
         {STEPS.map((s, i) => {
@@ -499,11 +512,19 @@ export default function ProductTour() {
           style={{ '--tour-cols': LAYOUT[step.id].cols, '--tour-rows': LAYOUT[step.id].rows }}
           className="grid grid-cols-2 gap-3 lg:h-[27rem] lg:[grid-template-columns:var(--tour-cols)] lg:[grid-template-rows:var(--tour-rows)] lg:transition-[grid-template-columns,grid-template-rows] lg:duration-500 lg:ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
         >
-          {SLOTS.map((slot) => (
-            <Tile key={slot} area={slot} brand={slot === 'brand'} stepId={step.id}>
-              {content[slot]}
-            </Tile>
-          ))}
+          {content.full ? (
+            <motion.div key={step.id} className="col-span-2 min-h-0 lg:row-span-3" initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduce ? 0 : 0.24, ease: TOUR_EASE }}>
+              {content.full}
+            </motion.div>
+          ) : (
+            <>
+              {SLOTS.map((slot) => (
+                <Tile key={slot} area={slot} brand={slot === 'brand'} stepId={step.id}>
+                  {content[slot]}
+                </Tile>
+              ))}
+            </>
+          )}
         </div>
       </div>
     </div>

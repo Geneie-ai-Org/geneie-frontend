@@ -133,7 +133,7 @@ export default function LegalConsentGate({ children }) {
           style={{ animationDelay: '180ms' }}
         >
           <span className="wb-spin-inline text-[hsl(var(--brand-500))]" aria-hidden="true" />
-          Checking your agreement…
+          Checking your agreement
         </div>
       </div>
     );

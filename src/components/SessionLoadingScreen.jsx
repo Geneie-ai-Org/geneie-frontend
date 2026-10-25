@@ -4,7 +4,7 @@ import React from 'react';
  * Full-screen auth bootstrap loader. Says what is happening; nothing to click while it runs.
  * It fades in after a short beat so a fast session check never flashes a screen at all.
  */
-const SessionLoadingScreen = ({ message = 'Loading your session…' }) => (
+const SessionLoadingScreen = ({ message = 'Loading your session' }) => (
   <div
     role="status"
     aria-live="polite"

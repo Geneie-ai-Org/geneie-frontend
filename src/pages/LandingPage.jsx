@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { ArrowRight, ArrowUp, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { motion } from 'motion/react';
 import { Dismissible, StageMark, StateButton } from '@/components/motion';
 import { BouncyAccordion } from '@/components/motion/bouncy-accordion';
 import { SharedLayoutBg } from '@/components/motion/shared-layout-bg';
@@ -22,6 +23,7 @@ import HalftoneWordmark from '@/components/public/HalftoneWordmark';
 import LoopVideo from '@/components/public/LoopVideo';
 import { TiltCard } from '@/components/motion/tilt-card';
 import ThemeToggle from '@/components/public/ThemeToggle';
+import { IsoDocs, IsoDbLock, IsoFunnelDb } from '@/components/public/IsoIcons';
 import { useBetaSeats } from '@/hooks/useBetaSeats';
 import { joinWaitlist } from '@/services/backendApi';
 import { useSeo } from '@/hooks/useSeo';
@@ -307,6 +309,9 @@ const DATA_HANDLING = [
   ['Where data lives', 'Application data is stored in AWS Mumbai (ap-south-1) and encrypted in transit.'],
   ['AI processing', 'Prompts and derived text sent to language-model or literature tools may be processed outside India.'],
 ];
+
+/** One isometric icon per DATA_HANDLING row, same order. */
+const DATA_ICONS = [IsoDocs, IsoDbLock, IsoFunnelDb];
 
 const FAQ_ITEMS = FAQS.map((item, i) => ({ id: `q${i}`, title: item.q, description: item.a }));
 
@@ -594,23 +599,35 @@ const LandingPage = () => {
               </Reveal>
               <div className="mt-6 sm:hidden">
                 <dl className="divide-y divide-[hsl(var(--wb-line))] border-y border-[hsl(var(--wb-line))]">
-                  {DATA_HANDLING.map(([k, v]) => (
-                    <div key={k} className="py-4">
-                      <dt className="text-xl font-medium leading-6">{k}</dt>
-                      <dd className="mt-1.5 text-base leading-6 text-muted-foreground">{v}</dd>
-                    </div>
-                  ))}
+                  {DATA_HANDLING.map(([k, v], i) => {
+                    const Icon = DATA_ICONS[i];
+                    return (
+                      <div key={k} className="flex items-start gap-4 py-4">
+                        <Icon size={72} className="-ml-2 shrink-0" />
+                        <div className="min-w-0">
+                          <dt className="text-xl font-medium leading-6">{k}</dt>
+                          <dd className="mt-1.5 text-base leading-6 text-muted-foreground">{v}</dd>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </dl>
               </div>
               <div className="mt-10 hidden gap-4 sm:grid lg:mt-12 lg:grid-cols-3">
-                {DATA_HANDLING.map(([k, v], i) => (
+                {DATA_HANDLING.map(([k, v], i) => {
+                  const Icon = DATA_ICONS[i];
+                  return (
                   <Reveal key={k} delay={BODY_LAG + i * 60} className="h-full">
+                    <motion.div initial="rest" animate="rest" whileHover="hover" className="h-full">
                     <TiltCard max={6} className="wb-card pub-card h-full rounded-[20px] p-5 sm:p-6">
+                      <Icon size={128} className="-ml-3 mb-2" />
                       <h3 className="text-xl font-medium leading-6 lg:text-2xl lg:leading-8">{k}</h3>
                       <p className="mt-2 text-base leading-6 text-muted-foreground">{v}</p>
                     </TiltCard>
+                    </motion.div>
                   </Reveal>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </section>

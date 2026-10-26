@@ -816,3 +816,24 @@ html.dark .wb-report-paper-wait { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06
 .wb-qc-hint[data-slow] { color: var(--warning); background-color: var(--warning-soft); }
 .wb-qc-hint[data-slow] [data-slot='button'], .wb-qc-note [data-slot='button'] { color: hsl(var(--foreground)); }
 html.dark .wb-qc-note { background-color: hsl(var(--brand-50)); }
+
+/* Isometric icons (IsoIcons.jsx): top face lightest, then left, then right, in both themes. */
+.iso-icon {
+  --iso-top: hsl(var(--brand-50));
+  --iso-left: hsl(var(--brand-200));
+  --iso-right: hsl(var(--brand-300));
+  --iso-accent: hsl(var(--brand-500));
+  --iso-line: hsl(var(--brand-700));
+  --iso-deep: hsl(var(--brand-700) / 0.28);
+  --iso-shadow: hsl(var(--brand-700) / 0.1);
+}
+html.dark .iso-icon {
+  /* Greys sampled from the Isometric Illustration Pack: light top, mid side, shaded side, dark outline. */
+  --iso-top: #f0f0f0;
+  --iso-left: #d0d0d0;
+  --iso-right: #989894;
+  --iso-accent: #646864;
+  --iso-line: #1c1c1c;
+  --iso-deep: rgb(0 0 0 / 0.3);
+  --iso-shadow: rgb(0 0 0 / 0.45);
+}

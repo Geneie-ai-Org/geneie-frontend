@@ -4,7 +4,7 @@ import { EASE_OUT } from '@/lib/ease';
 
 const LINE = 'hsl(var(--wb-line))';
 
-const LIMITS = [
+export const LIMITS = [
   {
     cut: 'diagnose',
     title: 'It does not diagnose',

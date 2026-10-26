@@ -12,16 +12,20 @@ import BrandLogo from '@/components/public/BrandLogo';
 import Reveal from '@/components/public/Reveal';
 import ProductTour from '@/components/public/ProductTour';
 import WhoItsFor from '@/components/public/WhoItsFor';
-import DrawsTheLine from '@/components/public/DrawsTheLine';
+import CardRail from '@/components/public/CardRail';
+import StackCards from '@/components/public/StackCards';
+import DrawsTheLine, { LIMITS } from '@/components/public/DrawsTheLine';
 import PrinciplesSection from '@/components/public/PrinciplesSection';
 import HeroGenome from '@/components/public/HeroGenome';
 import HelixDivider from '@/components/public/HelixDivider';
 import HalftoneWordmark from '@/components/public/HalftoneWordmark';
+import LoopVideo from '@/components/public/LoopVideo';
 import { TiltCard } from '@/components/motion/tilt-card';
 import ThemeToggle from '@/components/public/ThemeToggle';
 import { useBetaSeats } from '@/hooks/useBetaSeats';
 import { joinWaitlist } from '@/services/backendApi';
 import { useSeo } from '@/hooks/useSeo';
+import { useTheme } from '@/hooks/useTheme';
 import { acquireLenis, releaseLenis } from '@/lib/smoothScroll';
 
 /* ------------------------------------------------------------------ content */
@@ -231,7 +235,7 @@ function ProductPreview() {
     { gene: 'STXBP1', variant: 'c.902+1G>A', cls: 'Pathogenic' },
   ];
   return (
-    <figure className="relative w-full" aria-label="Illustrative example of a Geneie conversation">
+    <figure className="relative hidden w-full md:block" aria-label="Illustrative example of a Geneie conversation">
       <div className="wb-rise" style={{ animationDelay: `${HERO_AT.frame}ms` }}>
       <p className="mb-2 px-1 text-right text-[13px] leading-5 text-[var(--text-tertiary)]">Synthetic data</p>
       <div className="relative">
@@ -298,6 +302,12 @@ function Mark({ no = false }) {
   );
 }
 
+const DATA_HANDLING = [
+  ['Closed beta', 'Use de-identified or synthetic data. Identifiable patient data needs a separate written agreement.'],
+  ['Where data lives', 'Application data is stored in AWS Mumbai (ap-south-1) and encrypted in transit.'],
+  ['AI processing', 'Prompts and derived text sent to language-model or literature tools may be processed outside India.'],
+];
+
 const FAQ_ITEMS = FAQS.map((item, i) => ({ id: `q${i}`, title: item.q, description: item.a }));
 
 const FAQ_CLASSES = {
@@ -333,9 +343,9 @@ const HERO_AT = { sub: 550, form: 700, frame: 1000, bubble: 1250, answer: 1450, 
 // Body copy follows its heading by this much when a section scrolls in.
 const BODY_LAG = 90;
 
-const SECTION = 'mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-10 sm:py-20 lg:py-24';
+const SECTION = 'mx-auto max-w-7xl px-5 py-10 sm:px-8 lg:px-10 sm:py-20 lg:py-24';
 // Bands that hang a 28px ruler from their top edge need less top padding, so the gap to the heading matches the others.
-const SECTION_RULED = `${SECTION} !pt-10 sm:!pt-12 lg:!pt-16`;
+const SECTION_RULED = `${SECTION} !pt-6 sm:!pt-12 lg:!pt-16`;
 // Type scale follows docs/MISTRAL_TYPE_SCALE.md: one step at lg, body fixed at 16/24.
 const H2 = 'text-2xl font-medium leading-7 tracking-[-0.01em] text-balance lg:text-[2.75rem] lg:leading-[3.25rem]';
 const CARD_R = { borderRadius: 20 };
@@ -351,6 +361,7 @@ const LandingPage = () => {
     path: '/',
   });
   const navigate = useNavigate();
+  const { isDark } = useTheme();
   /* Closed beta: nobody self-serves an account. The CTA is an application form; a seat is
    * granted from /admin-haha. The seat count is shown as context when it is known, and
    * simply omitted when the call is slow or fails. */
@@ -427,7 +438,7 @@ const LandingPage = () => {
         <main id="main">
           {/* ------------------------------------------------------------ hero */}
           <div className="pub-hero" style={{ backgroundImage: 'radial-gradient(ellipse 60% 70% at 82% 30%, hsl(var(--brand-300) / 0.28), transparent 70%), radial-gradient(ellipse 45% 55% at 8% 0%, hsl(var(--brand-200) / 0.35), transparent 70%), linear-gradient(to bottom, var(--pub-tint) 0%, var(--pub-tint) 55%, var(--pub-plain) 100%)' }}>
-          <section aria-labelledby="hero-title" className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)] items-center gap-12 px-5 py-20 sm:px-8 lg:px-10 sm:pt-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,34rem)] lg:gap-16 lg:pb-16 lg:pt-24">
+          <section aria-labelledby="hero-title" className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)] items-center gap-8 px-5 py-8 sm:gap-12 sm:px-8 sm:py-20 lg:px-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,34rem)] lg:gap-16 lg:pb-16 lg:pt-24">
             <div>
               <TextReveal
                 as="h1"
@@ -439,11 +450,14 @@ const LandingPage = () => {
                 delay={0.05}
                 className="max-w-xl text-[2.5rem] font-medium leading-[3rem] tracking-[-0.02em] text-balance lg:text-[4rem] lg:leading-[4.25rem]"
               />
-              <p className="wb-rise mt-5 max-w-xl text-base leading-6 text-muted-foreground" style={{ animationDelay: `${HERO_AT.sub}ms` }}>
-                Upload a whole-genome or exome file. Geneie annotates it, applies ACMG and phenotype-driven
-                filters in deterministic pipelines, and lets you ask questions about the result in plain language.
+              <p className="wb-rise mt-4 max-w-xl sm:mt-5 text-base leading-6 text-muted-foreground" style={{ animationDelay: `${HERO_AT.sub}ms` }}>
+                <span className="sm:hidden">Upload a genome or exome file. Ask about the ranked variants in plain language.</span>
+                <span className="hidden sm:inline">
+                  Upload a whole-genome or exome file. Geneie annotates it, applies ACMG and phenotype-driven
+                  filters in deterministic pipelines, and lets you ask questions about the result in plain language.
+                </span>
               </p>
-              <div className="wb-rise mt-8" style={{ animationDelay: `${HERO_AT.form}ms` }}>
+              <div className="wb-rise mt-6 sm:mt-8" style={{ animationDelay: `${HERO_AT.form}ms` }}>
                 <AccessRequest seats={seats} source="landing-hero" idPrefix="hero" />
               </div>
             </div>
@@ -470,11 +484,8 @@ const LandingPage = () => {
           <div className="pub-band">
           <section id="who-its-for" aria-labelledby="who-title" className="scroll-mt-14">
             <div className={SECTION}>
-              <Reveal className="mb-8 lg:mb-12">
-                <h2 id="who-title" className={H2}>Who it’s for</h2>
-              </Reveal>
-              {/* Not wrapped in Reveal: it is several screens tall, so its visibility threshold would never be met reliably. */}
-              <WhoItsFor />
+              {/* The heading lives inside WhoItsFor: on phones it pins together with the roles. Not wrapped in Reveal: it is several screens tall, so its visibility threshold would never be met reliably. */}
+              <WhoItsFor heading={<h2 id="who-title" className={H2}>Who it’s for</h2>} />
             </div>
           </section>
           </div>
@@ -487,10 +498,21 @@ const LandingPage = () => {
               <Reveal>
                 <h2 id="cap-title" className={H2}>What the model does, and what it does not</h2>
                 <p className="mt-3 max-w-2xl text-muted-foreground">
-                  The pipelines do the scoring and classifying. The language model reads your question and explains what comes back, so every result traces to your data.
+                  <span className="sm:hidden">Pipelines score and classify. The language model reads your question and explains what comes back.</span>
+                  <span className="hidden sm:inline">The pipelines do the scoring and classifying. The language model reads your question and explains what comes back, so every result traces to your data.</span>
                 </p>
               </Reveal>
-              <div className="mt-10 grid gap-4 lg:mt-12 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+              <div className="mt-6 space-y-6 sm:hidden">
+                <div>
+                  <h3 className="mb-3 text-xl font-medium leading-6">Runs in established pipelines</h3>
+                  <CardRail label="Established pipelines" items={PIPELINES.map(([k, v]) => ({ id: k, title: k, body: v }))} />
+                </div>
+                <div>
+                  <h3 className="mb-3 text-xl font-medium leading-6">The language model</h3>
+                  <CardRail label="What the language model does" items={MODEL.map(([k, v, no]) => ({ id: k, title: k, body: v, icon: <Mark no={Boolean(no)} /> }))} />
+                </div>
+              </div>
+              <div className="mt-10 hidden gap-4 sm:grid lg:mt-12 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
                 <Reveal delay={BODY_LAG} className="wb-card pub-card p-5 sm:p-6" style={CARD_R}>
                   <h3 className="text-xl font-medium leading-6 lg:text-2xl lg:leading-8">Runs in established pipelines</h3>
                   <dl className="mt-4 grid gap-x-8 gap-y-5 sm:grid-cols-2">
@@ -527,7 +549,13 @@ const LandingPage = () => {
                 <h2 id="line-title" className={H2}>Where Geneie draws the line</h2>
                 <p className="mt-3 max-w-2xl text-muted-foreground">Decisions we made on purpose.</p>
               </Reveal>
-              <div className="mt-10 lg:mt-14">
+              <div className="mt-6 sm:hidden">
+                <StackCards items={LIMITS.map((l) => ({ id: l.cut, eyebrow: l.cut, title: l.title, body: l.body }))} />
+                <p className="mt-5 text-sm leading-5 text-muted-foreground">
+                  Application data is encrypted at rest and in transit and stored in AWS Mumbai. You can delete a conversation at any time, or ask us to delete your whole account.
+                </p>
+              </div>
+              <div className="mt-10 hidden sm:block lg:mt-14">
                 <DrawsTheLine />
               </div>
             </div>
@@ -543,7 +571,7 @@ const LandingPage = () => {
                 <h2 id="checked-title" className={H2}>Built to be checked</h2>
                 <p className="mt-3 max-w-2xl text-muted-foreground">Three properties you can verify yourself.</p>
               </Reveal>
-              <div className="mt-10 lg:mt-14">
+              <div className="mt-6 sm:mt-10 lg:mt-14">
                 <PrinciplesSection />
               </div>
             </div>
@@ -564,12 +592,18 @@ const LandingPage = () => {
                   <Link to="/legal/terms" className="text-[hsl(var(--brand-700))] underline underline-offset-2">Terms of Use</Link>.
                 </p>
               </Reveal>
-              <div className="mt-10 grid gap-4 lg:mt-12 lg:grid-cols-3">
-                {[
-                  ['Closed beta', 'Use de-identified or synthetic data. Identifiable patient data needs a separate written agreement.'],
-                  ['Where data lives', 'Application data is stored in AWS Mumbai (ap-south-1) and encrypted in transit.'],
-                  ['AI processing', 'Prompts and derived text sent to language-model or literature tools may be processed outside India.'],
-                ].map(([k, v], i) => (
+              <div className="mt-6 sm:hidden">
+                <dl className="divide-y divide-[hsl(var(--wb-line))] border-y border-[hsl(var(--wb-line))]">
+                  {DATA_HANDLING.map(([k, v]) => (
+                    <div key={k} className="py-4">
+                      <dt className="text-xl font-medium leading-6">{k}</dt>
+                      <dd className="mt-1.5 text-base leading-6 text-muted-foreground">{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+              <div className="mt-10 hidden gap-4 sm:grid lg:mt-12 lg:grid-cols-3">
+                {DATA_HANDLING.map(([k, v], i) => (
                   <Reveal key={k} delay={BODY_LAG + i * 60} className="h-full">
                     <TiltCard max={6} className="wb-card pub-card h-full rounded-[20px] p-5 sm:p-6">
                       <h3 className="text-xl font-medium leading-6 lg:text-2xl lg:leading-8">{k}</h3>
@@ -602,13 +636,29 @@ const LandingPage = () => {
           <div aria-hidden="true" className="pub-rule tx tx--ticks" />
           <section aria-labelledby="cta-title">
             <div className={SECTION_RULED}>
-              <Reveal className="wb-card pub-card pub-cta px-6 py-12 sm:px-12 sm:py-16" style={CARD_R}>
-                <h2 id="cta-title" className={`max-w-2xl ${H2}`}>
-                  Try Geneie on your own variant file.
-                </h2>
-                <Reveal delay={BODY_LAG} className="mt-6">
-                  <AccessRequest seats={seats} source="landing-pricing" idPrefix="cta" />
-                </Reveal>
+              <Reveal className="wb-card pub-card pub-cta relative px-5 py-8 sm:px-12 sm:py-16" style={CARD_R}>
+                {/* Helix loop on the right, out of flow so the heading and form keep their own padding and width. */}
+                <div
+                  aria-hidden="true"
+                  className={`absolute bottom-6 right-6 top-6 hidden w-[46%] overflow-hidden rounded-2xl border lg:block ${isDark ? 'bg-zinc-950' : 'bg-white'}`}
+                  style={{ borderColor: 'hsl(var(--wb-line))' }}
+                >
+                  {/* Two grades of the same loop: white on black for dark, navy on white for light. Keyed so a theme flip swaps the file. */}
+                  <LoopVideo
+                    key={isDark ? 'dark' : 'light'}
+                    src={isDark ? '/helix_dark.mp4' : '/helix_light.mp4'}
+                    poster={isDark ? '/hero-helix.webp' : '/hero-helix-light.jpg'}
+                    className="absolute inset-0 h-full w-full object-cover object-center"
+                  />
+                </div>
+                <div className="lg:max-w-[50%]">
+                  <h2 id="cta-title" className={`max-w-2xl ${H2}`}>
+                    Try Geneie on your own variant file.
+                  </h2>
+                  <Reveal delay={BODY_LAG} className="mt-4 sm:mt-6">
+                    <AccessRequest seats={seats} source="landing-pricing" idPrefix="cta" />
+                  </Reveal>
+                </div>
               </Reveal>
             </div>
           </section>
@@ -618,14 +668,14 @@ const LandingPage = () => {
         {/* ---------------------------------------------------------- footer */}
         <footer id="contact" className="pub-band pub-band--deep">
           <div aria-hidden="true" className="pub-rule tx tx--ticks" />
-          <div className="mx-auto flex max-w-7xl flex-col gap-10 px-5 py-12 sm:px-8 lg:px-10 md:flex-row md:items-start md:justify-between">
+          <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-8 sm:gap-10 sm:px-8 sm:py-12 lg:px-10 md:flex-row md:items-start md:justify-between">
             <div className="max-w-xs">
               <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Geneie by Omixir</p>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
                 Ask your variant file questions in plain language. Geneie supports your decisions; it does not diagnose.
               </p>
             </div>
-            <nav aria-label="Footer" className="-ml-3 flex gap-x-10 text-sm md:ml-0">
+            <nav aria-label="Footer" className="-ml-3 grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:flex sm:gap-x-10 md:ml-0">
               <div>
                 <h3 className="px-3 text-xs font-normal uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Product</h3>
                 <ul className="mt-2 flex flex-col">
@@ -641,7 +691,7 @@ const LandingPage = () => {
                   <li><Link to="/legal/privacy" className={FOOT_LINK}>Privacy Policy</Link></li>
                 </ul>
               </div>
-              <div>
+              <div className="col-span-2 sm:col-auto">
                 <h3 className="px-3 text-xs font-normal uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Contact</h3>
                 <ul className="mt-2 flex flex-col">
                   <li><a href="mailto:support@geneie.chat" className={FOOT_LINK}>support@geneie.chat</a></li>

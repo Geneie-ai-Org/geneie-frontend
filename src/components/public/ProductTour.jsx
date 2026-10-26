@@ -66,7 +66,7 @@ function Tile({ area, brand = false, stepId, children }) {
   const reduce = useReducedMotion();
   return (
     <div
-      className={`relative min-w-0 rounded-2xl border p-3.5 sm:p-4 ${AREA[area]}`}
+      className={`relative min-w-0 rounded-2xl border p-3.5 sm:p-4 ${area === 'main' ? '' : 'hidden sm:block'} ${AREA[area]}`}
       style={{
         borderColor: brand ? 'transparent' : LINE,
         background: brand ? 'hsl(var(--brand-solid))' : 'hsl(var(--wb-card))',
@@ -197,7 +197,7 @@ const checkContent = () => {
       <div className="flex h-full flex-col gap-3">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {cards.map((c, i) => (
-            <div key={c.label} className="rounded-2xl border px-3.5 py-3" style={{ borderColor: LINE, background: 'hsl(var(--wb-card))' }}>
+            <div key={c.label} className={`rounded-2xl border px-3.5 py-3 ${i > 1 ? 'hidden sm:block' : ''}`} style={{ borderColor: LINE, background: 'hsl(var(--wb-card))' }}>
               <Stat label={c.label} value={c.value} num={c.num} delay={450 + i * 100} note={c.note} />
             </div>
           ))}
@@ -426,7 +426,7 @@ export default function ProductTour() {
   const content = CONTENT[step.id];
 
   return (
-    <div className="mt-8">
+    <div className="mt-5 sm:mt-8">
     <div
       ref={root}
       className="grid gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-8"

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { ChevronDown, Copy, Download } from 'lucide-react';
+import Reveal from '@/components/public/Reveal';
 import { TextReveal } from '@/components/motion/text-reveal';
 import { DrawPath, curve } from '@/components/public/ProductTour';
 import { EASE_OUT } from '@/lib/ease';
@@ -67,7 +68,7 @@ function ResearcherProof() {
       <div className="flex gap-3">
         <span
           aria-hidden="true"
-          className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border"
+          className="mt-0.5 hidden h-8 w-8 shrink-0 items-center justify-center rounded-full border sm:inline-flex"
           style={{ borderColor: LINE, background: 'hsl(var(--wb-pill))' }}
         >
           <img src="/geneie-g.svg" alt="" className="h-4 w-4" />
@@ -75,31 +76,31 @@ function ResearcherProof() {
         <div className="min-w-0 flex-1">
           <p className="text-base leading-6">Found 3 rare variants in KCNQ2, all with gnomAD allele frequency below 0.0001.</p>
           <div className="mt-4 overflow-x-auto rounded-2xl border" style={{ borderColor: LINE }}>
-            <table className="w-full min-w-[22rem] text-left text-sm leading-6">
+            <table className="w-full text-left text-xs leading-5 sm:min-w-[22rem] sm:text-sm sm:leading-6">
               <thead className="text-[13px] leading-5 text-muted-foreground" style={{ background: 'hsl(var(--wb-pill))' }}>
                 <tr>
-                  <th className="px-4 py-2 font-normal">Gene</th>
-                  <th className="px-4 py-2 font-normal">Variant</th>
-                  <th className="px-4 py-2 font-normal">Consequence</th>
-                  <th className="px-4 py-2 text-right font-normal">gnomAD AF</th>
+                  <th className="px-2.5 sm:px-4 py-2 font-normal">Gene</th>
+                  <th className="px-2.5 sm:px-4 py-2 font-normal">Variant</th>
+                  <th className="hidden px-2.5 py-2 font-normal sm:table-cell sm:px-4">Consequence</th>
+                  <th className="px-2.5 sm:px-4 py-2 text-right font-normal">gnomAD AF</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r[1]} className="border-t" style={{ borderColor: LINE }}>
-                    <td className="px-4 py-2.5 font-semibold">{r[0]}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{r[1]}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{r[2]}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{r[3]}</td>
+                    <td className="px-2.5 py-2 font-semibold sm:px-4 sm:py-2.5">{r[0]}</td>
+                    <td className="px-2.5 py-2 font-mono text-xs text-muted-foreground sm:px-4 sm:py-2.5">{r[1]}</td>
+                    <td className="hidden px-2.5 py-2 text-muted-foreground sm:table-cell sm:px-4 sm:py-2.5">{r[2]}</td>
+                    <td className="px-2.5 py-2 text-right tabular-nums text-muted-foreground sm:px-4 sm:py-2.5">{r[3]}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <p className="mt-4 text-base leading-6 text-muted-foreground">
+          <p className="mt-4 hidden text-base leading-6 text-muted-foreground sm:block">
             Two are missense. c.637C&gt;T is a stop gain and is absent from gnomAD, so it is the one to look at first.
           </p>
-          <div className="mt-4 flex flex-wrap gap-2" aria-hidden="true">
+          <div className="mt-4 hidden flex-wrap gap-2 sm:flex" aria-hidden="true">
             <span className={action} style={{ borderColor: LINE }}><Copy className="h-3.5 w-3.5" />Copy insight</span>
             <span className={action} style={{ borderColor: LINE }}><Download className="h-3.5 w-3.5" />Export to Excel</span>
           </div>
@@ -193,6 +194,190 @@ const ROLES = [
   },
 ];
 
+const HEADER_PX = 56; // the sticky site header the pinned block sits under
+const STEP_VH = 60; // scroll distance, in viewport heights, between one role's settled point and the next
+// Each role is settled for HOLD of its step (scrolling there changes nothing: the detent), then changes over the rest.
+const HOLD = 0.65;
+const TAIL = 0.4; // steps of dwell after the last role before the pin lets go
+const SETTLE_MS = 140;
+
+/**
+ * Phones: the whole section (heading included) pins under the header, and the role morphs in place (the word, the
+ * need clause, the line of text and the proof) as scroll passes each step. Same idea as the desktop version:
+ * scrolling away from a settled role takes a long pull, the change itself takes a short one, and when scrolling stops
+ * mid-change the page settles on the nearest role. Native touch scrolling stays in charge (Lenis only animates the settle).
+ * The bars show the step and jump to it. Reduced motion: no settling, and the content just swaps.
+ */
+function WhoItsForPhone({ heading }) {
+  const reduce = useReducedMotion();
+  const [index, setIndex] = useState(0);
+  const track = useRef(null);
+  const role = ROLES[index];
+  const Proof = role.Proof;
+
+  const step = () => (window.innerHeight * STEP_VH) / 100;
+  // Scroll offset of the track at which role i is settled.
+  const settledY = (i) => window.scrollY + track.current.getBoundingClientRect().top - HEADER_PX + step() * i;
+
+  useEffect(() => {
+    let timer = 0;
+    let touching = false;
+    const progress = () => (HEADER_PX - track.current.getBoundingClientRect().top) / step(); // 0 at the first role's settled point
+
+    const pick = () => {
+      if (!track.current) return;
+      const next = Math.max(0, Math.min(ROLES.length - 1, Math.round(progress())));
+      setIndex((cur) => (cur === next ? cur : next));
+    };
+
+    // After scrolling stops mid-change, glide to the nearest role. Skipped while a finger is down or when pinned out of range.
+    const settle = () => {
+      if (touching || !track.current) return;
+      const p = progress();
+      if (p < 0 || p > ROLES.length - 1) return;
+      const nearest = Math.round(p);
+      if (Math.abs(p - nearest) <= HOLD / 2) return; // already in a hold: leave it
+      const y = settledY(nearest);
+      if (lenis) lenis.scrollTo(y, { duration: 0.55 });
+      else window.scrollTo({ top: y, behavior: 'smooth' });
+    };
+
+    const lenis = reduce ? null : acquireLenis();
+    const onScroll = () => {
+      pick();
+      clearTimeout(timer);
+      if (!reduce) timer = setTimeout(settle, SETTLE_MS);
+    };
+    const down = () => { touching = true; clearTimeout(timer); };
+    const up = () => { touching = false; clearTimeout(timer); if (!reduce) timer = setTimeout(settle, SETTLE_MS); };
+
+    pick();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', pick);
+    window.addEventListener('touchstart', down, { passive: true });
+    window.addEventListener('touchend', up, { passive: true });
+    window.addEventListener('touchcancel', up, { passive: true });
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', pick);
+      window.removeEventListener('touchstart', down);
+      window.removeEventListener('touchend', up);
+      window.removeEventListener('touchcancel', up);
+      if (lenis) releaseLenis();
+    };
+  }, [reduce]);
+
+  const jump = (i) => {
+    const y = settledY(i);
+    window.scrollTo({ top: y, behavior: reduce ? 'auto' : 'smooth' });
+  };
+
+  return (
+    <div
+      ref={track}
+      // Pinned height, plus a step per role to scroll through and a short dwell on the last one.
+      style={{ height: `calc((100svh - ${HEADER_PX}px) + ${(ROLES.length - 1 + TAIL) * STEP_VH}svh)` }}
+    >
+      <div
+        className="sticky flex flex-col justify-center overflow-hidden"
+        style={{ top: HEADER_PX, height: `calc(100svh - ${HEADER_PX}px)` }}
+      >
+        <div className="pb-2">{heading}</div>
+        <div className="flex items-center gap-2" role="group" aria-label="Roles">
+          {ROLES.map((r, i) => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => jump(i)}
+              aria-label={`Show ${r.label}`}
+              aria-current={i === index}
+              className="group -my-3 flex min-h-11 flex-1 items-center outline-none"
+            >
+              <span
+                className="h-0.5 w-full rounded-full transition-colors duration-300 group-focus-visible:ring-2 group-focus-visible:ring-[hsl(var(--brand-500))]"
+                style={{ background: i <= index ? 'hsl(var(--brand-500))' : 'hsl(var(--wb-line))' }}
+              />
+            </button>
+          ))}
+        </div>
+
+        {/* The whole block is centred in the pinned height. Invisible copies of every role share the cell with the live one,
+            so it is always as tall as the tallest role: a short proof leaves no hole and the heading never shifts. */}
+        <div className="grid grid-cols-[minmax(0,1fr)] pt-2">
+          <div className="min-w-0 self-start [grid-area:1/1]">
+            <div aria-live="polite">
+              <p className="text-2xl font-medium leading-8 tracking-[-0.01em] text-balance">
+                <span>I’m a </span>
+                <span className="inline-flex text-[hsl(var(--brand-500))] underline decoration-[hsl(var(--brand-300))] decoration-2 underline-offset-[0.18em]">
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.span
+                      key={role.id}
+                      initial={reduce ? false : { opacity: 0, y: '0.25em' }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={reduce ? { opacity: 0 } : { opacity: 0, y: '-0.25em' }}
+                      transition={{ duration: reduce ? 0 : 0.2, ease: EASE_OUT }}
+                    >
+                      {role.label}
+                    </motion.span>
+                  </AnimatePresence>
+                </span>
+              </p>
+              <TextReveal key={role.id} text={`and I need to ${role.need}`} stagger={0.03} blur={6} className="mt-1 min-h-[4.5rem] text-2xl font-medium leading-8 tracking-[-0.01em] text-muted-foreground text-balance" />
+            </div>
+
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={role.id}
+                initial={reduce ? false : { opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: reduce ? 0 : 0.22, ease: EASE_OUT }}
+              >
+                <p className="mt-3 text-base leading-6 text-muted-foreground">{role.body}</p>
+                <div className="wb-card pub-card mt-5 p-4" style={{ borderRadius: 20 }}>
+                  <Proof />
+                </div>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+          {ROLES.map((r) => {
+            const Ghost = r.Proof;
+            return (
+              <div key={r.id} aria-hidden="true" inert className="pointer-events-none invisible min-w-0 [grid-area:1/1]">
+                <p className="text-2xl font-medium leading-8 tracking-[-0.01em] text-balance">I’m a {r.label}</p>
+                <p className="mt-1 min-h-[4.5rem] text-2xl font-medium leading-8 tracking-[-0.01em] text-balance">and I need to {r.need}</p>
+                <p className="mt-3 text-base leading-6">{r.body}</p>
+                <div className="wb-card pub-card mt-5 p-4" style={{ borderRadius: 20 }}><Ghost /></div>
+              </div>
+            );
+          })}
+        </div>
+        <p className="pt-3 text-[13px] leading-5 text-[var(--text-tertiary)]">Synthetic data, illustration only.</p>
+      </div>
+    </div>
+  );
+}
+
+/** Mounts only the layout for the current width, so the sticky, snapping desktop version never runs on a phone. */
+export default function WhoItsFor({ heading }) {
+  const [desktop, setDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const on = () => setDesktop(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return desktop ? (
+    <>
+      <Reveal className="mb-8 lg:mb-12">{heading}</Reveal>
+      <WhoItsForDesktop />
+    </>
+  ) : (
+    <WhoItsForPhone heading={heading} />
+  );
+}
+
 const SENTENCE = 'text-[1.75rem] font-medium leading-9 tracking-[-0.01em] text-balance lg:text-[2rem] lg:leading-10';
 
 /**
@@ -201,7 +386,7 @@ const SENTENCE = 'text-[1.75rem] font-medium leading-9 tracking-[-0.01em] text-b
  * only control. Lenis settles the page on the nearest proof. Under lg the left side does not stick; each role stacks
  * as its own sentence, text and proof. Reduced motion: no morph. All content is synthetic.
  */
-export default function WhoItsFor() {
+function WhoItsForDesktop() {
   const reduce = useReducedMotion();
   const [index, setIndex] = useState(0);
   const [moved, setMoved] = useState(false); // the scroll cue goes once the visitor has seen a role change

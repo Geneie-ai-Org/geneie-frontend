@@ -163,7 +163,7 @@ export default function PrinciplesSection() {
 
   return (
     <div ref={ref}>
-      <div className="grid gap-12 lg:grid-cols-3 lg:gap-10">
+      <div className="grid gap-8 sm:gap-12 lg:grid-cols-3 lg:gap-10">
         {PRINCIPLES.map(({ title, body, Visual }, i) => (
           <div key={title} className="flex flex-col">
             <motion.div
@@ -174,14 +174,14 @@ export default function PrinciplesSection() {
               animate={{ scaleX: on ? 1 : 0 }}
               transition={{ duration: reduce ? 0 : 0.8, ease: [0.16, 1, 0.3, 1], delay: reduce ? 0 : i * 0.12 }}
             />
-            <p aria-hidden="true" className="mt-4 text-[13px] leading-5 tabular-nums text-[var(--text-tertiary)]">{String(i + 1).padStart(2, '0')}</p>
+            <p aria-hidden="true" className="mt-3 text-[13px] leading-5 tabular-nums sm:mt-4 text-[var(--text-tertiary)]">{String(i + 1).padStart(2, '0')}</p>
             <h3 className="mt-2 text-xl font-medium leading-6 lg:text-2xl lg:leading-8">{title}</h3>
             <p className="mt-2 max-w-sm text-base leading-6 text-muted-foreground lg:min-h-[4.5rem]">{body}</p>
-            <div className="mt-6 flex flex-1 flex-col"><Visual on={on} reduce={reduce} /></div>
+            <div className="mt-6 hidden flex-1 flex-col sm:flex"><Visual on={on} reduce={reduce} /></div>
           </div>
         ))}
       </div>
-      <div className="mt-14 flex items-center gap-5 border-t pt-6" style={{ borderColor: LINE }}>
+      <div className="mt-8 flex items-center gap-5 border-t pt-5 sm:mt-14 sm:pt-6" style={{ borderColor: LINE }}>
         <span className="shrink-0 text-base font-medium leading-6">Built on</span>
         <Marquee speed={32} gap="2.5rem" className="min-w-0 flex-1">
           {BUILT_ON.map((name) => <span key={name} className="text-base leading-6 text-muted-foreground">{name}</span>)}

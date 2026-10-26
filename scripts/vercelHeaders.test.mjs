@@ -188,6 +188,9 @@ test('connect-src includes the real API origin and known external hosts actually
     'https://jbrowse.org', // JBrowse reference FASTA + plugin store
     'https://ipapi.co', // SubscriptionPage.jsx country lookup -- a real fetch() call, found by
     // scanning the built bundle for every hardcoded fetch() URL, not just this repo's own files
+    'https://mygene.info', // Module1IgvPanel gene search (src/lib/module1GeneLookup.js).
+    // Geneie does not hold genomic coordinates for a symbol, so the browser asks MyGene.
+    // The query is the gene symbol the analyst typed. Same kind of allow-list as ipapi.co.
   ]) {
     assert.ok(connectSrc.includes(host), `connect-src must include ${host}`);
   }

@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useReducedMotion } from 'motion/react';
 import AuthForm from '@/components/AuthForm';
+import BrandLogo from '@/components/public/BrandLogo';
+import ThemeToggle from '@/components/public/ThemeToggle';
+import { Button } from '@/components/ui/button';
 import PixelBlast from '@/components/PixelBlast';
 import { useTheme } from '@/hooks/useTheme';
 import { useSeo } from '@/hooks/useSeo';
@@ -115,6 +118,7 @@ const AuthPage = () => {
     path: '/auth',
     noindex: true,
   });
+  const navigate = useNavigate();
   const reduce = useReducedMotion();
   const brand = useBrandHex();
 
@@ -155,14 +159,24 @@ const AuthPage = () => {
       <div className="relative flex flex-1 flex-col bg-background">
         <div className="pointer-events-none absolute inset-0 z-0 opacity-30 dark:opacity-35 lg:hidden">{blast}</div>
 
-        <div className="absolute left-0 top-0 z-20 flex w-full items-center justify-between p-6 lg:justify-end lg:p-8">
-          <Link
-            to="/"
-            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[hsl(var(--wb-line-strong))] px-3 py-1.5 text-sm font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] sm:min-h-0 lg:border-transparent"
-          >
-            Home
-          </Link>
-        </div>
+        <header className="absolute left-0 top-0 z-20 w-full border-b border-[hsl(var(--wb-line))] bg-background/80 backdrop-blur lg:border-0 lg:bg-transparent lg:backdrop-blur-none">
+          <div className="flex h-14 items-center justify-between gap-4 px-5 sm:px-8 lg:h-auto lg:justify-end lg:p-8">
+            <Link to="/" aria-label="Geneie home" className="inline-flex min-h-11 items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--brand-500))] lg:hidden">
+              <BrandLogo className="h-8 w-auto" />
+            </Link>
+            <nav aria-label="Primary" className="flex items-center gap-1">
+              <ThemeToggle className="ml-1 lg:hidden" />
+              <Button
+                type="button"
+                variant="outline"
+                className="ml-1 h-11 px-4 text-sm font-medium sm:h-9 lg:border-transparent"
+                onClick={() => navigate('/')}
+              >
+                Home
+              </Button>
+            </nav>
+          </div>
+        </header>
 
         <main className="relative z-10 flex flex-1 items-center justify-center px-4 py-20 sm:px-6 lg:px-8">
           <div className="w-full max-w-[400px]">

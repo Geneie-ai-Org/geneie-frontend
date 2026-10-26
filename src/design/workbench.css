@@ -51,6 +51,21 @@
 :is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='input']:hover,
 :is(.chat-shell-right, .wb-scope, [data-slot='dialog-content'], [data-slot='alert-dialog-content'], [data-slot='sheet-content'], [data-slot='popover-content'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], [data-slot='hover-card-content']) [data-slot='select-trigger']:hover { border-color: hsl(var(--brand-300)); }
 
+/* Invalid inputs: red border and ring. Sits after the shared pill rule so it wins over the hover and focus colours. */
+.wb-scope [data-slot='input'][aria-invalid='true'],
+.wb-scope [data-slot='input'][aria-invalid='true']:hover,
+.wb-scope [data-slot='input'][aria-invalid='true']:focus-visible {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--error) 20%, transparent);
+}
+
+/* Chrome draws an autofilled value at the UA default (13.33px) until the field is focused, then snaps to
+   the real size. Pin the size so the value does not grow on click. Matches the AuthFields input sizes. */
+.wb-scope [data-slot='input']:-webkit-autofill { font-size: 16px; }
+@media (min-width: 640px) {
+  .wb-scope [data-slot='input']:-webkit-autofill { font-size: 14px; }
+}
+
 /* ---- Tabs ------------------------------------------------------------------------------------- */
 .wb-tab {
   display: flex;

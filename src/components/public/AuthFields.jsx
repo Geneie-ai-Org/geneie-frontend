@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import React, { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion, useAnimationControls, useReducedMotion } from 'motion/react';
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Info } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Dismissible, StateButton } from '@/components/motion';
@@ -21,41 +21,36 @@ function useLast(value) {
 const FOCUS_RING =
   'focus-visible:outline-none focus-visible:border-[hsl(var(--brand-500))] focus-visible:ring-[3px] focus-visible:ring-[hsl(var(--brand-300)/0.45)]';
 
-export function FieldShell({ id, label, labelAction, error, hint, children }) {
+export function FieldShell({ id, label, labelAction, error, hint, shakeKey, children }) {
   const reduce = useReducedMotion();
-  const [focusCount, setFocusCount] = useState(0);
-  const lastError = useLast(error);
+  const shake = useAnimationControls();
+  /* A failed submit bumps `shakeKey`; the control shakes only if this field is the one in error. */
+  useEffect(() => {
+    if (!shakeKey || !error || reduce) return;
+    shake.start({ x: [0, -7, 7, -5, 5, -2, 0], transition: { duration: 0.4, ease: 'easeOut' } });
+  }, [shakeKey]);
   return (
-    <div className="group/field space-y-1.5" onFocusCapture={() => setFocusCount((n) => n + 1)}>
+    <div className="group/field space-y-1.5">
       <div className="flex items-center justify-between gap-3 px-1">
-        {/* The label settles into place each time the field takes focus. */}
-        <motion.label
-          key={focusCount}
+        <label
           htmlFor={id}
-          initial={reduce || focusCount === 0 ? false : { y: 3, opacity: 0.55 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 520, damping: 34 }}
           className="text-[13px] font-medium text-muted-foreground transition-colors duration-150 group-focus-within/field:text-[hsl(var(--brand-700))]"
         >
           {label}
-        </motion.label>
+        </label>
         {labelAction}
       </div>
-      {children}
-      <Dismissible show={Boolean(error)}>
-        <p id={`${id}-error`} className="flex items-start gap-1.5 px-1 pt-0.5 text-xs text-[var(--error)]">
-          <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          <span>{lastError}</span>
-        </p>
-      </Dismissible>
+      <motion.div animate={shake}>{children}</motion.div>
+      {/* The message is for assistive tech only; sighted users get the red border and the shake. */}
+      {error ? <p id={`${id}-error`} role="alert" className="sr-only">{error}</p> : null}
       {!error && hint ? <p id={`${id}-hint`} className="px-1 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
 
-export function TextField({ id, label, labelAction, error, hint, className, ...props }) {
+export function TextField({ id, label, labelAction, error, hint, shakeKey, className, ...props }) {
   return (
-    <FieldShell id={id} label={label} labelAction={labelAction} error={error} hint={hint}>
+    <FieldShell id={id} label={label} labelAction={labelAction} error={error} hint={hint} shakeKey={shakeKey}>
       <Input
         id={id}
         aria-invalid={error ? true : undefined}
@@ -68,7 +63,7 @@ export function TextField({ id, label, labelAction, error, hint, className, ...p
 }
 
 export const PasswordField = React.forwardRef(function PasswordField(
-  { id, label, labelAction, error, hint, show: showProp, onToggle, className, ...props },
+  { id, label, labelAction, error, hint, shakeKey, show: showProp, onToggle, className, ...props },
   ref,
 ) {
   const reduce = useReducedMotion();
@@ -78,7 +73,7 @@ export const PasswordField = React.forwardRef(function PasswordField(
   const toggle = () => (controlled ? onToggle?.() : setShowLocal((v) => !v));
 
   return (
-    <FieldShell id={id} label={label} labelAction={labelAction} error={error} hint={hint}>
+    <FieldShell id={id} label={label} labelAction={labelAction} error={error} hint={hint} shakeKey={shakeKey}>
       <div className="relative">
         <Input
           ref={ref}

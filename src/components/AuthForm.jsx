@@ -133,6 +133,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
 
     // Inline validation: a field shows its error once it has been left or a submit was tried.
     const [touched, setTouched] = useState({ email: false, password: false });
+    const [shakeKey, setShakeKey] = useState(0);
     const emailRef = useRef(null);
     const passwordRef = useRef(null);
 
@@ -325,6 +326,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
         setTouched({ email: true, password: true });
         if (emailError || passwordError) {
             setInlineMessage(null);
+            setShakeKey((k) => k + 1);
             (emailError ? emailRef : passwordRef).current?.focus();
             return;
         }
@@ -560,6 +562,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                         autoComplete="email"
                         inputMode="email"
                         error={showEmailError || undefined}
+                        shakeKey={shakeKey}
                         placeholder="name@lab.org"
                     />
 
@@ -576,6 +579,7 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                                 show={showPassword}
                                 onToggle={() => setShowPassword((v) => !v)}
                                 error={showPasswordError && (isLogin || !password) ? showPasswordError : undefined}
+                                shakeKey={shakeKey}
                                 labelAction={isLogin ? (
                                     <button
                                         type="button"
@@ -624,10 +628,10 @@ const AuthForm = ({ triggerReason = 'default', onSignupSuccess, onEmailVerificat
                     </p>
                     {!isLogin && !resetMode && (
                         <p className="wb-fade mt-2 text-center text-xs leading-5 text-[var(--text-tertiary)]">
-                            By creating an account you agree to the{' '}
+                            By signing up you agree to the{' '}
                             <Link to="/legal/terms" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Terms</Link>
                             {' '}and{' '}
-                            <Link to="/legal/privacy" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Privacy Policy</Link>.
+                            <Link to="/legal/privacy" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Privacy</Link>.
                         </p>
                     )}
                 </>

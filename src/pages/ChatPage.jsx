@@ -45,6 +45,7 @@ import { apiUrl, getApiOrigin } from '@/config/api';
 import { buildVariantDataFromConversation, getGuestPipelineCta, resolveVariantsUnderConsideration, variantFileRowCountForSidebar } from '@/lib/variantPipelineUtils';
 import { conversationPath, isValidConversationId } from '@/lib/conversationRoutes';
 import { getDeviceId } from '@/lib/deviceId';
+import { getOrMintGuestConversationId } from '@/lib/guestConversation';
 import { useVariantPipeline } from '@/hooks/useVariantPipeline';
 import { useModule1Pipeline } from '@/hooks/useModule1Pipeline';
 import { module1FinishedSuccessfully } from '@/lib/module1PipelinePhases';
@@ -179,10 +180,19 @@ const ChatPage = () => {
     && meterNearLimit(limits, 'chat');
 
 
-  const GUEST_SESSION_CONVERSATION_ID = 'guest-session';
+  const [guestConversationId, setGuestConversationId] = useState(null);
+  useEffect(() => {
+    if (userTier !== 'guest') return;
+    let cancelled = false;
+    getOrMintGuestConversationId()
+      .then((cid) => { if (!cancelled) setGuestConversationId(cid); })
+      .catch(() => { /* leave guestConversationId null; the UI already handles a null activeConversationId */ });
+    return () => { cancelled = true; };
+  }, [userTier]);
+
   const activeConversationId =
     userTier === 'guest'
-      ? GUEST_SESSION_CONVERSATION_ID
+      ? guestConversationId
       : urlConversationId && isValidConversationId(urlConversationId)
         ? urlConversationId
         : null;
@@ -274,7 +284,7 @@ const ChatPage = () => {
   } = pipeline;
 
   const handleGuestRefreshMetadata = useCallback(() => {
-    void refreshGuestConversationFromStatus(activeConversationId || GUEST_SESSION_CONVERSATION_ID);
+    void refreshGuestConversationFromStatus(activeConversationId);
   }, [refreshGuestConversationFromStatus, activeConversationId]);
 
   /* Chat needs either a proprietary filter applied or a working set under the plan's cap
@@ -1939,7 +1949,7 @@ const ChatPage = () => {
 
       <aside className="chat-shell-right" aria-hidden={!isVariantSidebarOpen}>
           <VariantFilterSidebar
-            conversationId={activeConversationId || 'guest-session'}
+            conversationId={activeConversationId}
             userId={userId || 'guest'}
             variantData={variantData}
             currentDocument={currentDocument}
@@ -2109,7 +2119,7 @@ const ChatPage = () => {
             >
               <div className="p-4 md:p-5">
                 <DocumentUpload
-                  conversationId={uploadSessionConversationId || activeConversationId || 'guest-session'}
+                  conversationId={uploadSessionConversationId || activeConversationId}
                   userId={userId || 'guest'}
                   onUploadingChange={handleVariantUploadingChangeWithCleanup}
                   onUploadProgressChange={handleUploadProgressChange}

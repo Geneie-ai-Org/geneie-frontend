@@ -801,6 +801,11 @@ const Module1UploadForm = ({
                       hg38 only. Same GPU or CPU choice as germline. Phenotype is not used.
                     </p>
                   )}
+                  {isMatched && (
+                    <p className="text-2xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
+                      Inherited variants are not part of this somatic report. The analyst can start the existing germline pipeline on the matched normal as a separate case.
+                    </p>
+                  )}
                 </div>
 
                 <div>

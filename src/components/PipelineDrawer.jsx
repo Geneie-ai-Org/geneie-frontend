@@ -778,10 +778,35 @@ const PipelineDrawer = ({
           )}
         </AnimatePresence>
 
-        {typeof module1Job?.contaminationFraction === 'number' && (
-          <p className="text-2xs px-0.5" style={{ color: 'var(--text-tertiary)' }}>
-            Contamination {(module1Job.contaminationFraction * 100).toFixed(2)}%
-          </p>
+        {(module1Job?.meanTargetCoverage != null
+          || module1Job?.pctTargetBases20x != null
+          || module1Job?.contaminationFraction != null
+          || module1Job?.qualityStatus
+          || module1Job?.inheritedNote) && (
+          <div className="text-2xs px-0.5 space-y-1" style={{ color: 'var(--text-tertiary)' }}>
+            {typeof module1Job.meanTargetCoverage === 'number' && (
+              <p>
+                Mean coverage {module1Job.meanTargetCoverage}×
+                {module1Job.coverageVerdict ? ` · ${module1Job.coverageVerdict[0].toUpperCase()}${module1Job.coverageVerdict.slice(1)}` : ''}
+              </p>
+            )}
+            {typeof module1Job.pctTargetBases20x === 'number' && (
+              <p>Target at 20× {module1Job.pctTargetBases20x}%</p>
+            )}
+            {typeof module1Job.contaminationFraction === 'number' && (
+              <p>
+                Contamination {(module1Job.contaminationFraction * 100).toFixed(2)}%
+                {module1Job.contaminationVerdict ? ` · ${module1Job.contaminationVerdict[0].toUpperCase()}${module1Job.contaminationVerdict.slice(1)}` : ''}
+              </p>
+            )}
+            {module1Job.qualityStatus && (
+              <p>Case quality {module1Job.qualityStatus[0].toUpperCase()}{module1Job.qualityStatus.slice(1)}</p>
+            )}
+            {module1Job.reportRelease === 'held' && (
+              <p>The signed report is held.</p>
+            )}
+            {module1Job.inheritedNote && <p>{module1Job.inheritedNote}</p>}
+          </div>
         )}
 
         {module1Failed && (

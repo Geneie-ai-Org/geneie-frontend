@@ -64,6 +64,13 @@ function jobFromStatusPayload(data, conversationId = null) {
     durationSeconds: data.duration_seconds ?? null,
     // Queue/compute fields are optional: older backends omit them and the UI falls back.
     contaminationFraction: typeof data.contamination_fraction === 'number' ? data.contamination_fraction : null,
+    meanTargetCoverage: typeof data.mean_target_coverage === 'number' ? data.mean_target_coverage : null,
+    pctTargetBases20x: typeof data.pct_target_bases_20x === 'number' ? data.pct_target_bases_20x : null,
+    coverageVerdict: data.coverage_verdict ?? null,
+    contaminationVerdict: data.contamination_verdict ?? null,
+    qualityStatus: data.quality_status ?? null,
+    reportRelease: data.report_release ?? null,
+    inheritedNote: typeof data.inherited_note === 'string' && data.inherited_note ? data.inherited_note : null,
     computePreference: data.compute_preference ?? null,
     compute: data.compute ?? null,
     computeReason: data.compute_reason ?? null,

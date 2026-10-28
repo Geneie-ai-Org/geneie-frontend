@@ -54,6 +54,7 @@ import { useAutomaticPipelineConductor } from '@/hooks/useAutomaticPipelineCondu
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { getClinicalReportGate } from '@/components/CaseReportDownloadButton';
 import ClinicalReportAssignModal from '@/components/ClinicalReportAssignModal';
+import Module1IgvPanel from '@/components/Module1IgvPanel';
 import AutomaticPipelinePanel from '@/components/AutomaticPipelinePanel';
 import {
   normalizePipelineRunMode,
@@ -2043,6 +2044,25 @@ const ChatPage = () => {
           onOpenChange={setClinicalReportOpen}
           conversationId={activeConversationId}
           automaticMode={automaticPipeline.active}
+          canViewInIgv={Boolean(
+            module1.module1Job?.bamIgvV2 &&
+              module1.module1Job?.hasBam &&
+              module1.module1Job?.conversationId === activeConversationId,
+          )}
+          bamExpiresAt={module1.module1Job?.bamExpiresAt ?? null}
+        />
+      ) : null}
+
+      {/* Always-mounted (hidden launcher) so View-in-IGV from report/GA works even if QC section is collapsed. */}
+      {module1.module1Job?.conversationId === activeConversationId &&
+      (module1.module1Job?.hasBam || module1.module1Job?.bamIgvV2) ? (
+        <Module1IgvPanel
+          conversationId={activeConversationId}
+          hasBam={Boolean(module1.module1Job?.hasBam)}
+          genome={module1.module1Job?.genome}
+          bamExpiresAt={module1.module1Job?.bamExpiresAt}
+          bamIgvV2={Boolean(module1.module1Job?.bamIgvV2)}
+          hideLauncher
         />
       ) : null}
 

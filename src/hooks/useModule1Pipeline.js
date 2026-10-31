@@ -71,6 +71,10 @@ function jobFromStatusPayload(data, conversationId = null) {
     qualityStatus: data.quality_status ?? null,
     reportRelease: data.report_release ?? null,
     inheritedNote: typeof data.inherited_note === 'string' && data.inherited_note ? data.inherited_note : null,
+    oncoviStatus: data.oncovi_status ?? null,
+    oncoviScoredCount: typeof data.oncovi_scored_count === 'number' ? data.oncovi_scored_count : null,
+    oncoviUnscoredCount: typeof data.oncovi_unscored_count === 'number' ? data.oncovi_unscored_count : null,
+    oncoviMessage: typeof data.oncovi_message === 'string' && data.oncovi_message ? data.oncovi_message : null,
     computePreference: data.compute_preference ?? null,
     compute: data.compute ?? null,
     computeReason: data.compute_reason ?? null,
@@ -512,6 +516,7 @@ export function useModule1Pipeline({
       normalR1File,
       normalR2File,
       normalSampleName,
+      oncotreeCode,
     }) => {
       if (userTier === 'guest') {
         setModule1SubmitError('Please sign in to run Module 1.');
@@ -612,6 +617,7 @@ export function useModule1Pipeline({
             ? { custom_bed_s3_key: resolvedCustomBedS3Key }
             : { bed_catalog_id: bedCatalogId }),
           ...(analysis ? { analysis, somatic_mode: somaticMode } : {}),
+          ...(analysis === 'somatic' && oncotreeCode ? { oncotree_code: oncotreeCode } : {}),
           ...(normalR1S3Key && normalR2S3Key
             ? {
                 normal_sample_name: normalSampleName,

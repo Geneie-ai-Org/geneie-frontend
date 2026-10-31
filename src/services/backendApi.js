@@ -431,6 +431,18 @@ export function isAllowedModule1RoleFilename(role, fileName) {
   return n.endsWith('.fastq.gz') || n.endsWith('.fastq') || n.endsWith('.fq.gz') || n.endsWith('.fq');
 }
 
+export async function fetchModule1Oncotree() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(apiUrl('/api/module1/oncotree'), { headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(parseApiErrorDetail(data.detail) || 'Failed to load cancer types');
+    err.status = response.status;
+    throw err;
+  }
+  return data; // { version, items: [{ code, name }] }
+}
+
 export async function fetchModule1BedCatalog(genome = 'hg38') {
   const headers = await getAuthHeaders();
   const response = await fetch(apiUrl(`/api/module1/bed-catalog?genome=${encodeURIComponent(genome)}`), {

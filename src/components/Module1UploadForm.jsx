@@ -27,7 +27,7 @@ import {
 import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
 import { PillToggle } from '@/components/ui/pill-toggle';
-import { MODULE1_BED_MAX_BYTES, MODULE1_FASTQ_MAX_BYTES, fetchPublicConfig } from '@/services/backendApi';
+import { MODULE1_BED_MAX_BYTES, MODULE1_FASTQ_MAX_BYTES, fetchModule1Oncotree, fetchPublicConfig } from '@/services/backendApi';
 import { isRecognizedImportUrl, module1UrlErrorMessage, precheckBedChromStyle } from '@/services/backendApi';
 import { cn } from '@/lib/utils';
 import PhenotypeInputPanel, { PHENOTYPE_MODE_NOTE } from '@/components/PhenotypeInputPanel';
@@ -307,6 +307,9 @@ const Module1UploadForm = ({
   const [normalR2File, setNormalR2File] = useState(null);
   const [normalSampleName, setNormalSampleName] = useState('');
   const [somaticEnabled, setSomaticEnabled] = useState(false);
+  const [oncotreeCode, setOncotreeCode] = useState('');
+  const [oncotreeTypes, setOncotreeTypes] = useState([]);
+  const [oncotreeVersion, setOncotreeVersion] = useState('');
   const [bedMode, setBedMode] = useState('catalog'); // 'catalog' | 'custom'
   const [bedCatalogId, setBedCatalogId] = useState('');
   const [customBedFile, setCustomBedFile] = useState(null);
@@ -333,6 +336,7 @@ const Module1UploadForm = ({
     setNormalR1File(null);
     setNormalR2File(null);
     setNormalSampleName('');
+    setOncotreeCode('');
     setBedMode('catalog');
     setBedCatalogId('');
     setCustomBedFile(null);
@@ -471,6 +475,23 @@ const Module1UploadForm = ({
   const isTumorOnly = sampleMetadata.analysisType === 'Tumor-Only';
   const isMatched = sampleMetadata.analysisType === 'Tumor-Normal Paired';
   const isSomaticChoice = isTumorOnly || isMatched;
+
+  useEffect(() => {
+    if (!open || !isSomaticChoice || oncotreeTypes.length) return undefined;
+    let cancelled = false;
+    fetchModule1Oncotree()
+      .then((data) => {
+        if (cancelled) return;
+        setOncotreeTypes(Array.isArray(data?.items) ? data.items : []);
+        setOncotreeVersion(data?.version || '');
+      })
+      .catch(() => {
+        if (!cancelled) setOncotreeTypes([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, isSomaticChoice, oncotreeTypes.length]);
   const analysisOptions = ANALYSIS_TYPE_OPTIONS.flatMap((opt) => {
     if (somaticEnabled && opt.value === 'Somatic') return [];
     if (somaticEnabled && (opt.value === 'Tumor-Only' || opt.value === 'Tumor-Normal Paired')) {
@@ -641,6 +662,7 @@ const Module1UploadForm = ({
             ...(isMatched
               ? { normalR1File, normalR2File, normalSampleName: normalSampleName.trim() }
               : {}),
+            ...(oncotreeCode ? { oncotreeCode } : {}),
           }
         : {}),
     });
@@ -805,6 +827,30 @@ const Module1UploadForm = ({
                     <p className="text-2xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
                       Inherited variants are not part of this somatic report. The analyst can start the existing germline pipeline on the matched normal as a separate case.
                     </p>
+                  )}
+                  {isSomaticChoice && (
+                    <div className="mt-3">
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }} htmlFor="module1-oncotree">
+                        Cancer type
+                      </label>
+                      <select
+                        id="module1-oncotree"
+                        className="w-full rounded-md border px-2 py-1.5 text-sm"
+                        style={{ borderColor: 'var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
+                        value={oncotreeCode}
+                        onChange={(event) => setOncotreeCode(event.target.value)}
+                      >
+                        <option value="">Not specified</option>
+                        {oncotreeTypes.map((item) => (
+                          <option key={item.code} value={item.code}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-2xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
+                        Optional. OncoTree{oncotreeVersion ? ` ${oncotreeVersion}` : ''}. The run starts without a cancer type.
+                      </p>
+                    </div>
                   )}
                 </div>
 

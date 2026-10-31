@@ -782,7 +782,9 @@ const PipelineDrawer = ({
           || module1Job?.pctTargetBases20x != null
           || module1Job?.contaminationFraction != null
           || module1Job?.qualityStatus
-          || module1Job?.inheritedNote) && (
+          || module1Job?.inheritedNote
+          || module1Job?.oncoviScoredCount != null
+          || module1Job?.oncoviMessage) && (
           <div className="text-2xs px-0.5 space-y-1" style={{ color: 'var(--text-tertiary)' }}>
             {typeof module1Job.meanTargetCoverage === 'number' && (
               <p>
@@ -806,6 +808,10 @@ const PipelineDrawer = ({
               <p>The signed report is held.</p>
             )}
             {module1Job.inheritedNote && <p>{module1Job.inheritedNote}</p>}
+            {typeof module1Job.oncoviScoredCount === 'number' && typeof module1Job.oncoviUnscoredCount === 'number' && (
+              <p>OncoVI scored {module1Job.oncoviScoredCount}. Unscored {module1Job.oncoviUnscoredCount}.</p>
+            )}
+            {module1Job.oncoviMessage && <p>{module1Job.oncoviMessage}</p>}
           </div>
         )}
 

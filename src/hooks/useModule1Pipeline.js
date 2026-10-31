@@ -63,6 +63,18 @@ function jobFromStatusPayload(data, conversationId = null) {
     completedAt: data.completed_at ?? null,
     durationSeconds: data.duration_seconds ?? null,
     // Queue/compute fields are optional: older backends omit them and the UI falls back.
+    contaminationFraction: typeof data.contamination_fraction === 'number' ? data.contamination_fraction : null,
+    meanTargetCoverage: typeof data.mean_target_coverage === 'number' ? data.mean_target_coverage : null,
+    pctTargetBases20x: typeof data.pct_target_bases_20x === 'number' ? data.pct_target_bases_20x : null,
+    coverageVerdict: data.coverage_verdict ?? null,
+    contaminationVerdict: data.contamination_verdict ?? null,
+    qualityStatus: data.quality_status ?? null,
+    reportRelease: data.report_release ?? null,
+    inheritedNote: typeof data.inherited_note === 'string' && data.inherited_note ? data.inherited_note : null,
+    oncoviStatus: data.oncovi_status ?? null,
+    oncoviScoredCount: typeof data.oncovi_scored_count === 'number' ? data.oncovi_scored_count : null,
+    oncoviUnscoredCount: typeof data.oncovi_unscored_count === 'number' ? data.oncovi_unscored_count : null,
+    oncoviMessage: typeof data.oncovi_message === 'string' && data.oncovi_message ? data.oncovi_message : null,
     computePreference: data.compute_preference ?? null,
     compute: data.compute ?? null,
     computeReason: data.compute_reason ?? null,
@@ -499,6 +511,12 @@ export function useModule1Pipeline({
       bedCatalogId,
       customBedS3Key,
       computePreference,
+      analysis,
+      somaticMode,
+      normalR1File,
+      normalR2File,
+      normalSampleName,
+      oncotreeCode,
     }) => {
       if (userTier === 'guest') {
         setModule1SubmitError('Please sign in to run Module 1.');
@@ -521,6 +539,8 @@ export function useModule1Pipeline({
       try {
         let r1S3Key;
         let r2S3Key;
+        let normalR1S3Key;
+        let normalR2S3Key;
         let resolvedCustomBedS3Key = customBedS3Key;
 
         if (sourceMode === 'url') {
@@ -570,6 +590,10 @@ export function useModule1Pipeline({
               { status: r2Error?.status, code: r2Error?.code },
             );
           }
+          if (normalR1File && normalR2File) {
+            normalR1S3Key = await uploadModule1File('r1', normalR1File, conversationId);
+            normalR2S3Key = await uploadModule1File('r2', normalR2File, conversationId);
+          }
         }
 
         /* Same camelCase shape the VCF upload path sends as `sample_metadata`, so both
@@ -592,6 +616,15 @@ export function useModule1Pipeline({
           ...(resolvedCustomBedS3Key
             ? { custom_bed_s3_key: resolvedCustomBedS3Key }
             : { bed_catalog_id: bedCatalogId }),
+          ...(analysis ? { analysis, somatic_mode: somaticMode } : {}),
+          ...(analysis === 'somatic' && oncotreeCode ? { oncotree_code: oncotreeCode } : {}),
+          ...(normalR1S3Key && normalR2S3Key
+            ? {
+                normal_sample_name: normalSampleName,
+                normal_r1_s3_key: normalR1S3Key,
+                normal_r2_s3_key: normalR2S3Key,
+              }
+            : {}),
           ...(computePreference ? { compute_preference: computePreference } : {}),
         });
 

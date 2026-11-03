@@ -2467,7 +2467,7 @@ const VariantFilterSidebar = ({
                   if (isNumeric && range) {
                     const span = range.max - range.min;
                     // Preset chips — pick sensible defaults per column type.
-                    const isFrequencyColumn = /(^|_)(af|maf|freq|gnomad|1000g|all\.sites)/i.test(colName);
+                    const isFrequencyColumn = /(^|_)(af|maf|freq|gnomad|genomeindia|1000g|all\.sites)/i.test(colName);
                     const presets = (isFrequencyColumn && range.min === 0 && range.max <= 1)
                       ? [
                           { label: '< 0.001', min: null, max: 0.001 },

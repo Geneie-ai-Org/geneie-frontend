@@ -163,6 +163,8 @@ export const COLUMN_TO_GROUP = {
   "GTEx_V8_sQTL_tissue": "nan",
   "eQTLGen_snp_id": "nan",
   "gnomad41_genome_AF": "Population Frequency",
+  "GenomeIndia_AF": "Population Frequency",
+  "GenomeIndia_dbSNP": "Population Frequency",
   "gnomad41_genome_AF_raw": "Population Frequency",
   "gnomad41_genome_AF_XX": "Population Frequency",
   "gnomad41_genome_AF_XY": "Population Frequency",

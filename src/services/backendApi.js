@@ -1026,6 +1026,23 @@ export async function searchPanelAppPanels({
 }
 
 /**
+ * GA list vs current filtered variants. Empty lists while flags.dual_lane is off.
+ * GET /api/conversations/{id}/dual-lane
+ */
+export async function fetchDualLane(conversationId) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(
+    apiUrl(`/api/conversations/${encodeURIComponent(conversationId)}/dual-lane`),
+    { headers },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to load dual-lane view');
+  }
+  return data;
+}
+
+/**
  * GA triage status + top candidates for analyst review UI.
  * GET /api/conversations/{id}/ga-triage
  */

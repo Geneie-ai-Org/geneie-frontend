@@ -1,11 +1,16 @@
 /**
  * Germline phenotype entry via clinical note.
  * Selected HPO finding IDs (confirmed_ids) drive phenotype prioritization.
- * Disease matches are a shortcut to load annotated findings for review.
+ * Finding suggestions update while typing (suggest-hpo); disease matches are an
+ * optional shortcut to load annotated findings for review.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronUp, Circle, Info, Loader2, Lock, X } from 'lucide-react';
-import { interpretPhenotypeNarrative, resolveHpoTerms } from '@/services/mongodbApi';
+import {
+  interpretPhenotypeNarrative,
+  resolveHpoTerms,
+  suggestHpoTerms,
+} from '@/services/mongodbApi';
 import PanelAppSuggestSection from '@/components/PanelAppSuggestSection';
 
 export const PHENOTYPE_MODE_FINDINGS = 'findings';
@@ -251,6 +256,29 @@ function mapResolveToCandidates(payload, { defaultSelected }) {
       match_type: 'disease_annotation',
       origin: 'disease_annotation',
       selected: Boolean(defaultSelected),
+    });
+  }
+  return Array.from(byId.values());
+}
+
+/** Live typeahead rows → finding chips (note_phrase). Disease annotations stay separate. */
+function mapSuggestToCandidates(suggestions, { autoSelectStrong }) {
+  const byId = new Map();
+  for (const s of suggestions || []) {
+    const hid = String(s?.hpo_id || '').trim().toUpperCase();
+    if (!hid.startsWith('HP:') || byId.has(hid)) continue;
+    const score = Number(s?.match_score);
+    const strong = Number.isFinite(score) && score >= AUTO_DISEASE_MIN_SCORE;
+    const selected = Boolean(autoSelectStrong && strong);
+    byId.set(hid, {
+      hpo_id: hid,
+      hpo_name: s.hpo_name || '',
+      matched_phrase: s.matched_phrase || '',
+      match_score: Number.isFinite(score) ? score : null,
+      match_type: 'typeahead',
+      origin: 'note_phrase',
+      selected,
+      selected_default: selected,
     });
   }
   return Array.from(byId.values());
@@ -573,7 +601,10 @@ export default function PhenotypeInputPanel({
   const interpretDebounceRef = useRef(null);
   const diseaseSeq = useRef(0);
   const diseaseDebounceRef = useRef(null);
+  const findingsSeq = useRef(0);
+  const findingsDebounceRef = useRef(null);
   const [searchingDiseases, setSearchingDiseases] = useState(false);
+  const [searchingFindings, setSearchingFindings] = useState(false);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -679,9 +710,11 @@ export default function PhenotypeInputPanel({
     if (was === runMode) return;
     interpretSeq.current += 1;
     diseaseSeq.current += 1;
+    findingsSeq.current += 1;
     setDraft('');
     setInterpreting(false);
     setSearchingDiseases(false);
+    setSearchingFindings(false);
     setNotePreview(null);
     setNoteUnmapped([]);
     setNoteAmbiguous([]);
@@ -760,10 +793,12 @@ export default function PhenotypeInputPanel({
   const clearNoteOnly = () => {
     interpretSeq.current += 1;
     diseaseSeq.current += 1;
+    findingsSeq.current += 1;
     autoApplyingDiseaseRef.current = false;
     setDraft('');
     setInterpreting(false);
     setSearchingDiseases(false);
+    setSearchingFindings(false);
     // Clearing the note clears auto-detected disease + findings too.
     clearEphemeralPhenotypeResults({ keepPinned: false });
   };
@@ -973,7 +1008,9 @@ export default function PhenotypeInputPanel({
     const seq = ++interpretSeq.current;
     // Invalidate in-flight raw fast-search so it cannot overwrite LLM-grounded matches.
     diseaseSeq.current += 1;
+    findingsSeq.current += 1;
     setSearchingDiseases(false);
+    setSearchingFindings(false);
     setInterpreting(true);
     setResolveError('');
     try {
@@ -1181,6 +1218,46 @@ export default function PhenotypeInputPanel({
     }
   }, [disabled, emit, autoApplyDiseases]);
 
+  /**
+   * Live finding suggestions while typing — same window/cadence as disease search (3–7 chars).
+   * Keeps pinned chips + disease-annotation rows; refreshes note_phrase proposals.
+   * At ≥8 chars, interpret owns grounding (same as diseases); do not let typeahead
+   * overwrite LLM findings on every keystroke.
+   */
+  const runFastFindingsSearch = useCallback(async (text) => {
+    const trimmed = sanitizePhenotypeQuery(text);
+    if (trimmed.length < 3 || disabled) return;
+    const seq = ++findingsSeq.current;
+    setSearchingFindings(true);
+    try {
+      const payload = await suggestHpoTerms({ text: trimmed, limit: 15 });
+      if (seq !== findingsSeq.current) return;
+
+      const autoSelectStrong = runModeRef.current === PHENOTYPE_RUN_AUTOMATIC;
+      const incoming = mapSuggestToCandidates(payload.suggestions || [], { autoSelectStrong }).filter(
+        (c) => !isInheritanceLikeHpo(c)
+      );
+
+      // Preserve analyst pins and disease-annotation rows; replace other note proposals.
+      const priorKeep = (stateRef.current.candidates || []).filter(
+        (c) => c.selected || c.origin === 'disease_annotation'
+      );
+      const merged = mergeCandidates(priorKeep, incoming);
+
+      emit({
+        candidates: merged,
+        phenotype_findings: findingsLabelFrom(merged),
+      });
+      stateRef.current.candidates = merged;
+    } catch (err) {
+      if (seq !== findingsSeq.current) return;
+      // Soft-fail: interpret path may still populate findings for longer notes.
+      console.warn('[Phenotype] fast findings search failed', err);
+    } finally {
+      if (seq === findingsSeq.current) setSearchingFindings(false);
+    }
+  }, [disabled, emit]);
+
   // Fast disease matches on every edit (short debounce) — scores refresh from the current text.
   useEffect(() => {
     if (disabled) return undefined;
@@ -1190,6 +1267,8 @@ export default function PhenotypeInputPanel({
     if (trimmed.length < 3) {
       setSearchingDiseases(false);
       diseaseSeq.current += 1;
+      findingsSeq.current += 1;
+      setSearchingFindings(false);
       autoApplyingDiseaseRef.current = false;
       // Cleared / too short: wipe disease matches, cleaned note, and all findings (incl. auto-selected).
       if (
@@ -1218,6 +1297,32 @@ export default function PhenotypeInputPanel({
     };
   }, [draft, disabled, runFastDiseaseSearch, clearEphemeralPhenotypeResults]);
 
+  // Live finding suggestions — same 3–7 char window as disease search.
+  useEffect(() => {
+    if (disabled) return undefined;
+    if (isUntouchedDraft(draft)) return undefined;
+    if (findingsDebounceRef.current) clearTimeout(findingsDebounceRef.current);
+    const trimmed = String(draft || '').trim();
+    if (trimmed.length < 3) {
+      setSearchingFindings(false);
+      findingsSeq.current += 1;
+      return undefined;
+    }
+    // ≥8: interpret owns findings (while typing, 500ms). Cancel any in-flight typeahead
+    // so it cannot overwrite LLM-grounded chips after interpret lands.
+    if (trimmed.length >= 8) {
+      setSearchingFindings(false);
+      findingsSeq.current += 1;
+      return undefined;
+    }
+    findingsDebounceRef.current = setTimeout(() => {
+      runFastFindingsSearch(trimmed);
+    }, 180);
+    return () => {
+      if (findingsDebounceRef.current) clearTimeout(findingsDebounceRef.current);
+    };
+  }, [draft, disabled, runFastFindingsSearch]);
+
   // Live interpret while typing. Do NOT depend on notePreview — that re-fired interpret forever.
   useEffect(() => {
     if (disabled) return undefined;
@@ -1232,17 +1337,14 @@ export default function PhenotypeInputPanel({
       if (trimmed.length < 3) {
         return undefined;
       }
-      // Shortened but still typing (3–7 chars): drop cleaned note + unselected proposals only.
-      const pinned = (stateRef.current.candidates || []).filter((c) => c.selected);
-      const hadUnselected = (stateRef.current.candidates || []).some((c) => !c.selected);
-      if (stateRef.current.noteCleanText || notePreviewRef.current || hadUnselected) {
+      // Shortened but still typing (3–7 chars): drop cleaned note only.
+      // Live findings search owns note_phrase proposals in this range — do not wipe them here.
+      if (stateRef.current.noteCleanText || notePreviewRef.current) {
         setNotePreview(null);
         setNoteUnmapped([]);
         setNoteAmbiguous([]);
         emit({
           phenotype_note_clean: '',
-          candidates: pinned,
-          phenotype_findings: findingsLabelFrom(pinned),
         });
       }
       return undefined;
@@ -1312,7 +1414,10 @@ export default function PhenotypeInputPanel({
           </label>
         )}
         <InfoHint label="About phenotype">
-          <p>Clinical findings are used to rank variants by how well they fit the patient.</p>
+          <p>
+            Findings update as you type. Select the ones that match this patient — those drive
+            phenotype ranking. Conditions are optional and can add annotated findings.
+          </p>
           {isAutomatic ? (
             <p>
               Automatic mode pre-selects strong disease matches and high-confidence findings.
@@ -1354,10 +1459,16 @@ export default function PhenotypeInputPanel({
       </div>
 
       <div className="flex items-center gap-2 flex-wrap min-h-[1.25rem]">
-        {searchingDiseases || interpreting ? (
+        {searchingFindings || searchingDiseases || interpreting ? (
           <span className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
             <Loader2 className="w-3 h-3 animate-spin" />
-            {searchingDiseases ? 'Finding matches…' : 'Reading note…'}
+            {interpreting
+              ? 'Reading note…'
+              : searchingFindings && searchingDiseases
+                ? 'Matching findings and conditions…'
+                : searchingFindings
+                  ? 'Suggesting findings…'
+                  : 'Finding conditions…'}
           </span>
         ) : draft.trim().length >= 3 ? (
           <span className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
@@ -1366,7 +1477,7 @@ export default function PhenotypeInputPanel({
           </span>
         ) : draft.trim().length > 0 ? (
           <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-            Keep typing to search…
+            Keep typing for finding and condition matches…
           </span>
         ) : (
           <span className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
@@ -1385,112 +1496,21 @@ export default function PhenotypeInputPanel({
         </div>
       )}
 
-      {primaryDisease && (() => {
-        // Chips that wrap: the first few matches stay visible, the rest sit behind "+N more".
-        // Long names truncate; the full name and ID are in the tooltip.
-        const VISIBLE = 4;
-        const all = [primaryDisease, ...altDiseases];
-        // Collapsed still keeps every selected match on screen, wherever it ranks.
-        const collapsed = all.filter((c, i) => i < VISIBLE || isActiveDisease(c));
-        const shown = showMoreDiseases ? all : collapsed;
-        const hiddenCount = all.length - collapsed.length;
-        const activeCount = all.filter(isActiveDisease).length;
-        return (
-          <div
-            className="px-2.5 py-2 rounded-lg border text-xs space-y-2"
-            style={{ borderColor: 'var(--border-default)', background: 'var(--bg-muted)' }}
-          >
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="inline-flex items-center gap-1 font-medium" style={{ color: 'var(--text-primary)' }}>
-                Likely condition
-                <InfoHint label="About disease matches">
-                  <p>Pick one or more. Their clinical findings are combined below.</p>
-                </InfoHint>
-              </span>
-              <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                {activeCount > 0 ? `${activeCount} selected` : 'Pick one or more'}
-              </span>
-            </div>
-
-            <div className="flex flex-wrap gap-1.5">
-              {shown.map((c) => {
-                const active = isActiveDisease(c);
-                return (
-                  <button
-                    key={diseaseKey(c)}
-                    type="button"
-                    disabled={disabled || resolving}
-                    onClick={() => applyDisease(c)}
-                    aria-pressed={active}
-                    title={c.disease_id ? `${c.disease_name} · ${c.disease_id}` : c.disease_name}
-                    className="inline-flex items-center gap-1 max-w-full px-2 py-1 rounded-full border text-2xs font-medium transition-colors disabled:opacity-60"
-                    style={{
-                      borderColor: active ? 'var(--accent-teal)' : 'var(--border-strong)',
-                      background: active
-                        ? 'color-mix(in srgb, var(--accent-teal) 12%, transparent)'
-                        : 'var(--bg-surface-raised)',
-                      color: active ? 'var(--accent-teal)' : 'var(--text-primary)',
-                    }}
-                  >
-                    {active ? (
-                      <Check className="w-3 h-3 shrink-0" aria-hidden />
-                    ) : (
-                      <Circle className="w-3 h-3 shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
-                    )}
-                    <span className="truncate">{c.disease_name}</span>
-                  </button>
-                );
-              })}
-              {hiddenCount > 0 && (
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => setShowMoreDiseases((v) => !v)}
-                  className="inline-flex items-center gap-0.5 px-2 py-1 rounded-full text-2xs"
-                  style={{ color: 'var(--text-secondary)' }}
-                >
-                  {showMoreDiseases ? (
-                    <>
-                      Show fewer <ChevronUp className="w-3 h-3" />
-                    </>
-                  ) : (
-                    <>
-                      +{hiddenCount} more <ChevronDown className="w-3 h-3" />
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-
-            {/* Says what picking does, until something is picked. */}
-            {activeCount === 0 && !resolving && (
-              <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                Pick a condition to see its findings.
-              </p>
-            )}
-            {propagatedFromRelated?.length > 0 && isActiveDisease(primaryDisease) && (
-              <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-                Includes annotations from {propagatedFromRelated.length} related subtype
-                {propagatedFromRelated.length === 1 ? '' : 's'}.
-              </p>
-            )}
-            {resolving && (
-              <p className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
-                <Loader2 className="w-3 h-3 animate-spin" /> Loading findings for disease…
-              </p>
-            )}
-          </div>
-        );
-      })()}
-
+      {/* Findings first — update while typing; disease click is optional enrichment. */}
       <div className="flex items-center justify-between gap-2">
         <div className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
-          {/* The note's progress shows once, under the text box — not again here. */}
-          {!interpreting && candidates.length > 0 ? (
+          {clinicalCandidates.length > 0 ? (
             <span>
               Clinical findings ({clinicalCandidates.filter((c) => c.selected).length}/
               {clinicalCandidates.length} selected)
             </span>
+          ) : searchingFindings || interpreting ? (
+            <span className="inline-flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Looking up findings…
+            </span>
+          ) : draft.trim().length >= 3 ? (
+            <span>No finding matches yet — keep typing or pick a condition below.</span>
           ) : null}
         </div>
         {(clinicalCandidates.length > 0 || inheritanceCandidates.length > 0) && (
@@ -1570,6 +1590,106 @@ export default function PhenotypeInputPanel({
           </div>
         </div>
       )}
+
+      {primaryDisease && (() => {
+        // Chips that wrap: the first few matches stay visible, the rest sit behind "+N more".
+        // Long names truncate; the full name and ID are in the tooltip.
+        const VISIBLE = 4;
+        const all = [primaryDisease, ...altDiseases];
+        // Collapsed still keeps every selected match on screen, wherever it ranks.
+        const collapsed = all.filter((c, i) => i < VISIBLE || isActiveDisease(c));
+        const shown = showMoreDiseases ? all : collapsed;
+        const hiddenCount = all.length - collapsed.length;
+        const activeCount = all.filter(isActiveDisease).length;
+        return (
+          <div
+            className="px-2.5 py-2 rounded-lg border text-xs space-y-2"
+            style={{ borderColor: 'var(--border-default)', background: 'var(--bg-muted)' }}
+          >
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="inline-flex items-center gap-1 font-medium" style={{ color: 'var(--text-primary)' }}>
+                Likely condition
+                <InfoHint label="About disease matches">
+                  <p>
+                    Optional. Selecting a condition adds its annotated clinical findings to the
+                    list above.
+                  </p>
+                </InfoHint>
+              </span>
+              <span className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+                {activeCount > 0 ? `${activeCount} selected` : 'Optional'}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5">
+              {shown.map((c) => {
+                const active = isActiveDisease(c);
+                return (
+                  <button
+                    key={diseaseKey(c)}
+                    type="button"
+                    disabled={disabled || resolving}
+                    onClick={() => applyDisease(c)}
+                    aria-pressed={active}
+                    title={c.disease_id ? `${c.disease_name} · ${c.disease_id}` : c.disease_name}
+                    className="inline-flex items-center gap-1 max-w-full px-2 py-1 rounded-full border text-2xs font-medium transition-colors disabled:opacity-60"
+                    style={{
+                      borderColor: active ? 'var(--accent-teal)' : 'var(--border-strong)',
+                      background: active
+                        ? 'color-mix(in srgb, var(--accent-teal) 12%, transparent)'
+                        : 'var(--bg-surface-raised)',
+                      color: active ? 'var(--accent-teal)' : 'var(--text-primary)',
+                    }}
+                  >
+                    {active ? (
+                      <Check className="w-3 h-3 shrink-0" aria-hidden />
+                    ) : (
+                      <Circle className="w-3 h-3 shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
+                    )}
+                    <span className="truncate">{c.disease_name}</span>
+                  </button>
+                );
+              })}
+              {hiddenCount > 0 && (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setShowMoreDiseases((v) => !v)}
+                  className="inline-flex items-center gap-0.5 px-2 py-1 rounded-full text-2xs"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  {showMoreDiseases ? (
+                    <>
+                      Show fewer <ChevronUp className="w-3 h-3" />
+                    </>
+                  ) : (
+                    <>
+                      +{hiddenCount} more <ChevronDown className="w-3 h-3" />
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
+            {activeCount === 0 && !resolving && (
+              <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+                Optional — adds annotated findings for that disease.
+              </p>
+            )}
+            {propagatedFromRelated?.length > 0 && isActiveDisease(primaryDisease) && (
+              <p className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+                Includes annotations from {propagatedFromRelated.length} related subtype
+                {propagatedFromRelated.length === 1 ? '' : 's'}.
+              </p>
+            )}
+            {resolving && (
+              <p className="text-2xs inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
+                <Loader2 className="w-3 h-3 animate-spin" /> Loading findings for disease…
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Also shown while a panel is still chosen: its genes are sent with the upload,
         * so it must stay visible (and removable) even with no findings selected. */}

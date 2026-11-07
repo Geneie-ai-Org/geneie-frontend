@@ -8,7 +8,10 @@ import Module1QcReportPanel from '@/components/Module1QcReportPanel';
 const EASE = [0.23, 1, 0.32, 1];
 
 export function module1HasQcArtifacts(job) {
-  return Boolean(job?.conversationId) && Boolean(job.hasQc || job.hasBam || job.bamQcPurged);
+  return (
+    Boolean(job?.conversationId) &&
+    Boolean(job.hasQc || job.hasBam || job.bamQcPurged || job.bamIgvV2)
+  );
 }
 
 /**
@@ -75,8 +78,15 @@ export default function Module1QcSection({ job }) {
           >
             {job.hasQc && <Module1QcPanel conversationId={job.conversationId} hasQc={job.hasQc} />}
 
-            {job.hasBam && (
-              <Module1IgvPanel conversationId={job.conversationId} hasBam={job.hasBam} genome={job.genome} />
+            {(job.hasBam || job.bamIgvV2) && (
+              <Module1IgvPanel
+                conversationId={job.conversationId}
+                hasBam={job.hasBam}
+                genome={job.genome}
+                bamExpiresAt={job.bamExpiresAt}
+                bamIgvV2={Boolean(job.bamIgvV2)}
+                listenForOpenRequests={false}
+              />
             )}
 
             <Module1QcReportPanel

@@ -2,11 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { ExternalLink, FileText, Loader2 } from 'lucide-react';
 import { fetchModule1QcArtifacts } from '@/services/backendApi';
 
-function kindLabel(kind) {
+function kindLabel(kind, file) {
+  const path = `${file?.key || ''} ${file?.name || ''}`.toLowerCase();
+  if (path.includes('fastqc_raw') || (kind === 'fastqc' && path.includes('fastqc'))) {
+    return path.includes('fastqc_raw') ? 'FastQC (raw reads)' : 'FastQC';
+  }
   if (kind === 'fastp') return 'fastp';
   if (kind === 'multiqc') return 'MultiQC';
   if (kind === 'fastqc') return 'FastQC';
   return 'QC';
+}
+
+function artifactLabel(file) {
+  const kind = kindLabel(file?.kind, file);
+  const name = file?.name || 'report';
+  if (kind.startsWith('FastQC')) return `${kind} · ${name}`;
+  return name;
 }
 
 /**
@@ -84,7 +95,7 @@ const Module1QcPanel = ({ conversationId, hasQc }) => {
           style={{ color: 'var(--accent-teal)' }}
         >
           <FileText className="w-3.5 h-3.5" />
-          Open {kindLabel(primary.kind)} report
+          Open {kindLabel(primary.kind, primary)} report
           <ExternalLink className="w-3 h-3" />
         </a>
       )}
@@ -96,7 +107,7 @@ const Module1QcPanel = ({ conversationId, hasQc }) => {
       )}
 
       {secondary.length > 0 && (
-        <ul className="mt-2 space-y-1">
+        <ul className="mt-2 space-y-1" aria-label="Additional QC reports including FastQC raw">
           {secondary.map((file) => (
             <li key={file.key}>
               <a
@@ -106,7 +117,7 @@ const Module1QcPanel = ({ conversationId, hasQc }) => {
                 className="text-2xs inline-flex items-center gap-1"
                 style={{ color: 'var(--text-secondary)' }}
               >
-                {file.name}
+                {artifactLabel(file)}
                 <ExternalLink className="w-2.5 h-2.5" />
               </a>
             </li>

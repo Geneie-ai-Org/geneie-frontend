@@ -19,6 +19,7 @@ const LandingPage = React.lazy(() => import('./pages/LandingPage'));
 const AuthPage = React.lazy(() => import('./pages/AuthPage'));
 const AuthActionPage = React.lazy(() => import('./pages/AuthActionPage'));
 const ChatPage = React.lazy(() => import('./pages/ChatPage'));
+const Module1IgvWindowPage = React.lazy(() => import('./pages/Module1IgvWindowPage'));
 const AdminPage = React.lazy(() => import('./pages/AdminPage'));
 const AdminInfraPage = React.lazy(() => import('./pages/AdminInfraPage'));
 const LegalDocPage = React.lazy(() => import('./pages/LegalDocPage'));
@@ -83,6 +84,17 @@ root.render(
               <ProtectedRoute>
                 <LegalConsentGate>
                   <ChatPage />
+                </LegalConsentGate>
+              </ProtectedRoute>
+            }
+          />
+          {/* Before /app/:conversationId so "module1-igv" is not treated as a chat id. */}
+          <Route
+            path="/app/module1-igv"
+            element={
+              <ProtectedRoute>
+                <LegalConsentGate>
+                  <Module1IgvWindowPage />
                 </LegalConsentGate>
               </ProtectedRoute>
             }

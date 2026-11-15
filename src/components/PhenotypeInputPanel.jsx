@@ -344,29 +344,40 @@ function diseaseScore(d) {
   return Number.isFinite(n) ? n : null;
 }
 
-function shouldAutoSelectDisease(d, runMode) {
-  if (runMode !== PHENOTYPE_RUN_AUTOMATIC || !d) return false;
+/**
+ * Strong enough to auto-load disease-annotated HPOs into the finding chip row.
+ * Used in both Automatic and Manual: Manual still leaves finding chips unchecked
+ * (applyDisease defaultSelected follows run mode); Automatic also ticks strong ones.
+ */
+function shouldLoadDiseaseAnnotations(d) {
+  if (!d) return false;
   if (!diseaseHasHpoAnnotations(d)) return false;
   const score = diseaseScore(d);
   return score != null && score >= AUTO_DISEASE_MIN_SCORE;
 }
 
+/** @deprecated alias — prefer shouldLoadDiseaseAnnotations */
+function shouldAutoSelectDisease(d, runMode) {
+  if (runMode !== PHENOTYPE_RUN_AUTOMATIC) return false;
+  return shouldLoadDiseaseAnnotations(d);
+}
+
 /**
- * High-confidence catalog rows to auto-apply.
- * Automatic only: prefer diseases explicitly named by the note LLM
- * (disease_candidates); otherwise top score≥0.90 rows (capped).
- * Manual: never auto-select — analyst must click a disease match.
+ * High-confidence catalog rows to auto-apply (load disease HPO annotations).
+ * Prefer diseases explicitly named by the note LLM (disease_candidates); otherwise
+ * top score≥0.90 rows (capped). Runs in Manual and Automatic so doctor notes get
+ * chips without an extra click; Manual keeps findings unchecked for review.
  */
 function diseasesToAutoApply(
   catalog,
   runMode,
   { alreadyKeys = new Set(), namedNameKeys = null } = {}
 ) {
-  if (runMode !== PHENOTYPE_RUN_AUTOMATIC) return [];
+  void runMode; // selection of chips still gated inside applyDisease / mapResolveToCandidates
 
   let pool = (catalog || []).filter((d) => {
     if (!d || alreadyKeys.has(diseaseKey(d))) return false;
-    return shouldAutoSelectDisease(d, runMode);
+    return shouldLoadDiseaseAnnotations(d);
   });
 
   if (namedNameKeys && namedNameKeys.size) {
@@ -1510,7 +1521,13 @@ export default function PhenotypeInputPanel({
               Looking up findings…
             </span>
           ) : draft.trim().length >= 3 ? (
-            <span>No finding matches yet — keep typing or pick a condition below.</span>
+            diseaseOptions.length > 0 ? (
+              <span>
+                No finding chips yet — select a likely condition below to load its HPO terms.
+              </span>
+            ) : (
+              <span>No finding matches yet — keep typing or pick a condition below.</span>
+            )
           ) : null}
         </div>
         {(clinicalCandidates.length > 0 || inheritanceCandidates.length > 0) && (

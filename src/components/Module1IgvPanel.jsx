@@ -143,9 +143,10 @@ const Module1IgvPanel = ({
         });
         setJBrowse(() => JBrowseLinearGenomeView);
 
-        setViewState((prev) => {
-          if (prev) return prev;
-          return createViewState({
+        // Always rebuild: a reused viewState keeps the first BAM/BAI URLs (and their
+        // failure state). That left users stuck on pre-proxy S3 URLs after #239.
+        setViewState(
+          createViewState({
             assembly: assemblyForGenome(assemblyName),
             tracks: [
               {
@@ -188,8 +189,8 @@ const Module1IgvPanel = ({
               },
             },
             configuration: buildGeneieJbrowseConfiguration(isDark),
-          });
-        });
+          })
+        );
       } catch (err) {
         if (!cancelled) setError(err?.message || 'Could not open alignment viewer.');
       } finally {
@@ -203,6 +204,15 @@ const Module1IgvPanel = ({
     // activeLocus only seeds first createViewState; later nav is a separate effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, conversationId, hasBam, genomeHint, isDark, bamExpiresAt]);
+
+  // Drop the JBrowse tree when the dialog closes so the next open gets fresh proxied URLs.
+  useEffect(() => {
+    if (open || embedded) return undefined;
+    setViewState(null);
+    setJBrowse(null);
+    setError(null);
+    return undefined;
+  }, [open, embedded]);
 
   // Soft-cap zoom-out: BAM pileup cannot render chromosome-scale windows.
   useEffect(() => {

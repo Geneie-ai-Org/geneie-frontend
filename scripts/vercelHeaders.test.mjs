@@ -191,9 +191,20 @@ test('connect-src includes the real API origin and known external hosts actually
     'https://mygene.info', // Module1IgvPanel gene search (src/lib/module1GeneLookup.js).
     // Geneie does not hold genomic coordinates for a symbol, so the browser asks MyGene.
     // The query is the gene symbol the analyst typed. Same kind of allow-list as ipapi.co.
+    'https://*.s3.ap-south-1.amazonaws.com', // BAM/BAI if proxy miss / dualstack
+    'https://*.s3.amazonaws.com',
+    'blob:', // JBrowse workers / filehandles
   ]) {
     assert.ok(connectSrc.includes(host), `connect-src must include ${host}`);
   }
+});
+
+test('worker-src allows self and blob for JBrowse', () => {
+  const directives = cspDirectives();
+  const workerSrc = directives['worker-src'];
+  assert.ok(workerSrc, 'missing worker-src');
+  assert.ok(workerSrc.includes("'self'"));
+  assert.ok(workerSrc.includes('blob:'));
 });
 
 test('img-src allows the variant-files S3 bucket for presigned images', () => {

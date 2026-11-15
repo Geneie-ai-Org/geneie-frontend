@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, Loader2, Maximize2, RotateCcw, Search } from 'lucide-react';
 import { toBlob } from 'html-to-image';
-import { fetchModule1BamArtifacts, uploadModule1ReportFigure } from '@/services/backendApi';
+import { fetchModule1BamArtifacts, getAuthHeaders, uploadModule1ReportFigure } from '@/services/backendApi';
+import { apiUrl } from '@/config/api';
+import { installModule1BamAuthFetch } from '@/lib/module1BamAuthFetch';
 import { toSameOriginVariantProxy } from '@/lib/module1S3Proxy';
 import { useTheme } from '@/hooks/useTheme';
 import {
@@ -117,25 +119,51 @@ const Module1IgvPanel = ({
     if (viewBuiltForOpenRef.current) return undefined;
 
     let cancelled = false;
+    let completed = false;
+    // Claim the slot immediately so Strict Mode / dep churn cannot start a second build
+    // that aborts the first mid-Range. Release only if this attempt never completed.
     viewBuiltForOpenRef.current = true;
     setLoading(true);
     setError(null);
 
     (async () => {
       try {
+        installModule1BamAuthFetch();
         const [{ createViewState, JBrowseLinearGenomeView }, data] = await Promise.all([
           import('@jbrowse/react-linear-genome-view2'),
           fetchModule1BamArtifacts(conversationId),
         ]);
         if (cancelled) return;
 
-        if (!data?.has_bam || !data.bam_url || !data.bai_url) {
+        if (!data?.has_bam) {
           throw new Error(data?.message || 'Alignment BAM is not available.');
         }
 
-        // Same-origin Vercel→S3 rewrite: avoids cross-origin Range CORS failures in BamAdapter.
-        const bamUri = toSameOriginVariantProxy(data.bam_url);
-        const baiUri = toSameOriginVariantProxy(data.bai_url);
+        // Prefer auth'd API Range proxy (no Vercel→S3 hop). Fall back to the
+        // same-origin Vercel rewrite while the backend proxy is rolling out.
+        let bamUri;
+        let baiUri;
+        const filePath =
+          data.bam_proxy_path || `/api/module1/bam/${encodeURIComponent(conversationId)}/file`;
+        const indexPath =
+          data.bai_proxy_path || `/api/module1/bam/${encodeURIComponent(conversationId)}/index`;
+        try {
+          const probeHeaders = await getAuthHeaders();
+          const probe = await fetch(apiUrl(filePath), { method: 'HEAD', headers: probeHeaders });
+          if (probe.ok) {
+            bamUri = apiUrl(filePath);
+            baiUri = apiUrl(indexPath);
+          }
+        } catch {
+          /* use S3 proxy below */
+        }
+        if (!bamUri || !baiUri) {
+          if (!data.bam_url || !data.bai_url) {
+            throw new Error(data?.message || 'Alignment BAM is not available.');
+          }
+          bamUri = toSameOriginVariantProxy(data.bam_url);
+          baiUri = toSameOriginVariantProxy(data.bai_url);
+        }
 
         const genome = (data.genome || genomeHint || 'hg38').toLowerCase();
         const assemblyName = genome === 'hg19' ? 'hg19' : 'hg38';
@@ -199,6 +227,7 @@ const Module1IgvPanel = ({
             },
           })
         );
+        completed = true;
       } catch (err) {
         if (!cancelled) {
           viewBuiltForOpenRef.current = false;
@@ -211,12 +240,16 @@ const Module1IgvPanel = ({
 
     return () => {
       cancelled = true;
+      // Strict Mode remount: allow the next mount to build if we never finished.
+      if (!completed) {
+        viewBuiltForOpenRef.current = false;
+      }
     };
     // intentional: do not re-create on isDark / bamExpiresAt (abort storm).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, conversationId, hasBam, genomeHint]);
 
-  // Drop the JBrowse tree when the dialog closes so the next open gets fresh proxied URLs.
+  // Drop the JBrowse tree when the dialog closes so the next open gets fresh proxy URLs.
   useEffect(() => {
     if (open || embedded) return undefined;
     viewBuiltForOpenRef.current = false;

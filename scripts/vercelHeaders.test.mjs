@@ -120,6 +120,16 @@ test('script-src only allows self and specific hashes, never unsafe-inline', () 
   assert.ok(hashSources.length >= 2, 'expected at least 2 sha256 hash sources for the inline scripts in index.html');
 });
 
+test('script-src allows wasm compile for JBrowse BGZF without unsafe-eval', () => {
+  // BamAdapter.getHeaderPre fetches an inlined data:application/wasm blob, then
+  // WebAssembly.instantiate. Chrome blocks that compile unless script-src has
+  // 'wasm-unsafe-eval'. That keyword does not allow JS eval.
+  const directives = cspDirectives();
+  const scriptSrc = directives['script-src'];
+  assert.ok(scriptSrc.includes("'wasm-unsafe-eval'"), "script-src must include 'wasm-unsafe-eval' for JBrowse BGZF");
+  assert.ok(!scriptSrc.includes("'unsafe-eval'"), "script-src must not include 'unsafe-eval'");
+});
+
 test('script-src allows apis.google.com and www.gstatic.com for Firebase Google sign-in', () => {
   // signInWithPopup(auth, new GoogleAuthProvider()) (AuthForm.jsx) loads the GSI client library
   // from apis.google.com -- S-071's original script-src (self + two hashes only) blocked that load
@@ -196,6 +206,7 @@ test('connect-src includes the real API origin and known external hosts actually
     'https://fonts.googleapis.com', // html-to-image snapshot may fetch stylesheet CSS
     'https://fonts.gstatic.com',
     'blob:', // JBrowse workers / filehandles
+    'data:', // JBrowse BGZF wasm is fetch()'d as data:application/wasm (connect-src, not img-src)
   ]) {
     assert.ok(connectSrc.includes(host), `connect-src must include ${host}`);
   }

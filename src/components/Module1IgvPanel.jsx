@@ -2,8 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ExternalLink, Loader2, Maximize2, RotateCcw, Search } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import { fetchModule1BamArtifacts, uploadModule1ReportFigure } from '@/services/backendApi';
-import { installModule1BamAuthFetch } from '@/lib/module1BamAuthFetch';
-import { module1BamByteUris } from '@/lib/module1BamByteUrls';
+import { toSameOriginVariantProxy } from '@/lib/module1S3Proxy';
 import { useTheme } from '@/hooks/useTheme';
 import {
   Dialog,
@@ -127,21 +126,24 @@ const Module1IgvPanel = ({
 
     (async () => {
       try {
-        installModule1BamAuthFetch();
         const [{ createViewState, JBrowseLinearGenomeView }, data] = await Promise.all([
           import('@jbrowse/react-linear-genome-view2'),
           fetchModule1BamArtifacts(conversationId),
         ]);
         if (cancelled) return;
 
-        if (!data?.has_bam) {
+        if (!data?.has_bam || !data.bam_url || !data.bai_url) {
           throw new Error(data?.message || 'Alignment BAM is not available.');
         }
 
-        // Same-origin byte URLs (Vercel → api-newprod Range proxy). Cross-origin
-        // api-newprod Range GETs were still TypeError: Failed to fetch in Chrome
-        // even when Network showed 200/206 for the index.
-        const { bamUri, baiUri } = module1BamByteUris(conversationId, data);
+        // Presigned S3 via same-origin Vercel rewrite — no window.fetch monkey-patch.
+        // Auth'd API Range proxy failed in BamAdapter.getHeaderPre (Failed to fetch).
+        const bamUri = toSameOriginVariantProxy(data.bam_url);
+        const baiUri = toSameOriginVariantProxy(data.bai_url);
+        if (bamUri === data.bam_url || baiUri === data.bai_url) {
+          // Host not rewritten → browser would hit S3 CORS; fail loud instead.
+          throw new Error('Alignment file URL could not be proxied for the browser. Please try again.');
+        }
 
         const genome = (data.genome || genomeHint || 'hg38').toLowerCase();
         const assemblyName = genome === 'hg19' ? 'hg19' : 'hg38';

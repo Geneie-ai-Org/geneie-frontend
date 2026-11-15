@@ -27,8 +27,17 @@ import {
 import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
 import { PillToggle } from '@/components/ui/pill-toggle';
-import { MODULE1_BED_MAX_BYTES, MODULE1_FASTQ_MAX_BYTES, fetchModule1Oncotree, fetchPublicConfig } from '@/services/backendApi';
-import { isRecognizedImportUrl, module1UrlErrorMessage, precheckBedChromStyle } from '@/services/backendApi';
+import {
+  MODULE1_BED_MAX_BYTES,
+  MODULE1_FASTQ_ACCEPT,
+  MODULE1_FASTQ_MAX_BYTES,
+  fetchModule1Oncotree,
+  fetchPublicConfig,
+  isAllowedModule1RoleFilename,
+  isRecognizedImportUrl,
+  module1UrlErrorMessage,
+  precheckBedChromStyle,
+} from '@/services/backendApi';
 import { cn } from '@/lib/utils';
 import PhenotypeInputPanel, { PHENOTYPE_MODE_NOTE } from '@/components/PhenotypeInputPanel';
 import GermlinePedigreeFields from '@/components/GermlinePedigreeFields';
@@ -172,7 +181,17 @@ function SelectWithDisabledOptions({ value, onChange, placeholder, options, clas
   );
 }
 
-function FilePickerRow({ label, file, onSelect, progress, accept, placeholder }) {
+function FilePickerRow({ label, file, onSelect, progress, accept, placeholder, role = 'r1' }) {
+  const handleChange = (e) => {
+    const picked = e.target.files?.[0] || null;
+    e.target.value = '';
+    if (picked && !isAllowedModule1RoleFilename(role, picked.name)) {
+      toast.error(`"${picked.name}" is not a valid FASTQ (.fastq.gz / .fq.gz / .fastq / .fq).`);
+      onSelect(null);
+      return;
+    }
+    onSelect(picked);
+  };
   return (
     <div>
       <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
@@ -184,7 +203,7 @@ function FilePickerRow({ label, file, onSelect, progress, accept, placeholder })
       >
         <FileText className="w-4 h-4 shrink-0" style={{ color: 'var(--accent-teal)' }} />
         <span className="truncate">{file?.name || placeholder || `Choose ${label} file…`}</span>
-        <input type="file" accept={accept} className="hidden" onChange={(e) => onSelect(e.target.files?.[0] || null)} />
+        <input type="file" accept={accept} className="hidden" onChange={handleChange} />
       </label>
       {progress != null && (
         <Progress value={progress} className="mt-1.5" />
@@ -923,7 +942,8 @@ const Module1UploadForm = ({
                       file={r1File}
                       onSelect={setR1File}
                       progress={module1UploadProgress?.r1}
-                      accept=".fastq.gz,.fastq,.fq.gz,.fq"
+                      accept={MODULE1_FASTQ_ACCEPT}
+                      role="r1"
                     />
                     <FilePickerRow
                       label="Reverse read (R2)"
@@ -931,7 +951,8 @@ const Module1UploadForm = ({
                       file={r2File}
                       onSelect={setR2File}
                       progress={module1UploadProgress?.r2}
-                      accept=".fastq.gz,.fastq,.fq.gz,.fq"
+                      accept={MODULE1_FASTQ_ACCEPT}
+                      role="r2"
                     />
                     {isMatched && (
                       <>
@@ -953,14 +974,16 @@ const Module1UploadForm = ({
                           placeholder="Choose normal R1…"
                           file={normalR1File}
                           onSelect={setNormalR1File}
-                          accept=".fastq.gz,.fastq,.fq.gz,.fq"
+                          accept={MODULE1_FASTQ_ACCEPT}
+                          role="r1"
                         />
                         <FilePickerRow
                           label="Normal reverse read (R2)"
                           placeholder="Choose normal R2…"
                           file={normalR2File}
                           onSelect={setNormalR2File}
-                          accept=".fastq.gz,.fastq,.fq.gz,.fq"
+                          accept={MODULE1_FASTQ_ACCEPT}
+                          role="r2"
                         />
                       </>
                     )}

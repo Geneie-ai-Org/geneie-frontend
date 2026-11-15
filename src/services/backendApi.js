@@ -424,6 +424,15 @@ export async function completeVariantUpload({
   return data;
 }
 
+/**
+ * FASTQ accept for <input type="file">.
+ * macOS / Safari greys out *.fastq.gz when accept is only ".fastq.gz" (compound
+ * extension). Include ".gz" + gzip MIME types so the picker enables them; real
+ * role checks still use isAllowedModule1RoleFilename.
+ */
+export const MODULE1_FASTQ_ACCEPT =
+  '.fastq.gz,.fastq,.fq.gz,.fq,.gz,application/gzip,application/x-gzip';
+
 /** FASTQ/BED filename checks per Module 1 role — mirrors the server-side extension validation. */
 export function isAllowedModule1RoleFilename(role, fileName) {
   const n = (fileName || '').toLowerCase();

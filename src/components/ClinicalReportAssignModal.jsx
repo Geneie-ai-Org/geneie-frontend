@@ -13,7 +13,7 @@ import {
   generateClinicalReport,
 } from '@/services/backendApi';
 import { bamExpiryCopy, locusFromVariantFields } from '@/lib/module1IgvLocus';
-import { requestModule1IgvOpen } from '@/lib/module1IgvBus';
+import { module1IgvWindowUrl } from '@/components/Module1IgvPanel';
 
 const INCLUDE = 'clinical_result';
 const ADDITIONAL = 'additional_finding';
@@ -67,6 +67,7 @@ export default function ClinicalReportAssignModal({
   const [assignments, setAssignments] = useState({});
   const [laneBReasons, setLaneBReasons] = useState({});
   const [downloadingTsv, setDownloadingTsv] = useState(false);
+  const [igvNotice, setIgvNotice] = useState('');
 
   const load = useCallback(async () => {
     if (!conversationId) return;
@@ -250,6 +251,11 @@ export default function ClinicalReportAssignModal({
               {pfraGateMessage}
             </p>
           ) : null}
+          {igvNotice ? (
+            <p className="text-2xs mt-2" style={{ color: 'var(--error)' }}>
+              {igvNotice}
+            </p>
+          ) : null}
         </div>
 
         <DualLaneSummary conversationId={conversationId} open={open} />
@@ -341,8 +347,26 @@ export default function ClinicalReportAssignModal({
                         <button
                           type="button"
                           onClick={() => {
-                            if (!igvLocus) return;
-                            requestModule1IgvOpen({ conversationId, locus: igvLocus });
+                            if (!igvLocus || !conversationId) return;
+                            // Do not open a second dialog on this page. The review
+                            // modal is already a dialog; stacking JBrowse inside it
+                            // takes down the chat (nested modal + BAM wasm).
+                            const url = module1IgvWindowUrl(conversationId, igvLocus);
+                            // Omit noopener so a blocked popup is distinguishable from a
+                            // successful open (noopener makes window.open return null).
+                            const win = window.open(
+                              url,
+                              'geneie-module1-igv',
+                              'width=1280,height=860',
+                            );
+                            if (!win) {
+                              setIgvNotice(
+                                'Allow pop-ups for geneie.chat, then try View in IGV again.',
+                              );
+                            } else {
+                              win.opener = null;
+                              setIgvNotice('');
+                            }
                           }}
                           disabled={!igvLocus}
                           title={

@@ -54,6 +54,39 @@ function getLgView(viewState) {
   return viewState?.session?.view ?? viewState?.view ?? null;
 }
 
+/**
+ * zoomTo / navToLocString read view width. Calling them before the canvas
+ * node is initialized throws "width undefined" and blanks the page.
+ */
+function whenViewReady(view, fn) {
+  if (!view) return () => {};
+  let cancelled = false;
+  let frames = 0;
+  const step = () => {
+    if (cancelled) return;
+    frames += 1;
+    let ready = false;
+    try {
+      ready = Boolean(view.initialized);
+    } catch {
+      ready = false;
+    }
+    if (ready) {
+      try {
+        fn(view);
+      } catch (err) {
+        console.warn('[Module1IgvPanel] view action skipped', err);
+      }
+      return;
+    }
+    if (frames < 180) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+  return () => {
+    cancelled = true;
+  };
+}
+
 export function module1IgvWindowUrl(conversationId, locus) {
   const q = new URLSearchParams();
   if (conversationId) q.set('cid', conversationId);
@@ -264,28 +297,32 @@ const Module1IgvPanel = ({
     return undefined;
   }, [open, embedded]);
 
-  // Soft-cap zoom-out once (not on an interval — repeated zoomTo aborts BamAdapter Range reads).
+  // Soft-cap zoom-out once, only after the canvas has a width.
   useEffect(() => {
     if (!open || !viewState) return undefined;
     const view = getLgView(viewState);
-    if (!view?.zoomTo) return undefined;
-    const bp = view.bpPerPx ?? view.effectiveBpPerPx;
-    if (typeof bp === 'number' && bp > MAX_USEFUL_BP_PER_PX) {
-      view.zoomTo(MAX_USEFUL_BP_PER_PX);
-    }
-    return undefined;
+    if (!view) return undefined;
+    return whenViewReady(view, (ready) => {
+      const bp = ready.bpPerPx ?? ready.effectiveBpPerPx;
+      if (typeof bp === 'number' && bp > MAX_USEFUL_BP_PER_PX && typeof ready.zoomTo === 'function') {
+        ready.zoomTo(MAX_USEFUL_BP_PER_PX);
+      }
+    });
   }, [open, viewState]);
 
-  // Navigate when locus changes after the view exists.
+  // Navigate when locus changes after the view is initialized.
   useEffect(() => {
-    if (!open || !viewState || !activeLocus || !bamMeta?.genome) return;
+    if (!open || !viewState || !activeLocus || !bamMeta?.genome) return undefined;
     const view = getLgView(viewState);
-    if (typeof view?.navToLocString === 'function') {
-      void view.navToLocString(activeLocus, bamMeta.genome);
-    }
-    if (typeof view?.zoomTo === 'function') {
-      view.zoomTo(DEFAULT_BP_PER_PX);
-    }
+    if (!view) return undefined;
+    return whenViewReady(view, (ready) => {
+      if (typeof ready.navToLocString === 'function') {
+        void ready.navToLocString(activeLocus, bamMeta.genome);
+      }
+      if (typeof ready.zoomTo === 'function') {
+        ready.zoomTo(DEFAULT_BP_PER_PX);
+      }
+    });
   }, [open, viewState, activeLocus, bamMeta]);
 
   const resetView = useCallback(() => {

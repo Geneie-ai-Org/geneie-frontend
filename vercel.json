@@ -9,6 +9,14 @@
       "source": "/s3-variant/:path*",
       "destination": "https://geneie-newprod-variant-files.s3.amazonaws.com/:path*"
     },
+    {
+      "source": "/api/module1/bam/:cid/file",
+      "destination": "https://api-newprod.geneie.chat/api/module1/bam/:cid/file"
+    },
+    {
+      "source": "/api/module1/bam/:cid/index",
+      "destination": "https://api-newprod.geneie.chat/api/module1/bam/:cid/index"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

@@ -13,4 +13,5 @@ test('auth fetch wrapper only matches module1 bam byte paths', () => {
   assert.match(src, /getAuthHeaders/);
   assert.match(src, /Authorization/);
   assert.match(src, /X-Device-Id/);
+  assert.ok(src.includes("cache: 'no-store'") || src.includes('cache: "no-store"'));
 });

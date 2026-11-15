@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, Loader2, Maximize2, RotateCcw, Search } from 'lucide-react';
 import { toBlob } from 'html-to-image';
-import { fetchModule1BamArtifacts, getAuthHeaders, uploadModule1ReportFigure } from '@/services/backendApi';
-import { apiUrl } from '@/config/api';
+import { fetchModule1BamArtifacts, uploadModule1ReportFigure } from '@/services/backendApi';
 import { installModule1BamAuthFetch } from '@/lib/module1BamAuthFetch';
-import { toSameOriginVariantProxy } from '@/lib/module1S3Proxy';
+import { module1BamByteUris } from '@/lib/module1BamByteUrls';
 import { useTheme } from '@/hooks/useTheme';
 import {
   Dialog,
@@ -139,31 +138,10 @@ const Module1IgvPanel = ({
           throw new Error(data?.message || 'Alignment BAM is not available.');
         }
 
-        // Prefer auth'd API Range proxy (no Vercel→S3 hop). Fall back to the
-        // same-origin Vercel rewrite while the backend proxy is rolling out.
-        let bamUri;
-        let baiUri;
-        const filePath =
-          data.bam_proxy_path || `/api/module1/bam/${encodeURIComponent(conversationId)}/file`;
-        const indexPath =
-          data.bai_proxy_path || `/api/module1/bam/${encodeURIComponent(conversationId)}/index`;
-        try {
-          const probeHeaders = await getAuthHeaders();
-          const probe = await fetch(apiUrl(filePath), { method: 'HEAD', headers: probeHeaders });
-          if (probe.ok) {
-            bamUri = apiUrl(filePath);
-            baiUri = apiUrl(indexPath);
-          }
-        } catch {
-          /* use S3 proxy below */
-        }
-        if (!bamUri || !baiUri) {
-          if (!data.bam_url || !data.bai_url) {
-            throw new Error(data?.message || 'Alignment BAM is not available.');
-          }
-          bamUri = toSameOriginVariantProxy(data.bam_url);
-          baiUri = toSameOriginVariantProxy(data.bai_url);
-        }
+        // Same-origin byte URLs (Vercel → api-newprod Range proxy). Cross-origin
+        // api-newprod Range GETs were still TypeError: Failed to fetch in Chrome
+        // even when Network showed 200/206 for the index.
+        const { bamUri, baiUri } = module1BamByteUris(conversationId, data);
 
         const genome = (data.genome || genomeHint || 'hg38').toLowerCase();
         const assemblyName = genome === 'hg19' ? 'hg19' : 'hg38';
@@ -259,25 +237,16 @@ const Module1IgvPanel = ({
     return undefined;
   }, [open, embedded]);
 
-  // Soft-cap zoom-out: BAM pileup cannot render chromosome-scale windows.
+  // Soft-cap zoom-out once (not on an interval — repeated zoomTo aborts BamAdapter Range reads).
   useEffect(() => {
     if (!open || !viewState) return undefined;
     const view = getLgView(viewState);
     if (!view?.zoomTo) return undefined;
-
-    let cancelled = false;
-    const id = window.setInterval(() => {
-      if (cancelled) return;
-      const bp = view.bpPerPx ?? view.effectiveBpPerPx;
-      if (typeof bp === 'number' && bp > MAX_USEFUL_BP_PER_PX) {
-        view.zoomTo(MAX_USEFUL_BP_PER_PX);
-      }
-    }, 250);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
+    const bp = view.bpPerPx ?? view.effectiveBpPerPx;
+    if (typeof bp === 'number' && bp > MAX_USEFUL_BP_PER_PX) {
+      view.zoomTo(MAX_USEFUL_BP_PER_PX);
+    }
+    return undefined;
   }, [open, viewState]);
 
   // Navigate when locus changes after the view exists.

@@ -598,6 +598,8 @@ export default function PhenotypeInputPanel({
   const [resolving, setResolving] = useState(false);
   const [interpreting, setInterpreting] = useState(false);
   const [resolveError, setResolveError] = useState('');
+  // Soft = tertiary hint (e.g. disease catalog empty but note chips already present).
+  const [resolveErrorSoft, setResolveErrorSoft] = useState(false);
   const [notePreview, setNotePreview] = useState(null);
   const [noteUnmapped, setNoteUnmapped] = useState([]);
   const [noteAmbiguous, setNoteAmbiguous] = useState([]);
@@ -730,6 +732,7 @@ export default function PhenotypeInputPanel({
     setNoteUnmapped([]);
     setNoteAmbiguous([]);
     setResolveError('');
+    setResolveErrorSoft(false);
     setShowMoreDiseases(false);
     emit({
       phenotype_note_clean: '',
@@ -778,6 +781,7 @@ export default function PhenotypeInputPanel({
     setNoteUnmapped([]);
     setNoteAmbiguous([]);
     setResolveError('');
+    setResolveErrorSoft(false);
     setShowMoreDiseases(false);
   }, []);
 
@@ -895,6 +899,26 @@ export default function PhenotypeInputPanel({
     stateRef.current.candidates = pinned;
   };
 
+  const noteFindingsAlreadyPresent = () =>
+    (stateRef.current.candidates || []).some(
+      (c) => c && c.origin !== 'disease_annotation' && !isInheritanceLikeHpo(c)
+    );
+
+  const setDiseaseNoHpoNotice = (allowToggleOff) => {
+    // Auto-apply / note path: note chips already cover the patient — don't scare with red.
+    if (!allowToggleOff || noteFindingsAlreadyPresent()) {
+      setResolveErrorSoft(true);
+      setResolveError(
+        'That condition has no annotated HPO terms in the catalog — using findings from the note. Pick another match only if you need disease annotations.'
+      );
+      return;
+    }
+    setResolveErrorSoft(false);
+    setResolveError(
+      'No clinical findings (HPO terms) are annotated for this disease — pick another match.'
+    );
+  };
+
   const applyDisease = useCallback(
     async (disease, { allowToggleOff = true } = {}) => {
       const name = sanitizePhenotypeQuery(disease?.disease_name || disease?.name || '');
@@ -909,14 +933,13 @@ export default function PhenotypeInputPanel({
 
       // Phase B: never select a catalog row known to have zero HPO annotations.
       if (disease?.has_hpo_meta && !diseaseHasHpoAnnotations(disease)) {
-        setResolveError(
-          'No clinical findings (HPO terms) are annotated for this disease — pick another match.'
-        );
+        setDiseaseNoHpoNotice(allowToggleOff);
         return;
       }
 
       setResolving(true);
       setResolveError('');
+      setResolveErrorSoft(false);
       try {
         const resolved = await resolveHpoTerms({
           text: name,
@@ -931,9 +954,7 @@ export default function PhenotypeInputPanel({
           )
           .map((c) => ({ ...c, disease_keys: [dKey] }));
         if (!fromDisease.length) {
-          setResolveError(
-            'No clinical findings (HPO terms) are annotated for this disease — pick another match.'
-          );
+          setDiseaseNoHpoNotice(allowToggleOff);
           return;
         }
         const match = toDiseaseMatchRecord(
@@ -976,6 +997,7 @@ export default function PhenotypeInputPanel({
         stateRef.current.candidates = merged;
         stateRef.current.topCandidates = catalog;
       } catch (err) {
+        setResolveErrorSoft(false);
         setResolveError(err?.message || 'Could not load findings for that disease');
       } finally {
         setResolving(false);
@@ -1024,6 +1046,7 @@ export default function PhenotypeInputPanel({
     setSearchingFindings(false);
     setInterpreting(true);
     setResolveError('');
+    setResolveErrorSoft(false);
     try {
       const data = await interpretPhenotypeNarrative({ text: trimmed });
       if (seq !== interpretSeq.current) return;
@@ -1124,6 +1147,7 @@ export default function PhenotypeInputPanel({
       }
     } catch (err) {
       if (seq !== interpretSeq.current) return;
+      setResolveErrorSoft(false);
       setResolveError(err?.message || 'Could not interpret clinical note');
     } finally {
       if (seq === interpretSeq.current) setInterpreting(false);
@@ -1583,7 +1607,10 @@ export default function PhenotypeInputPanel({
       )}
 
       {resolveError && (
-        <p className="text-2xs" style={{ color: 'var(--error)' }}>
+        <p
+          className="text-2xs"
+          style={{ color: resolveErrorSoft ? 'var(--text-tertiary)' : 'var(--error)' }}
+        >
           {resolveError}
         </p>
       )}

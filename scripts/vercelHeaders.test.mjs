@@ -193,6 +193,8 @@ test('connect-src includes the real API origin and known external hosts actually
     // The query is the gene symbol the analyst typed. Same kind of allow-list as ipapi.co.
     'https://*.s3.ap-south-1.amazonaws.com', // BAM/BAI if proxy miss / dualstack
     'https://*.s3.amazonaws.com',
+    'https://fonts.googleapis.com', // html-to-image snapshot may fetch stylesheet CSS
+    'https://fonts.gstatic.com',
     'blob:', // JBrowse workers / filehandles
   ]) {
     assert.ok(connectSrc.includes(host), `connect-src must include ${host}`);

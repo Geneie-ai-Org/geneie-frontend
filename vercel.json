@@ -1,6 +1,14 @@
 {
   "outputDirectory": "build",
   "rewrites": [
+    {
+      "source": "/s3-variant-regional/:path*",
+      "destination": "https://geneie-newprod-variant-files.s3.ap-south-1.amazonaws.com/:path*"
+    },
+    {
+      "source": "/s3-variant/:path*",
+      "destination": "https://geneie-newprod-variant-files.s3.amazonaws.com/:path*"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

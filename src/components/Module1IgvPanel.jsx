@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ExternalLink, Loader2, Maximize2, RotateCcw, Search } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import { fetchModule1BamArtifacts, uploadModule1ReportFigure } from '@/services/backendApi';
+import { toSameOriginVariantProxy } from '@/lib/module1S3Proxy';
 import { useTheme } from '@/hooks/useTheme';
 import {
   Dialog,
@@ -125,6 +126,10 @@ const Module1IgvPanel = ({
           throw new Error(data?.message || 'Alignment BAM is not available.');
         }
 
+        // Same-origin Vercel→S3 rewrite: avoids cross-origin Range CORS failures in BamAdapter.
+        const bamUri = toSameOriginVariantProxy(data.bam_url);
+        const baiUri = toSameOriginVariantProxy(data.bai_url);
+
         const genome = (data.genome || genomeHint || 'hg38').toLowerCase();
         const assemblyName = genome === 'hg19' ? 'hg19' : 'hg38';
         const sample = data.sample_name || 'Alignments';
@@ -150,9 +155,9 @@ const Module1IgvPanel = ({
                 assemblyNames: [assemblyName],
                 adapter: {
                   type: 'BamAdapter',
-                  bamLocation: { uri: data.bam_url, locationType: 'UriLocation' },
+                  bamLocation: { uri: bamUri, locationType: 'UriLocation' },
                   index: {
-                    location: { uri: data.bai_url, locationType: 'UriLocation' },
+                    location: { uri: baiUri, locationType: 'UriLocation' },
                   },
                   fetchSizeLimit: 12_000_000,
                 },

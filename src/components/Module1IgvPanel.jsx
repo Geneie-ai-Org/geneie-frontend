@@ -73,12 +73,15 @@ const Module1IgvPanel = ({
   const captureRootRef = useRef(null);
   const capturedRef = useRef(false);
   const lastLocusTokenRef = useRef(null);
+  /** One JBrowse tree per open cycle — rebuilding mid-flight aborts Range fetches as Failed to fetch. */
+  const viewBuiltForOpenRef = useRef(false);
 
   const expiryLine = bamExpiryCopy(bamExpiresAt, { hasBam });
 
   // Reset per conversation so a new BAM gets a fresh view + snapshot.
   useEffect(() => {
     capturedRef.current = false;
+    viewBuiltForOpenRef.current = false;
     if (!embedded) setOpen(Boolean(autoOpen));
     setViewState(null);
     setBamMeta(null);
@@ -109,8 +112,12 @@ const Module1IgvPanel = ({
 
   useEffect(() => {
     if (!open || !conversationId || !hasBam) return undefined;
+    // Already built for this open — do not tear down; status-poll / theme churn was
+    // aborting in-flight BAM Range reads and painting TypeError: Failed to fetch.
+    if (viewBuiltForOpenRef.current) return undefined;
 
     let cancelled = false;
+    viewBuiltForOpenRef.current = true;
     setLoading(true);
     setError(null);
 
@@ -133,7 +140,7 @@ const Module1IgvPanel = ({
         const genome = (data.genome || genomeHint || 'hg38').toLowerCase();
         const assemblyName = genome === 'hg19' ? 'hg19' : 'hg38';
         const sample = data.sample_name || 'Alignments';
-        const trackId = `module1-bam-${conversationId}`;
+        const trackId = `module1-bam-${conversationId}-${Date.now()}`;
         const startLocus = activeLocus || defaultLocusForGenome(assemblyName);
 
         setBamMeta({
@@ -143,8 +150,6 @@ const Module1IgvPanel = ({
         });
         setJBrowse(() => JBrowseLinearGenomeView);
 
-        // Always rebuild: a reused viewState keeps the first BAM/BAI URLs (and their
-        // failure state). That left users stuck on pre-proxy S3 URLs after #239.
         setViewState(
           createViewState({
             assembly: assemblyForGenome(assemblyName),
@@ -188,11 +193,17 @@ const Module1IgvPanel = ({
                 ],
               },
             },
-            configuration: buildGeneieJbrowseConfiguration(isDark),
+            configuration: {
+              ...buildGeneieJbrowseConfiguration(isDark),
+              rpc: { defaultDriver: 'MainThreadRpcDriver' },
+            },
           })
         );
       } catch (err) {
-        if (!cancelled) setError(err?.message || 'Could not open alignment viewer.');
+        if (!cancelled) {
+          viewBuiltForOpenRef.current = false;
+          setError(err?.message || 'Could not open alignment viewer.');
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -201,13 +212,14 @@ const Module1IgvPanel = ({
     return () => {
       cancelled = true;
     };
-    // activeLocus only seeds first createViewState; later nav is a separate effect.
+    // intentional: do not re-create on isDark / bamExpiresAt (abort storm).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, conversationId, hasBam, genomeHint, isDark, bamExpiresAt]);
+  }, [open, conversationId, hasBam, genomeHint]);
 
   // Drop the JBrowse tree when the dialog closes so the next open gets fresh proxied URLs.
   useEffect(() => {
     if (open || embedded) return undefined;
+    viewBuiltForOpenRef.current = false;
     setViewState(null);
     setJBrowse(null);
     setError(null);

@@ -20,6 +20,31 @@ import { bamExpiryCopy } from '@/lib/module1IgvLocus';
 import { subscribeModule1IgvOpen } from '@/lib/module1IgvBus';
 import { lookupGeneLocus } from '@/lib/module1GeneLookup';
 
+/** Keeps a JBrowse draw failure inside the viewer instead of blanking the chat. */
+class AlignmentViewBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error) {
+    console.error('[Module1IgvPanel] alignment view render failed', error);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <p className="text-2xs px-1 py-2" style={{ color: 'var(--error)' }}>
+        Alignment browser failed to draw. Close this view and use New window.
+      </p>
+    );
+  }
+}
+
 /** ~40–80 kb window — pileup stays under JBrowse’s BAM fetchSizeLimit. */
 const DEFAULT_BP_PER_PX = 1.5;
 /** Soft cap: beyond this, reads are almost always blocked by fetchSizeLimit. */
@@ -434,7 +459,9 @@ const Module1IgvPanel = ({
             touchAction: 'none',
           }}
         >
-          <Browser viewState={viewState} />
+          <AlignmentViewBoundary>
+            <Browser viewState={viewState} />
+          </AlignmentViewBoundary>
         </div>
       )}
     </div>

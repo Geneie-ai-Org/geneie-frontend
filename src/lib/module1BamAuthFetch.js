@@ -1,8 +1,10 @@
 /**
- * Wrap window.fetch so JBrowse BamAdapter Range GETs to the Module 1 BAM
- * API proxy carry Firebase Bearer + device id (api-newprod is cross-origin).
+ * Wrap window.fetch so JBrowse BamAdapter Range GETs for Module 1 BAM bytes
+ * carry Firebase Bearer + device id.
  *
- * Idempotent. Only touches /api/module1/bam/.../file|index.
+ * Byte URLs are same-origin (`geneie.chat/api/module1/bam/.../file|index` via
+ * Vercel rewrite → api-newprod) so the browser never hits cross-origin CORS on
+ * Range responses. Idempotent. Only touches those paths.
  */
 
 import { getAuthHeaders } from '@/services/backendApi';
@@ -44,9 +46,19 @@ export function installModule1BamAuthFetch() {
     headers.set('Authorization', auth.Authorization);
     headers.set('X-Device-Id', auth['X-Device-Id']);
 
+    // no-store: avoid Chrome's cached-CORS false failure on Range GETs
+    // (generic-filehandle documents this as "Failed to fetch").
+    const nextInit = {
+      ...(init || {}),
+      headers,
+      cache: 'no-store',
+    };
+
     if (typeof Request !== 'undefined' && input instanceof Request) {
-      return nativeFetch(new Request(input, { headers }), init);
+      // Do not pass init.headers again — it would drop Authorization.
+      const { headers: _drop, ...rest } = nextInit;
+      return nativeFetch(new Request(input, { headers }), rest);
     }
-    return nativeFetch(input, { ...(init || {}), headers });
+    return nativeFetch(input, nextInit);
   };
 }

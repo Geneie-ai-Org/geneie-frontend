@@ -185,10 +185,22 @@ const Module1IgvPanel = ({ conversationId, hasBam, genome: genomeHint }) => {
     const timer = setTimeout(async () => {
       try {
         setSnapshotStatus('Saving alignment snapshot…');
+        // skipFonts + filter: html-to-image otherwise fetch()es fonts.googleapis.com
+        // and reads cross-origin cssRules → CSP / SecurityError console flood.
         const blob = await toBlob(captureRootRef.current, {
           cacheBust: true,
           pixelRatio: 2,
           backgroundColor: isDark ? '#0f0f0f' : '#ffffff',
+          skipFonts: true,
+          filter: (node) => {
+            if (!node || node.nodeType !== 1) return true;
+            const el = /** @type {Element} */ (node);
+            if (el.tagName === 'LINK') {
+              const href = el.getAttribute('href') || '';
+              if (/fonts\.googleapis\.com|fonts\.gstatic\.com/i.test(href)) return false;
+            }
+            return true;
+          },
         });
         if (cancelled || !blob) {
           setSnapshotStatus(null);

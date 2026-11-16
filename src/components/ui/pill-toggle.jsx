@@ -30,7 +30,22 @@ export function PillToggle({ options, value, onChange, className = '' }) {
               backgroundColor: active ? 'var(--accent-teal-soft)' : 'transparent',
             }}
           >
-            {opt.label}
+            <span className="inline-flex items-center gap-1.5">
+              {opt.label}
+              {opt.badge ? (
+                <span
+                  className="text-2xs font-semibold px-1.5 h-[16px] inline-flex items-center rounded-full"
+                  style={{
+                    backgroundColor: active
+                      ? 'color-mix(in srgb, var(--accent-teal) 22%, transparent)'
+                      : 'var(--accent-teal-soft)',
+                    color: 'var(--accent-teal)',
+                  }}
+                >
+                  {opt.badge}
+                </span>
+              ) : null}
+            </span>
           </button>
         );
       })}

@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { getAuth } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 import { apiUrl } from '@/config/api';
 import { getAuthHeaders } from '@/services/backendApi';
+import { performLogout } from '@/lib/logout';
 import { Button } from '@/components/ui/button';
 
 const GUEST_LEGAL_KEY = 'geneie.legalAccept.v1';
@@ -40,13 +41,18 @@ function guestAccepted(required) {
  * Blocks /app until Terms + Privacy for the current version are accepted.
  * Signed-in: persisted via POST /api/legal/accept.
  * Guest: localStorage (same version keys).
+ *
+ * Always offers Sign out: this overlay covers the sidebar, so a stale Firebase
+ * session must not trap the user on Accept → "Authentication required".
  */
 export default function LegalConsentGate({ children }) {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [required, setRequired] = useState(null);
   const [needsAccept, setNeedsAccept] = useState(false);
   const [checked, setChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState('');
 
   const refresh = useCallback(async () => {
@@ -92,6 +98,8 @@ export default function LegalConsentGate({ children }) {
     try {
       const auth = getAuth();
       if (auth.currentUser) {
+        // Force-refresh: a stale persisted session can look signed-in but fail accept with 401.
+        await auth.currentUser.getIdToken(true);
         const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
         const res = await fetch(apiUrl('/api/legal/accept'), {
           method: 'POST',
@@ -113,6 +121,17 @@ export default function LegalConsentGate({ children }) {
       setError(e.message || 'Accept failed');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const onSignOut = async () => {
+    setSigningOut(true);
+    setError('');
+    try {
+      await performLogout(navigate, { to: '/auth' });
+    } catch (e) {
+      setError(e.message || 'Sign out failed');
+      setSigningOut(false);
     }
   };
 
@@ -167,7 +186,7 @@ export default function LegalConsentGate({ children }) {
         {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
         <Button
           className="mt-5 w-full"
-          disabled={!checked || submitting}
+          disabled={!checked || submitting || signingOut}
           onClick={onAccept}
         >
           {submitting ? (
@@ -176,6 +195,21 @@ export default function LegalConsentGate({ children }) {
             </>
           ) : (
             'Accept and continue'
+          )}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-3 w-full"
+          disabled={submitting || signingOut}
+          onClick={onSignOut}
+        >
+          {signingOut ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing out…
+            </>
+          ) : (
+            'Sign out'
           )}
         </Button>
       </div>

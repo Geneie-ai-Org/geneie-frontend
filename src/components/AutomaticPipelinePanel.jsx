@@ -97,10 +97,16 @@ export default function AutomaticPipelinePanel({
             borderColor: 'color-mix(in srgb, var(--accent-teal) 45%, transparent)',
             background: 'color-mix(in srgb, var(--accent-teal) 10%, transparent)',
           }}
-          title="Early access — Automatic advances ready pipeline steps. Review results before clinical use."
-          aria-label="Early access"
+          title="Beta — Automatic advances ready pipeline steps. Review results before clinical use."
+          aria-label="Beta Automatic mode"
         >
           <Info className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+        </span>
+        <span
+          className="shrink-0 text-2xs font-semibold px-1.5 h-[16px] inline-flex items-center rounded-full"
+          style={{ backgroundColor: 'var(--accent-teal-soft)', color: 'var(--accent-teal)' }}
+        >
+          Beta
         </span>
         <span className="flex-1 min-w-0 font-medium" style={{ color: 'var(--text-primary)' }}>
           {message || 'Automatic pipeline'}

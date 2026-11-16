@@ -61,7 +61,7 @@ function earlyAccessSurface(paddingBg = 'var(--bg-input)') {
 }
 
 const AUTOMATIC_INFO =
-  'Early access. Automatic advances annotation and phenotype prioritization when ready, and pre-selects strong disease matches (score ≥ 0.90) plus high-confidence findings. Review before clinical use.';
+  'Beta. Automatic advances annotation and phenotype prioritization when ready, and pre-selects strong disease matches (score ≥ 0.90) plus high-confidence findings. Review before clinical use.';
 
 function AutomaticInfoButton() {
   const [open, setOpen] = useState(false);
@@ -157,7 +157,7 @@ export default function PipelineRunModeToggle({
           }}
           options={[
             { value: PIPELINE_RUN_MANUAL, label: 'Manual' },
-            { value: PIPELINE_RUN_AUTOMATIC, label: 'Automatic' },
+            { value: PIPELINE_RUN_AUTOMATIC, label: 'Automatic', badge: 'Beta' },
           ]}
         />
       </div>

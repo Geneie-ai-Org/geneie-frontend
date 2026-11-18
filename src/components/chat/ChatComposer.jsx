@@ -93,6 +93,9 @@ const ChatComposer = ({
   onToggleVariantSidebar,
   hasDocument = false,
   pipelineDrawer = null,
+  /** Clickable prompt shown after GA (manual and automatic). */
+  suggestedPrompt = null,
+  suggestedPromptDisabled = false,
 }) => {
   const isStacked = layout === 'stacked';
   // Two separate gates. Typing is only blocked by the hard gates (no auth, quota
@@ -220,6 +223,27 @@ const ChatComposer = ({
          * `position: relative` with their own z-index, so they stack inside this element
          * without an extra box in the tree for the drawer to hide behind. */}
         {pipelineDrawer}
+        {suggestedPrompt ? (
+          <div className="px-3 pb-1">
+            <button
+              type="button"
+              disabled={suggestedPromptDisabled || isCurrentlyActive}
+              title={suggestedPrompt}
+              onClick={() => {
+                if (suggestedPromptDisabled || isCurrentlyActive) return;
+                onSend?.(suggestedPrompt);
+              }}
+              className="max-w-full rounded-lg border px-3 py-2 text-left text-xs leading-snug transition-colors hover:bg-[var(--bg-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-teal)]"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--accent-teal) 40%, transparent)',
+                color: 'var(--text-primary)',
+                background: 'color-mix(in srgb, var(--accent-teal) 8%, transparent)',
+              }}
+            >
+              {suggestedPrompt}
+            </button>
+          </div>
+        ) : null}
         <div
           onClick={handleContainerClick}
           className={`pipeline-composer ${

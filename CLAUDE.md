@@ -2,11 +2,10 @@
 
 ## Branches
 
-Work lands on `dev`: branch off it, and open pull requests against it.
+Work lands on `newprod`: branch off `origin/newprod`, open pull requests against it, squash-merge.
 
-**Vercel deploys `geneie.chat` from `main`, not `dev`.** Merging to `dev` ships nothing —
-a change only reaches production when `dev` is promoted to `main`. Verified on
-2026-09-14, when a merge to `dev` left production two days stale.
+**geneie.chat deploys from `newprod`.** A merge there is live within a couple of minutes, with no promotion
+step. `main` and `dev` are old prod and are not used for current work.
 
-The backend (`bio-lab-project`) is the opposite: `dev` is what runs, and its `main` is not
-to be updated.
+The backend (`bio-lab-project`) deploys from `feat/newprod-baseline`. If a change needs both sides, merge and
+deploy the backend first, then the frontend.

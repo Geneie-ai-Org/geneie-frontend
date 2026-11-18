@@ -99,18 +99,19 @@ export async function adminListUsers({ plan, email, limit = 100, cursor } = {}) 
   return data;
 }
 
-export async function adminSetPlan(uid, planStatus, { reason, seedBetaQuotas = true } = {}) {
+/** Resolves to { user, emailSent }. `notify` asks the backend to email the user about a real plan change. */
+export async function adminSetPlan(uid, planStatus, { reason, seedBetaQuotas = true, notify = false } = {}) {
   const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
   const response = await fetch(apiUrl(`/api/admin/users/${encodeURIComponent(uid)}/plan`), {
     method: 'PATCH',
     headers,
-    body: JSON.stringify({ planStatus, reason, seedBetaQuotas }),
+    body: JSON.stringify({ planStatus, reason, seedBetaQuotas, notify }),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(parseApiErrorDetail(data.detail) || 'Failed to set plan');
   }
-  return data.user;
+  return { user: data.user, emailSent: Boolean(data.emailSent) };
 }
 
 export async function adminSetCounters(uid, fields, { reason } = {}) {
@@ -156,11 +157,11 @@ export async function fetchBetaSeats() {
 }
 
 /** Join the waitlist once the seats are gone. Public, device-keyed, idempotent on email. */
-export async function joinWaitlist({ email, source } = {}) {
+export async function joinWaitlist({ email, source, name } = {}) {
   const response = await fetch(apiUrl('/api/waitlist'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Device-Id': getDeviceId() },
-    body: JSON.stringify({ email, source }),
+    body: JSON.stringify({ email, source, name: name || undefined }),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -220,6 +221,25 @@ export async function adminSetWaitlistStatus(entryId, status) {
     throw new Error(parseApiErrorDetail(data.detail) || 'Failed to update entry');
   }
   return data.entry;
+}
+
+/**
+ * Turn a waitlist entry into a beta account. `sendEmail` is the admin's explicit choice:
+ * true emails a one-time set-password link, false grants silently.
+ * Resolves to { entry, user, emailSent }.
+ */
+export async function adminGrantWaitlistSeat(entryId, { sendEmail, name } = {}) {
+  const headers = { ...(await getAuthHeaders()), 'Content-Type': 'application/json' };
+  const response = await fetch(apiUrl(`/api/admin/waitlist/${encodeURIComponent(entryId)}/grant`), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ sendEmail: Boolean(sendEmail), name: name || undefined }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(parseApiErrorDetail(data.detail) || 'Failed to grant the seat');
+  }
+  return { entry: data.entry, user: data.user, emailSent: Boolean(data.emailSent) };
 }
 
 export async function adminDeleteWaitlistEntry(entryId) {

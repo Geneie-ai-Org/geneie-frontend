@@ -1,6 +1,13 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { joinWaitlist } from '@/services/backendApi';
 
 /**
@@ -38,17 +45,18 @@ export function BetaSeatsBadge({ seats, className = '', style }) {
 }
 
 /**
- * Beta application form — the landing page's only call to action.
+ * Beta application entry point: one quiet sentence with a link, not a form in the hero.
  *
- * Geneie is a closed beta: nobody self-serves an account. Everyone applies here, and a
- * seat is granted deliberately from /admin-haha. The copy shifts once the seats are gone,
- * but the mechanism is identical either way, which is why this is one component and not
- * two: an "apply" and a "waitlist" that behaved differently would drift.
+ * Geneie is a closed beta: nobody self-serves an account. The link opens a small dialog where
+ * people leave their name (optional) and email; a seat is granted deliberately from /admin-haha.
+ * The copy shifts once the seats are gone, but the mechanism is identical either way, which is why
+ * this is one component and not two: an "apply" and a "waitlist" that behaved differently would drift.
  *
  * The backend treats a repeat email as a success rather than an error, so a second submit
  * shows the same confirmation instead of leaking whether an address is already listed.
  */
 export function BetaApplyForm({ seats, source = 'landing-hero', className = '', onSignIn }) {
+  const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -63,6 +71,7 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
     if (trap) {
       // A bot filled the hidden field. Show the success state and write nothing.
       setJoined(true);
+      setOpen(false);
       return;
     }
     if (!email.trim()) {
@@ -74,6 +83,7 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
     try {
       const result = await joinWaitlist({ email: email.trim(), source, name: name.trim() });
       setJoined(result);
+      setOpen(false);
       if (result.alreadyApplied) {
         toast.success("You're already on the list, we have your request.");
       } else {
@@ -90,66 +100,88 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
     }
   };
 
-  if (joined) {
-    return (
-      <div className={`flex flex-col items-center gap-2 ${className}`}>
-        <p className="text-base text-zinc-200">{confirmationFor(joined, isFull)}</p>
-        <SignInHint onSignIn={onSignIn} />
-      </div>
-    );
-  }
+  const inputClass =
+    'h-11 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-base text-white placeholder:text-zinc-500 outline-none transition-colors focus:border-zinc-400 disabled:opacity-60';
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className={`flex w-full max-w-md flex-col items-center gap-3 ${className}`}
-    >
-      <p className="text-sm text-zinc-400">
-        {isFull
-          ? 'All beta seats are taken right now. Leave your email and we\u2019ll get in touch when one opens.'
-          : 'Geneie is in closed beta. Leave your email to enrol, we\u2019ll set up your seat and let you know.'}
-      </p>
-      <input
-        type="text"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Your name (optional)"
-        autoComplete="name"
-        maxLength={80}
-        disabled={submitting}
-        className="h-12 w-full rounded-md border border-zinc-700 bg-zinc-900/70 px-4 text-base text-white placeholder:text-zinc-500 outline-none transition-colors focus:border-zinc-400 disabled:opacity-60"
-      />
-      <div className="flex w-full flex-col gap-2 sm:flex-row">
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@lab.org"
-          autoComplete="email"
-          disabled={submitting}
-          className="h-12 flex-1 rounded-md border border-zinc-700 bg-zinc-900/70 px-4 text-base text-white placeholder:text-zinc-500 outline-none transition-colors focus:border-zinc-400 disabled:opacity-60"
-        />
-        {/* Honeypot: off-screen and hidden from assistive tech, so only a bot fills it. */}
-        <input
-          type="text"
-          tabIndex={-1}
-          autoComplete="off"
-          aria-hidden="true"
-          value={trap}
-          onChange={(e) => setTrap(e.target.value)}
-          className="pointer-events-none absolute left-[-9999px] h-0 w-0 opacity-0"
-        />
-        <Button
-          type="submit"
-          size="lg"
-          disabled={submitting}
-          className="h-12 bg-white px-8 text-base font-medium text-black transition-all hover:bg-zinc-200 active:scale-95"
-        >
-          {submitting ? 'Sending\u2026' : isFull ? 'Join waitlist' : 'Apply for beta'}
-        </Button>
-      </div>
+    <div className={`flex w-full max-w-md flex-col items-center gap-2 ${className}`}>
+      {joined ? (
+        <p className="text-base text-zinc-200">{confirmationFor(joined, isFull)}</p>
+      ) : (
+        <p className="text-sm text-zinc-400">
+          {isFull ? 'All beta seats are taken right now.' : 'Want to join the beta program?'}{' '}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="font-medium text-zinc-100 underline underline-offset-4 transition-colors hover:text-white"
+          >
+            {isFull ? 'Join the waitlist' : 'Request access'}
+          </button>
+        </p>
+      )}
       <SignInHint onSignIn={onSignIn} />
-    </form>
+
+      <Dialog open={open} onOpenChange={(next) => !submitting && setOpen(next)}>
+        <DialogContent className="border-0 bg-zinc-950 text-white ring-zinc-800 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold text-white">
+              {isFull ? 'Join the Geneie waitlist' : 'Join the Geneie beta'}
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              {isFull
+                ? 'Leave your details and we\u2019ll get in touch when a seat opens.'
+                : 'Leave your details and we\u2019ll set up your seat and email you when it is ready.'}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1.5 text-sm text-zinc-300">
+              Name <span className="sr-only">(optional)</span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name (optional)"
+                autoComplete="name"
+                maxLength={80}
+                disabled={submitting}
+                className={inputClass}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm text-zinc-300">
+              Email
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@lab.org"
+                autoComplete="email"
+                required
+                disabled={submitting}
+                className={inputClass}
+              />
+            </label>
+            {/* Honeypot: off-screen and hidden from assistive tech, so only a bot fills it. */}
+            <input
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              aria-hidden="true"
+              value={trap}
+              onChange={(e) => setTrap(e.target.value)}
+              className="pointer-events-none absolute left-[-9999px] h-0 w-0 opacity-0"
+            />
+            <Button
+              type="submit"
+              size="lg"
+              disabled={submitting}
+              className="mt-1 h-11 bg-white text-base font-medium text-black transition-all hover:bg-zinc-200 active:scale-95"
+            >
+              {submitting ? 'Sending\u2026' : isFull ? 'Join waitlist' : 'Apply for beta'}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 

@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useSeo } from '@/hooks/useSeo';
+import { GrantSeatDialog, PlanChangeDialog } from '@/components/admin/InviteDialogs';
 import {
   adminDeleteWaitlistEntry,
   adminGetBetaSeats,
@@ -10,6 +11,7 @@ import {
   adminResetDevices,
   adminSetBetaSeats,
   adminSetCounters,
+  adminGrantWaitlistSeat,
   adminSetPlan,
   adminSetWaitlistStatus,
   adminWhoAmI,
@@ -119,6 +121,9 @@ const AdminPage = () => {
   const [seats, setSeats] = useState(null); // { seats, betaUserCount, waitlistCount }
   const [seatDraft, setSeatDraft] = useState('');
   const [waitlist, setWaitlist] = useState(null);
+  const [grantTarget, setGrantTarget] = useState(null); // waitlist entry awaiting the send/skip choice
+  const [grantName, setGrantName] = useState('');
+  const [planChange, setPlanChange] = useState(null); // { user, next } awaiting the send/skip choice
 
   const loadUsers = useCallback(async () => {
     setBusy(true);
@@ -242,19 +247,56 @@ const AdminPage = () => {
   }, [seatDraft]);
 
   /* Seat accounting is server-side: the plan endpoint claims or releases a seat, so the
-   * counter has to be re-read after a plan change rather than adjusted here. */
-  const changePlan = useCallback((user, next) => {
+   * counter has to be re-read after a plan change rather than adjusted here. The select only
+   * opens a confirm dialog; the write (and the optional email) happens from its buttons. */
+  const requestPlanChange = useCallback((user, next) => setPlanChange({ user, next }), []);
+
+  const confirmPlanChange = useCallback(async ({ notify }) => {
+    const { user, next } = planChange;
     const plan = user.planStatus || 'free';
-    applyChange(
-      user.uid,
-      () => adminSetPlan(user.uid, next),
-      next === 'beta'
-        ? `${user.email || user.uid} promoted to beta with full quotas.`
-        : `${user.email || user.uid} set to ${next}.`,
-    ).then(() => {
+    const who = user.email || user.uid;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const result = await adminSetPlan(user.uid, next, { notify });
+      setUsers((prev) => (prev || []).map((u) => (u.uid === user.uid ? { ...u, ...result.user } : u)));
+      const base = next === 'beta' ? `${who} promoted to beta with full quotas.` : `${who} set to ${next}.`;
+      const mail = !notify ? ' No email sent.' : result.emailSent ? ' Email sent.' : ' The email could not be sent.';
+      setStatus({ type: notify && !result.emailSent ? 'error' : 'ok', text: base + mail });
       if (next === 'beta' || plan === 'beta') loadSeats();
-    });
-  }, [applyChange, loadSeats]);
+      setPlanChange(null);
+    } catch (error) {
+      setStatus({ type: 'error', text: error.message || 'Update failed.' });
+      setPlanChange(null);
+    } finally {
+      setBusy(false);
+    }
+  }, [planChange, loadSeats]);
+
+  const openGrant = useCallback((entry) => {
+    setGrantName(entry.name || '');
+    setGrantTarget(entry);
+  }, []);
+
+  const confirmGrant = useCallback(async ({ sendEmail }) => {
+    const entry = grantTarget;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const result = await adminGrantWaitlistSeat(entry.id, { sendEmail, name: grantName.trim() });
+      setWaitlist((prev) => (prev || []).map((e) => (e.id === entry.id ? { ...e, ...result.entry } : e)));
+      const mail = !sendEmail ? ' No email sent.' : result.emailSent ? ' Set-password email sent.' : ' The email could not be sent.';
+      setStatus({ type: sendEmail && !result.emailSent ? 'error' : 'ok', text: `${entry.email} now has a beta seat.${mail}` });
+      setGrantTarget(null);
+      loadUsers();
+      loadSeats();
+    } catch (error) {
+      setStatus({ type: 'error', text: error.message || 'Could not grant the seat.' });
+      setGrantTarget(null);
+    } finally {
+      setBusy(false);
+    }
+  }, [grantTarget, grantName, loadUsers, loadSeats]);
 
   const updateWaitlistEntry = useCallback(async (entryId, nextStatus) => {
     setBusy(true);
@@ -457,7 +499,7 @@ const AdminPage = () => {
             </thead>
             <tbody>
               {users === null && (
-                <tr><td colSpan={5} className="px-3 py-6 text-xs" style={{ color: 'var(--text-tertiary)' }}>Loading…</td></tr>
+                <tr><td colSpan={6} className="px-3 py-6 text-xs" style={{ color: 'var(--text-tertiary)' }}>Loading…</td></tr>
               )}
               {users !== null && visible.length === 0 && (
                 <tr><td colSpan={5} className="px-3 py-6 text-xs" style={{ color: 'var(--text-tertiary)' }}>No matching users.</td></tr>
@@ -495,7 +537,7 @@ const AdminPage = () => {
                             if (!next || next === plan) return;
                             // The API seeds the full beta quota block; a bare plan flip
                             // would leave a beta user with no quotas at all.
-                            changePlan(u, next);
+                            requestPlanChange(u, next);
                           }}
                           className="px-2 py-1 text-2xs rounded-md border"
                           style={inputStyle}
@@ -592,9 +634,10 @@ const AdminPage = () => {
           className="rounded-xl border overflow-x-auto"
           style={{ backgroundColor: 'var(--bg-surface-raised)', borderColor: 'var(--border-default)' }}
         >
-          <table className="w-full text-left" style={{ minWidth: '620px' }}>
+          <table className="w-full text-left" style={{ minWidth: '760px' }}>
             <thead>
               <tr className="text-2xs" style={{ color: 'var(--text-tertiary)' }}>
+                <th className="px-3 py-2 font-medium border-b" style={cellStyle}>Name</th>
                 <th className="px-3 py-2 font-medium border-b" style={cellStyle}>Email</th>
                 <th className="px-3 py-2 font-medium border-b" style={cellStyle}>Joined</th>
                 <th className="px-3 py-2 font-medium border-b" style={cellStyle}>Source</th>
@@ -604,13 +647,16 @@ const AdminPage = () => {
             </thead>
             <tbody>
               {waitlist === null && (
-                <tr><td colSpan={5} className="px-3 py-6 text-xs" style={{ color: 'var(--text-tertiary)' }}>Loading…</td></tr>
+                <tr><td colSpan={6} className="px-3 py-6 text-xs" style={{ color: 'var(--text-tertiary)' }}>Loading…</td></tr>
               )}
               {waitlist !== null && waitlist.length === 0 && (
-                <tr><td colSpan={5} className="px-3 py-6 text-xs" style={{ color: 'var(--text-tertiary)' }}>Nobody is waiting.</td></tr>
+                <tr><td colSpan={6} className="px-3 py-6 text-xs" style={{ color: 'var(--text-tertiary)' }}>Nobody is waiting.</td></tr>
               )}
               {(waitlist || []).map((entry) => (
                 <tr key={entry.id} className="text-xs align-middle">
+                  <td className="px-3 py-2 border-b" style={{ ...cellStyle, color: 'var(--text-primary)' }}>
+                    {entry.name || '—'}
+                  </td>
                   <td className="px-3 py-2 border-b" style={{ ...cellStyle, color: 'var(--text-primary)' }}>
                     {entry.email}
                   </td>
@@ -634,6 +680,18 @@ const AdminPage = () => {
                     </select>
                   </td>
                   <td className="px-3 py-2 border-b text-right" style={cellStyle}>
+                    <div className="flex items-center justify-end gap-1.5">
+                    {entry.status !== 'invited' && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => openGrant(entry)}
+                        className="text-2xs px-2 py-1 rounded-md border disabled:opacity-50"
+                        style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
+                      >
+                        Grant seat
+                      </button>
+                    )}
                     <button
                       type="button"
                       disabled={busy}
@@ -643,6 +701,7 @@ const AdminPage = () => {
                     >
                       Delete
                     </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -662,6 +721,21 @@ const AdminPage = () => {
           </pre>
         </details>
       </div>
+      <GrantSeatDialog
+        entry={grantTarget}
+        name={grantName}
+        onNameChange={setGrantName}
+        seatsLeft={seats?.seats?.remaining}
+        busy={busy}
+        onConfirm={confirmGrant}
+        onCancel={() => setGrantTarget(null)}
+      />
+      <PlanChangeDialog
+        change={planChange}
+        busy={busy}
+        onConfirm={confirmPlanChange}
+        onCancel={() => setPlanChange(null)}
+      />
     </div>
   );
 };

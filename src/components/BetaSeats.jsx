@@ -50,6 +50,7 @@ export function BetaSeatsBadge({ seats, className = '', style }) {
  */
 export function BetaApplyForm({ seats, source = 'landing-hero', className = '', onSignIn }) {
   const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [joined, setJoined] = useState(null); // null | { alreadyApplied, status }
   const [trap, setTrap] = useState(''); // honeypot; humans never see it
@@ -71,7 +72,7 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
 
     setSubmitting(true);
     try {
-      const result = await joinWaitlist({ email: email.trim(), source });
+      const result = await joinWaitlist({ email: email.trim(), source, name: name.trim() });
       setJoined(result);
       if (result.alreadyApplied) {
         toast.success("You're already on the list, we have your request.");
@@ -108,6 +109,16 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
           ? 'All beta seats are taken right now. Leave your email and we\u2019ll get in touch when one opens.'
           : 'Geneie is in closed beta. Leave your email to enrol, we\u2019ll set up your seat and let you know.'}
       </p>
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Your name (optional)"
+        autoComplete="name"
+        maxLength={80}
+        disabled={submitting}
+        className="h-12 w-full rounded-md border border-zinc-700 bg-zinc-900/70 px-4 text-base text-white placeholder:text-zinc-500 outline-none transition-colors focus:border-zinc-400 disabled:opacity-60"
+      />
       <div className="flex w-full flex-col gap-2 sm:flex-row">
         <input
           type="email"
@@ -134,7 +145,7 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
           disabled={submitting}
           className="h-12 bg-white px-8 text-base font-medium text-black transition-all hover:bg-zinc-200 active:scale-95"
         >
-          {submitting ? 'Sending\u2026' : isFull ? 'Join waitlist' : 'Apply for beta access'}
+          {submitting ? 'Sending\u2026' : isFull ? 'Join waitlist' : 'Apply for beta'}
         </Button>
       </div>
       <SignInHint onSignIn={onSignIn} />
@@ -170,7 +181,7 @@ function SignInHint({ onSignIn }) {
       onClick={onSignIn}
       className="text-sm text-zinc-400 underline-offset-4 transition-colors hover:text-zinc-200 hover:underline"
     >
-      Already a member? Sign in here
+      Already have an account? Sign in
     </button>
   );
 }

@@ -487,12 +487,13 @@ export function useChatMessaging({
     [activeConversationId, userTier, currentDocument, setChatEligibility, normalizeChatEligibilityMessage]
   );
 
-  const sendMessage = useCallback(async () => {
-    if (!isAuthReady || !input.trim() || typingText || isChatLimitReached || variantUploadInProgress) return;
+  const sendMessage = useCallback(async (overrideText) => {
+    const fromPrompt = typeof overrideText === 'string';
+    const userMessageText = (fromPrompt ? overrideText : input).trim();
+    if (!isAuthReady || !userMessageText || typingText || isChatLimitReached || variantUploadInProgress) return;
     if (promptChatBlocked()) return;
 
-    const userMessageText = input.trim();
-    setInput('');
+    if (!fromPrompt) setInput('');
     // Pin the conversation this turn belongs to. If the user switches conversations while
     // the reply is in flight, we still persist to (and title) THIS conversation, and skip
     // rendering into whatever conversation is open now (cross-conversation leak fix).

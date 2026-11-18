@@ -2,7 +2,7 @@
  * Early-access Automatic pipeline conductor (Track 8.2).
  * When case-level pipeline_run_mode === automatic, advance ready stages:
  *   annotate (if needed) → phenotype prioritization (when eligible)
- *   → ready_report (analyst opens assignment modal via banner CTA).
+ *   → ready_report (Automatic asks the best-match chat prompt; report stays a banner CTA).
  * Also exposes a step timeline + event log for the Automatic activity panel.
  *
  * Important: never re-kick Annovar / Exomiser / GA on refresh when those stages
@@ -146,7 +146,7 @@ export function deriveAutomaticSteps({
     if (phase === 'ready_report' && gaDone) {
       return {
         status: 'waiting',
-        detail: 'Review GA-preselected variants, then Proceed',
+        detail: 'Asking which variant matches the clinical findings',
       };
     }
     if (exoDone && !gaDone) {
@@ -305,7 +305,7 @@ export function useAutomaticPipelineConductor({
         kickedRef.current.exomiser = true;
         kickedRef.current.annovar = true;
         setPhase('ready_report');
-        setMessage('GA ranking ready — review Include, then generate the report.');
+        setMessage('GA ranking ready — asking which variant matches the clinical findings.');
         return;
       }
 

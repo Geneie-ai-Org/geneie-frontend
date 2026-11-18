@@ -61,6 +61,7 @@ import {
   PIPELINE_RUN_AUTOMATIC,
 } from '@/components/PipelineRunModeToggle';
 import { DEFAULT_GUEST_CHAT_LIMIT, fetchGaTriage } from '@/services/backendApi';
+import { GA_BEST_MATCH_PROMPT, gaRankingReady } from '@/lib/gaBestMatchPrompt';
 import { formatMeterDetail, meterExhausted, meterFor, meterNearLimit, patchGuestChatUsed } from '@/services/tierLimits';
 import { describeLimitError, isEmailVerificationCode } from '@/services/limitErrors';
 import { useSeo } from '@/hooks/useSeo';
@@ -80,7 +81,8 @@ const ChatPage = () => {
   const [conversations, setConversations] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [clinicalReportOpen, setClinicalReportOpen] = useState(false);
-  const autoOpenedReportForConvRef = useRef(null);
+  const autoGaPromptRef = useRef(null);
+  const [chatHistoryFor, setChatHistoryFor] = useState(null);
   const [currentDocument, setCurrentDocument] = useState(null);
   const [variantData, setVariantData] = useState(null);
   const [isVariantSidebarOpen, setIsVariantSidebarOpen] = useState(false);
@@ -561,7 +563,8 @@ const ChatPage = () => {
 
   useEffect(() => {
     setClinicalReportOpen(false);
-    autoOpenedReportForConvRef.current = null;
+    autoGaPromptRef.current = null;
+    setChatHistoryFor(null);
   }, [activeConversationId]);
 
   const { handleDocumentUpload } = useDocumentUpload({
@@ -1001,10 +1004,12 @@ const ChatPage = () => {
           });
           syncPipelineFromConversationRef.current(null);
         }
+        setChatHistoryFor(conversationId);
       } catch (error) {
         if (cancelled) return;
         console.error('[App] Error loading conversation data:', error);
         clearConversationScopedState();
+        setChatHistoryFor(null);
       }
     };
 
@@ -1294,14 +1299,45 @@ const ChatPage = () => {
     !!variantData &&
     !!activeConversationId;
 
-  // Automatic ready_report: open the one review/report modal once (still confirm before PDF).
+  const showGaBestMatchPrompt =
+    userTier !== 'guest' &&
+    !!activeConversationId &&
+    !!variantData &&
+    gaRankingReady(gaTriageStatus);
+  const gaPromptSendBlocked =
+    !isAuthReady ||
+    isCurrentlyActive ||
+    isChatLimitReached ||
+    variantUploadInProgress ||
+    isRunningAnnovar ||
+    pipelineSnapshot.annovarJob?.status === 'running' ||
+    isChatPipelineGated;
+
+  // Automatic: once GA is done and chat is open, ask the best-match question.
+  // The review list stays behind the report button; it does not open on its own.
   useEffect(() => {
-    if (!showAutomaticReportCta || reportGate?.blocked) return;
-    if (autoOpenedReportForConvRef.current === activeConversationId) return;
-    autoOpenedReportForConvRef.current = activeConversationId;
-    setIsVariantSidebarOpen(true);
-    setClinicalReportOpen(true);
-  }, [showAutomaticReportCta, reportGate?.blocked, activeConversationId]);
+    if (!automaticPipeline.active || !showGaBestMatchPrompt) return;
+    if (chatHistoryFor !== activeConversationId) return;
+    if (gaPromptSendBlocked) return;
+    const alreadyAsked = messages.some(
+      (m) => m.role === 'user' && String(m.text || '').trim() === GA_BEST_MATCH_PROMPT
+    );
+    if (alreadyAsked) {
+      autoGaPromptRef.current = activeConversationId;
+      return;
+    }
+    if (autoGaPromptRef.current === activeConversationId) return;
+    autoGaPromptRef.current = activeConversationId;
+    sendMessage(GA_BEST_MATCH_PROMPT);
+  }, [
+    automaticPipeline.active,
+    showGaBestMatchPrompt,
+    chatHistoryFor,
+    activeConversationId,
+    gaPromptSendBlocked,
+    messages,
+    sendMessage,
+  ]);
 
   if (!isAuthReady || userLoading) {
     return <SessionLoadingScreen />;
@@ -1542,6 +1578,8 @@ const ChatPage = () => {
     isVariantSidebarOpen,
     onToggleVariantSidebar: () => setIsVariantSidebarOpen(!isVariantSidebarOpen),
     hasDocument: !!currentDocument,
+    suggestedPrompt: showGaBestMatchPrompt ? GA_BEST_MATCH_PROMPT : null,
+    suggestedPromptDisabled: gaPromptSendBlocked,
     // Module 1's stepper shares the drawer slot with the variant pipeline; only one of
     // the two is ever non-null for a given conversation.
     pipelineDrawer: (

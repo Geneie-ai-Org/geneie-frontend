@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
   Check,
@@ -77,8 +77,14 @@ export default function AutomaticPipelinePanel({
   reportCtaLabel = 'Generate report',
   onGenerateReport,
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(phase !== 'ready_report');
   const reportBlocked = reportGate?.blocked === true;
+
+  // Once GA is done the chat answer is the thing to read. Keep the checklist
+  // collapsed so the floating dock does not cover it. Activity can still be opened.
+  useEffect(() => {
+    if (phase === 'ready_report') setExpanded(false);
+  }, [phase]);
 
   return (
     <div

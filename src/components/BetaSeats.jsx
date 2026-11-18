@@ -134,7 +134,7 @@ export function BetaApplyForm({ seats, source = 'landing-hero', className = '', 
           disabled={submitting}
           className="h-12 bg-white px-8 text-base font-medium text-black transition-all hover:bg-zinc-200 active:scale-95"
         >
-          {submitting ? 'Sending\u2026' : isFull ? 'Join waitlist' : 'Apply for beta'}
+          {submitting ? 'Sending\u2026' : isFull ? 'Join waitlist' : 'Apply for beta access'}
         </Button>
       </div>
       <SignInHint onSignIn={onSignIn} />

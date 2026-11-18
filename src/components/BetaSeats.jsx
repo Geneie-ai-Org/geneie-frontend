@@ -170,7 +170,7 @@ function SignInHint({ onSignIn }) {
       onClick={onSignIn}
       className="text-sm text-zinc-400 underline-offset-4 transition-colors hover:text-zinc-200 hover:underline"
     >
-      Already have an account? Sign in
+      Already a member? Sign in here
     </button>
   );
 }

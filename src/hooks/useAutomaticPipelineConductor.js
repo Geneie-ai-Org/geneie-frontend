@@ -6,8 +6,10 @@
  * Also exposes a step timeline + event log for the Automatic activity panel.
  *
  * Important: never re-kick Annovar / Exomiser / GA on refresh when those stages
- * already completed or are in-flight. Empty status means "not hydrated yet", not
- * "not started".
+ * already completed or are in-flight. Before the conversation document has loaded,
+ * an empty Exomiser status is "not hydrated yet". After it has loaded, an empty
+ * status means prioritization has not started, so start it once annotation and
+ * clinical findings are ready.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { normalizePipelineRunMode, PIPELINE_RUN_AUTOMATIC } from '@/components/PipelineRunModeToggle';
@@ -393,13 +395,8 @@ export function useAutomaticPipelineConductor({
         return;
       }
 
-      // Exomiser status still empty after hydrate — wait; do NOT treat as "not started".
-      if (!exoStatus && !filterDone) {
-        setPhase('checking_prioritization');
-        setMessage('Checking prioritization status…');
-        return;
-      }
-
+      // Conversation is loaded and there is still no Exomiser job: start it.
+      // A running, finished, or failed job already returned above.
       if (typeof fetchExomiserEligibility !== 'function' || typeof runExomiser !== 'function') {
         return;
       }

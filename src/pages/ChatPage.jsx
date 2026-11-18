@@ -1299,11 +1299,22 @@ const ChatPage = () => {
     !!variantData &&
     !!activeConversationId;
 
+  const gaPromptAlreadyAsked = messages.some(
+    (m) => m.role === 'user' && String(m.text || '').trim() === GA_BEST_MATCH_PROMPT
+  );
   const showGaBestMatchPrompt =
     userTier !== 'guest' &&
     !!activeConversationId &&
     !!variantData &&
-    gaRankingReady(gaTriageStatus);
+    gaRankingReady(gaTriageStatus) &&
+    !gaPromptAlreadyAsked;
+
+  // The answer has to sit above the floating dock. Once Automatic has asked,
+  // fold the pipeline card so it does not cover the reply.
+  useEffect(() => {
+    if (!automaticPipeline.active || !gaPromptAlreadyAsked) return;
+    setPipelineExpanded(false);
+  }, [automaticPipeline.active, gaPromptAlreadyAsked]);
   const gaPromptSendBlocked =
     !isAuthReady ||
     isCurrentlyActive ||

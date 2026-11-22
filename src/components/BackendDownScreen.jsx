@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useReducedMotion } from 'motion/react';
 import DitherHelixField from '@/components/DitherHelixField';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { clearSessionAndGoHome } from '@/lib/leaveBackendDown';
 
 const TITLE = "We'll be right back";
 const BASES = 'ATGC';
@@ -49,6 +49,13 @@ function useScramble(final, enabled) {
 export default function BackendDownScreen({ checking = false, onRetry }) {
   const reduce = useReducedMotion();
   const title = useScramble(TITLE, !reduce);
+  const [leaving, setLeaving] = useState(false);
+  const leave = (e) => {
+    e.preventDefault();
+    if (leaving) return;
+    setLeaving(true);
+    clearSessionAndGoHome();
+  };
   return (
     <main
       aria-labelledby="backend-down-title"
@@ -72,9 +79,10 @@ export default function BackendDownScreen({ checking = false, onRetry }) {
           <Button size="lg" className="h-10 rounded-full px-5 text-sm" onClick={onRetry} disabled={checking}>
             {checking ? 'Checking' : 'Try again'}
           </Button>
-          <Link to="/" className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'h-10 rounded-full px-5 text-sm')}>
-            Back to home
-          </Link>
+          {/* Not a plain link: a signed-in visitor on the landing page is sent straight back to /app, which is this screen. */}
+          <a href="/" onClick={leave} aria-disabled={leaving} className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'h-10 rounded-full px-5 text-sm', leaving && 'pointer-events-none opacity-50')}>
+            {leaving ? 'Leaving' : 'Back to home'}
+          </a>
         </div>
       </div>
     </main>

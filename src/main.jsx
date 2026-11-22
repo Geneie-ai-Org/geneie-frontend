@@ -6,6 +6,7 @@ import { AuthProvider } from './hooks/useAuth';
 import { ThemeProvider, useTheme } from './hooks/useTheme';
 import PublicRoute from './components/PublicRoute';
 import ProtectedRoute from './components/ProtectedRoute';
+import BackendGate from './components/BackendGate';
 import ErrorBoundary from './components/ErrorBoundary';
 import SessionLoadingScreen from './components/SessionLoadingScreen';
 import { initAnalytics } from './lib/analytics';
@@ -81,32 +82,38 @@ root.render(
           <Route
             path="/app"
             element={
-              <ProtectedRoute>
-                <LegalConsentGate>
-                  <ChatPage />
-                </LegalConsentGate>
-              </ProtectedRoute>
+              <BackendGate>
+                <ProtectedRoute>
+                  <LegalConsentGate>
+                    <ChatPage />
+                  </LegalConsentGate>
+                </ProtectedRoute>
+              </BackendGate>
             }
           />
           {/* Before /app/:conversationId so "module1-igv" is not treated as a chat id. */}
           <Route
             path="/app/module1-igv"
             element={
-              <ProtectedRoute>
-                <LegalConsentGate>
-                  <Module1IgvWindowPage />
-                </LegalConsentGate>
-              </ProtectedRoute>
+              <BackendGate>
+                <ProtectedRoute>
+                  <LegalConsentGate>
+                    <Module1IgvWindowPage />
+                  </LegalConsentGate>
+                </ProtectedRoute>
+              </BackendGate>
             }
           />
           <Route
             path="/app/:conversationId"
             element={
-              <ProtectedRoute>
-                <LegalConsentGate>
-                  <ChatPage />
-                </LegalConsentGate>
-              </ProtectedRoute>
+              <BackendGate>
+                <ProtectedRoute>
+                  <LegalConsentGate>
+                    <ChatPage />
+                  </LegalConsentGate>
+                </ProtectedRoute>
+              </BackendGate>
             }
           />
           <Route path="/legal/terms" element={<LegalDocPage doc="terms" />} />

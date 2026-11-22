@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiUrl } from '@/config/api';
 
-const PROBE_TIMEOUT_MS = 4000;
-const SECOND_LOOK_MS = 2000; // one quick second look before the screen goes up, so a single blip never shows it
+const PROBE_TIMEOUT_MS = 3000;
+const SECOND_LOOK_MS = 800; // one quick second look before the screen goes up, so a single blip never shows it
+const FIRST_ANSWER_GRACE_MS = 3500; // a slow but alive backend must not blank the app for longer than this
 const RETRY_STEPS_MS = [15000, 30000, 60000];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -32,7 +33,7 @@ function isForcedDown() {
 
 /**
  * Is the backend reachable? Starts optimistic (the app renders straight away) and probes in the background.
- * Down means two failed probes in a row. While down it retries on its own, 15s then 30s then every 60s, and
+ * The host should keep the app covered until `ready`. Down means two failed probes in a row. While down it retries on its own, 15s then 30s then every 60s, and
  * again the moment the tab becomes visible or the network comes back. `epoch` changes on recovery so the host can
  * remount the app and refetch everything.
  */
@@ -41,6 +42,8 @@ export function useBackendHealth() {
   const [down, setDown] = useState(false);
   const [checking, setChecking] = useState(false);
   const [epoch, setEpoch] = useState(0);
+  const [verified, setVerified] = useState(false);
+  const [grace, setGrace] = useState(false);
   const downRef = useRef(false);
   const attemptRef = useRef(0);
   const timerRef = useRef(0);
@@ -61,6 +64,7 @@ export function useBackendHealth() {
     if (!aliveRef.current) return;
     setChecking(false);
     if (ok) {
+      setVerified(true);
       attemptRef.current = 0;
       if (downRef.current) {
         downRef.current = false;
@@ -79,6 +83,7 @@ export function useBackendHealth() {
   useEffect(() => {
     aliveRef.current = true;
     if (forced) return undefined;
+    const graceTimer = setTimeout(() => setGrace(true), FIRST_ANSWER_GRACE_MS);
     run(true);
     const again = () => {
       if (downRef.current) run(false);
@@ -90,6 +95,7 @@ export function useBackendHealth() {
     window.addEventListener('online', again);
     return () => {
       aliveRef.current = false;
+      clearTimeout(graceTimer);
       clearTimeout(timerRef.current);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('online', again);
@@ -102,5 +108,7 @@ export function useBackendHealth() {
     run(false);
   }, [forced, run]);
 
-  return { down: forced || down, checking, retry, epoch };
+  // `ready`: the first probe has answered (or the grace ran out), so the app may be shown. Until then the host covers it,
+  // which stops the app's own failed calls (for example the legal-agreement check) from flashing an error card first.
+  return { down: forced || down, checking, retry, epoch, ready: forced || verified || grace };
 }

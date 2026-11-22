@@ -9,7 +9,8 @@ import { useTheme } from '@/hooks/useTheme';
  * the light wins. Dots take one of three cool steps (blue) or three warm steps (orange). The helix is a ribbon with
  * glowing backbone edges and dense rows of small square bases between them. Bases facing the viewer are sharp and
  * bright, the ones behind are dim and soft, and warm clusters drift across the front-facing ones. A soft aurora and a
- * little dust sit underneath, and dots brighten under the pointer. The area behind the content is dimmed so text stays
+ * little dust sit underneath, benzene-style rings with bonds and a few drifting cells frame the sides on wide screens,
+ * and dots brighten under the pointer. The area behind the content is dimmed so text stays
  * readable. Layout comes from the canvas size, so it adapts to any screen. Decorative only (aria-hidden).
  */
 
@@ -56,8 +57,25 @@ function layoutFor(W, H) {
   const cell = Math.max(4, Math.min(6, Math.round(m / 150)));
   const wd = Math.max(cell * 1.7, m * 0.011);
   const A = Math.min(W * (land ? 0.24 : 0.4), H * (land ? 0.34 : 0.22), land ? 300 : 260);
+  // Molecules: two mirrored clusters on wide screens. On a phone the ribbon already fills the width, so only one cell stays.
+  const rings = land
+    ? [
+        { x: W * 0.14, y: H * 0.27, r: m * 0.1, rot: 0.2, spin: 0.05, w: wd * 0.8 },
+        { x: W * 0.075, y: H * 0.56, r: m * 0.06, rot: 0.6, spin: -0.07, w: wd * 0.7 },
+        { x: W * 0.26, y: H * 0.12, r: m * 0.04, rot: 0, spin: 0.08, w: wd * 0.65 },
+        { x: W * 0.86, y: H * 0.27, r: m * 0.085, rot: 0.5, spin: -0.05, w: wd * 0.8 },
+        { x: W * 0.93, y: H * 0.55, r: m * 0.05, rot: 0.1, spin: 0.07, w: wd * 0.7 },
+        { x: W * 0.85, y: H * 0.11, r: m * 0.035, rot: 0.3, spin: -0.08, w: wd * 0.65 },
+      ]
+    : [];
   return {
     cell,
+    wd,
+    rings,
+    bonds: land ? [[0, 1], [0, 2], [3, 4], [3, 5]] : [],
+    cells: land
+      ? [{ x: W * 0.22, y: H * 0.64, r: m * 0.035, s: 0 }, { x: W * 0.79, y: H * 0.66, r: m * 0.04, s: 3 }]
+      : [{ x: W * 0.84, y: H * 0.66, r: m * 0.055, s: 3 }],
     helix: {
       ax: W * 0.56, ay: -H * 0.06, bx: W * 0.44, by: H * 1.06, A,
       turns: land ? 1.1 : 1.5, rowsPerTurn: 60, spin: 0.5, w: wd * 0.9, floor: 0.32,
@@ -134,16 +152,60 @@ function helixV(px, py, t, h, cell) {
   return v;
 }
 
+function ringV(px, py, t, r) {
+  const dx = px - r.x;
+  const dy = py - r.y;
+  const d = Math.hypot(dx, dy);
+  if (d > r.r * 1.5) return 0;
+  const ang = Math.atan2(dy, dx) - r.rot - t * r.spin;
+  const P = Math.PI / 3;
+  const s0 = ((ang % P) + P) % P;
+  const sector = s0 - P / 2;
+  const ap = r.r * Math.cos(P / 2);
+  let v = G(d * Math.cos(sector) - ap, r.w); // the six bonds
+  v = Math.max(v, 0.5 * G(d - r.r * 0.5, r.w * 0.8)); // inner circle
+  const u = Math.min(s0, P - s0);
+  return Math.max(v, G(Math.hypot(d - r.r, d * u), r.w * 1.8)); // the six atoms
+}
+
+function bondV(px, py, a, b, w) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const t = Math.min(1, Math.max(0, ((px - a.x) * dx + (py - a.y) * dy) / (dx * dx + dy * dy)));
+  if (Math.hypot(px - a.x, py - a.y) < a.r * 1.1 || Math.hypot(px - b.x, py - b.y) < b.r * 1.1) return 0;
+  return 0.6 * G(Math.hypot(px - (a.x + t * dx), py - (a.y + t * dy)), w * 0.6);
+}
+
+function cellV(px, py, t, c, wd) {
+  const d = Math.hypot(px - c.x, py - c.y);
+  if (d > c.r * 1.4) return 0;
+  const nx = c.x + c.r * 0.28 * Math.cos(t * 0.3 + c.s);
+  const ny = c.y + c.r * 0.22 * Math.sin(t * 0.37 + c.s);
+  return Math.max(0.75 * G(d - c.r, wd * 0.75), 0.9 * G(Math.hypot(px - nx, py - ny), c.r * 0.2));
+}
+
 function fieldAt(px, py, t, intro, ci, cj, L, W, H, ptr) {
   const q = Math.hypot((px - L.mask.x) / L.mask.rx, (py - L.mask.y) / L.mask.ry);
   const m = smooth(0.75, 1.5, q);
-  // Soft aurora, then sparse dust. Both keep clear of the content.
+  // Soft aurora, sparse dust, then the molecules. All of it keeps clear of the content.
   const u = px / W;
   const y = py / H;
   const band = Math.sin(u * 5 + t * 0.4 + Math.sin(y * 4 + t * 0.3) * 0.9);
   let v = (0.36 * Math.max(0, band) * G(y - 0.62, 0.28) + 0.04) * 0.85;
   const st = hash(ci, cj);
   if (st < 0.0022) v = Math.max(v, 0.34 + 0.3 * Math.sin(t * 1.4 + st * 900));
+  for (const r of L.rings) {
+    const x = ringV(px, py, t, r);
+    if (x > v) v = x;
+  }
+  for (const [i, j] of L.bonds) {
+    const x = bondV(px, py, L.rings[i], L.rings[j], L.wd);
+    if (x > v) v = x;
+  }
+  for (const c of L.cells) {
+    const x = cellV(px, py, t, c, L.wd);
+    if (x > v) v = x;
+  }
   if (ptr.k > 0.01) v += ptr.k * 0.5 * G(Math.hypot(px - ptr.x, py - ptr.y), Math.max(110, Math.min(W, H) * 0.16));
   v *= 0.05 + 0.95 * m;
   const hv = helixV(px, py, t, L.helix, L.cell) * (L.helix.floor + (1 - L.helix.floor) * m);

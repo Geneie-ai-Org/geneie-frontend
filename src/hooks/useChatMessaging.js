@@ -11,6 +11,7 @@ import { env } from '@/config/env';
 import {
   splitSseFrames, parseSseFrame, classifyStreamEnd, withStreamCutNote, stripStreamCutNote,
 } from '@/lib/sseFrames';
+import { buildChatHistoryPayload, clampChatText } from '@/lib/chatRequestLimits';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const MAX_RETRIES = 3;
@@ -294,7 +295,7 @@ export function useChatMessaging({
           // Note: exploratory mode is handled in an earlier branch (streams directly to the
           // exploratory service); this requestBody is the normal PROD chat path only.
           const requestBody = {
-            message: userMessageText,
+            message: clampChatText(userMessageText),
             history: historyPayload,
             conversationId: activeConversationId,
             hasUploadedFile: userTier === 'guest' && currentDocument !== null,
@@ -391,7 +392,7 @@ export function useChatMessaging({
       let sawDone = false;
       try {
         const requestBody = {
-          message: userMessageText,
+          message: clampChatText(userMessageText),
           history: historyPayload,
           conversationId: activeConversationId,
           hasUploadedFile: userTier === 'guest' && currentDocument !== null,
@@ -511,10 +512,10 @@ export function useChatMessaging({
     chatAbortControllerRef.current = ac;
 
     const cutHandling = streamCutHandlingOn();
-    const historyPayload = [
-      ...messages.map((msg) => ({ role: msg.role, text: cutHandling ? stripStreamCutNote(msg.text) : msg.text })),
-      { role: 'user', text: userMessageText },
-    ];
+    const historyPayload = buildChatHistoryPayload(messages, {
+      extraUserText: userMessageText,
+      mapText: cutHandling ? stripStreamCutNote : undefined,
+    });
 
     // --- Exploratory (Strands) mode: stream steps + live answer via SSE, then return.
     // Isolated branch; the normal PROD path below is untouched.
@@ -794,7 +795,7 @@ export function useChatMessaging({
     const prev = messages[messages.length - 2];
     if (last.role !== 'ai' || prev.role !== 'user') return;
 
-    const historyPayload = messages.slice(0, -1).map((m) => ({ role: m.role, text: m.text }));
+    const historyPayload = buildChatHistoryPayload(messages.slice(0, -1));
     const userMessageText = prev.text;
     const aiMessageId = last.message_id;
     const originConversationId = activeConversationId;

@@ -1935,10 +1935,12 @@ const ChatPage = () => {
                     )}
                   </div>
                 </div>
-                {/* The scroll port now runs under the dock, so this has to clear it. */}
+                {/* The list already pads its bottom by the dock's height, and a sticky offset is added on top of that
+                    padding, so a constant offset is the gap above the dock however tall the dock is (composer alone,
+                    or with the pipeline card). Scaling it with the dock height floated the button into the text. */}
                 <div
                   className="sticky flex justify-center pointer-events-none"
-                  style={{ zIndex: 10, bottom: 'calc(var(--composer-dock-height, 0px) - 6rem)' }}
+                  style={{ zIndex: 10, bottom: '2.25rem' }}
                 >
                   <Button
                     type="button"

@@ -256,6 +256,7 @@ const ChatPage = () => {
     beginPipelineWork,
     refreshAfterFilterChange,
     uploadSessionConversationId,
+    uploadSessionActive,
     handleVariantUploadingChange,
     handleUploadProgressChange,
     uploadProgress,
@@ -1153,7 +1154,7 @@ const ChatPage = () => {
       e.preventDefault();
       setShowUploadModal(false);
       setPreSelectedFile(null);
-      if (uploadSessionConversationId === activeConversationId) {
+      if (uploadSessionConversationId === activeConversationId || variantUploadInProgress) {
         toast.info('Upload in progress', {
           description:
             'Your file is still uploading. Please wait — chat will resume when processing finishes.',
@@ -1162,7 +1163,7 @@ const ChatPage = () => {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showUploadModal, metadataFormOpen, uploadSessionConversationId, activeConversationId]);
+  }, [showUploadModal, metadataFormOpen, uploadSessionConversationId, uploadSessionActive, activeConversationId, variantUploadInProgress]);
 
   useEffect(() => {
     if (!columnInterpretationResult) {
@@ -2125,12 +2126,12 @@ const ChatPage = () => {
       />
 
       {/* Upload Modal for Variant Files — file picker; sample metadata opens as its own popup */}
-      {(showUploadModal || uploadSessionConversationId) && (
+      {(showUploadModal || uploadSessionActive) && (
         <div
           className={`fixed inset-0 z-50 ${
-            !showUploadModal && uploadSessionConversationId ? 'pointer-events-none opacity-0' : ''
+            !showUploadModal && uploadSessionActive ? 'pointer-events-none opacity-0' : ''
           }`}
-          aria-hidden={!showUploadModal && Boolean(uploadSessionConversationId)}
+          aria-hidden={!showUploadModal && Boolean(uploadSessionActive)}
         >
           {!metadataFormOpen && showUploadModal && (
             <div
@@ -2138,7 +2139,7 @@ const ChatPage = () => {
               onClick={() => {
                 setShowUploadModal(false);
                 setPreSelectedFile(null);
-                            if (uploadSessionConversationId === activeConversationId) {
+                            if (uploadSessionConversationId === activeConversationId || uploadSessionActive) {
                   toast.info('Upload in progress', {
                     description:
                       'Your file is still uploading. Please wait — chat will resume when processing finishes.',

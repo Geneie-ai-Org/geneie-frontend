@@ -90,6 +90,9 @@ export function useVariantPipeline({
   const [isRunningExomiser, setIsRunningExomiser] = useState(false);
   const [exomiserStatus, setExomiserStatus] = useState(null); // { status, phase, message, progress_percent, matched_count }
   const [uploadSessionConversationId, setUploadSessionConversationId] = useState(null);
+  // Latch for "an upload is running", independent of which conversation is active right now.
+  // Kept separate so a route/id change mid-transfer cannot hide the progress modal.
+  const [uploadSessionActive, setUploadSessionActive] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [downloadValidationGeneration, setDownloadValidationGeneration] = useState(0);
   const [downloadValidatedGeneration, setDownloadValidatedGeneration] = useState(0);
@@ -113,6 +116,8 @@ export function useVariantPipeline({
   pipelineSnapshotRef.current = pipelineSnapshot;
   const uploadSessionConversationIdRef = useRef(uploadSessionConversationId);
   uploadSessionConversationIdRef.current = uploadSessionConversationId;
+  const uploadSessionActiveRef = useRef(uploadSessionActive);
+  uploadSessionActiveRef.current = uploadSessionActive;
   const variantDataRef = useRef(variantData);
   variantDataRef.current = variantData;
   const conversationFilterStateRef = useRef(conversationFilterState);
@@ -968,6 +973,7 @@ export function useVariantPipeline({
       const snap = pipelineSnapshotRef.current;
       const vd = variantDataRef.current;
       const uploadConvId = uploadSessionConversationIdRef.current;
+      const uploadActive = uploadSessionActiveRef.current;
       const lineCountActive =
         vd?.s3_line_count_status === 'pending' || vd?.s3_line_count_status === 'running';
       const pipelineWorkActive =
@@ -976,6 +982,7 @@ export function useVariantPipeline({
         snap.annovarJob?.status === 'running' ||
         snap.filterJob?.status === 'running' ||
         snap.filterJob?.status === 'pending' ||
+        uploadActive ||
         uploadConvId === activeConversationId ||
         lineCountActive;
 
@@ -1160,7 +1167,9 @@ export function useVariantPipeline({
           filtJob.status === 'running' ||
           filtJob.status === 'pending' ||
           isApplyingProprietaryFilterRef.current;
-        const uploadStill = uploadSessionConversationIdRef.current === activeConversationId;
+        const uploadStill =
+          uploadSessionActiveRef.current ||
+          uploadSessionConversationIdRef.current === activeConversationId;
 
         if (!cancelled && (annStill || filtStill || lineStill || uploadStill)) {
           const delayMs = lineStill && !annStill && !filtStill && !uploadStill ? 15000 : 8000;
@@ -1208,6 +1217,7 @@ export function useVariantPipeline({
   const handleVariantUploadingChange = useCallback(
     (isUploading) => {
       // console.log('[useVariantPipeline] handleVariantUploadingChange:', isUploading);
+      setUploadSessionActive(Boolean(isUploading));
       if (isUploading) {
         setUploadSessionConversationId((prev) => prev || activeConversationId || null);
       } else {
@@ -1230,8 +1240,18 @@ export function useVariantPipeline({
     pipelineSnapshot.filterJob?.status === 'running' ||
     pipelineSnapshot.filterJob?.status === 'pending';
 
-  const variantUploadInProgress =
-    Boolean(uploadSessionConversationId) && uploadSessionConversationId === activeConversationId;
+  /**
+   * The progress modal must be driven by a plain latch, not by an id comparison.
+   *
+   * It used to be `uploadSessionConversationId === activeConversationId`. That equality silently
+   * failed whenever the id captured at upload start no longer matched the current route (a
+   * brand-new chat where the upload begins before/while /app/:id settles, or any navigation that
+   * lands during the transfer). The modal then never rendered, so a VCF upload showed no progress
+   * at all and the file simply appeared seconds later. The id is still kept for the pipeline poll;
+   * `uploadSessionActive` is set only by handleVariantUploadingChange, so it cannot leak between
+   * conversations.
+   */
+  const variantUploadInProgress = uploadSessionActive;
 
   // A Step1-fail (missing essential VCF columns) blocks chat too, on top of the
   // backend-driven chatEligibility gate — suppressed while the user is already mid-flow
@@ -2201,6 +2221,7 @@ export function useVariantPipeline({
     beginPipelineWork,
     refreshAfterFilterChange,
     uploadSessionConversationId,
+    uploadSessionActive,
     handleVariantUploadingChange,
     handleUploadProgressChange,
     uploadProgress,
